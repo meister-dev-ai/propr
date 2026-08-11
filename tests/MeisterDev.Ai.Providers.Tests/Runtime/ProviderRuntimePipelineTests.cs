@@ -29,14 +29,18 @@ public sealed class ProviderRuntimePipelineTests
             Recording(ProviderRuntimeStage.Retry, calls),
             Recording(ProviderRuntimeStage.Budget, calls),
             Recording(ProviderRuntimeStage.Observability, calls),
+            Recording(ProviderRuntimeStage.Pacing, calls),
         ]);
 
         var composed = pipeline.Compose(Substitute.For<IChatClient>(), Endpoint, Model);
         composed.GetService(typeof(string));
 
+        // Pacing lands between retry and observability: each attempt that gets through the gate is a real
+        // request against the quota, and the time spent held at the gate is not provider latency.
         Assert.Equal(
             [
                 ProviderRuntimeStage.Retry,
+                ProviderRuntimeStage.Pacing,
                 ProviderRuntimeStage.Observability,
                 ProviderRuntimeStage.Budget,
                 ProviderRuntimeStage.Normalization,

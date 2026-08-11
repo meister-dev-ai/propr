@@ -51,7 +51,7 @@ public sealed class AiProviderMetrics : IDisposable
     /// <summary>Records one completed attempt and how long it took.</summary>
     /// <param name="providerKind">Provider family the call was routed to.</param>
     /// <param name="modelId">Remote model id the call addressed.</param>
-    /// <param name="outcome">How the attempt ended: <c>ok</c>, <c>error</c> or <c>cancelled</c>.</param>
+    /// <param name="outcome">How the attempt ended: <c>ok</c>, <c>error</c>, <c>throttled</c> or <c>cancelled</c>.</param>
     /// <param name="elapsedSeconds">Wall-clock duration of the attempt.</param>
     public void RecordCall(AiProviderKind providerKind, string modelId, string outcome, double elapsedSeconds)
     {

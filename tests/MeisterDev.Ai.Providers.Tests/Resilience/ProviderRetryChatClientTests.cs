@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Runtime.CompilerServices;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
@@ -77,8 +76,10 @@ public sealed class ProviderRetryChatClientTests
         Assert.Equal(AiProviderKind.OpenAiCompatible, failure.ProviderKind);
     }
 
+    // A token that is already cancelled stops the call where it stands, so the provider is never asked. Counting
+    // attempts cannot show anything about retrying here, which is why the pair below carries that question.
     [Fact]
-    public async Task CancellationByTheCallerIsNeitherRetriedNorRewritten()
+    public async Task CancellationByTheCallerStopsBeforeTheProviderIsReached()
     {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
@@ -87,6 +88,20 @@ public sealed class ProviderRetryChatClientTests
         await Assert.ThrowsAsync<OperationCanceledException>(() => Client(inner).GetResponseAsync(
             [new ChatMessage(ChatRole.User, "hello")], cancellationToken: cts.Token));
 
+        Assert.Equal(0, inner.Calls);
+    }
+
+    // The other half: a cancellation raised while the caller's token is healthy is still not ours to judge. It
+    // reaches the caller as thrown, and the one attempt it cost is the only one made.
+    [Fact]
+    public async Task ACancellationRaisedWithAHealthyTokenIsNeitherRetriedNorRewritten()
+    {
+        var cancellation = new OperationCanceledException();
+        var inner = new ScriptedChatClient([cancellation]);
+
+        var thrown = await Assert.ThrowsAsync<OperationCanceledException>(() => Client(inner).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.Same(cancellation, thrown);
         Assert.Equal(1, inner.Calls);
     }
 
@@ -223,6 +238,23 @@ public sealed class ProviderRetryChatClientTests
         Assert.Equal(2, inner.Calls);
     }
 
+    // A quota that stays exhausted for the whole attempt budget ends the call, and the reason written on the job
+    // has to say it was a rate limit and what an operator can do about it.
+    [Fact]
+    public async Task AThrottleOnEveryAttemptEndsAsAFailureThatNamesTheRateLimit()
+    {
+        var inner = new ScriptedChatClient([Throttled(), Throttled(), Throttled()]);
+
+        var failure = await Assert.ThrowsAsync<ProviderCallFailedException>(() => Client(inner).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.Equal(3, inner.Calls);
+        Assert.Equal(3, failure.Attempts);
+        Assert.True(failure.Verdict.IsThrottled);
+        Assert.Contains("throttled the request", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(DriverFailureMapper.ActionHintFor(429), failure.ActionHint);
+        Assert.Contains(failure.ActionHint!, failure.Message, StringComparison.Ordinal);
+    }
+
     private static ProviderRetryChatClient Client(
         IChatClient inner,
         ProviderRetryPolicy? policy = null,
@@ -246,70 +278,11 @@ public sealed class ProviderRetryChatClientTests
         return new HttpRequestException("rejected", null, (System.Net.HttpStatusCode)status);
     }
 
+    private static Exception Throttled()
+    {
+        return new HttpRequestException("rate limited", null, System.Net.HttpStatusCode.TooManyRequests);
+    }
+
     /// <summary>Stands in for a budget hard cap: a product refusal that travels on the cancellation channel.</summary>
     private sealed class HardCapStub() : OperationCanceledException("the budget hard cap was reached");
-
-    /// <summary>
-    ///     Fails with each queued exception in turn — a <see langword="null" /> entry means "succeed this time".
-    /// </summary>
-    private sealed class ScriptedChatClient(IReadOnlyList<Exception?> script, bool failAfterFirstUpdate = false) : IChatClient
-    {
-        public int Calls { get; private set; }
-
-        public List<IList<ChatMessage>> Conversations { get; } = [];
-
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            this.Record(messages);
-            var failure = this.NextFailure();
-            return failure is not null
-                ? Task.FromException<ChatResponse>(failure)
-                : Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
-        }
-
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            this.Record(messages);
-            var failure = this.NextFailure();
-            if (failure is not null)
-            {
-                throw failure;
-            }
-
-            await Task.Yield();
-            yield return new ChatResponseUpdate(ChatRole.Assistant, "ok");
-
-            if (failAfterFirstUpdate)
-            {
-                throw new HttpRequestException(HttpRequestError.ConnectionError, "stream cut");
-            }
-        }
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public TService? GetService<TService>(object? key = null)
-            where TService : class => null;
-
-        public void Dispose()
-        {
-        }
-
-        private void Record(IEnumerable<ChatMessage> messages)
-        {
-            this.Conversations.Add(messages.ToList());
-            this.Calls++;
-        }
-
-        private Exception? NextFailure()
-        {
-            var index = this.Calls - 1;
-            return index < script.Count ? script[index] : null;
-        }
-    }
 }

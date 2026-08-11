@@ -16,6 +16,14 @@ namespace MeisterDev.Ai.Providers.Runtime;
 ///         </item>
 ///         <item>
 ///             <description>
+///                 <see cref="Pacing" /> inside retry, because each attempt that gets past the gate is a real
+///                 request against the quota, so the attempt budget stays with retry. It sits outside
+///                 <see cref="Observability" /> so that time spent waiting on a throttled connection is not
+///                 counted as provider latency.
+///             </description>
+///         </item>
+///         <item>
+///             <description>
 ///                 <see cref="Observability" /> inside retry sees each attempt separately, and captures a
 ///                 <see cref="Budget" /> refusal within the attempt that provoked it.
 ///             </description>
@@ -33,12 +41,15 @@ public enum ProviderRuntimeStage
     /// <summary>Retries transient provider failures. Outermost, so each attempt passes through every later stage.</summary>
     Retry = 0,
 
+    /// <summary>Holds an attempt back while the connection it is bound for is known to be out of quota.</summary>
+    Pacing = 1,
+
     /// <summary>Records spans, logs, and usage for a single attempt.</summary>
-    Observability = 1,
+    Observability = 2,
 
     /// <summary>Meters and gates spend. Host-supplied; the library has no notion of cost or entitlement.</summary>
-    Budget = 2,
+    Budget = 3,
 
     /// <summary>Adapts requests and responses for a specific model's quirks. Innermost, closest to the wire.</summary>
-    Normalization = 3,
+    Normalization = 4,
 }

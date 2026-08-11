@@ -39,6 +39,33 @@ public sealed class AiRuntimeFactoryTests
         Assert.Same(binding, runtime.Binding);
     }
 
+    // A gate is only worth having if the stage that uses it is actually in the composed chain: without it, a
+    // fan-out learns about a throttle one refusal at a time, which is the behaviour the gate was added to end.
+    [Fact]
+    public void CreateChatRuntime_WithAThrottleGate_ComposesThePacingStage()
+    {
+        var (registry, _, _, connection, model, binding) = SetupChat();
+
+        var factory = new AiRuntimeFactory(registry, throttleGate: new ProviderThrottleGate());
+        var runtime = factory.CreateChatRuntime(connection, model, binding);
+
+        Assert.IsType<ProviderRetryChatClient>(runtime.ChatClient);
+        Assert.NotNull(runtime.ChatClient.GetService<ProviderPacingChatClient>());
+    }
+
+    // Nothing shared to pace against means no stage at all, rather than a gate built per scope that would only
+    // ever tell a caller what it had already found out for itself.
+    [Fact]
+    public void CreateChatRuntime_WithNoThrottleGate_LeavesThePacingStageOut()
+    {
+        var (registry, _, _, connection, model, binding) = SetupChat();
+
+        var factory = new AiRuntimeFactory(registry);
+        var runtime = factory.CreateChatRuntime(connection, model, binding);
+
+        Assert.Null(runtime.ChatClient.GetService<ProviderPacingChatClient>());
+    }
+
     // With a budget scope accessor, the client is wrapped for metering (a different instance).
     [Fact]
     public void CreateChatRuntime_WithBudgetAccessor_WrapsClient()

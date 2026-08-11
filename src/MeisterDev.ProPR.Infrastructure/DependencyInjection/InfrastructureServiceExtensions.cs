@@ -9,6 +9,7 @@ using Azure.Core;
 using Azure.Identity;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Egress;
+using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Infrastructure.AI;
@@ -22,6 +23,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Services;
 using Microsoft.Extensions.Options;
@@ -92,6 +94,14 @@ public static class InfrastructureServiceExtensions
         // One meter for the process, so the instruments are not recreated per resolved runtime. Its name matches
         // the meter the host already exports, so no telemetry configuration has to learn about it.
         services.AddSingleton<AiProviderMetrics>();
+
+        // One gate for the process, because its whole job is to tell calls about a throttle that happened
+        // somewhere else. A scoped one would be a private note each review writes to itself. Every provider
+        // request is issued from the API process, runner-executed reviews included because a runner relays its
+        // model calls back through it, so one gate covers the whole fan-out of one replica. A deployment running
+        // several API replicas has a gate per replica, and each learns about a throttle on its own.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton(sp => new ProviderThrottleGate(sp.GetRequiredService<TimeProvider>()));
         services.AddScoped<IAiRuntimeResolver, AiRuntimeResolver>();
         services.AddScoped<IAiRuntimeFactory, AiRuntimeFactory>();
         // ILogicalModelResolver is registered in the Clients module, alongside its ILogicalModelCatalogRepository

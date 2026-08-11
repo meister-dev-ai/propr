@@ -64,6 +64,78 @@ public sealed class DriverFailureMapperClassificationTests
         Assert.Equal(TimeSpan.FromSeconds(7), verdict.RetryAfter);
     }
 
+    // Throttling is separated from the other transient classes so a later stage can pace the connection without
+    // re-reading the HTTP status off an exception it was never given.
+    [Fact]
+    public void AThrottleIsMarkedAsOneRatherThanOnlyAsTransient()
+    {
+        var throttled = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429));
+        var serverError = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(503));
+
+        Assert.True(throttled.IsThrottled);
+        Assert.True(throttled.IsTransient);
+        Assert.False(serverError.IsThrottled);
+    }
+
+    // OpenAI and the gateways that speak its shape state the wait in the error body and often send no header at
+    // all, so the body is read rather than the wait being guessed at.
+    [Fact]
+    public void AStatedDelayInTheBodyIsReadWhenNoHeaderCarriesOne()
+    {
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, message: RateLimitBody("Please try again in 4.023s.")));
+
+        Assert.Equal(TimeSpan.FromSeconds(4.023), verdict.RetryAfter);
+    }
+
+    [Fact]
+    public void AStatedDelayInMillisecondsIsReadAsAFractionOfASecond()
+    {
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, message: RateLimitBody("Please try again in 500ms.")));
+
+        Assert.Equal(TimeSpan.FromMilliseconds(500), verdict.RetryAfter);
+    }
+
+    [Fact]
+    public void ABodyThatStatesNoDelayLeavesTheScheduleToDecide()
+    {
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, message: RateLimitBody("Rate limit reached for this organization.")));
+
+        Assert.True(verdict.IsThrottled);
+        Assert.Null(verdict.RetryAfter);
+    }
+
+    // The header is the protocol's answer and the body is the provider's prose, so the header wins where both
+    // are present.
+    [Fact]
+    public void TheHeaderWinsOverADelayStatedInTheBody()
+    {
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, retryAfter: "7", message: RateLimitBody("Please try again in 4.023s.")));
+
+        Assert.Equal(TimeSpan.FromSeconds(7), verdict.RetryAfter);
+    }
+
+    // A header of zero is the provider taking back the wait it just offered. Reading it as "come straight back"
+    // would throw away a real number the body gave and send the fan-out into the quota it was asked to wait out.
+    [Fact]
+    public void ARetryAfterOfZeroDoesNotMaskADelayStatedInTheBody()
+    {
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, retryAfter: "0", message: RateLimitBody("Please try again in 4.023s.")));
+
+        Assert.Equal(TimeSpan.FromSeconds(4.023), verdict.RetryAfter);
+    }
+
+    // Anthropic, Google and Vertex report a 429 as an HttpRequestException rather than through the OpenAI SDK's
+    // own type, and the body rides along in the message, so the stated wait has to be read from there as well.
+    [Fact]
+    public void AStatedDelayIsReadFromAnHttpRequestExceptionToo()
+    {
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(
+            new HttpRequestException(RateLimitBody("Please try again in 12s."), null, HttpStatusCode.TooManyRequests));
+
+        Assert.True(verdict.IsThrottled);
+        Assert.Equal(TimeSpan.FromSeconds(12), verdict.RetryAfter);
+    }
+
     [Fact]
     public void ARetryAfterDateAlreadyPastYieldsNoWaitRatherThanANegativeOne()
     {
@@ -132,9 +204,17 @@ public sealed class DriverFailureMapperClassificationTests
         Assert.Equal(fromVerification.ActionHint, fromRuntime);
     }
 
-    private static ClientResultException HttpFailure(int status, string? retryAfter = null)
+    private static ClientResultException HttpFailure(int status, string? retryAfter = null, string? message = null)
     {
-        return new ClientResultException(new StubResponse(status, retryAfter));
+        var response = new StubResponse(status, retryAfter);
+        return message is null ? new ClientResultException(response) : new ClientResultException(message, response);
+    }
+
+    /// <summary>The shape a rate-limit failure arrives in: the status line, then the provider's own JSON body.</summary>
+    private static string RateLimitBody(string detail)
+    {
+        return "HTTP 429 (Too Many Requests)\n\n"
+               + "{\"error\":{\"message\":\"Rate limit reached for gpt-4o. " + detail + "\",\"type\":\"tokens\"}}";
     }
 
     /// <summary>Minimal transport response so a real <see cref="ClientResultException" /> can be constructed.</summary>

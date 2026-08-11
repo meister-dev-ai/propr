@@ -229,15 +229,25 @@ public sealed class BedrockProviderDriver(
                 continue;
             }
 
+            // Bedrock reports an exhausted quota by error code, so it is named as throttling rather than only as
+            // transient. Every other caller on the same account is about to be refused too, and only a verdict
+            // that says "throttled" lets a later stage act on that.
+            var isThrottled = aws.ErrorCode is "ThrottlingException" or "TooManyRequestsException"
+                              || (int)aws.StatusCode == 429;
+
             // A model that is still warming up answers this way and is worth waiting for, as is anything the
-            // service throttled or failed internally.
-            var isTransient = aws.ErrorCode is "ThrottlingException" or "TooManyRequestsException"
-                                  or "ModelNotReadyException" or "ServiceUnavailableException"
+            // service failed internally.
+            var isTransient = isThrottled
+                              || aws.ErrorCode is "ModelNotReadyException" or "ServiceUnavailableException"
                                   or "InternalServerException" or "ModelTimeoutException"
-                              || (int)aws.StatusCode == 429
                               || (int)aws.StatusCode >= 500;
 
             var reason = Describe(aws);
+            if (isThrottled)
+            {
+                return ProviderFailureVerdict.Throttled(reason, null, (int)aws.StatusCode);
+            }
+
             return isTransient
                 ? ProviderFailureVerdict.Transient(reason, null, (int)aws.StatusCode)
                 : ProviderFailureVerdict.Permanent(reason, (int)aws.StatusCode);

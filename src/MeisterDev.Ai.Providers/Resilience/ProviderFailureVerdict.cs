@@ -16,11 +16,18 @@ namespace MeisterDev.Ai.Providers.Resilience;
 /// <param name="Reason">Short operator-facing description of what went wrong.</param>
 /// <param name="RetryAfter">How long the provider asked the caller to wait, when it said so.</param>
 /// <param name="HttpStatus">The HTTP status behind the failure, when the failure had one.</param>
+/// <param name="IsThrottled">
+///     Whether the provider refused the call for want of quota. Throttling is called out separately from the
+///     other transient classes because it says something about the connection as a whole: every other caller
+///     sharing it is about to be refused too. A stage that acts on that would otherwise have to re-derive it
+///     from the HTTP status, which not every driver has.
+/// </param>
 public readonly record struct ProviderFailureVerdict(
     bool IsTransient,
     string Reason,
     TimeSpan? RetryAfter = null,
-    int? HttpStatus = null)
+    int? HttpStatus = null,
+    bool IsThrottled = false)
 {
     /// <summary>A failure that repeating cannot fix — a rejected request, a bad credential, a missing model.</summary>
     /// <param name="reason">Short operator-facing description of what went wrong.</param>
@@ -37,5 +44,17 @@ public readonly record struct ProviderFailureVerdict(
     public static ProviderFailureVerdict Transient(string reason, TimeSpan? retryAfter = null, int? httpStatus = null)
     {
         return new ProviderFailureVerdict(true, reason, retryAfter, httpStatus);
+    }
+
+    /// <summary>
+    ///     A call the provider refused for want of quota. Transient like the rest, and additionally marked so a
+    ///     later stage can hold back the other calls bound for the same connection.
+    /// </summary>
+    /// <param name="reason">Short operator-facing description of what went wrong.</param>
+    /// <param name="retryAfter">How long the provider asked the caller to wait, when it said so.</param>
+    /// <param name="httpStatus">The HTTP status behind the failure, when the failure had one.</param>
+    public static ProviderFailureVerdict Throttled(string reason, TimeSpan? retryAfter = null, int? httpStatus = null)
+    {
+        return new ProviderFailureVerdict(true, reason, retryAfter, httpStatus, true);
     }
 }

@@ -5,6 +5,7 @@ using System.ClientModel;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Resilience;
@@ -17,8 +18,11 @@ namespace MeisterDev.Ai.Providers.Drivers;
 ///     same failures, so they share one place to answer it — a provider whose 429 is understood at probe time but
 ///     not at runtime would retry inconsistently for no reason a reader could discover.
 /// </summary>
-public static class DriverFailureMapper
+public static partial class DriverFailureMapper
 {
+    /// <summary>How much of a failure message is scanned for a stated wait.</summary>
+    private const int MaxScannedMessageLength = 4096;
+
     public static ProviderVerificationResult Verified(string summary, IReadOnlyList<string>? warnings = null)
     {
         return new ProviderVerificationResult(
@@ -87,9 +91,9 @@ public static class DriverFailureMapper
             switch (candidate)
             {
                 case ClientResultException clientResult:
-                    return FromStatus(clientResult.Status, ReadRetryAfter(clientResult));
-                case HttpRequestException { StatusCode: { } statusCode }:
-                    return FromStatus((int)statusCode, null);
+                    return FromStatus(clientResult.Status, ReadStatedWait(clientResult));
+                case HttpRequestException { StatusCode: { } statusCode } withStatus:
+                    return FromStatus((int)statusCode, ReadStatedDelay(withStatus.Message));
                 case HttpRequestException httpRequest:
                     return ProviderFailureVerdict.Transient($"The provider endpoint could not be reached ({httpRequest.HttpRequestError}).");
                 case TimeoutException:
@@ -141,7 +145,7 @@ public static class DriverFailureMapper
     {
         return status switch
         {
-            429 => ProviderFailureVerdict.Transient($"The provider throttled the request (HTTP {status}).", retryAfter, status),
+            429 => ProviderFailureVerdict.Throttled($"The provider throttled the request (HTTP {status}).", retryAfter, status),
             408 or 425 => ProviderFailureVerdict.Transient($"The provider timed out the request (HTTP {status}).", retryAfter, status),
             // 501 and 505 are server-side statuses that repeating cannot change: the provider does not implement
             // what was asked, and it will not start to on the second attempt.
@@ -152,6 +156,20 @@ public static class DriverFailureMapper
             404 => ProviderFailureVerdict.Permanent($"The provider has no such endpoint or model (HTTP {status}).", status),
             _ => ProviderFailureVerdict.Permanent($"The provider rejected the request (HTTP {status}).", status),
         };
+    }
+
+    /// <summary>
+    ///     The wait to honour for one failure, drawn from the header when it names a real one and from the
+    ///     response body otherwise. A <c>Retry-After</c> of zero, or an HTTP date that has already passed, is a
+    ///     header that grants no wait at all; letting it win over a body that states seconds would send the whole
+    ///     fan-out straight back into the exhausted quota. With nothing in the body, the header still decides,
+    ///     zero included.
+    /// </summary>
+    /// <param name="exception">The failure, carrying both the raw response and the body in its message.</param>
+    private static TimeSpan? ReadStatedWait(ClientResultException exception)
+    {
+        var header = ReadRetryAfter(exception);
+        return header > TimeSpan.Zero ? header : ReadStatedDelay(exception.Message) ?? header;
     }
 
     // Providers state their own backoff on 429 and sometimes on 503. Honouring it beats guessing, so it is read
@@ -174,6 +192,62 @@ public static class DriverFailureMapper
             ? Max(until - DateTimeOffset.UtcNow, TimeSpan.Zero)
             : null;
     }
+
+    /// <summary>
+    ///     Reads a wait the provider stated in prose rather than in a header. OpenAI and the gateways that copy
+    ///     its shape answer a throttled call with "Please try again in 4.023s" and frequently send no
+    ///     <c>Retry-After</c> at all, so ignoring the body means guessing at a number the provider already gave.
+    ///     Anything that does not parse yields nothing, which leaves the exponential schedule in charge.
+    /// </summary>
+    /// <param name="message">The failure message, which for these SDKs carries the response body.</param>
+    private static TimeSpan? ReadStatedDelay(string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return null;
+        }
+
+        // A provider that echoes the request back can make the body arbitrarily long, and the stated wait is part
+        // of the error prose at the front of it, so only the opening is scanned.
+        var scanned = message.Length > MaxScannedMessageLength ? message[..MaxScannedMessageLength] : message;
+
+        Match match;
+        try
+        {
+            match = StatedDelayPattern().Match(scanned);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // Classification runs from inside a catch block. A throw here would replace the provider failure the
+            // caller is trying to report with a failure to read it, so an unreadable body states nothing.
+            return null;
+        }
+
+        if (!match.Success
+            || !double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var amount))
+        {
+            return null;
+        }
+
+        var unit = match.Groups[2].Value;
+        if (unit.StartsWith("ms", StringComparison.OrdinalIgnoreCase)
+            || unit.StartsWith("milli", StringComparison.OrdinalIgnoreCase))
+        {
+            return TimeSpan.FromMilliseconds(amount);
+        }
+
+        return unit.StartsWith("m", StringComparison.OrdinalIgnoreCase)
+            ? TimeSpan.FromMinutes(amount)
+            : TimeSpan.FromSeconds(amount);
+    }
+
+    // The digits are bounded so a malformed or hostile body cannot produce a duration the runtime cannot hold;
+    // whatever survives that is capped again by the retry policy before anyone waits on it.
+    [GeneratedRegex(
+        @"(?:try again|retry)\s+(?:in|after)\s+(\d{1,6}(?:\.\d{1,3})?)\s*(ms|milliseconds?|s|seconds?|m|minutes?)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        200)]
+    private static partial Regex StatedDelayPattern();
 
     private static TimeSpan Max(TimeSpan left, TimeSpan right)
     {

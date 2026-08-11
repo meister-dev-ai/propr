@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Domain.Services;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -27,7 +28,23 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 ///         eventually succeeded, and outside the budget stage, so a refusal is recorded against the attempt that
 ///         provoked it.
 ///     </para>
+///     <para>
+///         Sitting inside retry also means it sees failures the retry stage goes on to absorb. A throttled
+///         attempt is one of those, so it is recorded as throttling rather than as a fault; reporting it as an
+///         error would put a stack trace and an error span behind something the review recovered from.
+///     </para>
 /// </remarks>
+/// <param name="innerClient">The client whose calls are measured.</param>
+/// <param name="target">The profile, provider and model being called.</param>
+/// <param name="pricing">Pricing for the model, so cost can be measured alongside tokens.</param>
+/// <param name="metrics">Instruments the measurements are recorded on.</param>
+/// <param name="logger">Optional logger for the per-call log line.</param>
+/// <param name="clientId">Owning client, tagged on spans only.</param>
+/// <param name="logicalModelName">The logical-model role the call was resolved under, when there was one.</param>
+/// <param name="classifyFailure">
+///     The driver's classification of a failure, used only to tell a throttle from a fault. Omitting it reports
+///     every failure as a fault, which is what a caller with no driver to hand can honestly say.
+/// </param>
 public sealed partial class ProviderTelemetryChatClient(
     IChatClient innerClient,
     ProviderCallTarget target,
@@ -35,7 +52,8 @@ public sealed partial class ProviderTelemetryChatClient(
     AiProviderMetrics metrics,
     ILogger? logger = null,
     Guid? clientId = null,
-    string? logicalModelName = null) : DelegatingChatClient(innerClient)
+    string? logicalModelName = null,
+    Func<Exception, ProviderFailureVerdict>? classifyFailure = null) : DelegatingChatClient(innerClient)
 {
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
 
@@ -213,18 +231,65 @@ public sealed partial class ProviderTelemetryChatClient(
         // A cancellation is not a provider fault — a stopped job and a budget refusal both arrive this way — so
         // it is counted apart from errors rather than inflating a provider's failure rate.
         var cancelled = exception is OperationCanceledException;
-        var outcome = cancelled ? "cancelled" : "error";
+
+        // A throttle gets its own outcome for the same reason. The provider answered that it has no quota left
+        // for the moment, and the retry stage above waits and asks again. Keeping it apart from errors is what
+        // lets a rate limit be told from an outage in the chart that used to show both the same way.
+        var verdict = cancelled ? null : this.Classify(exception);
+        var throttled = verdict?.IsThrottled == true;
+        var faulted = !cancelled && !throttled;
+        var outcome = cancelled ? "cancelled" : throttled ? "throttled" : "error";
         metrics.RecordCall(target.ProviderKind, target.ModelId, outcome, ElapsedSeconds(started));
 
         if (activity is not null)
         {
-            activity.SetTag("error.type", exception.GetType().FullName ?? exception.GetType().Name);
-            activity.SetStatus(cancelled ? ActivityStatusCode.Unset : ActivityStatusCode.Error, exception.Message);
+            if (faulted)
+            {
+                // Backends derive a provider's error rate from this tag, so a throttle or a stop the review
+                // recovered from must not carry one.
+                activity.SetTag("error.type", exception.GetType().FullName ?? exception.GetType().Name);
+            }
+
+            activity.SetStatus(faulted ? ActivityStatusCode.Error : ActivityStatusCode.Unset, exception.Message);
         }
 
-        if (logger is not null && !cancelled)
+        if (logger is null)
+        {
+            return;
+        }
+
+        if (faulted)
         {
             LogCallFailed(logger, target.Describe(), exception);
+        }
+        else if (verdict is { IsThrottled: true } throttle)
+        {
+            // No exception argument, so no stack trace: the retry stage owns the operator-facing line about the
+            // throttle, and a second one carrying a trace reads as a fault that nothing actually suffered.
+            LogCallThrottled(logger, target.Describe(), throttle.Reason);
+        }
+    }
+
+    /// <summary>
+    ///     Asks the driver what the failure was, treating a classifier that throws as having no opinion.
+    ///     Recording a call is a side errand, and the exception the retry stage still has to classify must reach
+    ///     it whatever happens here.
+    /// </summary>
+    /// <param name="exception">The failure the attempt threw.</param>
+    private ProviderFailureVerdict? Classify(Exception exception)
+    {
+        if (classifyFailure is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return classifyFailure(exception);
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 
@@ -245,4 +310,7 @@ public sealed partial class ProviderTelemetryChatClient(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "AI provider call to {Target} failed.")]
     private static partial void LogCallFailed(ILogger logger, string target, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "AI provider call to {Target} was throttled ({Reason}).")]
+    private static partial void LogCallThrottled(ILogger logger, string target, string reason);
 }

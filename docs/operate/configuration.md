@@ -405,6 +405,12 @@ effect - see [editions](../reference/editions.md). Without it a review works on 
 same rule the worker applies to whole jobs. It is the second of the two multipliers described under
 [review workers](deploy.md#review-workers).
 
+When a provider rate-limits a call, ProPR waits for the delay that provider asked for. The delay is read
+from the `Retry-After` header, or from the error message when the provider states it there instead.
+`AI_MAX_BACKOFF_SECONDS` caps that wait and `AI_MAX_RATE_LIMIT_RETRIES` sets how many further attempts the
+call gets. While one connection is rate-limited, other calls bound for the same connection wait too, so a
+review working on several files at once stops sending requests the provider has already refused.
+
 Which files land in which complexity tier is decided per review - see
 [reviews](../concepts/reviews.md).
 

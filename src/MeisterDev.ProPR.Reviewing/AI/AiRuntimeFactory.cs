@@ -30,7 +30,8 @@ public sealed class AiRuntimeFactory(
     IOptions<AiReviewOptions>? aiOptions = null,
     ILogger<AiRuntimeFactory>? logger = null,
     TimeProvider? timeProvider = null,
-    AiProviderMetrics? metrics = null) : IAiRuntimeFactory
+    AiProviderMetrics? metrics = null,
+    ProviderThrottleGate? throttleGate = null) : IAiRuntimeFactory
 {
     public IResolvedAiChatRuntime CreateChatRuntime(
         AiConnectionDto connection,
@@ -112,11 +113,26 @@ public sealed class AiRuntimeFactory(
         AiConfiguredModelDto model,
         string? logicalModelName)
     {
+        var policy = this.RetryPolicy();
         var decorators = new List<IProviderChatClientDecorator>
         {
-            new ProviderRetryChatClientDecorator(driver, this.RetryPolicy(), connection.DisplayName, timeProvider, logger),
+            new ProviderRetryChatClientDecorator(driver, policy, connection.DisplayName, timeProvider, logger),
             new ReasoningModelSamplingDecorator(),
         };
+
+        // The gate is handed in rather than built here because it has to be shared: this factory is scoped, and
+        // a gate per scope would tell each caller only what it had already found out for itself. Keyed by the
+        // connection, since that is what the provider's quota belongs to.
+        if (throttleGate is not null)
+        {
+            decorators.Add(
+                new ProviderPacingChatClientDecorator(
+                    driver,
+                    throttleGate,
+                    connection.Id.ToString("D"),
+                    policy,
+                    logger));
+        }
 
         if (metrics is not null)
         {
@@ -127,7 +143,8 @@ public sealed class AiRuntimeFactory(
                     connection.DisplayName,
                     connection.ClientId,
                     logicalModelName,
-                    logger));
+                    logger,
+                    driver.ClassifyRuntimeFailure));
         }
 
         if (budgetScopeAccessor is not null)

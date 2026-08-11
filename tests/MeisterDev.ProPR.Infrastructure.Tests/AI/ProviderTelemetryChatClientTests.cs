@@ -2,11 +2,15 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Net;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
@@ -24,7 +28,9 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
     private readonly ProviderCallTarget _target;
 
     private readonly List<Activity> _captured = [];
+    private readonly List<string> _recordedOutcomes = [];
     private readonly ActivityListener _listener;
+    private readonly MeterListener _meterListener;
     private readonly AiProviderMetrics _metrics = new();
 
     public ProviderTelemetryChatClientTests()
@@ -43,6 +49,21 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
             },
         };
         ActivitySource.AddActivityListener(this._listener);
+
+        // The meter is process-wide for the same reason the activity source is, so the call counter is read back
+        // through the same filter: only measurements tagged with this instance's model id count as its own.
+        this._meterListener = new MeterListener
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Name == "meisterpropr_ai_provider_calls_total")
+                {
+                    listener.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        this._meterListener.SetMeasurementEventCallback<long>((_, _, tags, _) => this.RecordOutcome(tags));
+        this._meterListener.Start();
     }
 
     /// <summary>Only this instance's own calls, so a concurrent test on the shared source cannot be mistaken for one.</summary>
@@ -57,9 +78,22 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
         }
     }
 
+    /// <summary>The outcome tag of every call this instance recorded, in order.</summary>
+    private List<string> Outcomes
+    {
+        get
+        {
+            lock (this._recordedOutcomes)
+            {
+                return [.. this._recordedOutcomes];
+            }
+        }
+    }
+
     public void Dispose()
     {
         this._listener.Dispose();
+        this._meterListener.Dispose();
         this._metrics.Dispose();
     }
 
@@ -138,6 +172,100 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
         Assert.NotEqual(ActivityStatusCode.Error, activity.Status);
     }
 
+    // A throttle is the provider working exactly as configured and saying "not right now". The retry stage waits
+    // and asks again, so recording it as a provider error would show a recovered review as an outage.
+    [Fact]
+    public async Task AThrottleIsRecordedAsThrottlingRatherThanAsAProviderError()
+    {
+        var client = this.Client(
+            new StubChatClient(new HttpRequestException("rate limited", null, HttpStatusCode.TooManyRequests)),
+            classifyFailure: _ => ProviderFailureVerdict.Throttled("the provider throttled the request", TimeSpan.FromSeconds(4), 429));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        var activity = Assert.Single(this.Activities);
+        Assert.NotEqual(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal(["throttled"], this.Outcomes);
+
+        // Backends derive an error rate from this tag rather than from the span status, so leaving it on a
+        // throttle would keep counting the rate limit as an outage whatever the status says.
+        Assert.Null(activity.GetTagItem("error.type"));
+    }
+
+    [Fact]
+    public async Task AFailureTheDriverDoesNotCallAThrottleIsStillAProviderError()
+    {
+        var client = this.Client(
+            new StubChatClient(new InvalidOperationException("provider said no")),
+            classifyFailure: _ => ProviderFailureVerdict.Permanent("the provider rejected the request", 400));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        var activity = Assert.Single(this.Activities);
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal(["error"], this.Outcomes);
+    }
+
+    // Without a classification there is nothing to distinguish a throttle by, and guessing would be worse than
+    // the honest answer that the call failed.
+    [Fact]
+    public async Task WithNoClassificationEveryFailureIsStillAnError()
+    {
+        var client = this.Client(new StubChatClient(new HttpRequestException("rate limited", null, HttpStatusCode.TooManyRequests)));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.Equal(["error"], this.Outcomes);
+    }
+
+    // This stage sees one attempt, never the call as a whole, so what is pinned here is the attempt: its throttle
+    // line is written without an exception argument, which is what keeps a stack trace out of the log. That the
+    // call then recovers is a question for the two stages together, covered further down.
+    [Fact]
+    public async Task AThrottledAttemptIsLoggedWithNoStackTraceBehindIt()
+    {
+        var logger = new CapturingLogger();
+        var client = this.Client(
+            new StubChatClient(new HttpRequestException("rate limited", null, HttpStatusCode.TooManyRequests)),
+            logger: logger,
+            classifyFailure: _ => ProviderFailureVerdict.Throttled("the provider throttled the request", TimeSpan.FromSeconds(4), 429));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Null(entry.Exception);
+        Assert.Contains("throttled", entry.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AGenuineFaultIsStillLoggedWithTheExceptionThatCausedIt()
+    {
+        var logger = new CapturingLogger();
+        var failure = new InvalidOperationException("provider said no");
+        var client = this.Client(new StubChatClient(failure), logger: logger);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Same(failure, entry.Exception);
+    }
+
+    // A classifier is the driver's own code. Recording a call is a side errand, so one that throws must not take
+    // the provider failure with it before the retry stage has had a look.
+    [Fact]
+    public async Task AClassifierThatThrowsLeavesTheProviderFailureOnItsWayUp()
+    {
+        var failure = new HttpRequestException("rate limited", null, HttpStatusCode.TooManyRequests);
+        var client = this.Client(
+            new StubChatClient(failure),
+            classifyFailure: _ => throw new InvalidOperationException("the classifier is broken"));
+
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.Same(failure, thrown);
+        Assert.Equal(["error"], this.Outcomes);
+    }
+
     private static UsageDetails Usage(long input, long output)
     {
         return new UsageDetails { InputTokenCount = input, OutputTokenCount = output };
@@ -148,14 +276,140 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
         return activity.GetTagItem(name) as string;
     }
 
-    private ProviderTelemetryChatClient Client(IChatClient inner, ModelPricing? pricing = null)
+    // Absorption is a property of the pair, not of this stage: the throttled attempt is measured and logged as a
+    // throttle, and the caller still gets an answer, with nothing in the log carrying a trace for either attempt.
+    [Fact]
+    public async Task AThrottleTheRetryStageAbsorbsStillLeavesAnAnswerAndNoLoggedFault()
+    {
+        var logger = new CapturingLogger();
+        var inner = new ThrottleThenAnswerChatClient(new HttpRequestException("rate limited", null, HttpStatusCode.TooManyRequests));
+        var measured = this.Client(inner, classifyFailure: ThrottledWithoutStatedWait, logger: logger);
+
+        // No stated wait and no base backoff, so the retry lands at once and the test does not sit on a clock.
+        var policy = new ProviderRetryPolicy
+        {
+            MaxAttempts = 2,
+            BaseDelay = TimeSpan.Zero,
+            MaxDelay = TimeSpan.FromSeconds(30),
+            JitterFactor = 0,
+        };
+        var client = new ProviderRetryChatClient(measured, policy, ThrottledWithoutStatedWait, this._target);
+
+        var response = await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]);
+
+        Assert.Equal("ok", response.Text);
+        Assert.Equal(2, inner.Calls);
+        Assert.Equal(["throttled", "ok"], this.Outcomes);
+        Assert.All(logger.Entries, entry => Assert.Null(entry.Exception));
+    }
+
+    private static ProviderFailureVerdict ThrottledWithoutStatedWait(Exception exception)
+    {
+        return ProviderFailureVerdict.Throttled("the provider throttled the request", null, 429);
+    }
+
+    private ProviderTelemetryChatClient Client(
+        IChatClient inner,
+        ModelPricing? pricing = null,
+        Func<Exception, ProviderFailureVerdict>? classifyFailure = null,
+        ILogger? logger = null)
     {
         return new ProviderTelemetryChatClient(
             inner,
             this._target,
             pricing ?? new ModelPricing(3m, 15m),
             this._metrics,
-            clientId: Guid.NewGuid());
+            logger,
+            clientId: Guid.NewGuid(),
+            classifyFailure: classifyFailure);
+    }
+
+    private void RecordOutcome(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    {
+        string? model = null;
+        string? outcome = null;
+        foreach (var tag in tags)
+        {
+            if (tag.Key == "ai_model")
+            {
+                model = tag.Value as string;
+            }
+            else if (tag.Key == "outcome")
+            {
+                outcome = tag.Value as string;
+            }
+        }
+
+        if (model != this._modelId || outcome is null)
+        {
+            return;
+        }
+
+        lock (this._recordedOutcomes)
+        {
+            this._recordedOutcomes.Add(outcome);
+        }
+    }
+
+    /// <summary>
+    ///     Keeps each line and whatever exception was handed to it, which is what tells an absorbed throttle from
+    ///     a fault the operator is meant to see a trace for.
+    /// </summary>
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<(string Message, Exception? Exception)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            ArgumentNullException.ThrowIfNull(formatter);
+
+            this.Entries.Add((formatter(state, exception), exception));
+        }
+    }
+
+    /// <summary>Refuses the first call and answers the second, which is the shape of a throttle worth absorbing.</summary>
+    /// <param name="failure">What the first call throws.</param>
+    private sealed class ThrottleThenAnswerChatClient(Exception failure) : IChatClient
+    {
+        public int Calls { get; private set; }
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            this.Calls++;
+            return this.Calls == 1
+                ? Task.FromException<ChatResponse>(failure)
+                : Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
+        }
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException("This client serves the response path only.");
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public TService? GetService<TService>(object? key = null)
+            where TService : class => null;
+
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class StubChatClient : IChatClient
