@@ -305,14 +305,30 @@ public sealed class RunnerFindingsIntakeTests
     [InlineData(-1, 2)]
     [InlineData(2, 2)]
     [InlineData(0, 0)]
-    public async Task AChunkOutsideItsDeclaredRange_IsRejectedBeforeAnythingElse(int index, int count)
+    public async Task AChunkOutsideItsDeclaredRange_IsRejectedWithoutAssemblingAnything(int index, int count)
     {
         var result = await this.CreateIntake().SubmitAsync(
             Call,
             new RunnerFindingsChunk("sub-1", index, count, null, []));
 
         Assert.Equal(RunnerSubmissionOutcome.Rejected, result.Outcome);
-        await this._authorizer.DidNotReceive().AuthorizeAsync(Arg.Any<RunnerCallContext>(), Arg.Any<CancellationToken>());
+        await this._publisher.DidNotReceive().PublishAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
+    }
+
+    // The shape of the body decides nothing until the caller is known to own the call. Answered the other
+    // way round, a malformed chunk from a superseded generation would be told how the chunking is checked,
+    // and the caller's own refusal would be decided by a number it chose.
+    [Theory]
+    [InlineData(-1, 2)]
+    [InlineData(0, 0)]
+    public async Task AMalformedChunkFromAnUnauthorizedCaller_IsRefusedAsUnauthorized(int index, int count)
+    {
+        var result = await this.CreateIntake(authorized: false).SubmitAsync(
+            Call,
+            new RunnerFindingsChunk("sub-1", index, count, null, []));
+
+        Assert.Equal(RunnerSubmissionOutcome.NotAuthorized, result.Outcome);
+        Assert.Equal(RunnerCallRefusal.SupersededGeneration, result.CallRefusal);
     }
 
     // A publication that threw has not published. Keeping the claim would strand a review that never

@@ -36,18 +36,19 @@ public sealed class RunnerFindingsIntake(
         ArgumentNullException.ThrowIfNull(chunk);
         ArgumentException.ThrowIfNullOrWhiteSpace(chunk.SubmissionId);
 
-        if (chunk.ChunkCount < 1 || chunk.ChunkIndex < 0 || chunk.ChunkIndex >= chunk.ChunkCount)
-        {
-            return RunnerSubmissionResult.Rejected("The chunk index is outside the declared chunk count.");
-        }
-
+        // Authorization comes before anything the body says, so nothing the body says can decide whether
+        // authorization runs. The most common refusal is the same job submitted twice from two lease
+        // generations, because the original executor came back after a reclaim; the older one is refused
+        // here rather than allowed to publish a second review.
         var authorization = await authorizer.AuthorizeAsync(call, ct);
         if (!authorization.IsAuthorized)
         {
-            // Covers the case the story cares about most: the same job submitted twice from two lease
-            // generations, because the original executor came back after a reclaim. The older one is
-            // refused here rather than allowed to publish a second review.
             return RunnerSubmissionResult.NotAuthorized(authorization.Refusal);
+        }
+
+        if (chunk.ChunkCount < 1 || chunk.ChunkIndex < 0 || chunk.ChunkIndex >= chunk.ChunkCount)
+        {
+            return RunnerSubmissionResult.Rejected("The chunk index is outside the declared chunk count.");
         }
 
         // A resend of a submission that already published. Answered as success and published nothing,
