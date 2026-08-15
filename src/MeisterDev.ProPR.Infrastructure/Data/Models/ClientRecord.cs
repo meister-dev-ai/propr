@@ -187,4 +187,7 @@ public sealed class ClientRecord
     public ICollection<ClientPurposeLogicalModelRecord> PurposeLogicalModels { get; set; } = [];
 
     public ICollection<CrawlConfigurationRecord> CrawlConfigurations { get; set; } = [];
+
+    /// <summary>The projects and repositories this client answers `@`-mentions on.</summary>
+    public ICollection<MentionConfigurationRecord> MentionConfigurations { get; set; } = [];
 }

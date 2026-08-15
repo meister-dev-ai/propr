@@ -217,6 +217,8 @@ try
         .AddSingleton<IValidator<UpdateTenantSsoProviderRequest>, UpdateTenantSsoProviderRequestValidator>();
     builder.Services.AddSingleton<IValidator<CreateAdminCrawlConfigRequest>, CreateAdminCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchAdminCrawlConfigRequest>, PatchAdminCrawlConfigRequestValidator>();
+    builder.Services.AddSingleton<IValidator<CreateMentionConfigRequest>, CreateMentionConfigRequestValidator>();
+    builder.Services.AddSingleton<IValidator<PatchMentionConfigRequest>, PatchMentionConfigRequestValidator>();
     builder.Services
         .AddSingleton<IValidator<CreateAdminWebhookConfigRequest>, CreateAdminWebhookConfigRequestValidator>();
     builder.Services

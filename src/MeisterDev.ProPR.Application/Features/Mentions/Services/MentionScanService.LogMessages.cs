@@ -68,4 +68,24 @@ public sealed partial class MentionScanService
         Level = LogLevel.Error,
         Message = "MentionScanService: error scanning config {ConfigId}")]
     private static partial void LogConfigScanError(ILogger logger, Guid configId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message =
+            "MentionScanService: config {ConfigId} answers on {CoveredCount} of the {TotalCount} recently updated PRs in the project")]
+    private static partial void LogPrsAfterRepositoryFilter(
+        ILogger logger,
+        Guid configId,
+        int coveredCount,
+        int totalCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message =
+            "MentionScanService: PR #{PullRequestId} thread {ThreadId} comment {CommentId} was taken by another client covering the same repository")]
+    private static partial void LogMentionTakenByAnotherClient(
+        ILogger logger,
+        int pullRequestId,
+        string threadId,
+        long commentId);
 }

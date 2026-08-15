@@ -17,26 +17,45 @@ public interface IMentionReplyJobRepository
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task AddAsync(MentionReplyJob job, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Adds a job unless another client's scan has already taken the same comment, returning whether
+    ///     this call is the one that took it.
+    /// </summary>
+    /// <remarks>
+    ///     The losing side of the race is an ordinary outcome rather than a fault: both clients cover the
+    ///     repository, both are correct to have looked, and exactly one of them answers. Distinguishing a
+    ///     lost race from a real write failure is why this returns a result instead of throwing.
+    /// </remarks>
+    /// <param name="job">The job to persist.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    Task<bool> TryAddAsync(MentionReplyJob job, CancellationToken ct = default);
+
     /// <summary>Returns all pending jobs, oldest first.</summary>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<IReadOnlyList<MentionReplyJob>> GetPendingAsync(CancellationToken ct = default);
 
     /// <summary>
-    ///     Returns <c>true</c> if a job already exists for the given mention comment.
-    ///     Used to prevent duplicate enqueuing.
+    ///     Returns <c>true</c> when this comment has already been taken by some client.
     /// </summary>
-    /// <param name="clientId">The client identifier.</param>
+    /// <remarks>
+    ///     Deliberately not scoped to a client. Two clients may both cover a repository and neither can see
+    ///     the other's configuration, so the question worth asking is whether this question has an answer
+    ///     coming, not whether this particular client has one coming. The reviewer account addressed is part
+    ///     of the identity: a mention of a different bot on the same comment is a different question.
+    ///     This is an optimisation over the uniqueness rule the database enforces, not a substitute for it.
+    /// </remarks>
     /// <param name="repositoryId">Provider-native repository identifier.</param>
-    /// <param name="pullRequestId">ADO pull request number.</param>
-    /// <param name="threadId">ADO thread ID.</param>
-    /// <param name="commentId">ADO comment ID.</param>
+    /// <param name="pullRequestId">Provider pull request number.</param>
+    /// <param name="threadId">Provider-native thread identifier.</param>
+    /// <param name="commentId">Provider-native comment identifier.</param>
+    /// <param name="mentionedReviewerKey">Stable key of the reviewer account the mention addressed.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<bool> ExistsForCommentAsync(
-        Guid clientId,
         string repositoryId,
         int pullRequestId,
         string threadId,
         long commentId,
+        string mentionedReviewerKey,
         CancellationToken ct = default);
 
     /// <summary>
@@ -51,6 +70,50 @@ public interface IMentionReplyJobRepository
         Guid jobId,
         MentionJobStatus from,
         MentionJobStatus to,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records the increment the answer is charged to and the runtime that produced it.
+    /// </summary>
+    /// <remarks>
+    ///     Written once the answer is back, because the connection and model are only known from the response,
+    ///     and they are what price the tokens. A process that dies between the call and this write leaves the
+    ///     row with none of them set, so that answer's spend is unrecoverable and the retry pays for it again.
+    ///     The window is one database round trip wide and closing it would need the runtime resolved before the
+    ///     call rather than during it.
+    /// </remarks>
+    /// <param name="jobId">The job identifier.</param>
+    /// <param name="iterationId">The increment current when the answer is written, or null when unknown.</param>
+    /// <param name="connectionId">The resolved AI connection, or null when none was resolved.</param>
+    /// <param name="model">The resolved model identifier, or null when none was resolved.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    Task SetExecutionContextAsync(
+        Guid jobId,
+        int? iterationId,
+        Guid? connectionId,
+        string? model,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Marks a job as stopped by a budget cap, recording which cap stopped it.
+    /// </summary>
+    /// <param name="jobId">The job identifier.</param>
+    /// <param name="iterationId">
+    ///     The increment resolved for the answer, or null when unknown. Recorded here because a refused answer
+    ///     never reaches the write that would otherwise carry it.
+    /// </param>
+    /// <param name="scope">The budget scope whose cap was reached.</param>
+    /// <param name="capKind">Whether the cap was soft or hard.</param>
+    /// <param name="thresholdUsd">The configured cap.</param>
+    /// <param name="spentUsd">What the scope had spent.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    Task SetBudgetHeldAsync(
+        Guid jobId,
+        int? iterationId,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
         CancellationToken ct = default);
 
     /// <summary>Marks a job as failed with an error message.</summary>

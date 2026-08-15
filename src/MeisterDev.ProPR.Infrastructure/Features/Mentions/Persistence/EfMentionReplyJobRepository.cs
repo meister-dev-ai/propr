@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
 
@@ -35,22 +36,64 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
 
     /// <inheritdoc />
     public async Task<bool> ExistsForCommentAsync(
-        Guid clientId,
         string repositoryId,
         int pullRequestId,
         string threadId,
         long commentId,
+        string mentionedReviewerKey,
         CancellationToken ct = default)
     {
         return await dbContext.MentionReplyJobs
             .AnyAsync(
                 j =>
-                    j.ClientId == clientId &&
                     j.RepositoryId == repositoryId &&
                     j.PullRequestId == pullRequestId &&
                     j.ThreadId == threadId &&
-                    j.CommentId == commentId,
+                    j.CommentId == commentId &&
+                    j.MentionedReviewerKey == mentionedReviewerKey,
                 ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryAddAsync(MentionReplyJob job, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+
+        await dbContext.MentionReplyJobs.AddAsync(job, ct);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex)
+        {
+            // Detached whatever went wrong, not only on the race. One scan cycle shares a single context
+            // across every configuration and pull request it visits, so a job left in Added state after a
+            // failed write is replayed by the next SaveChangesAsync and fails it too. One over-long value
+            // from a provider would otherwise take down the rest of the cycle.
+            dbContext.Entry(job).State = EntityState.Detached;
+
+            if (IsMentionUniquenessViolation(ex))
+            {
+                // Another client covering the same repository reached this comment first. An ordinary
+                // outcome: both were right to look, and exactly one of them answers.
+                return false;
+            }
+
+            throw;
+        }
+    }
+
+    // Narrowed to the one constraint that means "already taken". Treating every DbUpdateException as a lost
+    // race would swallow genuine write failures and report a mention as answered when nothing was stored.
+    private static bool IsMentionUniquenessViolation(DbUpdateException exception)
+    {
+        return exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } postgres
+               && string.Equals(
+                   postgres.ConstraintName,
+                   "uq_mention_reply_jobs_mention",
+                   StringComparison.Ordinal);
     }
 
     /// <inheritdoc />
@@ -83,6 +126,48 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
             await dbContext.Entry(job).ReloadAsync(ct);
             return false;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task SetExecutionContextAsync(
+        Guid jobId,
+        int? iterationId,
+        Guid? connectionId,
+        string? model,
+        CancellationToken ct = default)
+    {
+        var job = await dbContext.MentionReplyJobs.FindAsync([jobId], ct);
+        if (job is null)
+        {
+            return;
+        }
+
+        job.SetIteration(iterationId);
+        job.SetAiConfig(connectionId, model);
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task SetBudgetHeldAsync(
+        Guid jobId,
+        int? iterationId,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default)
+    {
+        var job = await dbContext.MentionReplyJobs.FindAsync([jobId], ct);
+        if (job is null)
+        {
+            return;
+        }
+
+        job.Status = MentionJobStatus.BudgetHeld;
+        job.CompletedAt = DateTimeOffset.UtcNow;
+        job.SetIteration(iterationId);
+        job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
+        await dbContext.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />

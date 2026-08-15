@@ -112,9 +112,17 @@ calls in all three scopes. The tenant Budget and Spend views are read-only roll-
 clients - they report and forecast, they never enforce. Budgeting requires a commercial license; see
 [editions and licensed features](../reference/editions.md).
 
-Every scope totals both units of work over a pull request: the file review and the thread pass that
-answers the conversation. A thread pass is held, cut and restarted on the same terms a review is, and
-what it spent per thread is visible in its own trace, reachable from the pull request's review view.
+Every scope totals all three units of work over a pull request: the file review, the thread pass that
+answers the conversation, and the answer to an `@propr` mention. A thread pass is held, cut and restarted
+on the same terms a review is, and what it spent per thread is visible in its own trace, reachable from
+the pull request's review view.
+
+A mention answer is metered the same way, and only a hard cap stops it. Someone is waiting on the answer, so
+a soft cap lets it through and records that it was written past the threshold, while a hard cap makes ProPR
+post a short reply saying the budget for the period is used up without calling the model. A stopped answer
+is not held for a restart: the job ends there, and asking again once an administrator raises the cap is how
+you get an answer. An answer whose increment cannot be determined still counts toward the client and
+pull-request totals, and takes no part in per-increment capping.
 
 ### Output language
 

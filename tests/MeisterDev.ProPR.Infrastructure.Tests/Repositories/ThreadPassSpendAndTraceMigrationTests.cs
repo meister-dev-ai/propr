@@ -69,12 +69,13 @@ public sealed class ThreadPassSpendAndTraceMigrationTests(PostgresContainerFixtu
             {
                 await MigrateToAsync(afterUpgrade, SpendMigration);
 
-                var stored = await afterUpgrade.ReviewJobProtocols
-                    .AsNoTracking()
-                    .FirstAsync(candidate => candidate.Id == protocolId);
+                // Read with raw SQL rather than through the entity. This database stops at the migration under
+                // test, while the model carries every column added since, so an entity query here asks for
+                // columns this schema has never heard of and fails on the next one anybody adds.
+                var (storedJobId, storedThreadPassJobId) = await ReadProtocolOwnersAsync(scratch, protocolId);
 
-                Assert.Equal(jobId, stored.JobId);
-                Assert.Null(stored.ThreadPassJobId);
+                Assert.Equal(jobId, storedJobId);
+                Assert.Null(storedThreadPassJobId);
 
                 var ownerless = await Record.ExceptionAsync(() => afterUpgrade.Database.ExecuteSqlRawAsync(
                     """
@@ -96,6 +97,25 @@ public sealed class ThreadPassSpendAndTraceMigrationTests(PostgresContainerFixtu
     private static async Task<Guid> SeedClientAsync(MeisterProPRDbContext dbContext)
     {
         return await HistoricalSchemaSeed.SeedClientAsync(dbContext, "Spend Migration Test");
+    }
+
+    /// <summary>Reads one trace record's owner columns as the schema under test actually holds them.</summary>
+    private static async Task<(Guid? JobId, Guid? ThreadPassJobId)> ReadProtocolOwnersAsync(
+        string connectionString,
+        Guid protocolId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT job_id, thread_pass_job_id FROM review_job_protocols WHERE id = @id;",
+            connection);
+        command.Parameters.AddWithValue("id", protocolId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return (
+            await reader.IsDBNullAsync(0) ? null : reader.GetGuid(0),
+            await reader.IsDBNullAsync(1) ? null : reader.GetGuid(1));
     }
 
     private static MeisterProPRDbContext CreateDbContext(string connectionString)

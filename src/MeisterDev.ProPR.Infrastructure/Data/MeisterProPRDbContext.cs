@@ -134,6 +134,12 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Repository-scope filters for crawl configurations.</summary>
     public DbSet<CrawlRepoFilterRecord> CrawlRepoFilters => this.Set<CrawlRepoFilterRecord>();
 
+    /// <summary>Mention scanning configurations.</summary>
+    public DbSet<MentionConfigurationRecord> MentionConfigurations => this.Set<MentionConfigurationRecord>();
+
+    /// <summary>Repositories each mention configuration answers on.</summary>
+    public DbSet<MentionRepoFilterRecord> MentionRepoFilters => this.Set<MentionRepoFilterRecord>();
+
     /// <summary>Webhook configurations table.</summary>
     public DbSet<WebhookConfigurationRecord> WebhookConfigurations => this.Set<WebhookConfigurationRecord>();
 

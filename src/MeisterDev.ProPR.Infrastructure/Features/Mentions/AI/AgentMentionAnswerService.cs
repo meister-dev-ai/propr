@@ -4,6 +4,8 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.Interfaces;
@@ -41,7 +43,7 @@ internal sealed partial class AgentMentionAnswerService(
             TimeSpan.FromSeconds(1));
 
     /// <inheritdoc />
-    public async Task<string> AnswerAsync(
+    public async Task<MentionAnswer> AnswerAsync(
         PullRequest pullRequest,
         Guid clientId,
         string question,
@@ -53,12 +55,18 @@ internal sealed partial class AgentMentionAnswerService(
 
         string modelId;
         IChatClient chatClient;
+        Guid? connectionId;
+        string? logicalModelName;
+        AiProviderKind? providerKind;
 
         if (aiRuntimeResolver is not null)
         {
             var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(clientId, AiPurpose.ReviewDefault, cancellationToken);
             modelId = runtime.Model.RemoteModelId;
             chatClient = runtime.ChatClient;
+            connectionId = runtime.Connection.Id;
+            logicalModelName = runtime.LogicalModelName;
+            providerKind = runtime.Connection.ProviderKind;
         }
         else
         {
@@ -70,6 +78,9 @@ internal sealed partial class AgentMentionAnswerService(
                       ?? throw new InvalidOperationException($"No active AI model configured for client {clientId}.");
 
             chatClient = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
+            connectionId = activeConnection.Id;
+            logicalModelName = null;
+            providerKind = activeConnection.ProviderKind;
         }
 
         // A mention answer is not part of a review job, so the language is resolved from the client here rather
@@ -94,7 +105,15 @@ internal sealed partial class AgentMentionAnswerService(
             messages,
             new ChatOptions { ModelId = modelId },
             cancellationToken);
-        return response.Text ?? "";
+
+        // The usage rides back with the text. The orchestrator owns the recording, so this returns what it
+        // needs to price rather than reading the number and throwing it away.
+        return new MentionAnswer(
+            response.Text ?? string.Empty,
+            AiTokenUsageExtractor.FromResponse(response, providerKind),
+            modelId,
+            connectionId,
+            logicalModelName);
     }
 
     private static string BuildUserMessage(PullRequest pr, string question, string threadId)

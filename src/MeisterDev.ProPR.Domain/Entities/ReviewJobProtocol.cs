@@ -7,24 +7,35 @@ namespace MeisterDev.ProPR.Domain.Entities;
 
 /// <summary>
 ///     Carries the full execution trace for one pass of one unit of work: an attempt of a
-///     <see cref="ReviewJob" />, or one thread a <see cref="ThreadPassJob" /> evaluated.
+///     <see cref="ReviewJob" />, one thread a <see cref="ThreadPassJob" /> evaluated, or one question a
+///     <see cref="MentionReplyJob" /> answered.
 /// </summary>
 /// <remarks>
-///     Exactly one owner is set. A single trace record serving both kinds of job is what keeps the operator's
-///     view of a pull request whole: the thread pass answers the same conversation the review used to, and
-///     splitting it into a second record shape would fork the trace read paths, the search index, and the
-///     viewer for no gain in what is actually stored.
+///     <para>
+///         Exactly one owner is set. One record shape for every kind of job means one place that moves tokens
+///         onto the owning row, and one place a reader has to be added rather than a second table, a second
+///         search index and a second viewer. Closing a record is what moves its tokens, so a unit of work
+///         without one spends unmetered.
+///     </para>
+///     <para>
+///         Being stored is not the same as being visible. Review-owned and thread-pass-owned records have read
+///         paths; mention-owned records are written and propagate their spend, but no reader selects on
+///         <see cref="MentionReplyJobId" /> yet, so they do not appear in the trace viewer.
+///     </para>
 /// </remarks>
 public sealed class ReviewJobProtocol
 {
     /// <summary>Unique identifier for this protocol record.</summary>
     public Guid Id { get; init; }
 
-    /// <summary>The review job this protocol belongs to, or <see langword="null" /> when a thread pass owns it.</summary>
+    /// <summary>The review job this protocol belongs to, or <see langword="null" /> when another unit of work owns it.</summary>
     public Guid? JobId { get; init; }
 
-    /// <summary>The thread pass this protocol belongs to, or <see langword="null" /> when a review job owns it.</summary>
+    /// <summary>The thread pass this protocol belongs to, or <see langword="null" /> when another unit of work owns it.</summary>
     public Guid? ThreadPassJobId { get; init; }
+
+    /// <summary>The mention answer this protocol belongs to, or <see langword="null" /> when another unit of work owns it.</summary>
+    public Guid? MentionReplyJobId { get; init; }
 
     /// <summary>Attempt ordinal (1-based). Always 1 for the initial attempt.</summary>
     public int AttemptNumber { get; init; }

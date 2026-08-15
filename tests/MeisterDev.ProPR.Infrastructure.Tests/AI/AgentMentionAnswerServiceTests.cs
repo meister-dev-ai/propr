@@ -138,7 +138,7 @@ public sealed class AgentMentionAnswerServiceTests
 
         // Act & Assert: no exception, returns AI text
         var result = await sut.AnswerAsync(MakePr(), ClientId, $"@<{BotGuid}> Hello?", "999");
-        Assert.Equal("fine", result);
+        Assert.Equal("fine", result.Text);
     }
 
     [Fact]
@@ -152,7 +152,43 @@ public sealed class AgentMentionAnswerServiceTests
         var result = await sut.AnswerAsync(MakePr(), ClientId, "any question", "1");
 
         // Assert
-        Assert.Equal("Certainly, here is the answer.", result);
+        Assert.Equal("Certainly, here is the answer.", result.Text);
+    }
+
+    [Fact]
+    public async Task AnswerAsync_CarriesBackWhatTheCallSpent()
+    {
+        // The provider reports the tokens on the same response as the text. Returning the text alone is what
+        // left mention spend unmetered.
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, "The answer."))
+                {
+                    Usage = new UsageDetails { InputTokenCount = 1_234, OutputTokenCount = 56 },
+                });
+        var sut = CreateSut(chatClient);
+
+        var result = await sut.AnswerAsync(MakePr(), ClientId, "any question", "1");
+
+        Assert.Equal(1_234, result.Usage.InputTokens);
+        Assert.Equal(56, result.Usage.OutputTokens);
+        Assert.False(result.Usage.IsEstimated);
+    }
+
+    [Fact]
+    public async Task AnswerAsync_ProviderReportsNoUsage_FlagsTheCountsEstimated()
+    {
+        // Zeros that were never measured must not read as a free call.
+        var sut = CreateSut(MakeChatClient("The answer."));
+
+        var result = await sut.AnswerAsync(MakePr(), ClientId, "any question", "1");
+
+        Assert.True(result.Usage.IsEstimated);
     }
 
     [Fact]

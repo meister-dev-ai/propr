@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Interfaces;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Mentions.Persistence;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +31,10 @@ public static class MentionsModuleServiceCollectionExtensions
         {
             services.AddScoped<IMentionReplyJobRepository, EfMentionReplyJobRepository>();
             services.AddScoped<IMentionScanRepository, EfMentionScanRepository>();
+
+            // What the scan reads to decide which repositories this installation answers on. Without a
+            // database there is nothing to configure and nothing to scan.
+            services.AddScoped<IMentionConfigurationRepository, MentionConfigurationRepository>();
 
             // Rebuilds provenance a crash left unwritten. Registered under the same gate as the job repository
             // it reads, and as the provenance store the review-archive module registers, so it exists exactly

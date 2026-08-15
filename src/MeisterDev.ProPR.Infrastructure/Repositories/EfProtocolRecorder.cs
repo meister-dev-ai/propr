@@ -94,6 +94,34 @@ public sealed class EfProtocolRecorder(
     }
 
     /// <inheritdoc />
+    public async Task<Guid> BeginForMentionReplyAsync(
+        Guid mentionReplyJobId,
+        string? label = null,
+        string? modelId = null,
+        CancellationToken ct = default,
+        string? logicalModelName = null)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            MentionReplyJobId = mentionReplyJobId,
+
+            // A mention job carries no attempt counter, so there is no ordinal to pass through. A job that
+            // died before completing is returned to Pending at the next startup and answered again, and that
+            // second answer opens a record of its own that also reads as attempt 1.
+            AttemptNumber = 1,
+            Label = label,
+            StartedAt = DateTimeOffset.UtcNow,
+            ModelId = modelId,
+            LogicalModelName = logicalModelName,
+        };
+        db.ReviewJobProtocols.Add(protocol);
+        await db.SaveChangesAsync(ct);
+        return protocol.Id;
+    }
+
+    /// <inheritdoc />
     public async Task RecordAiCallAsync(
         Guid protocolId,
         int iteration,
@@ -314,6 +342,10 @@ public sealed class EfProtocolRecorder(
             {
                 await this.PropagateToThreadPassAsync(db, protocol, threadPassJobId, totals, ct);
             }
+            else if (protocol.MentionReplyJobId is { } mentionReplyJobId)
+            {
+                await this.PropagateToMentionReplyAsync(db, protocol, mentionReplyJobId, totals, ct);
+            }
         }
         catch (Exception ex)
         {
@@ -440,6 +472,91 @@ public sealed class EfProtocolRecorder(
             cost,
             protocol.LogicalModelName ?? string.Empty,
             await ResolveProviderKindAsync(db, pass.AiConnectionId, ct));
+    }
+
+    /// <summary>
+    ///     Moves one closed mention protocol's tokens onto the answer's own totals and the client's daily usage
+    ///     sample.
+    /// </summary>
+    /// <remarks>
+    ///     Keyed exactly as the review and thread-pass paths key theirs, which is how the client month-to-date
+    ///     scope reaches a mention's spend without knowing that mentions exist. The answer carries a single
+    ///     total rather than a per-tier breakdown: it is one call on one resolved runtime, so there are no
+    ///     effort tiers to tell apart.
+    /// </remarks>
+    private async Task PropagateToMentionReplyAsync(
+        MeisterProPRDbContext db,
+        ReviewJobProtocol protocol,
+        Guid mentionReplyJobId,
+        ProtocolTotals totals,
+        CancellationToken ct)
+    {
+        var mention = await db.MentionReplyJobs.FindAsync([mentionReplyJobId], ct);
+        if (mention is null)
+        {
+            return;
+        }
+
+        // An answered mention always made a call, so a closed record reporting no tokens means the provider
+        // sent no usage rather than that nothing was spent. Recording that as an unpriced contribution is what
+        // makes the scope read as a lower bound; returning here instead would drop the row from every total
+        // and leave the scope claiming to be exact.
+        if (!totals.AnyTokens)
+        {
+            mention.AccumulateSpend(0, 0, null);
+            await db.SaveChangesAsync(ct);
+
+            // The daily sample too, not just the row. The client month-to-date scope reads only the samples,
+            // so flagging the answer approximate while writing no sample leaves that scope reporting an
+            // exact total with the unmetered call missing from it entirely.
+            var unmeteredUsageRepo = new ClientTokenUsageRepository(db);
+            await unmeteredUsageRepo.UpsertAsync(
+                mention.ClientId,
+                protocol.ModelId ?? mention.AiModel ?? UnknownModelId,
+                DateOnly.FromDateTime(DateTime.UtcNow),
+                0,
+                0,
+                ct,
+                0,
+                0,
+                0,
+                null,
+                protocol.LogicalModelName ?? string.Empty,
+                await ResolveProviderKindAsync(db, mention.AiConnectionId, ct));
+            return;
+        }
+
+        var modelId = protocol.ModelId ?? mention.AiModel ?? UnknownModelId;
+        var pricing = await this.TryResolvePricingAsync(mention.AiConnectionId ?? Guid.Empty, modelId, ct);
+        var cost = pricing is null
+            ? null
+            : AiCostCalculator.Calculate(
+                    new AiTokenUsage(
+                        totals.InputTokens,
+                        totals.OutputTokens,
+                        totals.CachedInputTokens,
+                        totals.CacheWriteTokens,
+                        totals.ReasoningTokens),
+                    pricing)
+                .Usd;
+
+        mention.AccumulateSpend(totals.InputTokens, totals.OutputTokens, cost);
+        await db.SaveChangesAsync(ct);
+
+        var usageRepo = new ClientTokenUsageRepository(db);
+        await usageRepo.UpsertAsync(
+            mention.ClientId,
+            modelId,
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            totals.InputTokens,
+            totals.OutputTokens,
+            ct,
+            totals.CachedInputTokens,
+            totals.CacheWriteTokens,
+            totals.ReasoningTokens,
+            cost,
+            protocol.LogicalModelName ?? string.Empty,
+            await ResolveProviderKindAsync(db, mention.AiConnectionId, ct));
     }
 
     /// <summary>

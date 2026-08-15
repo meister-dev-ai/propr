@@ -13,15 +13,16 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Budgeting;
 
 /// <summary>
 ///     Computes accumulated spend per budget scope from the persisted per-job USD cost
-///     (<see cref="ReviewJob.TotalEstimatedCostUsd" /> and <see cref="ThreadPassJob.TotalEstimatedCostUsd" />) and
-///     the per-client daily usage samples. All sums are null-aware: an unpriced contribution is omitted from the
-///     total and flags the scope approximate rather than being coerced to zero.
+///     (<see cref="ReviewJob.TotalEstimatedCostUsd" />, <see cref="ThreadPassJob.TotalEstimatedCostUsd" /> and
+///     <see cref="MentionReplyJob.TotalEstimatedCostUsd" />) and the per-client daily usage samples. All sums
+///     are null-aware: an unpriced contribution is omitted from the total and flags the scope approximate
+///     rather than being coerced to zero.
 /// </summary>
 /// <remarks>
-///     The pull-request and increment scopes total both kinds of job. A thread pass spends a client's money
-///     against the same pull request a review does, so a scope that saw only review jobs would let a recurring,
-///     deliberately created category of spend run past every cap. The client month-to-date scope needs no such
-///     widening: it reads the daily usage samples, which both kinds of job write.
+///     The pull-request and increment scopes total every kind of job. A thread pass and a mention answer each
+///     spend a client's money against the same pull request a review does, so a scope that saw only review
+///     jobs would let recurring, deliberately created categories of spend run past every cap. The client
+///     month-to-date scope needs no such widening: it reads the daily usage samples, which all three write.
 /// </remarks>
 public sealed class ReviewSpendAccumulator(
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
@@ -90,10 +91,32 @@ public sealed class ReviewSpendAccumulator(
                 candidate.PullRequestId == subject.PullRequestId &&
                 candidate.Id != subject.UnitOfWorkId);
 
+        var mentionAnswers = context.MentionReplyJobs
+            .AsNoTracking()
+            .Where(candidate =>
+                candidate.ClientId == subject.ClientId &&
+                candidate.OrganizationUrl == subject.OrganizationUrl &&
+                candidate.ProjectId == subject.ProjectId &&
+                candidate.RepositoryId == subject.RepositoryId &&
+                candidate.PullRequestId == subject.PullRequestId &&
+                candidate.Id != subject.UnitOfWorkId);
+
+        // A unit of work that belongs to no increment takes no part in increment arithmetic, in either
+        // direction: it is not measured against the increment cap, and its cost is not added to anyone else's
+        // increment total. Counting it everywhere instead would let one unresolved answer both refuse a
+        // developer whose increment has spent nothing and hold down every later increment of that pull
+        // request. The spend is still bounded, because the client month-to-date and per-pull-request scopes
+        // count it in full. Only the mention path can produce a row without an increment.
         if (includeIncrementFilter)
         {
-            reviewJobs = reviewJobs.Where(candidate => candidate.IterationId == subject.IterationId);
-            threadPasses = threadPasses.Where(candidate => candidate.IterationId == subject.IterationId);
+            if (subject.IterationId is not { } iterationId)
+            {
+                return ReviewScopeSpend.None;
+            }
+
+            reviewJobs = reviewJobs.Where(candidate => candidate.IterationId == iterationId);
+            threadPasses = threadPasses.Where(candidate => candidate.IterationId == iterationId);
+            mentionAnswers = mentionAnswers.Where(candidate => candidate.IterationId == iterationId);
         }
 
         var rows = await reviewJobs
@@ -101,9 +124,15 @@ public sealed class ReviewSpendAccumulator(
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        // A pass that has not yet spent anything reports no cost at all, which is silence rather than an
-        // unpriced call, so it must not flag the scope approximate the way an unpriced review job does.
+        // A pass or an answer that has not yet spent anything reports no cost at all, which is silence rather
+        // than an unpriced call, so it must not flag the scope approximate the way an unpriced review job does.
         var passRows = await threadPasses
+            .Where(candidate => candidate.TotalEstimatedCostUsd != null || candidate.CostIsApproximate)
+            .Select(candidate => new CostProjection(candidate.TotalEstimatedCostUsd, candidate.CostIsApproximate))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var mentionRows = await mentionAnswers
             .Where(candidate => candidate.TotalEstimatedCostUsd != null || candidate.CostIsApproximate)
             .Select(candidate => new CostProjection(candidate.TotalEstimatedCostUsd, candidate.CostIsApproximate))
             .ToListAsync(ct)
@@ -115,9 +144,13 @@ public sealed class ReviewSpendAccumulator(
         known += passRows
             .Where(row => row.TotalEstimatedCostUsd.HasValue)
             .Sum(row => row.TotalEstimatedCostUsd!.Value);
+        known += mentionRows
+            .Where(row => row.TotalEstimatedCostUsd.HasValue)
+            .Sum(row => row.TotalEstimatedCostUsd!.Value);
 
         var isApproximate = rows.Any(row => !row.TotalEstimatedCostUsd.HasValue || row.CostIsApproximate)
-                            || passRows.Any(row => row.CostIsApproximate);
+                            || passRows.Any(row => row.CostIsApproximate)
+                            || mentionRows.Any(row => row.CostIsApproximate);
         return new ReviewScopeSpend(known, isApproximate);
     }
 

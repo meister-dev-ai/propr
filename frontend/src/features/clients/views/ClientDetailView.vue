@@ -29,6 +29,10 @@
                             :class="{ active: activeTab === 'crawl-configs' }" @click="activeTab = 'crawl-configs'">
                             <i class="fi fi-rr-spider"></i> Crawl Configs
                         </button>
+                        <button class="sidebar-nav-link" :class="{ active: activeTab === 'mention-configs' }"
+                            @click="activeTab = 'mention-configs'">
+                            <i class="fi fi-rr-comment-question"></i> Mentions
+                        </button>
                         <button class="sidebar-nav-link" :class="{ active: activeTab === 'webhooks' }"
                             @click="activeTab = 'webhooks'">
                             <i class="fi fi-rr-link-alt"></i> Webhooks
@@ -126,6 +130,10 @@
                     <ClientCrawlConfigsTab :clientId="client.id" />
                 </div>
 
+                <div v-if="canManageClient" v-show="activeTab === 'mention-configs'">
+                    <ClientMentionConfigsTab :clientId="client.id" />
+                </div>
+
                 <div v-if="canManageClient" v-show="activeTab === 'webhooks'">
                     <ClientWebhookConfigsTab :clientId="client.id"
                         @update:isDetailOpen="isWebhookDetailOpen = $event" />
@@ -213,6 +221,7 @@ import ClientBudgetTab from "@/features/clients/components/ClientBudgetTab.vue";
 import ClientCodeQualityTab from "@/features/clients/components/ClientCodeQualityTab.vue";
 import ClientSpendTab from "@/features/clients/components/ClientSpendTab.vue";
 import ClientCrawlConfigsTab from "@/features/clients/components/ClientCrawlConfigsTab.vue";
+import ClientMentionConfigsTab from "@/features/clients/components/ClientMentionConfigsTab.vue";
 import ClientWebhookConfigsTab from "@/features/clients/components/ClientWebhookConfigsTab.vue";
 import ClientProviderConnectionsTab from "@/features/clients/components/ClientProviderConnectionsTab.vue";
 import ClientAiConnectionsTab from "@/features/clients/components/ClientAiConnectionsTab.vue";

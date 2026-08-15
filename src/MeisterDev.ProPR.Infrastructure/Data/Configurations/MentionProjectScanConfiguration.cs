@@ -17,8 +17,8 @@ internal sealed class MentionProjectScanConfiguration : IEntityTypeConfiguration
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Id).HasColumnName("id").ValueGeneratedNever();
 
-        builder.Property(s => s.CrawlConfigurationId)
-            .HasColumnName("crawl_configuration_id")
+        builder.Property(s => s.MentionConfigurationId)
+            .HasColumnName("mention_configuration_id")
             .IsRequired();
 
         builder.Property(s => s.LastScannedAt)
@@ -29,12 +29,12 @@ internal sealed class MentionProjectScanConfiguration : IEntityTypeConfiguration
             .HasColumnName("updated_at")
             .IsRequired();
 
-        builder.HasOne<CrawlConfigurationRecord>()
+        builder.HasOne<MentionConfigurationRecord>()
             .WithMany()
-            .HasForeignKey(s => s.CrawlConfigurationId)
+            .HasForeignKey(s => s.MentionConfigurationId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(s => s.CrawlConfigurationId)
+        builder.HasIndex(s => s.MentionConfigurationId)
             .IsUnique()
             .HasDatabaseName("uq_mention_project_scans_config");
     }

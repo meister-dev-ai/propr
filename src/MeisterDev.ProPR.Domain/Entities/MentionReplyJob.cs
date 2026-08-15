@@ -10,8 +10,14 @@ namespace MeisterDev.ProPR.Domain.Entities;
 ///     Represents a pending reply job triggered by a pull request comment mention.
 ///     State machine: <see cref="MentionJobStatus.Pending" /> →
 ///     <see cref="MentionJobStatus.Processing" /> →
-///     <see cref="MentionJobStatus.Completed" /> | <see cref="MentionJobStatus.Failed" />.
+///     <see cref="MentionJobStatus.Completed" /> | <see cref="MentionJobStatus.Failed" /> |
+///     <see cref="MentionJobStatus.BudgetHeld" />.
 /// </summary>
+/// <remarks>
+///     All three end states are terminal, and the row is never deleted, so the duplicate guard on the mention
+///     comment keeps the same question from being answered twice. That is what stops a budget-refused answer
+///     from posting its note again on every scan.
+/// </remarks>
 public sealed class MentionReplyJob
 {
     private MentionReplyJob()
@@ -191,6 +197,27 @@ public sealed class MentionReplyJob
     /// <summary>Raw content of the mention comment.</summary>
     public string MentionText { get; init; }
 
+    /// <summary>
+    ///     Stable key for the reviewer account this mention addressed, from
+    ///     <see cref="ReviewerIdentity.AddressedKey" />.
+    /// </summary>
+    /// <remarks>
+    ///     Part of the uniqueness rule that keeps one question to one answer. The account that was addressed
+    ///     is a property of the comment rather than of any client, so two clients that both cover the
+    ///     repository and resolve the same reviewer identity describe the same unit of work and only one of
+    ///     them may create it. The account that eventually writes the reply is a different one, the
+    ///     authenticated connection identity, and it is not what this records.
+    /// </remarks>
+    public string MentionedReviewerKey { get; private set; } = string.Empty;
+
+    /// <summary>Records which reviewer account the mention addressed.</summary>
+    /// <param name="reviewer">The reviewer identity the mention detector matched.</param>
+    public void SetMentionedReviewer(ReviewerIdentity reviewer)
+    {
+        ArgumentNullException.ThrowIfNull(reviewer);
+        this.MentionedReviewerKey = reviewer.AddressedKey;
+    }
+
     /// <summary>Current status of the job.</summary>
     public MentionJobStatus Status { get; set; }
 
@@ -218,6 +245,106 @@ public sealed class MentionReplyJob
 
     /// <summary>Error details if the job failed.</summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    ///     The increment this answer was charged to, or <see langword="null" /> when the provider could not
+    ///     say which one was current.
+    /// </summary>
+    /// <remarks>
+    ///     A mention is not raised against a revision the way a review or a thread pass is: it arrives whenever
+    ///     someone asks, and the scan reads the pull request at a fixed iteration. The increment is therefore
+    ///     whichever one was current when the answer was written, resolved at that moment. A lookup that fails
+    ///     leaves this null rather than guessing, and the increment budget scope then reads this row against the
+    ///     whole pull request, which counts it too widely rather than not at all.
+    /// </remarks>
+    public int? IterationId { get; private set; }
+
+    /// <summary>The AI connection whose model answered, recorded when the runtime was resolved.</summary>
+    public Guid? AiConnectionId { get; private set; }
+
+    /// <summary>The model that answered, recorded when the runtime was resolved.</summary>
+    public string? AiModel { get; private set; }
+
+    /// <summary>Input tokens this answer spent.</summary>
+    public long TotalInputTokens { get; private set; }
+
+    /// <summary>Output tokens this answer spent.</summary>
+    public long TotalOutputTokens { get; private set; }
+
+    /// <summary>
+    ///     Estimated USD cost of what this answer spent, or <see langword="null" /> while nothing priced has
+    ///     been recorded. The per-pull-request and per-increment budget scopes read this column.
+    /// </summary>
+    public decimal? TotalEstimatedCostUsd { get; private set; }
+
+    /// <summary>True when some recorded spend had no known price, so the total is a lower bound.</summary>
+    public bool CostIsApproximate { get; private set; }
+
+    /// <summary>The budget scope that stopped this answer, if one did.</summary>
+    public BudgetScopeKind? BudgetBlockScope { get; private set; }
+
+    /// <summary>Whether the cap that stopped this answer was a soft or a hard one.</summary>
+    public BudgetCapKind? BudgetBlockCapKind { get; private set; }
+
+    /// <summary>The cap the blocked scope was measured against.</summary>
+    public decimal? BudgetBlockThresholdUsd { get; private set; }
+
+    /// <summary>What the blocked scope had already spent when the cap was reached.</summary>
+    public decimal? BudgetBlockSpentUsd { get; private set; }
+
+    /// <summary>Records the increment this answer is charged to.</summary>
+    /// <param name="iterationId">The increment current when the answer was written, or null when unknown.</param>
+    public void SetIteration(int? iterationId)
+    {
+        this.IterationId = iterationId;
+    }
+
+    /// <summary>Records which connection and model produced the answer.</summary>
+    /// <param name="connectionId">The resolved AI connection, or <see langword="null" /> when none was resolved.</param>
+    /// <param name="model">The resolved model identifier, or <see langword="null" /> when none was resolved.</param>
+    public void SetAiConfig(Guid? connectionId, string? model)
+    {
+        this.AiConnectionId = connectionId;
+        this.AiModel = model;
+    }
+
+    /// <summary>Adds what one model call spent to this answer's totals.</summary>
+    /// <remarks>
+    ///     Additive rather than assigned, so an answer that grows a second model call sums the two instead of
+    ///     reporting only the last. Additive is not idempotent: recording the same call twice counts it twice,
+    ///     so the caller must close a given trace record once. An unpriced contribution adds nothing to the
+    ///     total and flags it approximate, so an absent price is never read as free.
+    /// </remarks>
+    /// <param name="inputTokens">Input tokens the call reported.</param>
+    /// <param name="outputTokens">Output tokens the call reported.</param>
+    /// <param name="costUsd">What the call cost, or <see langword="null" /> when the model has no known price.</param>
+    public void AccumulateSpend(long inputTokens, long outputTokens, decimal? costUsd)
+    {
+        this.TotalInputTokens += inputTokens;
+        this.TotalOutputTokens += outputTokens;
+
+        if (costUsd is { } cost)
+        {
+            this.TotalEstimatedCostUsd = (this.TotalEstimatedCostUsd ?? 0m) + cost;
+        }
+        else
+        {
+            this.CostIsApproximate = true;
+        }
+    }
+
+    /// <summary>Records the cap that stopped this answer, so an operator can see why it was not written.</summary>
+    /// <param name="scope">The scope whose cap was reached.</param>
+    /// <param name="capKind">Whether the cap was soft or hard.</param>
+    /// <param name="thresholdUsd">The configured cap.</param>
+    /// <param name="spentUsd">What the scope had spent.</param>
+    public void SetBudgetBlock(BudgetScopeKind scope, BudgetCapKind capKind, decimal thresholdUsd, decimal spentUsd)
+    {
+        this.BudgetBlockScope = scope;
+        this.BudgetBlockCapKind = capKind;
+        this.BudgetBlockThresholdUsd = thresholdUsd;
+        this.BudgetBlockSpentUsd = spentUsd;
+    }
 
     /// <summary>Stores the normalized review target for this mention job while preserving legacy compatibility fields.</summary>
     public void SetProviderReviewContext(CodeReviewRef codeReview)

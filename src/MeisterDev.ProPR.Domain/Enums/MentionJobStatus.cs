@@ -19,4 +19,11 @@ public enum MentionJobStatus
 
     /// <summary>Job failed with an error.</summary>
     Failed,
+
+    /// <summary>
+    ///     A budget cap stopped the answer, either because one was already reached when the mention came due
+    ///     or because the answer's own call reached one. Terminal: the developer was told the budget is
+    ///     exhausted, so re-running the job would answer a question that has already had its reply.
+    /// </summary>
+    BudgetHeld,
 }

@@ -34,7 +34,8 @@ public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixtur
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
 
-        // Seed client + crawl config for FK constraints.
+        // Seed client + mention config for FK constraints. A watermark says how far one mention
+        // configuration has scanned, so that is what it hangs off.
         if (!await this._dbContext.Clients.AnyAsync(c => c.Id == SeedClientId))
         {
             this._dbContext.Clients.Add(
@@ -49,18 +50,27 @@ public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixtur
             await this._dbContext.SaveChangesAsync();
         }
 
-        if (!await this._dbContext.CrawlConfigurations.AnyAsync(c => c.Id == ConfigId))
+        if (!await this._dbContext.MentionConfigurations.AnyAsync(c => c.Id == ConfigId))
         {
-            this._dbContext.CrawlConfigurations.Add(
-                new CrawlConfigurationRecord
+            this._dbContext.MentionConfigurations.Add(
+                new MentionConfigurationRecord
                 {
                     Id = ConfigId,
                     ClientId = SeedClientId,
                     OrganizationUrl = "https://dev.azure.com/test-org",
                     ProjectId = "test-proj",
-                    CrawlIntervalSeconds = 60,
+                    ScanIntervalSeconds = 60,
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
+                    RepoFilters =
+                    [
+                        new MentionRepoFilterRecord
+                        {
+                            Id = Guid.NewGuid(),
+                            RepositoryId = "test-repo",
+                            ClaimedAt = DateTimeOffset.UtcNow,
+                        },
+                    ],
                 });
             await this._dbContext.SaveChangesAsync();
         }
@@ -96,7 +106,7 @@ public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixtur
 
         var retrieved = await this._repo.GetProjectScanAsync(ConfigId);
         Assert.NotNull(retrieved);
-        Assert.Equal(ConfigId, retrieved.CrawlConfigurationId);
+        Assert.Equal(ConfigId, retrieved.MentionConfigurationId);
         Assert.Equal(lastScanned.ToUnixTimeSeconds(), retrieved.LastScannedAt.ToUnixTimeSeconds());
     }
 

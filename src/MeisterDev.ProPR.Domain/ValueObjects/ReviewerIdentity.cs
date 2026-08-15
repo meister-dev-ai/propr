@@ -40,4 +40,16 @@ public sealed record ReviewerIdentity
 
     /// <summary>Gets a value indicating whether the reviewer is a bot.</summary>
     public bool IsBot { get; }
+
+    /// <summary>
+    ///     A stable key for "which account was addressed", usable as part of a database uniqueness rule.
+    /// </summary>
+    /// <remarks>
+    ///     Built from the provider, the host and the external user id, because those are the parts a
+    ///     provider does not let a person change. The login and display name are deliberately excluded: both
+    ///     can be renamed, and a key that moved when somebody renamed an account would stop recognizing the
+    ///     mentions it had already answered.
+    /// </remarks>
+    public string AddressedKey =>
+        $"{this.Host.Provider}|{this.Host.HostBaseUrl}|{this.ExternalUserId}".ToLowerInvariant();
 }

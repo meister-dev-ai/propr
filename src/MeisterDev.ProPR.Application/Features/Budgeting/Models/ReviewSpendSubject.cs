@@ -12,16 +12,17 @@ namespace MeisterDev.ProPR.Application.Features.Budgeting.Models;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Two kinds of job spend a client's money against one pull request, and both must count. The
-///         accumulator's abstraction is widened to this subject rather than a second summand being bolted onto
-///         a review-job-shaped contract, because the question a budget scope asks is about a pull request and an
-///         increment, not about a table. A third unit of work later reaches the same scopes by describing itself
+///         Three kinds of job spend a client's money against one pull request, and all of them must count. The
+///         accumulator's abstraction is widened to this subject rather than summands being bolted onto a
+///         review-job-shaped contract, because the question a budget scope asks is about a pull request and an
+///         increment, not about a table. A further unit of work reaches the same scopes by describing itself
 ///         here, without the scopes learning its type.
 ///     </para>
 ///     <para>
 ///         <paramref name="UnitOfWorkId" /> identifies the asking row within its own table. Row identifiers are
-///         unique across both tables, so excluding it is exact: each unit of work's cost lives in exactly one
-///         row, is summed once, and is never counted twice when a review and a pass share an increment.
+///         unique across the tables, so excluding it is exact: each unit of work's cost lives in exactly one
+///         row, is summed once, and is never counted twice when a review, a pass and an answer share an
+///         increment.
 ///     </para>
 /// </remarks>
 /// <param name="UnitOfWorkId">The identifier of the row asking, excluded from the totals it reads.</param>
@@ -30,7 +31,11 @@ namespace MeisterDev.ProPR.Application.Features.Budgeting.Models;
 /// <param name="ProjectId">Provider project, workspace, or namespace key.</param>
 /// <param name="RepositoryId">Provider-native repository identifier.</param>
 /// <param name="PullRequestId">Provider pull request number.</param>
-/// <param name="IterationId">The increment this unit of work belongs to.</param>
+/// <param name="IterationId">
+///     The increment this unit of work belongs to, or <see langword="null" /> when it belongs to no single one.
+///     A subject with no increment reads the whole pull request as its increment scope, which counts too much
+///     rather than too little, so a missing increment cannot become a way past an increment cap.
+/// </param>
 public sealed record ReviewSpendSubject(
     Guid UnitOfWorkId,
     Guid ClientId,
@@ -38,7 +43,7 @@ public sealed record ReviewSpendSubject(
     string ProjectId,
     string RepositoryId,
     int PullRequestId,
-    int IterationId)
+    int? IterationId)
 {
     /// <summary>Describes a review job as a spend subject.</summary>
     /// <param name="job">The review job.</param>
@@ -59,6 +64,22 @@ public sealed record ReviewSpendSubject(
     /// <summary>Describes a thread pass as a spend subject.</summary>
     /// <param name="job">The thread pass.</param>
     public static ReviewSpendSubject For(ThreadPassJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+
+        return new ReviewSpendSubject(
+            job.Id,
+            job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId);
+    }
+
+    /// <summary>Describes a mention answer as a spend subject.</summary>
+    /// <param name="job">The mention answer. Its increment is null until one has been resolved for it.</param>
+    public static ReviewSpendSubject For(MentionReplyJob job)
     {
         ArgumentNullException.ThrowIfNull(job);
 

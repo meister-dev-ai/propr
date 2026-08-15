@@ -19,8 +19,8 @@ public interface IMentionAnswerService
     /// <param name="question">The question extracted from the mention comment.</param>
     /// <param name="threadId">The ADO thread ID the question was asked in, used to focus the AI on the relevant file and line.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>The AI-generated answer text.</returns>
-    Task<string> AnswerAsync(
+    /// <returns>The AI-generated answer together with what producing it spent.</returns>
+    Task<MentionAnswer> AnswerAsync(
         PullRequest pullRequest,
         Guid clientId,
         string question,

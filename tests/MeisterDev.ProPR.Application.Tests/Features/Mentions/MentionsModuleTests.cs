@@ -20,7 +20,7 @@ public sealed class MentionsModuleTests
     private static readonly Guid ConfigId = Guid.NewGuid();
     private static readonly Guid ReviewerId = Guid.NewGuid();
 
-    private static readonly CrawlConfigurationDto DefaultConfig = new(
+    private static readonly MentionConfigurationDto DefaultConfig = new(
         ConfigId,
         ClientId,
         ScmProvider.AzureDevOps,
@@ -29,12 +29,19 @@ public sealed class MentionsModuleTests
         60,
         true,
         DateTimeOffset.UtcNow,
-        []);
+        [
+            new MentionRepoFilterDto(
+                Guid.NewGuid(),
+                "repo",
+                // Claimed a week ago, as a stored configuration is. A filter with no claim time is treated
+                // as claimed this instant, which answers nothing.
+                ClaimedAt: DateTimeOffset.UtcNow.AddDays(-7)),
+        ]);
 
     [Fact]
     public async Task ScanAsync_WhenUniqueMentionExists_StoresAndEnqueuesReplyJob()
     {
-        var crawlConfigs = Substitute.For<ICrawlConfigurationRepository>();
+        var mentionConfigs = Substitute.For<IMentionConfigurationRepository>();
         var activePrFetcher = Substitute.For<IActivePrFetcher>();
         var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
         var scanRepository = Substitute.For<IMentionScanRepository>();
@@ -42,7 +49,7 @@ public sealed class MentionsModuleTests
         var clientRegistry = Substitute.For<IClientRegistry>();
         var channel = Channel.CreateUnbounded<MentionReplyJob>();
         var sut = new MentionScanService(
-            crawlConfigs,
+            mentionConfigs,
             activePrFetcher,
             pullRequestFetcher,
             clientRegistry,
@@ -80,7 +87,7 @@ public sealed class MentionsModuleTests
                     ]),
             ]);
 
-        crawlConfigs.GetAllActiveAsync(Arg.Any<CancellationToken>()).Returns([DefaultConfig]);
+        mentionConfigs.GetAllActiveAsync(Arg.Any<CancellationToken>()).Returns([DefaultConfig]);
         activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -106,12 +113,20 @@ public sealed class MentionsModuleTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pullRequest);
-        jobRepository.ExistsForCommentAsync(ClientId, "repo", 1, "100", 200, Arg.Any<CancellationToken>()).Returns(false);
+        jobRepository.ExistsForCommentAsync(
+                "repo",
+                1,
+                "100",
+                200,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(false);
+        jobRepository.TryAddAsync(Arg.Any<MentionReplyJob>(), Arg.Any<CancellationToken>()).Returns(true);
 
         await sut.ScanAsync();
 
         await jobRepository.Received(1)
-            .AddAsync(
+            .TryAddAsync(
                 Arg.Is<MentionReplyJob>(job =>
                     job.ClientId == ClientId &&
                     job.PullRequestId == 1 &&
@@ -180,7 +195,7 @@ public sealed class MentionsModuleTests
                 Arg.Any<CancellationToken>())
             .Returns(pullRequest);
         answerService.AnswerAsync(pullRequest, ClientId, job.MentionText, job.ThreadId, Arg.Any<CancellationToken>())
-            .Returns("Here is the answer.");
+            .Returns(new MentionAnswer("Here is the answer.", AiTokenUsage.Missing, "gpt-test"));
 
         await sut.ProcessAsync(job);
 

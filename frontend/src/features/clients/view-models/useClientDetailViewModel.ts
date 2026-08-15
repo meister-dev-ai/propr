@@ -11,6 +11,7 @@ import type { components } from '@/services/generated/openapi'
 const detailTabs = [
   'config',
   'crawl-configs',
+  'mention-configs',
   'webhooks',
   'providers',
   'procursor',

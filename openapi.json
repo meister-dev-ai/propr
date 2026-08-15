@@ -640,6 +640,469 @@
         }
       }
     },
+    "/admin/mention-configurations": {
+      "get": {
+        "tags": [
+          "AdminMentionConfigs"
+        ],
+        "summary": "Lists mention configurations visible to the caller.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Optional client filter. Non-admin callers are restricted to their own clients regardless.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The configurations the caller may see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MentionConfigResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MentionConfigResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MentionConfigResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the requested client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AdminMentionConfigs"
+        ],
+        "summary": "Declares that a client answers mentions on a set of repositories in one project.",
+        "requestBody": {
+          "description": "The configuration to create.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMentionConfigRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMentionConfigRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMentionConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MentionConfigResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MentionConfigResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MentionConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No repositories were named, or the provider family is disabled.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The client already has a configuration for this project.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/mention-configurations/{configId}": {
+      "patch": {
+        "tags": [
+          "AdminMentionConfigs"
+        ],
+        "summary": "Changes a configuration's scan interval, active flag, or repository list.",
+        "parameters": [
+          {
+            "name": "configId",
+            "in": "path",
+            "description": "The configuration to change.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The changes to apply. Omitted fields are left as they are.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMentionConfigRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMentionConfigRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMentionConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MentionConfigResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MentionConfigResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MentionConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The repository list was given but empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AdminMentionConfigs"
+        ],
+        "summary": "Removes a configuration, so the client stops answering mentions in that project.",
+        "parameters": [
+          {
+            "name": "configId",
+            "in": "path",
+            "description": "The configuration to remove.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/model-catalog/snapshot": {
       "post": {
         "tags": [
@@ -26848,6 +27311,45 @@
         "additionalProperties": false,
         "description": "Request body for creating a client."
       },
+      "CreateMentionConfigRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client that answers.",
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "providerScopePath": {
+            "type": "string",
+            "description": "Provider scope path the project lives under.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Provider project, workspace, or namespace key.",
+            "nullable": true
+          },
+          "repoFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MentionRepoFilterRequest"
+            },
+            "description": "The repositories to answer on. At least one is required.",
+            "nullable": true
+          },
+          "scanIntervalSeconds": {
+            "type": "integer",
+            "description": "Shortest gap between two scans. Defaults to 60 seconds.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request to declare that a client answers mentions on repositories in one project."
+      },
       "CreatePatRequest": {
         "type": "object",
         "properties": {
@@ -27571,6 +28073,117 @@
         "type": "string",
         "description": "Discriminator that indicates how a `ThreadMemoryRecord` was created."
       },
+      "MentionConfigResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier.",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "The client that answers, and that pays for the answers.",
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "providerScopePath": {
+            "type": "string",
+            "description": "Provider scope path the project lives under.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Provider project, workspace, or namespace key.",
+            "nullable": true
+          },
+          "scanIntervalSeconds": {
+            "type": "integer",
+            "description": "Shortest gap between two scans of this configuration.",
+            "format": "int32"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether this configuration is scanned."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the configuration was created.",
+            "format": "date-time"
+          },
+          "repoFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MentionRepoFilterResponse"
+            },
+            "description": "The repositories answered on.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A mention scanning configuration as returned by the admin API."
+      },
+      "MentionRepoFilterRequest": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider-native repository identifier.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Human-readable repository name, stored for display only.",
+            "nullable": true
+          },
+          "canonicalSourceRef": {
+            "type": "string",
+            "description": "Provider-aware canonical source reference, when the selection produced one.",
+            "nullable": true
+          },
+          "sourceProvider": {
+            "type": "string",
+            "description": "Provider key backing the guided repository selection.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One repository in a create or patch request."
+      },
+      "MentionRepoFilterResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier.",
+            "format": "uuid"
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider-native repository identifier. What the scan matches on.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Human-readable repository name, for display only.",
+            "nullable": true
+          },
+          "canonicalSourceRef": {
+            "type": "string",
+            "description": "Provider-aware canonical source reference, when available.",
+            "nullable": true
+          },
+          "sourceProvider": {
+            "type": "string",
+            "description": "Provider key backing the guided repository selection, when one was used.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One repository a mention configuration answers on."
+      },
       "ModelCatalogImportResponse": {
         "type": "object",
         "properties": {
@@ -27873,6 +28486,32 @@
         },
         "additionalProperties": false,
         "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default."
+      },
+      "PatchMentionConfigRequest": {
+        "type": "object",
+        "properties": {
+          "scanIntervalSeconds": {
+            "type": "integer",
+            "description": "New scan interval, or null to leave it.",
+            "format": "int32",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "New active flag, or null to leave it.",
+            "nullable": true
+          },
+          "repoFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MentionRepoFilterRequest"
+            },
+            "description": "Replacement repository list, or null to leave it. Must not be empty when given.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request to change a mention configuration. Omitted fields are left as they are."
       },
       "PatchPremiumCapabilityOverrideRequest": {
         "type": "object",
@@ -34218,6 +34857,9 @@
     },
     {
       "name": "AdminLicensing"
+    },
+    {
+      "name": "AdminMentionConfigs"
     },
     {
       "name": "AdminModelCatalog"

@@ -40,6 +40,7 @@ public sealed class ReviewSpendAccumulatorTests(PostgresContainerFixture fixture
         // Clean slate so the scope sums are deterministic (the collection runs serially).
         await this._dbContext.ReviewJobs.ExecuteDeleteAsync();
         await this._dbContext.ThreadPassJobs.ExecuteDeleteAsync();
+        await this._dbContext.MentionReplyJobs.ExecuteDeleteAsync();
         await this._dbContext.ClientTokenUsageSamples.ExecuteDeleteAsync();
 
         this._clientId = Guid.NewGuid();
@@ -66,6 +67,9 @@ public sealed class ReviewSpendAccumulatorTests(PostgresContainerFixture fixture
         }
 
         await this._dbContext.ClientTokenUsageSamples.Where(s => s.ClientId == this._clientId).ExecuteDeleteAsync();
+
+        // A mention answer holds its client down with a restricting foreign key, so the rows go before it does.
+        await this._dbContext.MentionReplyJobs.Where(m => m.ClientId == this._clientId).ExecuteDeleteAsync();
         await this._dbContext.Clients.Where(c => c.Id == this._clientId).ExecuteDeleteAsync();
         await this._dbContext.DisposeAsync();
     }
@@ -202,6 +206,150 @@ public sealed class ReviewSpendAccumulatorTests(PostgresContainerFixture fixture
 
         Assert.Equal(3.00m, baseline.Increment.KnownUsd);
         Assert.True(baseline.Increment.IsApproximate);
+    }
+
+    [Fact]
+    public async Task GetBaselineAsync_ForAReviewJob_CountsWhatTheMentionAnswersSpentOnTheSamePullRequest()
+    {
+        var asOf = new DateOnly(2026, 8, 11);
+
+        var current = MakeJob(this._clientId, prId: 1, iterationId: 5);
+        await this.AddJobWithCostAsync(current, costUsd: null);
+
+        // Two answers on the same pull request: one in this increment, one in an earlier one.
+        await this.AddMentionWithCostAsync(MakeMention(this._clientId, prId: 1, iterationId: 5), 0.40m);
+        await this.AddMentionWithCostAsync(MakeMention(this._clientId, prId: 1, iterationId: 4), 0.10m);
+        // An answer on a different pull request must not count.
+        await this.AddMentionWithCostAsync(MakeMention(this._clientId, prId: 2, iterationId: 5), 99.00m);
+
+        var baseline = await this._accumulator.GetBaselineAsync(ReviewSpendSubject.For(current), asOf);
+
+        Assert.Equal(0.50m, baseline.PullRequest.KnownUsd);
+        Assert.Equal(0.40m, baseline.Increment.KnownUsd);
+        Assert.False(baseline.Increment.IsApproximate);
+    }
+
+    [Fact]
+    public async Task GetBaselineAsync_MentionAnswerWithNoIncrement_CountsInThePullRequestButNoIncrement()
+    {
+        // Counting it in every increment would let one unresolved answer hold down every later increment of
+        // the pull request. It is still counted where it cannot hide, which is the pull-request total.
+        var asOf = new DateOnly(2026, 8, 11);
+
+        var current = MakeJob(this._clientId, prId: 1, iterationId: 5);
+        await this.AddJobWithCostAsync(current, costUsd: null);
+        await this.AddMentionWithCostAsync(MakeMention(this._clientId, prId: 1, iterationId: null), 0.30m);
+
+        var baseline = await this._accumulator.GetBaselineAsync(ReviewSpendSubject.For(current), asOf);
+
+        Assert.Equal(0.30m, baseline.PullRequest.KnownUsd);
+        Assert.Equal(0m, baseline.Increment.KnownUsd);
+    }
+
+    [Fact]
+    public async Task GetBaselineAsync_ForAMentionWithNoIncrement_TakesNoPartInIncrementArithmetic()
+    {
+        // Reading the whole pull request here would refuse a developer whose increment has spent nothing,
+        // and tell them their budget is used up when it is not.
+        var asOf = new DateOnly(2026, 8, 11);
+
+        var current = MakeMention(this._clientId, prId: 1, iterationId: null);
+        await this.AddMentionWithCostAsync(current, costUsd: null);
+        await this.AddJobWithCostAsync(MakeJob(this._clientId, prId: 1, iterationId: 5), 2.00m);
+        await this.AddJobWithCostAsync(MakeJob(this._clientId, prId: 1, iterationId: 4), 1.00m);
+
+        var baseline = await this._accumulator.GetBaselineAsync(ReviewSpendSubject.For(current), asOf);
+
+        // The client and pull-request scopes still see it in full; only the increment cap stands down.
+        Assert.Equal(3.00m, baseline.PullRequest.KnownUsd);
+        Assert.Equal(0m, baseline.Increment.KnownUsd);
+        Assert.False(baseline.Increment.IsApproximate);
+    }
+
+    [Fact]
+    public async Task GetBaselineAsync_ForAMentionAnswer_ExcludesItsOwnRowAndCountsTheOthersOnce()
+    {
+        var asOf = new DateOnly(2026, 8, 11);
+
+        var current = MakeMention(this._clientId, prId: 1, iterationId: 5);
+        await this.AddMentionWithCostAsync(current, 7.00m);
+        await this.AddJobWithCostAsync(MakeJob(this._clientId, prId: 1, iterationId: 5), 2.00m);
+        await this.AddThreadPassWithCostAsync(MakeThreadPass(this._clientId, prId: 1, iterationId: 5), 0.50m);
+        await this.AddMentionWithCostAsync(MakeMention(this._clientId, prId: 1, iterationId: 5), 0.25m);
+
+        var baseline = await this._accumulator.GetBaselineAsync(ReviewSpendSubject.For(current), asOf);
+
+        // The asking answer's own 7.00 is excluded; a review, a pass and a sibling answer each count once.
+        Assert.Equal(2.75m, baseline.PullRequest.KnownUsd);
+        Assert.Equal(2.75m, baseline.Increment.KnownUsd);
+    }
+
+    [Fact]
+    public async Task GetBaselineAsync_MentionAnswerThatHasSpentNothingYet_LeavesTheScopeExact()
+    {
+        var asOf = new DateOnly(2026, 8, 11);
+
+        var current = MakeJob(this._clientId, prId: 1, iterationId: 5);
+        await this.AddJobWithCostAsync(current, costUsd: null);
+        await this.AddJobWithCostAsync(MakeJob(this._clientId, prId: 1, iterationId: 5), 3.00m);
+        // A queued answer reports no cost because it has not run, which is silence rather than unpriced spend.
+        await this.AddMentionWithCostAsync(MakeMention(this._clientId, prId: 1, iterationId: 5), costUsd: null);
+
+        var baseline = await this._accumulator.GetBaselineAsync(ReviewSpendSubject.For(current), asOf);
+
+        Assert.Equal(3.00m, baseline.Increment.KnownUsd);
+        Assert.False(baseline.Increment.IsApproximate);
+    }
+
+    [Fact]
+    public async Task GetBaselineAsync_MentionAnswerWithUnpricedSpend_FlagsTheScopeApproximate()
+    {
+        var asOf = new DateOnly(2026, 8, 11);
+
+        var current = MakeJob(this._clientId, prId: 1, iterationId: 5);
+        await this.AddJobWithCostAsync(current, costUsd: null);
+        await this.AddJobWithCostAsync(MakeJob(this._clientId, prId: 1, iterationId: 5), 3.00m);
+        await this.AddMentionWithCostAsync(
+            MakeMention(this._clientId, prId: 1, iterationId: 5),
+            costUsd: null,
+            approximate: true);
+
+        var baseline = await this._accumulator.GetBaselineAsync(ReviewSpendSubject.For(current), asOf);
+
+        Assert.Equal(3.00m, baseline.Increment.KnownUsd);
+        Assert.True(baseline.Increment.IsApproximate);
+    }
+
+    private static MentionReplyJob MakeMention(
+        Guid clientId,
+        int prId,
+        int? iterationId,
+        string org = "https://dev.azure.com/org",
+        string project = "proj",
+        string repo = "repo")
+    {
+        var job = new MentionReplyJob(
+            Guid.NewGuid(),
+            clientId,
+            org,
+            project,
+            repo,
+            prId,
+            Guid.NewGuid().ToString(),
+            Random.Shared.NextInt64(1, long.MaxValue),
+            "what does this do?");
+        job.SetIteration(iterationId);
+        return job;
+    }
+
+    private async Task AddMentionWithCostAsync(MentionReplyJob mention, decimal? costUsd, bool approximate = false)
+    {
+        mention.Status = MentionJobStatus.Completed;
+        mention.CompletedAt = DateTimeOffset.UtcNow;
+        this._dbContext.MentionReplyJobs.Add(mention);
+        this._dbContext.Entry(mention).Property(nameof(MentionReplyJob.TotalEstimatedCostUsd)).CurrentValue = costUsd;
+        this._dbContext.Entry(mention).Property(nameof(MentionReplyJob.CostIsApproximate)).CurrentValue = approximate;
+        await this._dbContext.SaveChangesAsync();
     }
 
     private static ThreadPassJob MakeThreadPass(

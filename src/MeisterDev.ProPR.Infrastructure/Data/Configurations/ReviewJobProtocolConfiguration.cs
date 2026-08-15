@@ -18,6 +18,7 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
 
         builder.Property(p => p.JobId).HasColumnName("job_id").IsRequired(false);
         builder.Property(p => p.ThreadPassJobId).HasColumnName("thread_pass_job_id").IsRequired(false);
+        builder.Property(p => p.MentionReplyJobId).HasColumnName("mention_reply_job_id").IsRequired(false);
         builder.Property(p => p.AttemptNumber).HasColumnName("attempt_number").IsRequired();
         builder.Property(p => p.Label).HasColumnName("label").HasMaxLength(2048).IsRequired(false);
         builder.Property(p => p.FileResultId).HasColumnName("file_result_id").IsRequired(false);
@@ -77,14 +78,22 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
             .HasForeignKey(p => p.ThreadPassJobId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasOne<MentionReplyJob>()
+            .WithMany()
+            .HasForeignKey(p => p.MentionReplyJobId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasIndex(p => p.JobId).HasDatabaseName("ix_review_job_protocols_job_id");
         builder.HasIndex(p => p.ThreadPassJobId).HasDatabaseName("ix_review_job_protocols_thread_pass_job_id");
+        builder.HasIndex(p => p.MentionReplyJobId).HasDatabaseName("ix_review_job_protocols_mention_reply_job_id");
         builder.HasIndex(p => p.FileResultId).HasDatabaseName("ix_review_job_protocols_file_result_id");
 
-        // Exactly one owner, enforced where it cannot be worked around: a trace row with neither owner is
-        // unreachable from any read path, and one with both would be counted against two units of work.
+        // Exactly one owner, enforced where it cannot be worked around: a trace row with no owner is
+        // unreachable from any read path, and one with two would be counted against two units of work.
+        // Counting the non-null owners is what lets a third kind of job join without the rule being
+        // rewritten as a widening chain of pairwise exclusions.
         builder.ToTable(table => table.HasCheckConstraint(
             "ck_review_job_protocols_single_owner",
-            "(job_id IS NULL) <> (thread_pass_job_id IS NULL)"));
+            "(job_id IS NOT NULL)::int + (thread_pass_job_id IS NOT NULL)::int + (mention_reply_job_id IS NOT NULL)::int = 1"));
     }
 }

@@ -66,6 +66,21 @@ public sealed class InMemoryProtocolRecorder(
         return Task.FromResult(Guid.NewGuid());
     }
 
+    /// <summary>
+    ///     Offline execution reviews files and answers no mentions, so there is no job to own a protocol and
+    ///     nothing to record against. The identifier is still returned so the caller's recording path stays
+    ///     uniform.
+    /// </summary>
+    public Task<Guid> BeginForMentionReplyAsync(
+        Guid mentionReplyJobId,
+        string? label = null,
+        string? modelId = null,
+        CancellationToken ct = default,
+        string? logicalModelName = null)
+    {
+        return Task.FromResult(Guid.NewGuid());
+    }
+
     public Task RecordAiCallAsync(
         Guid protocolId,
         int iteration,

@@ -118,11 +118,26 @@ DevOps, `@login` on GitHub, GitLab and Forgejo - and ProPR answers in that same 
 pull request as context. It is a question-and-answer path, not a re-review: no new findings are
 posted and no comments are resolved.
 
-Mentions are found by a periodic scan, not by webhook, so a reply is not instant. The scan interval
+Answering mentions is configured in its own right, on the client's **Mentions** tab. A mention
+configuration names one project and the repositories within it this client answers on. Organization,
+project and repositories are picked from what the client's credentials can already reach, and each
+repository is stored by the provider's own id so a rename does not stop answers. The conversations in a
+repository nobody claimed are never read, and a client with no mention configuration answers nothing. The
+scan does list the open pull requests of the whole project before narrowing to the claimed repositories,
+so it sees that unclaimed ones exist; it never opens their comments. Claiming a repository takes effect
+from that moment: questions asked before it are not answered.
+
+Two clients may claim the same repository, and neither is told about the other. What decides who answers is
+the identity the comment addresses. If the two clients resolve different reviewer identities, only the one
+actually mentioned replies; mention both identities in a single comment and both reply, each billed to its
+own client. If they share one identity, the first to reach the comment answers it and is billed for it, and
+the other stays quiet, so a question addressed to one identity gets exactly one answer.
+
+Mentions are found by a periodic scan, not by webhook, so a reply is not instant. How often the scan runs
 is set by `MENTION_CRAWL_INTERVAL_SECONDS` - see
-[background intervals](../operate/configuration.md#background-intervals). The scan walks your crawl configurations and skips
-any that has no resolvable reviewer identity, so answering mentions needs both a reviewer identity
-and at least one crawl configuration - and crawl configurations are a licensed capability.
+[background intervals](../operate/configuration.md#background-intervals) - and each configuration can ask
+to be visited less often than that. A configuration whose client has no resolvable reviewer identity is
+skipped, so answering mentions needs both a reviewer identity and a mention configuration.
 
 ## ProCursor
 

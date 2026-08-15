@@ -115,6 +115,12 @@ internal sealed class MentionReplyJobConfiguration : IEntityTypeConfiguration<Me
             .HasColumnName("mention_text")
             .IsRequired();
 
+        builder.Property(j => j.MentionedReviewerKey)
+            .HasColumnName("mentioned_reviewer_key")
+            .HasMaxLength(512)
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
         builder.Property(j => j.Status)
             .HasColumnName("status")
             .HasConversion<string>()
@@ -141,6 +147,61 @@ internal sealed class MentionReplyJobConfiguration : IEntityTypeConfiguration<Me
             .HasMaxLength(256)
             .IsRequired(false);
 
+        builder.Property(j => j.IterationId)
+            .HasColumnName("iteration_id")
+            .IsRequired(false);
+
+        builder.Property(j => j.AiConnectionId)
+            .HasColumnName("ai_connection_id")
+            .IsRequired(false);
+
+        builder.Property(j => j.AiModel)
+            .HasColumnName("ai_model")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
+        builder.Property(j => j.TotalInputTokens)
+            .HasColumnName("total_input_tokens")
+            .HasDefaultValue(0L)
+            .IsRequired();
+
+        builder.Property(j => j.TotalOutputTokens)
+            .HasColumnName("total_output_tokens")
+            .HasDefaultValue(0L)
+            .IsRequired();
+
+        // Nullable on purpose: null means this installation prices nothing, and zero would be a claim that the
+        // answer was free.
+        builder.Property(j => j.TotalEstimatedCostUsd)
+            .HasColumnName("total_estimated_cost_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
+        builder.Property(j => j.CostIsApproximate)
+            .HasColumnName("cost_is_approximate")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(j => j.BudgetBlockScope)
+            .HasColumnName("budget_block_scope")
+            .HasConversion<int>()
+            .IsRequired(false);
+
+        builder.Property(j => j.BudgetBlockCapKind)
+            .HasColumnName("budget_block_cap_kind")
+            .HasConversion<int>()
+            .IsRequired(false);
+
+        builder.Property(j => j.BudgetBlockThresholdUsd)
+            .HasColumnName("budget_block_threshold_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
+        builder.Property(j => j.BudgetBlockSpentUsd)
+            .HasColumnName("budget_block_spent_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
         builder.HasOne<ClientRecord>()
             .WithMany()
             .HasForeignKey(j => j.ClientId)
@@ -148,7 +209,24 @@ internal sealed class MentionReplyJobConfiguration : IEntityTypeConfiguration<Me
 
         builder.HasIndex(j => j.Status).HasDatabaseName("ix_mention_reply_jobs_status");
         builder.HasIndex(j => j.ClientId).HasDatabaseName("ix_mention_reply_jobs_client_id");
-        builder.HasIndex(j => new { j.ClientId, j.PullRequestId, j.ThreadId, j.CommentId })
+
+        // Every budget admission check on this pull request now sums this table, so it carries the same
+        // covering index the thread pass does. Without it a client with a long mention history slows the start
+        // of every review, not only of its own answers.
+        builder.HasIndex(j => new { j.ClientId, j.RepositoryId, j.PullRequestId })
+            .HasDatabaseName("ix_mention_reply_jobs_client_repo_pr");
+        // Keyed on what identifies the event outside ProPR rather than on which client noticed it. Two
+        // clients may both cover a repository, and neither can see the other's configuration to avoid the
+        // overlap, so the database is what keeps one question to one answer: the second insert loses and
+        // that client simply does not answer. Keying this by client is what let both answer and both bill.
+        builder.HasIndex(j => new
+            {
+                j.RepositoryId,
+                j.PullRequestId,
+                j.ThreadId,
+                j.CommentId,
+                j.MentionedReviewerKey,
+            })
             .IsUnique()
             .HasDatabaseName("uq_mention_reply_jobs_mention");
 

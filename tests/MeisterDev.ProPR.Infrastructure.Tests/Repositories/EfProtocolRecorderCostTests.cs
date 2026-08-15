@@ -276,6 +276,125 @@ public sealed class EfProtocolRecorderCostTests
         Assert.True(storedPass.CostIsApproximate);
     }
 
+    [Fact]
+    public async Task BeginForMentionReplyAsync_OwnsTheTraceRecordByTheAnswerRatherThanAReviewJob()
+    {
+        var options = CreateOptions();
+        var mention = await SeedMentionAsync(options);
+
+        var recorder = new EfProtocolRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProtocolRecorder>.Instance);
+
+        var protocolId = await recorder.BeginForMentionReplyAsync(mention.Id, "mention-thread-17", "gpt-4o");
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var stored = await verify.ReviewJobProtocols.FirstAsync(p => p.Id == protocolId);
+        Assert.Equal(mention.Id, stored.MentionReplyJobId);
+        Assert.Null(stored.JobId);
+        Assert.Null(stored.ThreadPassJobId);
+        Assert.Equal("mention-thread-17", stored.Label);
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_ForAMentionProtocol_MovesTheSpendOntoTheAnswerAndTheDailySample()
+    {
+        // This is the route the client month-to-date scope reads. An answer that never reaches it spends
+        // money no total records.
+        var options = CreateOptions();
+        var mention = await SeedMentionAsync(options);
+
+        var resolver = Substitute.For<IModelPricingResolver>();
+        resolver.ResolveAsync(ConnectionId, Arg.Any<AiConnectionModelCategory>(), "gpt-4o", Arg.Any<CancellationToken>())
+            .Returns(new ModelPricing(2m, 10m, 1m));
+
+        var recorder = new EfProtocolRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProtocolRecorder>.Instance,
+            resolver);
+
+        var protocolId = await recorder.BeginForMentionReplyAsync(mention.Id, "mention-thread-17", "gpt-4o");
+        await recorder.SetCompletedAsync(protocolId, "completed", 1_000_000, 500_000, 1, 0, null);
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var storedMention = await verify.MentionReplyJobs.FirstAsync(m => m.Id == mention.Id);
+
+        Assert.Equal(1_000_000, storedMention.TotalInputTokens);
+        Assert.Equal(500_000, storedMention.TotalOutputTokens);
+        Assert.Equal(7m, storedMention.TotalEstimatedCostUsd);
+        Assert.False(storedMention.CostIsApproximate);
+
+        var sample = await verify.ClientTokenUsageSamples.FirstAsync(s => s.ClientId == mention.ClientId);
+        Assert.Equal(1_000_000, sample.InputTokens);
+        Assert.Equal(500_000, sample.OutputTokens);
+        Assert.Equal(7m, sample.EstimatedCostUsd);
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_ForAnUnpricedMentionProtocol_RecordsTokensAndFlagsTheCostApproximate()
+    {
+        // An installation that prices nothing must read as absent rather than free.
+        var options = CreateOptions();
+        var mention = await SeedMentionAsync(options);
+
+        var recorder = new EfProtocolRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProtocolRecorder>.Instance);
+
+        var protocolId = await recorder.BeginForMentionReplyAsync(mention.Id, "mention-thread-17", "gpt-4o");
+        await recorder.SetCompletedAsync(protocolId, "completed", 1000, 500, 1, 0, null);
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var storedMention = await verify.MentionReplyJobs.FirstAsync(m => m.Id == mention.Id);
+
+        Assert.Equal(1000, storedMention.TotalInputTokens);
+        Assert.Null(storedMention.TotalEstimatedCostUsd);
+        Assert.True(storedMention.CostIsApproximate);
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_ForAMentionProtocolWithNoReportedUsage_FlagsTheCostApproximate()
+    {
+        // An answered mention always made a call, so zero tokens means the provider reported none. Recording
+        // nothing at all would drop the row from every scope and leave the scope claiming to be exact.
+        var options = CreateOptions();
+        var mention = await SeedMentionAsync(options);
+
+        var recorder = new EfProtocolRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProtocolRecorder>.Instance);
+
+        var protocolId = await recorder.BeginForMentionReplyAsync(mention.Id, "mention-thread-17", "gpt-4o");
+        await recorder.SetCompletedAsync(protocolId, "completed", 0, 0, 1, 0, null);
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var storedMention = await verify.MentionReplyJobs.FirstAsync(m => m.Id == mention.Id);
+
+        Assert.Equal(0, storedMention.TotalInputTokens);
+        Assert.Null(storedMention.TotalEstimatedCostUsd);
+        Assert.True(storedMention.CostIsApproximate);
+    }
+
+    private static async Task<MentionReplyJob> SeedMentionAsync(DbContextOptions<MeisterProPRDbContext> options)
+    {
+        var mention = new MentionReplyJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/test",
+            "proj",
+            "repo",
+            1,
+            "17",
+            42,
+            "what does this do?");
+        mention.SetAiConfig(ConnectionId, "gpt-4o");
+
+        await using var seed = new MeisterProPRDbContext(options);
+        seed.MentionReplyJobs.Add(mention);
+        await seed.SaveChangesAsync();
+        return mention;
+    }
+
     private static async Task<ThreadPassJob> SeedThreadPassAsync(DbContextOptions<MeisterProPRDbContext> options)
     {
         var pass = new ThreadPassJob(

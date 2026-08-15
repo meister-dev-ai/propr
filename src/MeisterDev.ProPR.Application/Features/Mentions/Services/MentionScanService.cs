@@ -12,12 +12,13 @@ using Microsoft.Extensions.Logging;
 namespace MeisterDev.ProPR.Application.Services;
 
 /// <summary>
-///     Orchestrates a single mention scan cycle across all active crawl configurations.
-///     Discovers recently updated PRs, detects bot mentions in comment threads,
-///     and enqueues <see cref="MentionReplyJob" /> items for processing.
+///     Orchestrates a single mention scan cycle across all active mention configurations.
+///     Discovers pull requests in the repositories each configuration claims, detects mentions of the
+///     client's reviewer identity in their comment threads, and enqueues <see cref="MentionReplyJob" />
+///     items for processing.
 /// </summary>
 public sealed partial class MentionScanService(
-    ICrawlConfigurationRepository crawlConfigs,
+    IMentionConfigurationRepository mentionConfigs,
     IActivePrFetcher activePrFetcher,
     IPullRequestFetcher pullRequestFetcher,
     IClientRegistry clientRegistry,
@@ -33,7 +34,7 @@ public sealed partial class MentionScanService(
     /// <inheritdoc />
     public async Task ScanAsync(CancellationToken cancellationToken = default)
     {
-        var configs = await crawlConfigs.GetAllActiveAsync(cancellationToken);
+        var configs = await mentionConfigs.GetAllActiveAsync(cancellationToken);
         LogScanCycleStarted(logger, configs.Count);
 
         foreach (var config in configs)
@@ -53,7 +54,7 @@ public sealed partial class MentionScanService(
         }
     }
 
-    private async Task ScanConfigAsync(CrawlConfigurationDto config, CancellationToken ct)
+    private async Task ScanConfigAsync(MentionConfigurationDto config, CancellationToken ct)
     {
         try
         {
@@ -65,6 +66,17 @@ public sealed partial class MentionScanService(
             }
 
             var projectScan = await scanRepository.GetProjectScanAsync(config.Id, ct);
+
+            // The configuration's own interval, measured from the last time this configuration was scanned.
+            // The worker ticks on one shared cadence, so without this a configuration asking to be scanned
+            // rarely would still be scanned on every tick.
+            if (projectScan is not null
+                && DateTimeOffset.UtcNow - projectScan.LastScannedAt
+                < TimeSpan.FromSeconds(Math.Max(1, config.ScanIntervalSeconds)))
+            {
+                return;
+            }
+
             var updatedAfter = projectScan?.LastScannedAt ?? DateTimeOffset.UtcNow.Subtract(InitialLookBack);
 
             var recentPrs = await activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(
@@ -76,14 +88,36 @@ public sealed partial class MentionScanService(
 
             LogPrsFound(logger, config.ProviderScopePath, config.ProviderProjectKey, recentPrs.Count);
 
-            foreach (var pr in recentPrs)
+            // The provider lists the whole project, so the configuration's repositories are what narrow it.
+            // Without this a client reads the conversations of every repository in a project it shares,
+            // including ones belonging to another client entirely.
+            var claimedAtByRepository = config.RepoFilters
+                .GroupBy(filter => filter.RepositoryId, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Min(filter => filter.ClaimedAt ?? DateTimeOffset.UtcNow),
+                    StringComparer.OrdinalIgnoreCase);
+            var coveredPrs = recentPrs
+                .Where(pr => claimedAtByRepository.ContainsKey(pr.RepositoryId))
+                .ToList();
+
+            LogPrsAfterRepositoryFilter(logger, config.Id, coveredPrs.Count, recentPrs.Count);
+
+            foreach (var pr in coveredPrs)
             {
                 if (ct.IsCancellationRequested)
                 {
                     break;
                 }
 
-                await this.ScanPrAsync(config, reviewer, pr.RepositoryId, pr.PullRequestId, pr.LastUpdatedAt, ct);
+                await this.ScanPrAsync(
+                    config,
+                    reviewer,
+                    pr.RepositoryId,
+                    pr.PullRequestId,
+                    pr.LastUpdatedAt,
+                    claimedAtByRepository[pr.RepositoryId],
+                    ct);
             }
 
             // Advance the project-level watermark.
@@ -102,11 +136,12 @@ public sealed partial class MentionScanService(
     }
 
     private async Task ScanPrAsync(
-        CrawlConfigurationDto config,
+        MentionConfigurationDto config,
         ReviewerIdentity reviewer,
         string repositoryId,
         int pullRequestId,
         DateTimeOffset prLastUpdatedAt,
+        DateTimeOffset claimedAt,
         CancellationToken ct)
     {
         var prScan = await scanRepository.GetPrScanAsync(config.Id, repositoryId, pullRequestId, ct);
@@ -158,6 +193,7 @@ public sealed partial class MentionScanService(
                             thread,
                             comment,
                             prScan,
+                            claimedAt,
                             ct)))
                 {
                     newMentionsEnqueued++;
@@ -204,7 +240,10 @@ public sealed partial class MentionScanService(
             .Max();
     }
 
-    private static bool ShouldProcessComment(PrThreadComment comment, MentionPrScan? prScan)
+    private static bool ShouldProcessComment(
+        PrThreadComment comment,
+        MentionPrScan? prScan,
+        DateTimeOffset claimedAt)
     {
         // Skip comments without a valid ID (shouldn't happen with real ADO data).
         if (comment.CommentId <= 0)
@@ -212,10 +251,32 @@ public sealed partial class MentionScanService(
             return false;
         }
 
+        // The later of the two floors. The claim time covers a repository never scanned before: the provider
+        // hands back every open pull request whatever its age, so an absent watermark treated as "process
+        // everything" would answer, and bill for, every question the repository has ever been asked.
+        //
+        // Taking the later of the two rather than preferring the watermark also covers a repository removed
+        // from a configuration and added back later. Its scan rows survive the gap, so the stale watermark
+        // would otherwise win and every question asked while nobody was claiming the repository would be
+        // answered, which is the opposite of what claiming it from a moment onwards means.
+        var seenUpTo = prScan is null
+            ? claimedAt
+            : prScan.LastCommentSeenAt > claimedAt
+                ? prScan.LastCommentSeenAt
+                : claimedAt;
+
+        // A comment the provider does not date cannot be shown to fall after either floor, and treating it
+        // as new defeats both of them: the first scan after a repository is claimed would answer, and bill
+        // for, every undated question the repository has ever been asked. The cost of being wrong the other
+        // way is that a provider omitting timestamps answers nothing, which is visible and recoverable,
+        // where a spent budget is neither.
+        if (!comment.PublishedAt.HasValue)
+        {
+            return false;
+        }
+
         // Skip comments we've already processed (published before or at last seen time).
-        return !comment.PublishedAt.HasValue ||
-               prScan is null ||
-               comment.PublishedAt.Value > prScan.LastCommentSeenAt;
+        return comment.PublishedAt.Value > seenUpTo;
     }
 
     // Produce a redacted, single-line, length-bounded rendering of (attacker-controlled) comment text
@@ -235,7 +296,7 @@ public sealed partial class MentionScanService(
 
     private async Task<bool> ProcessCommentForMentionAsync(MentionCommentInputs inputs)
     {
-        if (!ShouldProcessComment(inputs.Comment, inputs.PrScan))
+        if (!ShouldProcessComment(inputs.Comment, inputs.PrScan, inputs.ClaimedAt))
         {
             return false;
         }
@@ -256,16 +317,18 @@ public sealed partial class MentionScanService(
             return false;
         }
 
-        // Check for duplicate — unique constraint is the authoritative guard.
-        var alreadyExists = await jobRepository.ExistsForCommentAsync(
-            inputs.Config.ClientId,
+        // Asked across every client, because another client covering this repository may already have taken
+        // the comment. The unique constraint is the authoritative guard; this only avoids building a job
+        // that would lose.
+        var alreadyTaken = await jobRepository.ExistsForCommentAsync(
             inputs.RepositoryId,
             inputs.PullRequestId,
             inputs.Thread.ThreadId,
             inputs.Comment.CommentId,
+            inputs.Reviewer.AddressedKey,
             inputs.Ct);
 
-        if (alreadyExists)
+        if (alreadyTaken)
         {
             LogDuplicateMentionSkipped(logger, inputs.PullRequestId, inputs.Thread.ThreadId, inputs.Comment.CommentId);
             return false;
@@ -320,14 +383,29 @@ public sealed partial class MentionScanService(
         job.SetReviewThreadContext(threadRef);
         job.SetReviewCommentContext(commentRef);
 
-        await jobRepository.AddAsync(job, inputs.Ct);
+        // The account the developer addressed, which is what makes this comment one unit of work rather
+        // than one per client that happens to cover the repository.
+        job.SetMentionedReviewer(inputs.Reviewer);
+
+        // Another client's scan can take the comment between the check above and this write, so the answer
+        // that matters is the one the database gives.
+        if (!await jobRepository.TryAddAsync(job, inputs.Ct))
+        {
+            LogMentionTakenByAnotherClient(
+                logger,
+                inputs.PullRequestId,
+                inputs.Thread.ThreadId,
+                inputs.Comment.CommentId);
+            return false;
+        }
+
         await channelWriter.WriteAsync(job, inputs.Ct);
         LogMentionEnqueued(logger, inputs.PullRequestId, inputs.Thread.ThreadId, inputs.Comment.CommentId);
         return true;
     }
 
     private async Task<ReviewerIdentity?> ResolveReviewerIdentityAsync(
-        CrawlConfigurationDto config,
+        MentionConfigurationDto config,
         CancellationToken ct)
     {
         var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
@@ -335,7 +413,7 @@ public sealed partial class MentionScanService(
     }
 
     private static string ResolveRepositoryProjectPath(
-        CrawlConfigurationDto config,
+        MentionConfigurationDto config,
         string repositoryId,
         PullRequest pullRequest)
     {
@@ -356,7 +434,7 @@ public sealed partial class MentionScanService(
     }
 
     private sealed record MentionCommentInputs(
-        CrawlConfigurationDto Config,
+        MentionConfigurationDto Config,
         ReviewerIdentity Reviewer,
         string RepositoryId,
         int PullRequestId,
@@ -364,5 +442,6 @@ public sealed partial class MentionScanService(
         PrCommentThread Thread,
         PrThreadComment Comment,
         MentionPrScan? PrScan,
+        DateTimeOffset ClaimedAt,
         CancellationToken Ct);
 }

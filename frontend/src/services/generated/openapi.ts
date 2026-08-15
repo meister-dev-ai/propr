@@ -441,6 +441,299 @@ export interface paths {
         };
         trace?: never;
     };
+    "/admin/mention-configurations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists mention configurations visible to the caller. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Optional client filter. Non-admin callers are restricted to their own clients regardless. */
+                    clientId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The configurations the caller may see. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MentionConfigResponse"][];
+                        "application/json": components["schemas"]["MentionConfigResponse"][];
+                        "text/json": components["schemas"]["MentionConfigResponse"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the requested client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Declares that a client answers mentions on a set of repositories in one project. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The configuration to create. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateMentionConfigRequest"];
+                    "text/json": components["schemas"]["CreateMentionConfigRequest"];
+                    "application/*+json": components["schemas"]["CreateMentionConfigRequest"];
+                };
+            };
+            responses: {
+                /** @description The created configuration. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MentionConfigResponse"];
+                        "application/json": components["schemas"]["MentionConfigResponse"];
+                        "text/json": components["schemas"]["MentionConfigResponse"];
+                    };
+                };
+                /** @description No repositories were named, or the provider family is disabled. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description No such client. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The client already has a configuration for this project. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/mention-configurations/{configId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Removes a configuration, so the client stops answering mentions in that project. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The configuration to remove. */
+                    configId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description No such configuration. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Changes a configuration's scan interval, active flag, or repository list. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The configuration to change. */
+                    configId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The changes to apply. Omitted fields are left as they are. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchMentionConfigRequest"];
+                    "text/json": components["schemas"]["PatchMentionConfigRequest"];
+                    "application/*+json": components["schemas"]["PatchMentionConfigRequest"];
+                };
+            };
+            responses: {
+                /** @description The updated configuration. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MentionConfigResponse"];
+                        "application/json": components["schemas"]["MentionConfigResponse"];
+                        "text/json": components["schemas"]["MentionConfigResponse"];
+                    };
+                };
+                /** @description The repository list was given but empty. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description No such configuration. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/admin/model-catalog/snapshot": {
         parameters: {
             query?: never;
@@ -18153,6 +18446,26 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
         };
+        /** @description Request to declare that a client answers mentions on repositories in one project. */
+        CreateMentionConfigRequest: {
+            /**
+             * Format: uuid
+             * @description The client that answers.
+             */
+            clientId?: string;
+            provider?: components["schemas"]["ScmProvider"];
+            /** @description Provider scope path the project lives under. */
+            providerScopePath?: string | null;
+            /** @description Provider project, workspace, or namespace key. */
+            providerProjectKey?: string | null;
+            /** @description The repositories to answer on. At least one is required. */
+            repoFilters?: components["schemas"]["MentionRepoFilterRequest"][] | null;
+            /**
+             * Format: int32
+             * @description Shortest gap between two scans. Defaults to 60 seconds.
+             */
+            scanIntervalSeconds?: number | null;
+        };
         /** @description Create-PAT request. */
         CreatePatRequest: {
             label?: string | null;
@@ -18461,6 +18774,65 @@ export interface components {
          * @enum {string}
          */
         MemorySource: "threadResolved" | "adminDismissed";
+        /** @description A mention scanning configuration as returned by the admin API. */
+        MentionConfigResponse: {
+            /**
+             * Format: uuid
+             * @description Unique identifier.
+             */
+            id?: string;
+            /**
+             * Format: uuid
+             * @description The client that answers, and that pays for the answers.
+             */
+            clientId?: string;
+            provider?: components["schemas"]["ScmProvider"];
+            /** @description Provider scope path the project lives under. */
+            providerScopePath?: string | null;
+            /** @description Provider project, workspace, or namespace key. */
+            providerProjectKey?: string | null;
+            /**
+             * Format: int32
+             * @description Shortest gap between two scans of this configuration.
+             */
+            scanIntervalSeconds?: number;
+            /** @description Whether this configuration is scanned. */
+            isActive?: boolean;
+            /**
+             * Format: date-time
+             * @description When the configuration was created.
+             */
+            createdAt?: string;
+            /** @description The repositories answered on. */
+            repoFilters?: components["schemas"]["MentionRepoFilterResponse"][] | null;
+        };
+        /** @description One repository in a create or patch request. */
+        MentionRepoFilterRequest: {
+            /** @description Provider-native repository identifier. */
+            repositoryId?: string | null;
+            /** @description Human-readable repository name, stored for display only. */
+            displayName?: string | null;
+            /** @description Provider-aware canonical source reference, when the selection produced one. */
+            canonicalSourceRef?: string | null;
+            /** @description Provider key backing the guided repository selection. */
+            sourceProvider?: string | null;
+        };
+        /** @description One repository a mention configuration answers on. */
+        MentionRepoFilterResponse: {
+            /**
+             * Format: uuid
+             * @description Unique identifier.
+             */
+            id?: string;
+            /** @description Provider-native repository identifier. What the scan matches on. */
+            repositoryId?: string | null;
+            /** @description Human-readable repository name, for display only. */
+            displayName?: string | null;
+            /** @description Provider-aware canonical source reference, when available. */
+            canonicalSourceRef?: string | null;
+            /** @description Provider key backing the guided repository selection, when one was used. */
+            sourceProvider?: string | null;
+        };
         /** @description Outcome of a catalog snapshot import. */
         ModelCatalogImportResponse: {
             /**
@@ -18582,6 +18954,18 @@ export interface components {
             outputLanguage?: string | null;
             reviewEveryIncrementEnabled?: boolean | null;
             withholdOutOfScopeFindings?: boolean | null;
+        };
+        /** @description Request to change a mention configuration. Omitted fields are left as they are. */
+        PatchMentionConfigRequest: {
+            /**
+             * Format: int32
+             * @description New scan interval, or null to leave it.
+             */
+            scanIntervalSeconds?: number | null;
+            /** @description New active flag, or null to leave it. */
+            isActive?: boolean | null;
+            /** @description Replacement repository list, or null to leave it. Must not be empty when given. */
+            repoFilters?: components["schemas"]["MentionRepoFilterRequest"][] | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {

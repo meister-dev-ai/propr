@@ -16,19 +16,19 @@ public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : I
 {
     /// <inheritdoc />
     public async Task<MentionProjectScan?> GetProjectScanAsync(
-        Guid crawlConfigurationId,
+        Guid mentionConfigurationId,
         CancellationToken ct = default)
     {
         return await dbContext.MentionProjectScans
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.CrawlConfigurationId == crawlConfigurationId, ct);
+            .FirstOrDefaultAsync(s => s.MentionConfigurationId == mentionConfigurationId, ct);
     }
 
     /// <inheritdoc />
     public async Task UpsertProjectScanAsync(MentionProjectScan record, CancellationToken ct = default)
     {
         var updated = await dbContext.MentionProjectScans
-            .Where(s => s.CrawlConfigurationId == record.CrawlConfigurationId)
+            .Where(s => s.MentionConfigurationId == record.MentionConfigurationId)
             .ExecuteUpdateAsync(
                 s => s
                     .SetProperty(p => p.LastScannedAt, record.LastScannedAt)
@@ -45,7 +45,7 @@ public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : I
 
     /// <inheritdoc />
     public async Task<MentionPrScan?> GetPrScanAsync(
-        Guid crawlConfigurationId,
+        Guid mentionConfigurationId,
         string repositoryId,
         int pullRequestId,
         CancellationToken ct = default)
@@ -54,7 +54,7 @@ public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : I
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 s =>
-                    s.CrawlConfigurationId == crawlConfigurationId &&
+                    s.MentionConfigurationId == mentionConfigurationId &&
                     s.RepositoryId == repositoryId &&
                     s.PullRequestId == pullRequestId,
                 ct);
@@ -65,7 +65,7 @@ public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : I
     {
         var updated = await dbContext.MentionPrScans
             .Where(s =>
-                s.CrawlConfigurationId == record.CrawlConfigurationId &&
+                s.MentionConfigurationId == record.MentionConfigurationId &&
                 s.RepositoryId == record.RepositoryId &&
                 s.PullRequestId == record.PullRequestId)
             .ExecuteUpdateAsync(

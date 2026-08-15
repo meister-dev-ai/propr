@@ -17,8 +17,8 @@ internal sealed class MentionPrScanConfiguration : IEntityTypeConfiguration<Ment
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Id).HasColumnName("id").ValueGeneratedNever();
 
-        builder.Property(s => s.CrawlConfigurationId)
-            .HasColumnName("crawl_configuration_id")
+        builder.Property(s => s.MentionConfigurationId)
+            .HasColumnName("mention_configuration_id")
             .IsRequired();
 
         builder.Property(s => s.RepositoryId)
@@ -36,12 +36,12 @@ internal sealed class MentionPrScanConfiguration : IEntityTypeConfiguration<Ment
             .HasColumnName("updated_at")
             .IsRequired();
 
-        builder.HasOne<CrawlConfigurationRecord>()
+        builder.HasOne<MentionConfigurationRecord>()
             .WithMany()
-            .HasForeignKey(s => s.CrawlConfigurationId)
+            .HasForeignKey(s => s.MentionConfigurationId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(s => new { s.CrawlConfigurationId, s.RepositoryId, s.PullRequestId })
+        builder.HasIndex(s => new { s.MentionConfigurationId, s.RepositoryId, s.PullRequestId })
             .IsUnique()
             .HasDatabaseName("uq_mention_pr_scans_pr");
     }

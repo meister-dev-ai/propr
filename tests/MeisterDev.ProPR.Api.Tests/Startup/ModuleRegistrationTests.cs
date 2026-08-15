@@ -4,6 +4,7 @@
 using System.Reflection;
 using Azure.Core;
 using MeisterDev.ProPR.Api.Features.ProCursor;
+using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
@@ -214,6 +215,36 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IReviewDiscoveryProvider>(services));
         Assert.NotNull(FindService<IReviewerIdentityService>(services));
         Assert.NotNull(FindService<IWebhookIngressService>(services));
+    }
+
+    [Fact]
+    public void ComposedModules_GiveTheMentionPathEverythingItsMeteringAndCapsNeed()
+    {
+        // These arrive through optional constructor parameters, so a missing registration is filled with null
+        // and the mention path silently goes back to spending money nothing meters and no cap observes. The
+        // failure has no symptom at startup, which is why it is asserted here.
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddDataProtection();
+        services.AddSingleton(new VssConnectionFactory(Substitute.For<TokenCredential>()));
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration);
+        services.AddCrawlingModule(configuration);
+        services.AddClientsModule(configuration);
+        services.AddIdentityAndAccessModule(configuration);
+        services.AddMentionsModule(configuration);
+        services.AddPromptCustomizationModule(configuration);
+        services.AddUsageReportingModule(configuration);
+        services.AddProCursorModule(configuration);
+
+        Assert.NotNull(FindService<IMentionReplyService>(services));
+        Assert.NotNull(FindService<IProtocolRecorder>(services));
+        Assert.NotNull(FindService<IPullRequestIterationResolver>(services));
+        Assert.NotNull(FindService<IBudgetCapsProvider>(services));
+        Assert.NotNull(FindService<IReviewSpendAccumulator>(services));
+        Assert.NotNull(FindService<IBudgetScopeAccessor>(services));
+        Assert.NotNull(FindService<IBudgetEventPublisher>(services));
     }
 
     [Fact]

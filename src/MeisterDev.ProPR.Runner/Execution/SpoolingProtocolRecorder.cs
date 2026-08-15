@@ -80,6 +80,17 @@ public sealed class SpoolingProtocolRecorder(JobSpool spool, TimeProvider timePr
     }
 
     /// <inheritdoc />
+    public Task<Guid> BeginForMentionReplyAsync(
+        Guid mentionReplyJobId,
+        string? label = null,
+        string? modelId = null,
+        CancellationToken ct = default,
+        string? logicalModelName = null)
+    {
+        throw new NotSupportedException("Mention answers run in the control plane; a runner reviews files.");
+    }
+
+    /// <inheritdoc />
     public Task RecordAiCallAsync(
         Guid protocolId,
         int iteration,

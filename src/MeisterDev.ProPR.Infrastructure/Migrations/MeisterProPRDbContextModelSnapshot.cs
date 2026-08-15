@@ -1037,13 +1037,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("CrawlConfigurationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("crawl_configuration_id");
-
                     b.Property<DateTimeOffset>("LastCommentSeenAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_comment_seen_at");
+
+                    b.Property<Guid>("MentionConfigurationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mention_configuration_id");
 
                     b.Property<int>("PullRequestId")
                         .HasColumnType("integer")
@@ -1060,7 +1060,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CrawlConfigurationId", "RepositoryId", "PullRequestId")
+                    b.HasIndex("MentionConfigurationId", "RepositoryId", "PullRequestId")
                         .IsUnique()
                         .HasDatabaseName("uq_mention_pr_scans_pr");
 
@@ -1073,13 +1073,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("CrawlConfigurationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("crawl_configuration_id");
-
                     b.Property<DateTimeOffset>("LastScannedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_scanned_at");
+
+                    b.Property<Guid>("MentionConfigurationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mention_configuration_id");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1087,7 +1087,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CrawlConfigurationId")
+                    b.HasIndex("MentionConfigurationId")
                         .IsUnique()
                         .HasDatabaseName("uq_mention_project_scans_config");
 
@@ -1099,6 +1099,33 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<Guid?>("AiConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ai_connection_id");
+
+                    b.Property<string>("AiModel")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("ai_model");
+
+                    b.Property<int?>("BudgetBlockCapKind")
+                        .HasColumnType("integer")
+                        .HasColumnName("budget_block_cap_kind");
+
+                    b.Property<int?>("BudgetBlockScope")
+                        .HasColumnType("integer")
+                        .HasColumnName("budget_block_scope");
+
+                    b.Property<decimal?>("BudgetBlockSpentUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("budget_block_spent_usd");
+
+                    b.Property<decimal?>("BudgetBlockThresholdUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("budget_block_threshold_usd");
 
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid")
@@ -1143,6 +1170,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
+                    b.Property<bool>("CostIsApproximate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("cost_is_approximate");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1161,10 +1194,22 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("host_base_url");
 
+                    b.Property<int?>("IterationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("iteration_id");
+
                     b.Property<string>("MentionText")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("mention_text");
+
+                    b.Property<string>("MentionedReviewerKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasDefaultValue("")
+                        .HasColumnName("mentioned_reviewer_key");
 
                     b.Property<string>("OrganizationUrl")
                         .IsRequired()
@@ -1230,6 +1275,23 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("thread_line_number");
 
+                    b.Property<decimal?>("TotalEstimatedCostUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("total_estimated_cost_usd");
+
+                    b.Property<long>("TotalInputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("total_input_tokens");
+
+                    b.Property<long>("TotalOutputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("total_output_tokens");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId")
@@ -1238,7 +1300,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_mention_reply_jobs_status");
 
-                    b.HasIndex("ClientId", "PullRequestId", "ThreadId", "CommentId")
+                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId")
+                        .HasDatabaseName("ix_mention_reply_jobs_client_repo_pr");
+
+                    b.HasIndex("RepositoryId", "PullRequestId", "ThreadId", "CommentId", "MentionedReviewerKey")
                         .IsUnique()
                         .HasDatabaseName("uq_mention_reply_jobs_mention");
 
@@ -2354,6 +2419,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("logical_model_name");
 
+                    b.Property<Guid?>("MentionReplyJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mention_reply_job_id");
+
                     b.Property<string>("ModelId")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
@@ -2414,12 +2483,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasIndex("JobId")
                         .HasDatabaseName("ix_review_job_protocols_job_id");
 
+                    b.HasIndex("MentionReplyJobId")
+                        .HasDatabaseName("ix_review_job_protocols_mention_reply_job_id");
+
                     b.HasIndex("ThreadPassJobId")
                         .HasDatabaseName("ix_review_job_protocols_thread_pass_job_id");
 
                     b.ToTable("review_job_protocols", null, t =>
                         {
-                            t.HasCheckConstraint("ck_review_job_protocols_single_owner", "(job_id IS NULL) <> (thread_pass_job_id IS NULL)");
+                            t.HasCheckConstraint("ck_review_job_protocols_single_owner", "(job_id IS NOT NULL)::int + (thread_pass_job_id IS NOT NULL)::int + (mention_reply_job_id IS NOT NULL)::int = 1");
                         });
                 });
 
@@ -4484,6 +4556,103 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("ai_logical_models", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.MentionConfigurationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("OrganizationUrl")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("organization_url");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("project_id");
+
+                    b.Property<int>("Provider")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("provider");
+
+                    b.Property<int>("ScanIntervalSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(60)
+                        .HasColumnName("scan_interval_seconds");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId")
+                        .HasDatabaseName("ix_mention_configurations_client_id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_mention_configurations_active")
+                        .HasFilter("is_active = true");
+
+                    b.ToTable("mention_configurations", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.MentionRepoFilterRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CanonicalSourceRef")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("canonical_source_ref");
+
+                    b.Property<DateTimeOffset>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("display_name");
+
+                    b.Property<Guid>("MentionConfigurationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mention_configuration_id");
+
+                    b.Property<string>("RepositoryId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("repository_id");
+
+                    b.Property<string>("SourceProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("source_provider");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MentionConfigurationId")
+                        .HasDatabaseName("ix_mention_repo_filters_configuration_id");
+
+                    b.ToTable("mention_repo_filters", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.PremiumCapabilityOverrideRecord", b =>
                 {
                     b.Property<string>("CapabilityKey")
@@ -5439,18 +5608,18 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.MentionPrScan", b =>
                 {
-                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.CrawlConfigurationRecord", null)
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.MentionConfigurationRecord", null)
                         .WithMany()
-                        .HasForeignKey("CrawlConfigurationId")
+                        .HasForeignKey("MentionConfigurationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.MentionProjectScan", b =>
                 {
-                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.CrawlConfigurationRecord", null)
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.MentionConfigurationRecord", null)
                         .WithMany()
-                        .HasForeignKey("CrawlConfigurationId")
+                        .HasForeignKey("MentionConfigurationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -5557,6 +5726,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasOne("MeisterDev.ProPR.Domain.Entities.ReviewJob", null)
                         .WithMany("Protocols")
                         .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.MentionReplyJob", null)
+                        .WithMany()
+                        .HasForeignKey("MentionReplyJobId")
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("MeisterDev.ProPR.Domain.Entities.ThreadPassJob", null)
@@ -5854,6 +6028,28 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.MentionConfigurationRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany("MentionConfigurations")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.MentionRepoFilterRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.MentionConfigurationRecord", "MentionConfiguration")
+                        .WithMany("RepoFilters")
+                        .HasForeignKey("MentionConfigurationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MentionConfiguration");
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.PromptOverrideRecord", b =>
                 {
                     b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.ClientRecord", "Client")
@@ -6119,6 +6315,8 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                 {
                     b.Navigation("CrawlConfigurations");
 
+                    b.Navigation("MentionConfigurations");
+
                     b.Navigation("ProviderConnectionAuditEntries");
 
                     b.Navigation("PurposeLogicalModels");
@@ -6146,6 +6344,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                 {
                     b.Navigation("ProCursorSources");
 
+                    b.Navigation("RepoFilters");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.MentionConfigurationRecord", b =>
+                {
                     b.Navigation("RepoFilters");
                 });
 

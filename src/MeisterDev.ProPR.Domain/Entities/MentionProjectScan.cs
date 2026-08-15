@@ -5,7 +5,7 @@ namespace MeisterDev.ProPR.Domain.Entities;
 
 /// <summary>
 ///     Tracks the project-level watermark for mention scanning.
-///     One row per <c>CrawlConfiguration</c>. The <see cref="LastScannedAt" /> value
+///     One row per mention configuration. The <see cref="LastScannedAt" /> value
 ///     is used as <c>minLastUpdateDate</c> in ADO PR list queries.
 /// </summary>
 public sealed class MentionProjectScan
@@ -13,20 +13,20 @@ public sealed class MentionProjectScan
     /// <summary>
     ///     Creates a new <see cref="MentionProjectScan" />.
     /// </summary>
-    public MentionProjectScan(Guid id, Guid crawlConfigurationId, DateTimeOffset lastScannedAt)
+    public MentionProjectScan(Guid id, Guid mentionConfigurationId, DateTimeOffset lastScannedAt)
     {
         if (id == Guid.Empty)
         {
             throw new ArgumentException("Id must not be empty.", nameof(id));
         }
 
-        if (crawlConfigurationId == Guid.Empty)
+        if (mentionConfigurationId == Guid.Empty)
         {
-            throw new ArgumentException("CrawlConfigurationId must not be empty.", nameof(crawlConfigurationId));
+            throw new ArgumentException("MentionConfigurationId must not be empty.", nameof(mentionConfigurationId));
         }
 
         this.Id = id;
-        this.CrawlConfigurationId = crawlConfigurationId;
+        this.MentionConfigurationId = mentionConfigurationId;
         this.LastScannedAt = lastScannedAt;
         this.UpdatedAt = DateTimeOffset.UtcNow;
     }
@@ -34,8 +34,8 @@ public sealed class MentionProjectScan
     /// <summary>Unique identifier.</summary>
     public Guid Id { get; init; }
 
-    /// <summary>FK to the crawl configuration this watermark belongs to.</summary>
-    public Guid CrawlConfigurationId { get; init; }
+    /// <summary>FK to the mention configuration this watermark belongs to.</summary>
+    public Guid MentionConfigurationId { get; init; }
 
     /// <summary>
     ///     Latest ADO PR last-update time observed; passed as <c>minLastUpdateDate</c>
