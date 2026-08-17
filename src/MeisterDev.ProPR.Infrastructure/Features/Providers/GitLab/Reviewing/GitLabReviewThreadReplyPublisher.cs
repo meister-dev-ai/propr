@@ -44,8 +44,12 @@ internal sealed partial class GitLabReviewThreadReplyPublisher(
         Guid clientId,
         ReviewThreadRef thread,
         string replyText,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? quotedComment = null)
     {
+        // quotedComment is ignored, for the same reason it is on Azure DevOps: the reply is a note in the
+        // discussion, so the comment being answered is already directly above it. GitHub's conversation path
+        // and Forgejo use it, because they post a new comment on the pull request instead.
         ArgumentNullException.ThrowIfNull(thread);
 
         var host = thread.Review.Repository.Host;

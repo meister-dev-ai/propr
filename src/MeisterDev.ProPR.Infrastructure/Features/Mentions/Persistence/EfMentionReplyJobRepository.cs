@@ -55,6 +55,27 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> GetPostedReplyCommentIdsAsync(
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct = default)
+    {
+        var postedCommentIds = await dbContext.MentionReplyJobs
+            .AsNoTracking()
+            .Where(j =>
+                j.RepositoryId == repositoryId &&
+                j.PullRequestId == pullRequestId &&
+                j.PostedReplyCommentId != null)
+            .Select(j => j.PostedReplyCommentId!)
+            .Distinct()
+            .ToListAsync(ct);
+
+        // Ordinal, because these are provider identifiers rather than words: two that differ in case are two
+        // different comments on a provider that spells them in hexadecimal.
+        return postedCommentIds.ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
     public async Task<bool> TryAddAsync(MentionReplyJob job, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(job);

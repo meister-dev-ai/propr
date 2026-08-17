@@ -27,6 +27,12 @@ public sealed class ThreadMemoryRecord
     public string ThreadId { get; init; } = string.Empty;
 
     /// <summary>ADO repository identifier. Required, ≤ 256 characters.</summary>
+    /// <summary>The host that issued <see cref="RepositoryId" />, and so the scope it is unique within.</summary>
+    public string OrganizationUrl { get; init; } = string.Empty;
+
+    /// <summary>The project within the host, empty where the host addresses repositories without one.</summary>
+    public string ProjectId { get; init; } = string.Empty;
+
     public string RepositoryId { get; init; } = string.Empty;
 
     /// <summary>ADO pull request number. Must be &gt; 0.</summary>

@@ -5695,6 +5695,210 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/clients/{clientId}/providers/{provider}/discovery/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the owners, organizations, or groups the connection can reach. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Provider-connection identifier. */
+                    connectionId?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Provider family the connection belongs to. */
+                    provider: components["schemas"]["ScmProvider"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The scopes the connection can reach. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProviderScopeOptionResponse"][];
+                        "application/json": components["schemas"]["ProviderScopeOptionResponse"][];
+                        "text/json": components["schemas"]["ProviderScopeOptionResponse"][];
+                    };
+                };
+                /** @description The connection is unusable, or the provider refused the request. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an administrator of the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The provider family has no discovery in this deployment. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description This installation is not entitled to answer mentions. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/providers/{provider}/discovery/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the repositories in one scope the connection can reach. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Provider-connection identifier. */
+                    connectionId?: string;
+                    /** @description The owner, organization, or group to list within. */
+                    scopePath?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Provider family the connection belongs to. */
+                    provider: components["schemas"]["ScmProvider"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The repositories in that scope. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProviderRepositoryOptionResponse"][];
+                        "application/json": components["schemas"]["ProviderRepositoryOptionResponse"][];
+                        "text/json": components["schemas"]["ProviderRepositoryOptionResponse"][];
+                    };
+                };
+                /** @description The connection is unusable, the scope is missing, or the provider refused. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an administrator of the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The provider family has no discovery in this deployment. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description This installation is not entitled to answer mentions. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/provider-connections/{connectionId}/scopes": {
         parameters: {
             query?: never;
@@ -19935,6 +20139,22 @@ export interface components {
         ProviderOperationalStatusDto: {
             connections?: components["schemas"]["ProviderConnectionOperationalStatusDto"][] | null;
             providerFamilies?: components["schemas"]["ProviderFamilyOperationalStatusDto"][] | null;
+        };
+        /** @description One repository a connection can reach within a scope. */
+        ProviderRepositoryOptionResponse: {
+            /** @description The provider-native identifier, which survives a rename. */
+            repositoryId?: string | null;
+            /** @description The repository's path, for reading. */
+            displayName?: string | null;
+            /** @description The owner, organization, or group it belongs to. */
+            scopePath?: string | null;
+        };
+        /** @description One owner, organization, or group a connection can reach. */
+        ProviderScopeOptionResponse: {
+            /** @description What the provider is addressed by, and what a configuration stores. */
+            scopePath?: string | null;
+            /** @description What to show an operator. */
+            displayName?: string | null;
         };
         /** @description One pull request in the grouped review history, with every review run against it. */
         PullRequestHistoryItem: {

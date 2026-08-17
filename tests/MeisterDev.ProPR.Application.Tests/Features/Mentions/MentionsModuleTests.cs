@@ -89,12 +89,9 @@ public sealed class MentionsModuleTests
 
         mentionConfigs.GetAllActiveAsync(Arg.Any<CancellationToken>()).Returns([DefaultConfig]);
         activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DateTimeOffset>(),
-                Arg.Any<Guid?>(),
+                Arg.Any<ActivePullRequestQuery>(),
                 Arg.Any<CancellationToken>())
-            .Returns([pr]);
+            .Returns(new ActivePullRequestDiscovery([pr], true));
         clientRegistry.GetEffectiveReviewerIdentityAsync(ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
             .Returns(
                 new ReviewerIdentity(
@@ -149,7 +146,8 @@ public sealed class MentionsModuleTests
                 Arg.Any<Guid>(),
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(Task.FromResult<string?>(null));
         providerRegistry.GetReviewThreadReplyPublisher(Arg.Any<ScmProvider>())
             .Returns(threadReplier);
@@ -200,7 +198,12 @@ public sealed class MentionsModuleTests
         await sut.ProcessAsync(job);
 
         await threadReplier.Received(1)
-            .ReplyAsync(job.ClientId, job.ReviewThreadReference, "Here is the answer.", Arg.Any<CancellationToken>());
+            .ReplyAsync(
+                job.ClientId,
+                job.ReviewThreadReference,
+                "Here is the answer.",
+                Arg.Any<CancellationToken>(),
+                job.MentionText);
         await jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 }

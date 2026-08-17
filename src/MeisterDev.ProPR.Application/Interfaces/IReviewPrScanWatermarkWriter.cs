@@ -17,12 +17,16 @@ public interface IReviewPrScanWatermarkWriter
     ///     processed revision, so this is the only operation that brings one into being.
     /// </summary>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="organizationUrl">The host that issued the repository identifier.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="revisionKey">The stored revision key that has now been processed.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task SetReviewWatermarkAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string revisionKey,

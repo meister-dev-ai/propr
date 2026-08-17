@@ -20,6 +20,29 @@ public interface IScmProviderRegistry
     /// <summary>Resolves repository and scope discovery for the given provider family.</summary>
     IRepositoryDiscoveryProvider GetRepositoryDiscoveryProvider(ScmProvider provider);
 
+    /// <summary>
+    ///     Reports whether active pull-request discovery is registered for the given provider family, which is
+    ///     what decides whether the provider can answer mentions at all.
+    /// </summary>
+    bool SupportsActivePullRequestDiscovery(ScmProvider provider);
+
+    /// <summary>
+    ///     Reports whether a reply can be published into a review thread on the given provider family, which is
+    ///     the other half of what mention answering needs: finding the question, and answering where it was
+    ///     asked.
+    /// </summary>
+    bool SupportsReviewThreadReply(ScmProvider provider);
+
+    /// <summary>
+    ///     Reports whether replying on the given provider family needs the thread's own identifier, which
+    ///     decides whether a comment belonging to no addressable thread can still be answered.
+    /// </summary>
+    /// <remarks>
+    ///     True when no reply publisher is registered, so a caller reading this before deciding what to accept
+    ///     never widens what it accepts because a provider is absent.
+    /// </remarks>
+    bool RequiresReviewThreadIdentifier(ScmProvider provider);
+
     /// <summary>Resolves review-query capabilities for the given provider family.</summary>
     ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider);
 

@@ -510,8 +510,60 @@ internal sealed class GitLabPullRequestFetcher(
             $"GitLab's discussion listing for merge request {pullRequestId}",
             ct);
 
+        // Standalone comments are left out here: they sit on the merge request rather than on the diff, and
+        // the review prompt, the file reviewer and the thread pass all read this set wanting threads anchored
+        // to a file. FetchConversationThreadsAsync returns exactly the ones excluded here.
+        return ToThreads(discussions, individualNotes: false);
+    }
+
+    /// <summary>
+    ///     Reads the comments standing on the merge request itself rather than on the diff.
+    /// </summary>
+    /// <remarks>
+    ///     GitLab returns these from the same discussions endpoint as code threads, flagged as individual
+    ///     notes, and the thread read above drops them for being anchored to no file. A question addressed to
+    ///     the reviewer is as likely to be asked there as on a line of code, so mention scanning asks for them
+    ///     separately rather than widening what reviewing sees.
+    ///     Each carries its discussion id, which is the identifier a reply is posted into, so answering one
+    ///     needs nothing the code threads do not already have.
+    /// </remarks>
+    public async Task<IReadOnlyList<PrCommentThread>> FetchConversationThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitLab merge-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.GitLab, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var discussions = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.GetDiscussionPageAsync(
+                context,
+                host,
+                repositoryId,
+                pullRequestId,
+                page,
+                pageSize,
+                pageCt),
+            IdentifyDiscussion,
+            $"GitLab's discussion listing for merge request {pullRequestId}",
+            cancellationToken);
+
+        return ToThreads(discussions, individualNotes: true);
+    }
+
+    private static IReadOnlyList<PrCommentThread> ToThreads(
+        IReadOnlyList<GitLabDiscussionResponse> discussions,
+        bool individualNotes)
+    {
         return discussions
-            .Where(discussion => !discussion.IndividualNote)
+            .Where(discussion => discussion.IndividualNote == individualNotes)
             .Select(discussion => new
             {
                 discussion.Id,

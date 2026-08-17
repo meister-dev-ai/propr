@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Threading.Channels;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -26,7 +27,8 @@ public sealed partial class MentionScanService(
     IMentionReplyJobRepository jobRepository,
     ChannelWriter<MentionReplyJob> channelWriter,
     ILogger<MentionScanService> logger,
-    IProviderActivationService? providerActivationService = null) : IMentionScanService
+    IProviderActivationService? providerActivationService = null,
+    IScmProviderRegistry? providerRegistry = null) : IMentionScanService
 {
     // Default look-back window for the first scan when no watermark exists.
     private static readonly TimeSpan InitialLookBack = TimeSpan.FromHours(1);
@@ -47,6 +49,9 @@ public sealed partial class MentionScanService(
             if (providerActivationService is not null &&
                 !await providerActivationService.IsEnabledAsync(config.Provider, cancellationToken))
             {
+                // Logged, because a configuration whose provider an administrator disabled answers nothing
+                // and previously did so with no log entry, which looks the same as a scan that is not running.
+                LogConfigSkippedProviderDisabled(logger, config.Id, config.Provider);
                 continue;
             }
 
@@ -74,59 +79,103 @@ public sealed partial class MentionScanService(
                 && DateTimeOffset.UtcNow - projectScan.LastScannedAt
                 < TimeSpan.FromSeconds(Math.Max(1, config.ScanIntervalSeconds)))
             {
+                LogConfigNotDueYet(logger, config.Id, projectScan.LastScannedAt, config.ScanIntervalSeconds);
                 return;
             }
 
-            var updatedAfter = projectScan?.LastScannedAt ?? DateTimeOffset.UtcNow.Subtract(InitialLookBack);
+            // Where the last scan that read everything got to, not where the last scan got to. A tick that a
+            // throttle or an unreadable repository left partial does not move this, so the window it failed
+            // to cover is asked about again. A row written before that was recorded carries its old value.
+            var updatedAfter = projectScan?.LastCompleteScanAt
+                               ?? projectScan?.LastScannedAt
+                               ?? DateTimeOffset.UtcNow.Subtract(InitialLookBack);
 
-            var recentPrs = await activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                updatedAfter,
-                config.ClientId,
-                ct);
-
-            LogPrsFound(logger, config.ProviderScopePath, config.ProviderProjectKey, recentPrs.Count);
-
-            // The provider lists the whole project, so the configuration's repositories are what narrow it.
-            // Without this a client reads the conversations of every repository in a project it shares,
-            // including ones belonging to another client entirely.
             var claimedAtByRepository = config.RepoFilters
                 .GroupBy(filter => filter.RepositoryId, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
                     group => group.Key,
                     group => group.Min(filter => filter.ClaimedAt ?? DateTimeOffset.UtcNow),
                     StringComparer.OrdinalIgnoreCase);
-            var coveredPrs = recentPrs
+
+            // Stamped before anything is asked, and used as the new watermark below rather than the time the
+            // tick finished. A comment posted while the tick is running would otherwise fall between the
+            // listing that missed it and a watermark set after it arrived, and never be asked for again.
+            var startedAt = DateTimeOffset.UtcNow;
+
+            var discovery = await activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(
+                new ActivePullRequestQuery(
+                    config.Provider,
+                    config.ProviderScopePath,
+                    config.RepoFilters
+                        .Select(filter => new ClaimedRepositoryRef(filter.RepositoryId, filter.DisplayName))
+                        .ToList(),
+                    updatedAfter,
+                    config.ClientId),
+                ct);
+
+            LogPrsFound(
+                logger,
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                discovery.PullRequests.Count);
+
+            // Discovery is only asked about claimed repositories, so this filter normally removes nothing.
+            // It stays as a second check: a client reading the conversations of a repository it never claimed
+            // cannot be undone, and an adapter returning an extra repository would cause exactly that.
+            var coveredPrs = discovery.PullRequests
                 .Where(pr => claimedAtByRepository.ContainsKey(pr.RepositoryId))
                 .ToList();
 
-            LogPrsAfterRepositoryFilter(logger, config.Id, coveredPrs.Count, recentPrs.Count);
+            LogPrsAfterRepositoryFilter(
+                logger,
+                config.Id,
+                coveredPrs.Count,
+                discovery.PullRequests.Count);
+
+            var readEverything = discovery.IsComplete;
 
             foreach (var pr in coveredPrs)
             {
                 if (ct.IsCancellationRequested)
                 {
+                    readEverything = false;
                     break;
                 }
 
-                await this.ScanPrAsync(
-                    config,
-                    reviewer,
-                    pr.RepositoryId,
-                    pr.PullRequestId,
-                    pr.LastUpdatedAt,
-                    claimedAtByRepository[pr.RepositoryId],
-                    ct);
+                if (!await this.ScanPrAsync(
+                        config,
+                        reviewer,
+                        pr.RepositoryId,
+                        pr.PullRequestId,
+                        pr.LastUpdatedAt,
+                        claimedAtByRepository[pr.RepositoryId],
+                        ct))
+                {
+                    readEverything = false;
+                }
             }
 
-            // Advance the project-level watermark.
             var updatedProjectScan = projectScan ?? new MentionProjectScan(
                 Guid.NewGuid(),
                 config.Id,
                 DateTimeOffset.UtcNow);
 
+            // The configuration was scanned whatever came of it, so its interval advances and the next tick
+            // does not scan it again immediately.
             updatedProjectScan.LastScannedAt = DateTimeOffset.UtcNow;
+
+            // The window only closes over ground actually covered. A throttle, a repository that has gone, or
+            // a pull request that could not be read leaves it open, so the next tick asks about it again
+            // instead of stepping over a question nobody has seen.
+            if (readEverything)
+            {
+                updatedProjectScan.LastCompleteScanAt = startedAt;
+            }
+            else
+            {
+                LogScanWindowHeldOpen(logger, config.Id, updatedAfter);
+            }
+
             await scanRepository.UpsertProjectScanAsync(updatedProjectScan, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -135,7 +184,16 @@ public sealed partial class MentionScanService(
         }
     }
 
-    private async Task ScanPrAsync(
+    /// <summary>
+    ///     Scans one pull request, and reports whether everything it holds was read.
+    /// </summary>
+    /// <remarks>
+    ///     The answer decides whether the configuration's discovery window may close over this pull request.
+    ///     A read that failed leaves questions unseen, and a window closed over them would never bring them
+    ///     back: discovery asks for what changed since the watermark, and a pull request nobody touches again
+    ///     never changes.
+    /// </remarks>
+    private async Task<bool> ScanPrAsync(
         MentionConfigurationDto config,
         ReviewerIdentity reviewer,
         string repositoryId,
@@ -146,11 +204,11 @@ public sealed partial class MentionScanService(
     {
         var prScan = await scanRepository.GetPrScanAsync(config.Id, repositoryId, pullRequestId, ct);
 
-        // Skip PRs that have not received new activity since the last scan.
+        // Nothing has happened here since the last scan, so there was nothing to read and everything was read.
         if (prScan is not null && prLastUpdatedAt <= prScan.LastCommentSeenAt)
         {
             LogPrSkippedNoNewActivity(logger, pullRequestId);
-            return;
+            return true;
         }
 
         // Fetch the full PR with thread context (iterationId = 1 is sufficient for comment scanning).
@@ -170,13 +228,26 @@ public sealed partial class MentionScanService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogPrFetchError(logger, pullRequestId, ex);
-            return;
+            return false;
         }
 
-        var threads = pullRequest.ExistingThreads ?? [];
+        // Questions are asked in the pull request's conversation as well as on lines of code. Azure DevOps
+        // returns both from the thread listing above. The other providers keep them apart, and they are read
+        // separately here so they stay out of PullRequest.ExistingThreads, which the review prompt, the file
+        // reviewer and the thread pass read expecting threads with a file position.
+        var conversation = await this.FetchConversationThreadsAsync(config, repositoryId, pullRequestId, ct);
+        var threads = conversation.Threads.Count == 0
+            ? pullRequest.ExistingThreads ?? []
+            : [.. pullRequest.ExistingThreads ?? [], .. conversation.Threads];
+
         var latestCommentTimestamp = ComputeLatestCommentTimestamp(
             threads,
             prScan?.LastCommentSeenAt ?? DateTimeOffset.MinValue);
+
+        // Read once for the pull request rather than per comment: this is what tells ProPR's own answers from
+        // the questions it is looking for, and without it an answer repeating the reviewer's handle is read as
+        // a new question on the next scan, answered, and read again.
+        var ownAnswers = await jobRepository.GetPostedReplyCommentIdsAsync(repositoryId, pullRequestId, ct);
         var newMentionsEnqueued = 0;
 
         foreach (var thread in threads)
@@ -194,6 +265,7 @@ public sealed partial class MentionScanService(
                             comment,
                             prScan,
                             claimedAt,
+                            ownAnswers,
                             ct)))
                 {
                     newMentionsEnqueued++;
@@ -201,20 +273,27 @@ public sealed partial class MentionScanService(
             }
         }
 
-        // Update the PR-level watermark.
-        var updatedPrScan = prScan ?? new MentionPrScan(
-            Guid.NewGuid(),
-            config.Id,
-            repositoryId,
-            pullRequestId,
-            latestCommentTimestamp);
-
-        if (latestCommentTimestamp > DateTimeOffset.MinValue)
+        // Only over what was read. The watermark is a floor on how old an answerable comment may be, so
+        // advancing it past a conversation that could not be listed refuses the questions in it from then on:
+        // they are older than the floor on every later scan, and the pull request is skipped outright once
+        // its last update is older too. Leaving it where it was costs a re-read and nothing else.
+        if (conversation.Complete)
         {
-            updatedPrScan.LastCommentSeenAt = latestCommentTimestamp;
+            var updatedPrScan = prScan ?? new MentionPrScan(
+                Guid.NewGuid(),
+                config.Id,
+                repositoryId,
+                pullRequestId,
+                latestCommentTimestamp);
+
+            if (latestCommentTimestamp > DateTimeOffset.MinValue)
+            {
+                updatedPrScan.LastCommentSeenAt = latestCommentTimestamp;
+            }
+
+            await scanRepository.UpsertPrScanAsync(updatedPrScan, ct);
         }
 
-        await scanRepository.UpsertPrScanAsync(updatedPrScan, ct);
         if (newMentionsEnqueued == 0)
         {
             LogPrScanCompletedNoMentions(logger, pullRequestId);
@@ -222,6 +301,44 @@ public sealed partial class MentionScanService(
         else
         {
             LogPrScanCompletedWithMentions(logger, pullRequestId, newMentionsEnqueued);
+        }
+
+        return conversation.Complete;
+    }
+
+    /// <summary>
+    ///     Reads the pull request's own conversation, where the provider keeps it apart from review threads,
+    ///     and reports whether the read succeeded.
+    /// </summary>
+    /// <remarks>
+    ///     A failure costs this pull request's conversation and nothing else: the review threads have already
+    ///     been read, and answering a question on a line of code is worth more than failing the whole scan
+    ///     because the timeline could not be listed. It is reported rather than swallowed because the caller
+    ///     moves a watermark afterwards, and an empty list from a failed read is indistinguishable from a
+    ///     pull request whose conversation is genuinely empty.
+    /// </remarks>
+    private async Task<ConversationRead> FetchConversationThreadsAsync(
+        MentionConfigurationDto config,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct)
+    {
+        try
+        {
+            var threads = await pullRequestFetcher.FetchConversationThreadsAsync(
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                repositoryId,
+                pullRequestId,
+                config.ClientId,
+                ct);
+
+            return new ConversationRead(threads, true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogConversationFetchError(logger, pullRequestId, ex);
+            return new ConversationRead([], false);
         }
     }
 
@@ -240,6 +357,27 @@ public sealed partial class MentionScanService(
             .Max();
     }
 
+    /// <summary>
+    ///     The moment a comment has to fall after to be answerable: the later of the claim and the watermark.
+    /// </summary>
+    /// <remarks>
+    ///     The claim time covers a repository never scanned before: the provider hands back every open pull
+    ///     request whatever its age, so an absent watermark treated as "process everything" would answer, and
+    ///     bill for, every question the repository has ever been asked.
+    ///     Using the later of the two also covers a repository removed from a configuration and added back
+    ///     later. Its scan rows survive the gap, so the older watermark would win and every question asked
+    ///     while the repository was unclaimed would be answered. Claiming a repository applies from the moment
+    ///     of the claim.
+    /// </remarks>
+    private static DateTimeOffset ComputeSeenUpTo(MentionPrScan? prScan, DateTimeOffset claimedAt)
+    {
+        return prScan is null
+            ? claimedAt
+            : prScan.LastCommentSeenAt > claimedAt
+                ? prScan.LastCommentSeenAt
+                : claimedAt;
+    }
+
     private static bool ShouldProcessComment(
         PrThreadComment comment,
         MentionPrScan? prScan,
@@ -250,20 +388,6 @@ public sealed partial class MentionScanService(
         {
             return false;
         }
-
-        // The later of the two floors. The claim time covers a repository never scanned before: the provider
-        // hands back every open pull request whatever its age, so an absent watermark treated as "process
-        // everything" would answer, and bill for, every question the repository has ever been asked.
-        //
-        // Taking the later of the two rather than preferring the watermark also covers a repository removed
-        // from a configuration and added back later. Its scan rows survive the gap, so the stale watermark
-        // would otherwise win and every question asked while nobody was claiming the repository would be
-        // answered, which is the opposite of what claiming it from a moment onwards means.
-        var seenUpTo = prScan is null
-            ? claimedAt
-            : prScan.LastCommentSeenAt > claimedAt
-                ? prScan.LastCommentSeenAt
-                : claimedAt;
 
         // A comment the provider does not date cannot be shown to fall after either floor, and treating it
         // as new defeats both of them: the first scan after a repository is claimed would answer, and bill
@@ -276,7 +400,7 @@ public sealed partial class MentionScanService(
         }
 
         // Skip comments we've already processed (published before or at last seen time).
-        return comment.PublishedAt.Value > seenUpTo;
+        return comment.PublishedAt.Value > ComputeSeenUpTo(prScan, claimedAt);
     }
 
     // Produce a redacted, single-line, length-bounded rendering of (attacker-controlled) comment text
@@ -298,19 +422,54 @@ public sealed partial class MentionScanService(
     {
         if (!ShouldProcessComment(inputs.Comment, inputs.PrScan, inputs.ClaimedAt))
         {
+            // A question that names the reviewer and is turned away for its age is the one skip an operator
+            // comes looking for, and it used to leave no trace at all: claiming a repository takes effect
+            // from that moment, so a question asked before it is never answered and nothing said so.
+            if (MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer))
+            {
+                LogMentionOlderThanFloor(
+                    logger,
+                    inputs.PullRequestId,
+                    inputs.Comment.CommentId,
+                    inputs.Comment.PublishedAt,
+                    ComputeSeenUpTo(inputs.PrScan, inputs.ClaimedAt));
+            }
+
             return false;
         }
 
-        // A reply is published back into the thread it was mentioned in, so a provider that names no thread
-        // leaves nothing to answer into and nothing to key the duplicate guard on.
-        if (string.IsNullOrWhiteSpace(inputs.Thread.ThreadId))
+        // An answer ProPR posted is not a question, whatever it says. Quoting covers the part of it that
+        // repeats the question, and on a provider that replies inside the thread there is no quote at all, so
+        // an answer that names the reviewer in its own words would otherwise be answered in turn, for as long
+        // as the pull request stayed open. Keyed on what was posted rather than on who posted it, because an
+        // installation whose reviewer identity is an account a person also posts from would lose every real
+        // question to an author check.
+        if (inputs.OwnAnswers.Contains(inputs.Comment.CommentId.ToString(CultureInfo.InvariantCulture)))
         {
+            LogOwnAnswerSkipped(logger, inputs.PullRequestId, inputs.Comment.CommentId);
+            return false;
+        }
+
+        var threadKey = this.ResolveThreadKey(inputs.Config.Provider, inputs.Thread, inputs.Comment);
+        if (threadKey is null)
+        {
+            // Logged only when the comment mentions the reviewer. A provider that names no thread names
+            // none for any comment, so logging every one would produce noise without information.
+            if (MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer))
+            {
+                LogMentionWithoutAnswerableThread(
+                    logger,
+                    inputs.PullRequestId,
+                    inputs.Comment.CommentId,
+                    inputs.Config.Provider);
+            }
+
             return false;
         }
 
         // Log a redacted, single-line, length-bounded rendering of the content so we can still detect
         // format changes without leaking full (attacker-controlled) comment text or allowing log injection.
-        LogCommentContent(logger, inputs.Thread.ThreadId, inputs.Comment.CommentId, SanitizeCommentForLog(inputs.Comment.Content));
+        LogCommentContent(logger, threadKey, inputs.Comment.CommentId, SanitizeCommentForLog(inputs.Comment.Content));
 
         if (!MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer))
         {
@@ -323,14 +482,14 @@ public sealed partial class MentionScanService(
         var alreadyTaken = await jobRepository.ExistsForCommentAsync(
             inputs.RepositoryId,
             inputs.PullRequestId,
-            inputs.Thread.ThreadId,
+            threadKey,
             inputs.Comment.CommentId,
             inputs.Reviewer.AddressedKey,
             inputs.Ct);
 
         if (alreadyTaken)
         {
-            LogDuplicateMentionSkipped(logger, inputs.PullRequestId, inputs.Thread.ThreadId, inputs.Comment.CommentId);
+            LogDuplicateMentionSkipped(logger, inputs.PullRequestId, threadKey, inputs.Comment.CommentId);
             return false;
         }
 
@@ -341,7 +500,7 @@ public sealed partial class MentionScanService(
             inputs.Config.ProviderProjectKey,
             inputs.RepositoryId,
             inputs.PullRequestId,
-            inputs.Thread.ThreadId,
+            threadKey,
             inputs.Comment.CommentId,
             inputs.Comment.Content,
             inputs.Thread.FilePath,
@@ -363,7 +522,7 @@ public sealed partial class MentionScanService(
             inputs.PullRequestId);
         var threadRef = new ReviewThreadRef(
             review,
-            inputs.Thread.ThreadId,
+            threadKey,
             inputs.Thread.FilePath,
             inputs.Thread.LineNumber,
             false);
@@ -394,14 +553,44 @@ public sealed partial class MentionScanService(
             LogMentionTakenByAnotherClient(
                 logger,
                 inputs.PullRequestId,
-                inputs.Thread.ThreadId,
+                threadKey,
                 inputs.Comment.CommentId);
             return false;
         }
 
         await channelWriter.WriteAsync(job, inputs.Ct);
-        LogMentionEnqueued(logger, inputs.PullRequestId, inputs.Thread.ThreadId, inputs.Comment.CommentId);
+        LogMentionEnqueued(logger, inputs.PullRequestId, threadKey, inputs.Comment.CommentId);
         return true;
+    }
+
+    /// <summary>
+    ///     The identifier the answer is addressed through and the duplicate guard is keyed on, or
+    ///     <see langword="null" /> when this comment cannot be answered at all.
+    /// </summary>
+    /// <remarks>
+    ///     A thread's own identifier when it has one. Forgejo has none for a comment on a line of code: it
+    ///     exposes no thread object there, and its adapter reports the absence rather than handing back
+    ///     something that resolves to a comment. Its reply publisher does not need one — it answers on the pull
+    ///     request and says which comment it answers with a quote — so the comment's own identifier serves as
+    ///     the key, and a question asked on a line of code is answered like any other.
+    ///     A provider whose publisher does address a thread gets no such substitute: a job built on an
+    ///     identifier it cannot post into would spend an answer and then fail to publish it. Absent registry,
+    ///     absent publisher, and a publisher that needs a thread all read the same way, so this never widens
+    ///     what is accepted because something is missing.
+    /// </remarks>
+    private string? ResolveThreadKey(ScmProvider provider, PrCommentThread thread, PrThreadComment comment)
+    {
+        if (!string.IsNullOrWhiteSpace(thread.ThreadId))
+        {
+            return thread.ThreadId;
+        }
+
+        if (providerRegistry is null || providerRegistry.RequiresReviewThreadIdentifier(provider))
+        {
+            return null;
+        }
+
+        return comment.CommentId.ToString(CultureInfo.InvariantCulture);
     }
 
     private async Task<ReviewerIdentity?> ResolveReviewerIdentityAsync(
@@ -412,6 +601,16 @@ public sealed partial class MentionScanService(
         return await clientRegistry.GetEffectiveReviewerIdentityAsync(config.ClientId, host, ct);
     }
 
+    /// <summary>
+    ///     Names the repository the way its provider writes it, for the reference the reply is addressed
+    ///     through.
+    /// </summary>
+    /// <remarks>
+    ///     Guided selection stores a repository by the provider's own id, so joining the scope to that id
+    ///     builds something shaped like an owner and a name that names no repository. The name recorded
+    ///     beside the id when it was claimed is what carries the real pair, and it is preferred over anything
+    ///     assembled here.
+    /// </remarks>
     private static string ResolveRepositoryProjectPath(
         MentionConfigurationDto config,
         string repositoryId,
@@ -422,16 +621,34 @@ public sealed partial class MentionScanService(
             return config.ProviderProjectKey;
         }
 
-        if (!string.IsNullOrWhiteSpace(pullRequest.RepositoryName) &&
-            pullRequest.RepositoryName.Contains('/', StringComparison.Ordinal))
+        var claimedName = config.RepoFilters
+            .FirstOrDefault(filter =>
+                string.Equals(filter.RepositoryId, repositoryId, StringComparison.OrdinalIgnoreCase))
+            ?.DisplayName;
+
+        if (LooksLikeOwnerAndName(claimedName))
+        {
+            return claimedName!.Trim();
+        }
+
+        if (LooksLikeOwnerAndName(pullRequest.RepositoryName))
         {
             return pullRequest.RepositoryName;
         }
 
-        return string.IsNullOrWhiteSpace(config.ProviderProjectKey)
-            ? repositoryId
-            : $"{config.ProviderProjectKey.TrimEnd('/')}/{repositoryId}";
+        // Nothing here names the pair, so the identifier stands alone rather than being dressed up as a path.
+        // What addresses the provider resolves it from this identifier anyway.
+        return repositoryId;
     }
+
+    private static bool LooksLikeOwnerAndName(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+               && value.Split('/', StringSplitOptions.RemoveEmptyEntries).Length == 2;
+    }
+
+    /// <summary>What a conversation read returned, and whether it returned it because there was nothing.</summary>
+    private sealed record ConversationRead(IReadOnlyList<PrCommentThread> Threads, bool Complete);
 
     private sealed record MentionCommentInputs(
         MentionConfigurationDto Config,
@@ -443,5 +660,6 @@ public sealed partial class MentionScanService(
         PrThreadComment Comment,
         MentionPrScan? PrScan,
         DateTimeOffset ClaimedAt,
+        IReadOnlySet<string> OwnAnswers,
         CancellationToken Ct);
 }

@@ -85,7 +85,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-gh-1", 42, "11");
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-gh-1", 42, "11");
         scan.Threads.Add(
             new ReviewPrScanThread
             {
@@ -95,7 +95,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                 LastSeenStatus = "Active",
             });
 
-        scanRepository.GetAsync(ClientId, "repo-gh-1", 42, Arg.Any<CancellationToken>())
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-gh-1", 42, Arg.Any<CancellationToken>())
             .Returns(scan);
         threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 "https://dev.azure.com/org",
@@ -143,6 +143,8 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         await scanRepository.Received(1)
             .SetLastSeenStatusesAsync(
                 ClientId,
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 "repo-gh-1",
                 42,
                 Arg.Is<IReadOnlyDictionary<string, string?>>(statuses =>
@@ -172,8 +174,8 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
 
-        scanRepository.GetAsync(ClientId, "repo-gh-1", 42, Arg.Any<CancellationToken>())
-            .Returns(new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-gh-1", 42, "revision-1"));
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-gh-1", 42, Arg.Any<CancellationToken>())
+            .Returns(new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-gh-1", 42, "revision-1"));
         threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 "https://dev.azure.com/org",
                 "project",
@@ -235,7 +237,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
 
         // The watermark holds the revision key the last pass ran at, which for a provider-neutral revision is the
         // provider revision id rather than the iteration id.
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-gh-1", 42, "revision-1");
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-gh-1", 42, "revision-1");
         scan.Threads.Add(
             new ReviewPrScanThread
             {
@@ -247,7 +249,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
 
         clientRegistry.GetEffectiveReviewerIdentityAsync(ClientId, host, Arg.Any<CancellationToken>())
             .Returns(effectiveReviewer);
-        scanRepository.GetAsync(ClientId, "repo-gh-1", 42, Arg.Any<CancellationToken>())
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-gh-1", 42, Arg.Any<CancellationToken>())
             .Returns(scan);
         threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 "https://dev.azure.com/org",

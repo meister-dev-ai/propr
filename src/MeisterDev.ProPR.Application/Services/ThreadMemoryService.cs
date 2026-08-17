@@ -277,6 +277,8 @@ public sealed partial class ThreadMemoryService(
     {
         return this.RecordNoOpAsync(
             evt.ClientId,
+            evt.OrganizationUrl,
+            evt.ProjectId,
             evt.RepositoryId,
             evt.PullRequestId,
             evt.ThreadId,
@@ -291,7 +293,13 @@ public sealed partial class ThreadMemoryService(
     {
         try
         {
-            var deleted = await repository.RemoveByThreadAsync(evt.ClientId, evt.RepositoryId, evt.ThreadId, ct);
+            var deleted = await repository.RemoveByThreadAsync(
+                evt.ClientId,
+                evt.OrganizationUrl,
+                evt.ProjectId,
+                evt.RepositoryId,
+                evt.ThreadId,
+                ct);
             var outcome = deleted ? "deleted" : "no_op";
 
             await activityLog.AppendAsync(
@@ -321,6 +329,8 @@ public sealed partial class ThreadMemoryService(
     /// <inheritdoc />
     public async Task RecordNoOpAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadId,
@@ -393,6 +403,8 @@ public sealed partial class ThreadMemoryService(
     /// <inheritdoc />
     public async Task<HistoricalDuplicateSuppressionMatchDto> FindDuplicateSuppressionMatchAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string? filePath,
@@ -414,7 +426,15 @@ public sealed partial class ThreadMemoryService(
 
         if (queryVector is not null)
         {
-            var semanticMatch = await this.TryFindSemanticDuplicateMatchAsync(clientId, repositoryId, pullRequestId, queryVector, degradedComponents, ct);
+            var semanticMatch = await this.TryFindSemanticDuplicateMatchAsync(
+                clientId,
+                organizationUrl,
+                projectId,
+                repositoryId,
+                pullRequestId,
+                queryVector,
+                degradedComponents,
+                ct);
             if (semanticMatch is not null)
             {
                 return HistoricalDuplicateSuppressionMatchDto.Match(
@@ -437,7 +457,17 @@ public sealed partial class ThreadMemoryService(
         }
 
         var fallbackMatch = await this.TryFindFilePathFallbackMatchAsync(
-            new FilePathFallbackInputs(clientId, repositoryId, pullRequestId, normalizedFilePath, findingMessage, degradedComponents, fallbackChecks, ct));
+            new FilePathFallbackInputs(
+                clientId,
+                organizationUrl,
+                projectId,
+                repositoryId,
+                pullRequestId,
+                normalizedFilePath,
+                findingMessage,
+                degradedComponents,
+                fallbackChecks,
+                ct));
         if (fallbackMatch is not null)
         {
             return HistoricalDuplicateSuppressionMatchDto.Match(
@@ -546,6 +576,8 @@ public sealed partial class ThreadMemoryService(
             ? []
             : await repository.FindByFilePathAsync(
                 clientId,
+                job.OrganizationUrl,
+                job.ProjectId,
                 job.RepositoryId,
                 lookupFilePath,
                 this._opts.MemoryTopN,
@@ -890,6 +922,8 @@ public sealed partial class ThreadMemoryService(
 
     private async Task<ThreadMemoryMatchDto?> TryFindSemanticDuplicateMatchAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         float[] queryVector,
@@ -900,6 +934,8 @@ public sealed partial class ThreadMemoryService(
         {
             var semanticMatches = await repository.FindSimilarInPullRequestAsync(
                 clientId,
+                organizationUrl,
+                projectId,
                 repositoryId,
                 pullRequestId,
                 queryVector,
@@ -925,6 +961,8 @@ public sealed partial class ThreadMemoryService(
         {
             var filePathMatches = await repository.FindByPullRequestFilePathAsync(
                 inputs.ClientId,
+                inputs.OrganizationUrl,
+                inputs.ProjectId,
                 inputs.RepositoryId,
                 inputs.PullRequestId,
                 inputs.NormalizedFilePath,
@@ -1380,6 +1418,8 @@ public sealed partial class ThreadMemoryService(
 
     private sealed record FilePathFallbackInputs(
         Guid ClientId,
+        string OrganizationUrl,
+        string ProjectId,
         string RepositoryId,
         int PullRequestId,
         string NormalizedFilePath,

@@ -88,6 +88,18 @@ function getMockCodeInsightsCapability() {
   }
 }
 
+function getMockMentionAnsweringCapability() {
+  return {
+    key: 'mention-answering',
+    displayName: 'Mention answering',
+    requiresCommercial: true,
+    defaultWhenCommercial: true,
+    overrideState: 'default',
+    isAvailable: true,
+    message: null,
+  }
+}
+
 function getMockTenantBySlug(tenantSlug: string) {
   return mockTenants.find((tenant) => tenant.slug === tenantSlug) ?? null
 }
@@ -1729,7 +1741,7 @@ let providerActivationStatuses = [
     providerFamily: 'azureDevOps',
     isEnabled: true,
     baselineAdapterSetRegistered: true,
-    registeredCapabilities: ['repositoryDiscovery'],
+    registeredCapabilities: ['repositoryDiscovery', 'activePullRequestDiscovery', 'reviewThreadReply'],
     supportClaimReadiness: 'workflowComplete',
     supportClaimReason: 'Azure DevOps is fully supported.',
     updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
@@ -1738,7 +1750,7 @@ let providerActivationStatuses = [
     providerFamily: 'github',
     isEnabled: false,
     baselineAdapterSetRegistered: true,
-    registeredCapabilities: ['repositoryDiscovery'],
+    registeredCapabilities: ['repositoryDiscovery', 'activePullRequestDiscovery', 'reviewThreadReply'],
     supportClaimReadiness: 'onboardingReady',
     supportClaimReason: 'GitHub remains onboarding ready when enabled.',
     updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
@@ -1747,7 +1759,7 @@ let providerActivationStatuses = [
     providerFamily: 'gitLab',
     isEnabled: true,
     baselineAdapterSetRegistered: true,
-    registeredCapabilities: ['repositoryDiscovery'],
+    registeredCapabilities: ['repositoryDiscovery', 'activePullRequestDiscovery', 'reviewThreadReply'],
     supportClaimReadiness: 'onboardingReady',
     supportClaimReason: 'GitLab remains onboarding ready when enabled.',
     updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
@@ -1756,7 +1768,7 @@ let providerActivationStatuses = [
     providerFamily: 'forgejo',
     isEnabled: false,
     baselineAdapterSetRegistered: true,
-    registeredCapabilities: ['repositoryDiscovery'],
+    registeredCapabilities: ['repositoryDiscovery', 'activePullRequestDiscovery', 'reviewThreadReply'],
     supportClaimReadiness: 'onboardingReady',
     supportClaimReason: 'Forgejo remains onboarding ready when enabled.',
     updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
@@ -2322,7 +2334,7 @@ export const handlers = [
     return HttpResponse.json({
       edition: mockEdition,
       availableSignInMethods: mockSsoCapabilityAvailable ? ['password', 'sso'] : ['password'],
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability(), getMockMentionAnsweringCapability()],
     })
   }),
 
@@ -2344,7 +2356,7 @@ export const handlers = [
 
     return HttpResponse.json({
       edition: mockEdition,
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability(), getMockMentionAnsweringCapability()],
     })
   }),
 
@@ -2392,7 +2404,7 @@ export const handlers = [
       tenantRoles: isAdmin ? { 'tenant-1': 1 } : { 'tenant-1': 0 },
       hasLocalPassword: isAdmin || !username.includes('sso'),
       edition: mockEdition,
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability(), getMockMentionAnsweringCapability()],
     })
   }),
 
@@ -2829,6 +2841,38 @@ export const handlers = [
     }
 
     return HttpResponse.json(getCrawlFilters(scope.id, projectId))
+  }),
+
+  // Provider-neutral discovery, which the mention configuration form drives for every provider other than
+  // Azure DevOps. Keyed on the connection, because that is where the host comes from.
+  http.get(`${base}/admin/clients/:clientId/providers/:provider/discovery/scopes`, async ({ request }) => {
+    await delay(200)
+    const connectionId = new URL(request.url).searchParams.get('connectionId')
+
+    if (!connectionId) {
+      return HttpResponse.json({ error: 'That connection does not belong to this client.' }, { status: 400 })
+    }
+
+    return HttpResponse.json([
+      { scopePath: 'meister-dev', displayName: 'meister-dev' },
+      { scopePath: 'acme', displayName: 'acme' },
+    ])
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/providers/:provider/discovery/repositories`, async ({ request }) => {
+    await delay(200)
+    const url = new URL(request.url)
+    const connectionId = url.searchParams.get('connectionId')
+    const scopePath = url.searchParams.get('scopePath')
+
+    if (!connectionId || !scopePath) {
+      return HttpResponse.json({ error: 'That connection does not belong to this client.' }, { status: 400 })
+    }
+
+    return HttpResponse.json([
+      { repositoryId: '101', displayName: `${scopePath}/propr`, scopePath },
+      { repositoryId: '102', displayName: `${scopePath}/propr-website`, scopePath },
+    ])
   }),
 
   http.get(`${base}/admin/clients/:clientId/ado/discovery/sources`, async ({ params, request }) => {

@@ -607,7 +607,7 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
             .Returns(Task.FromResult(new PullRequestRef("feature/test", "main", PrStatus.Active)));
 
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
 
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();

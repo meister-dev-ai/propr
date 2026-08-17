@@ -37,6 +37,11 @@ public sealed class StaticPremiumCapabilityCatalog : IPremiumCapabilityCatalog
             "A commercial license is required to manage guided crawl configurations and discovery, including in self-hosted deployments.",
             "Crawl configurations are currently disabled for this installation."),
         new(
+            PremiumCapabilityKey.MentionAnswering,
+            "Mention answering",
+            "A commercial license is required to answer @-mentions in pull request comments, including in self-hosted deployments.",
+            "Mention answering is currently disabled for this installation."),
+        new(
             PremiumCapabilityKey.Budgeting,
             "Budgeting",
             "A commercial license is required to set and enforce USD spend budgets, including in self-hosted deployments.",

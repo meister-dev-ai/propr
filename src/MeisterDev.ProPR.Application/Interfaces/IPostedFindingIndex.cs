@@ -29,6 +29,8 @@ public interface IPostedFindingIndex
     /// </summary>
     Task<PostedFindingMatchDto> FindDuplicateAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string findingMessage,

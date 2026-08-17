@@ -281,14 +281,11 @@ public partial class ReviewOrchestrationServiceTests
         ReviewJob job)
     {
         var scan = new ReviewPrScan(
-            Guid.NewGuid(),
-            job.ClientId,
-            job.RepositoryId,
-            job.PullRequestId,
+            Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId,
             ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId));
 
         prScanRepository
-            .GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
+            .GetAsync(job.ClientId, Arg.Any<string>(), Arg.Any<string>(), job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
             .Returns(scan);
 
         prFetcher.FetchAsync(

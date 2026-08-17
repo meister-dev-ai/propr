@@ -43,7 +43,8 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
             services.TryAddScoped<IPrStatusFetcher, StubPrStatusFetcher>();
             services.TryAddScoped<IIdentityResolver, StubIdentityResolver>();
             services.TryAddScoped<StubAdoReviewerManager>();
-            services.TryAddScoped<IActivePrFetcher, StubActivePrFetcher>();
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<IActivePullRequestDiscoveryProvider, StubActivePrFetcher>());
+            services.TryAddScoped<IActivePrFetcher, ProviderActivePrFetcher>();
             services.TryAddScoped<StubAdoThreadReplier>();
             services.TryAddScoped<StubAdoThreadClient>();
             services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewAssignmentService, StubAdoReviewerManager>());
@@ -68,7 +69,8 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
                 sp.GetRequiredService<IClientScmConnectionRepository>()));
         services.TryAddScoped<AdoReviewerManager>();
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewAssignmentService, AdoReviewerManager>());
-        services.TryAddScoped<IActivePrFetcher, AdoActivePrFetcher>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IActivePullRequestDiscoveryProvider, AdoActivePrFetcher>());
+        services.TryAddScoped<IActivePrFetcher, ProviderActivePrFetcher>();
         services.TryAddScoped<AdoThreadReplier>();
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewThreadReplyPublisher, AdoThreadReplier>());
         services.TryAddScoped<AdoThreadClient>();

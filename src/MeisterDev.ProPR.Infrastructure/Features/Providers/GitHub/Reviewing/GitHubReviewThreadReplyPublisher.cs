@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
 using MeisterDev.ProPR.Infrastructure.Utilities;
 using Microsoft.Extensions.Logging;
@@ -50,9 +51,18 @@ internal sealed partial class GitHubReviewThreadReplyPublisher(
         Guid clientId,
         ReviewThreadRef thread,
         string replyText,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? quotedComment = null)
     {
         ArgumentNullException.ThrowIfNull(thread);
+
+        // A comment in the pull request conversation belongs to no review thread, so there is nothing to
+        // reply into. GitHub's own answer to that is what a person does by hand: a new comment opening with
+        // a quote of the one it answers.
+        if (thread.FilePath is null)
+        {
+            return await this.ReplyInConversationAsync(clientId, thread, replyText, quotedComment, ct);
+        }
 
         var threadId = GitHubReviewThreadNodeId.Require(thread.ExternalThreadId, "replies");
         var host = thread.Review.Repository.Host;
@@ -91,6 +101,104 @@ internal sealed partial class GitHubReviewThreadReplyPublisher(
     internal static string FormatReplyText(string replyText)
     {
         return HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText;
+    }
+
+    /// <summary>
+    ///     Answers a comment in the pull request conversation by posting a new one that quotes it.
+    /// </summary>
+    /// <remarks>
+    ///     The issue-comments route, because a pull request's conversation is its issue timeline. The quote is
+    ///     what ties the answer to the question, since GitHub threads nothing here.
+    /// </remarks>
+    private async Task<string?> ReplyInConversationAsync(
+        Guid clientId,
+        ReviewThreadRef thread,
+        string replyText,
+        string? quotedComment,
+        CancellationToken ct)
+    {
+        var host = thread.Review.Repository.Host;
+
+        using var activity = ActivitySource.StartActivity("GitHubReviewThreadReplyPublisher.ReplyInConversation");
+        activity?.SetTag("scm.provider", ScmProvider.GitHub.ToString());
+        activity?.SetTag("provider.host", host.HostBaseUrl);
+        activity?.SetTag("review.number", thread.Review.Number);
+
+        var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
+
+        // Resolved from the repository's own identifier rather than taken from the project path. A mention
+        // configuration stores the repository the way guided selection recorded it, which is the numeric id,
+        // and a path assembled around that id is shaped like one while addressing nothing.
+        var repositoryPath = await this.ResolveRepositoryPathAsync(
+            context,
+            host,
+            thread.Review.Repository.ExternalRepositoryId,
+            ct);
+
+        using var request = await context.CreateAuthenticatedRequestAsync(
+            GitHubConnectionVerifier.BuildApiUri(
+                host,
+                $"/repos/{repositoryPath}/issues/{thread.Review.Number.ToString(CultureInfo.InvariantCulture)}/comments"),
+            HttpMethod.Post,
+            ct);
+        request.Content = JsonContent.Create(
+            new
+            {
+                body = FormatReplyText(ReviewCommentQuoting.BuildQuotedReply(quotedComment, replyText)),
+            });
+
+        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            throw new InvalidOperationException(
+                $"GitHub rejected the reply on pull request {thread.Review.Number} with status {(int)response.StatusCode}. {PermissionAdvice}");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitHub reply on pull request {thread.Review.Number} failed with status {(int)response.StatusCode}.");
+        }
+
+        var created = await response.Content.ReadFromJsonAsync<GitHubCreatedIssueCommentResponse>(ct);
+        var commentId = created?.Id?.ToString(CultureInfo.InvariantCulture);
+
+        LogRepliedInConversation(this._logger, thread.Review.Number, commentId ?? "unknown");
+
+        return commentId;
+    }
+
+    /// <summary>
+    ///     Turns the stored repository identifier into the <c>owner/name</c> pair the REST API is addressed
+    ///     by, looking it up when what was stored is the provider's own id.
+    /// </summary>
+    private async Task<string> ResolveRepositoryPathAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        ProviderHostRef host,
+        string repositoryId,
+        CancellationToken ct)
+    {
+        if (ProviderRepositoryPath.LooksLikeOwnerAndName(repositoryId))
+        {
+            return repositoryId.Trim();
+        }
+
+        using var request = await context.CreateAuthenticatedRequestAsync(
+            GitHubConnectionVerifier.BuildApiUri(host, $"/repositories/{Uri.EscapeDataString(repositoryId)}"),
+            ct: ct);
+        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitHub repository lookup for {repositoryId} failed with status {(int)response.StatusCode}.");
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<GitHubRepositoryLookupResponse>(ct);
+        if (string.IsNullOrWhiteSpace(payload?.FullName))
+        {
+            throw new InvalidOperationException($"GitHub repository lookup for {repositoryId} returned no repository name.");
+        }
+
+        return payload.FullName.Trim();
     }
 
     private static async Task<string?> ReadCreatedCommentIdAsync(
@@ -181,6 +289,14 @@ internal sealed partial class GitHubReviewThreadReplyPublisher(
         int pullRequestNumber,
         string commentId);
 
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "GitHubReviewThreadReplyPublisher: replied in the conversation of PR#{PullRequestNumber} as comment {CommentId}")]
+    private static partial void LogRepliedInConversation(
+        ILogger logger,
+        int pullRequestNumber,
+        string commentId);
+
     private sealed record GitHubReplyMutationResponse(
         [property: JsonPropertyName("data")] GitHubReplyMutationData? Data,
         [property: JsonPropertyName("errors")] IReadOnlyList<GitHubGraphQlError>? Errors);
@@ -202,4 +318,10 @@ internal sealed partial class GitHubReviewThreadReplyPublisher(
         [property: JsonPropertyName("type")] string? Type,
         [property: JsonPropertyName("message")]
         string? Message);
+
+    private sealed record GitHubCreatedIssueCommentResponse([property: JsonPropertyName("id")] long? Id);
+
+    private sealed record GitHubRepositoryLookupResponse(
+        [property: JsonPropertyName("full_name")]
+        string? FullName);
 }

@@ -21,6 +21,8 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     /// <inheritdoc />
     public async Task<ReviewPrScan?> GetAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         CancellationToken ct = default)
@@ -31,6 +33,8 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
             .FirstOrDefaultAsync(
                 s =>
                     s.ClientId == clientId &&
+                    s.OrganizationUrl == organizationUrl &&
+                    s.ProjectId == projectId &&
                     s.RepositoryId == repositoryId &&
                     s.PullRequestId == pullRequestId,
                 ct);
@@ -39,17 +43,19 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     /// <inheritdoc />
     public async Task SetReviewWatermarkAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string revisionKey,
         CancellationToken ct = default)
     {
-        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        var scan = await TrackScanAsync(dbContext, clientId, organizationUrl, projectId, repositoryId, pullRequestId, ct);
 
         if (scan is null)
         {
             await dbContext.ReviewPrScans.AddAsync(
-                new ReviewPrScan(Guid.NewGuid(), clientId, repositoryId, pullRequestId, revisionKey),
+                new ReviewPrScan(Guid.NewGuid(), clientId, organizationUrl, projectId, repositoryId, pullRequestId, revisionKey),
                 ct);
         }
         else
@@ -64,12 +70,14 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     /// <inheritdoc />
     public async Task SetPendingReviewRevisionAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string revisionKey,
         CancellationToken ct = default)
     {
-        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        var scan = await TrackScanAsync(dbContext, clientId, organizationUrl, projectId, repositoryId, pullRequestId, ct);
 
         if (scan is null)
         {
@@ -77,6 +85,8 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
                 ReviewPrScan.ForPendingReview(
                     Guid.NewGuid(),
                     clientId,
+                    organizationUrl,
+                    projectId,
                     repositoryId,
                     pullRequestId,
                     revisionKey,
@@ -103,17 +113,19 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     /// <inheritdoc />
     public async Task SetThreadPassWatermarkAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string revisionKey,
         CancellationToken ct = default)
     {
-        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        var scan = await TrackScanAsync(dbContext, clientId, organizationUrl, projectId, repositoryId, pullRequestId, ct);
 
         if (scan is null)
         {
             await dbContext.ReviewPrScans.AddAsync(
-                ReviewPrScan.ForThreadPass(Guid.NewGuid(), clientId, repositoryId, pullRequestId, revisionKey),
+                ReviewPrScan.ForThreadPass(Guid.NewGuid(), clientId, organizationUrl, projectId, repositoryId, pullRequestId, revisionKey),
                 ct);
         }
         else
@@ -128,6 +140,8 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     /// <inheritdoc />
     public async Task SetLastSeenReplyCountsAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         IReadOnlyDictionary<string, int> replyCountByThreadId,
@@ -138,7 +152,7 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
             return;
         }
 
-        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        var scan = await TrackScanAsync(dbContext, clientId, organizationUrl, projectId, repositoryId, pullRequestId, ct);
         if (scan is null)
         {
             return;
@@ -156,6 +170,8 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     /// <inheritdoc />
     public async Task SetLastSeenStatusesAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         IReadOnlyDictionary<string, string?> statusByThreadId,
@@ -166,7 +182,7 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
             return;
         }
 
-        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        var scan = await TrackScanAsync(dbContext, clientId, organizationUrl, projectId, repositoryId, pullRequestId, ct);
         if (scan is null)
         {
             return;
@@ -184,12 +200,14 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     /// <inheritdoc />
     public async Task RetainOnlyThreadsAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         IReadOnlyCollection<string> threadIds,
         CancellationToken ct = default)
     {
-        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        var scan = await TrackScanAsync(dbContext, clientId, organizationUrl, projectId, repositoryId, pullRequestId, ct);
         if (scan is null)
         {
             return;
@@ -210,6 +228,8 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     private static async Task<ReviewPrScan?> TrackScanAsync(
         MeisterProPRDbContext dbContext,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         CancellationToken ct)
@@ -219,6 +239,8 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
             .FirstOrDefaultAsync(
                 s =>
                     s.ClientId == clientId &&
+                    s.OrganizationUrl == organizationUrl &&
+                    s.ProjectId == projectId &&
                     s.RepositoryId == repositoryId &&
                     s.PullRequestId == pullRequestId,
                 ct);

@@ -130,14 +130,20 @@ public sealed class ProviderNativeThreadIdentityMigrationTests(PostgresContainer
                 Assert.Equal(3, scanThreads.Single(thread => thread.ThreadId == longer).LastSeenReplyCount);
                 Assert.Equal(1, scanThreads.Single(thread => thread.ThreadId == shorter).LastSeenReplyCount);
 
+                // Projections for the same reason the mention job below is one: the schema here stops at this
+                // migration, and these entities carry columns added after it.
                 Assert.Equal(
                     longer,
-                    (await afterUpgrade.ThreadPassHandledThreads.AsNoTracking()
-                        .SingleAsync(row => row.Id == handledId)).ThreadId);
+                    await afterUpgrade.ThreadPassHandledThreads.AsNoTracking()
+                        .Where(row => row.Id == handledId)
+                        .Select(row => row.ThreadId)
+                        .SingleAsync());
                 Assert.Equal(
                     longer,
-                    (await afterUpgrade.ThreadMemoryRecords.AsNoTracking()
-                        .SingleAsync(row => row.Id == memoryId)).ThreadId);
+                    await afterUpgrade.ThreadMemoryRecords.AsNoTracking()
+                        .Where(row => row.Id == memoryId)
+                        .Select(row => row.ThreadId)
+                        .SingleAsync());
                 Assert.Equal(
                     longer,
                     (await afterUpgrade.MemoryActivityLogEntries.AsNoTracking()
@@ -152,8 +158,10 @@ public sealed class ProviderNativeThreadIdentityMigrationTests(PostgresContainer
                         .SingleAsync());
                 Assert.Equal(
                     longer,
-                    (await afterUpgrade.PostedFindingRecords.AsNoTracking()
-                        .SingleAsync(row => row.Id == postedFindingId)).ProviderThreadId);
+                    await afterUpgrade.PostedFindingRecords.AsNoTracking()
+                        .Where(row => row.Id == postedFindingId)
+                        .Select(row => row.ProviderThreadId)
+                        .SingleAsync());
 
                 // The unique keys were rebuilt over the new column type, so the constraint that stops a second
                 // row for one thread still bites.

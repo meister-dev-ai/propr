@@ -53,6 +53,34 @@ public sealed class MentionDetectorProviderTests
         Assert.False(MentionDetector.IsMentioned(string.Empty, reviewer));
     }
 
+    /// <summary>
+    ///     What a Forgejo or GitHub answer looks like on the next scan: the question quoted, the answer under
+    ///     it. Reading the quote as a question would answer the answer, and quote that in turn.
+    /// </summary>
+    [Theory]
+    [InlineData(ScmProvider.GitHub)]
+    [InlineData(ScmProvider.GitLab)]
+    [InlineData(ScmProvider.Forgejo)]
+    public void IsMentioned_ItsOwnQuotedAnswer_ReturnsFalse(ScmProvider provider)
+    {
+        var reviewer = CreateReviewer(provider, "user-1", "meister-dev-bot");
+        var quotedAnswer = "> @meister-dev-bot what does this do?\n\nIt sorts ascending and then takes three.";
+
+        Assert.False(MentionDetector.IsMentioned(quotedAnswer, reviewer));
+    }
+
+    [Theory]
+    [InlineData(ScmProvider.GitHub)]
+    [InlineData(ScmProvider.GitLab)]
+    [InlineData(ScmProvider.Forgejo)]
+    public void IsMentioned_FollowUpAskedUnderAQuote_ReturnsTrue(ScmProvider provider)
+    {
+        var reviewer = CreateReviewer(provider, "user-1", "meister-dev-bot");
+        var followUp = "> It sorts ascending and then takes three.\n\n@meister-dev-bot then why the label?";
+
+        Assert.True(MentionDetector.IsMentioned(followUp, reviewer));
+    }
+
     private static ReviewerIdentity CreateReviewer(ScmProvider provider, string externalUserId, string login)
     {
         var hostBaseUrl = provider switch

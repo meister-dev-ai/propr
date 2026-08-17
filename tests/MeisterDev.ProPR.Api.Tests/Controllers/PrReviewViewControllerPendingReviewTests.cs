@@ -107,7 +107,7 @@ public sealed class PrReviewViewControllerPendingReviewTests
         string pendingRevision,
         DateTimeOffset? detectedAt)
     {
-        return new ReviewPrScan(Guid.NewGuid(), ClientId, RepositoryId, PullRequestId, "seed")
+        return new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", RepositoryId, PullRequestId, "seed")
         {
             LastProcessedCommitId = reviewedRevision,
             PendingReviewRevisionKey = pendingRevision,
@@ -132,6 +132,8 @@ public sealed class PrReviewViewControllerPendingReviewTests
         var memoryRepository = Substitute.For<IThreadMemoryRepository>();
         memoryRepository.GetDigestsForPullRequestAsync(
                 ClientId,
+                ScopePath,
+                ProjectKey,
                 RepositoryId,
                 PullRequestId,
                 Arg.Any<MemorySource>(),
@@ -142,6 +144,8 @@ public sealed class PrReviewViewControllerPendingReviewTests
         var threadPasses = Substitute.For<IThreadPassJobRepository>();
         threadPasses.GetForPullRequestAsync(
                 ClientId,
+                ScopePath,
+                ProjectKey,
                 RepositoryId,
                 PullRequestId,
                 Arg.Any<int>(),
@@ -149,7 +153,7 @@ public sealed class PrReviewViewControllerPendingReviewTests
             .Returns([]);
 
         var prScanReader = Substitute.For<IReviewPrScanReader>();
-        prScanReader.GetAsync(ClientId, RepositoryId, PullRequestId, Arg.Any<CancellationToken>())
+        prScanReader.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), RepositoryId, PullRequestId, Arg.Any<CancellationToken>())
             .Returns(scan);
 
         var controller = new PrReviewViewController(

@@ -16,11 +16,15 @@ public interface IReviewPrScanReader
     ///     The <see cref="ReviewPrScan.Threads" /> collection is included.
     /// </summary>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="organizationUrl">The host that issued the repository identifier.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<ReviewPrScan?> GetAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         CancellationToken ct = default);

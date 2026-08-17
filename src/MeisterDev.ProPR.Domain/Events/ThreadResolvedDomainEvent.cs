@@ -21,6 +21,8 @@ namespace MeisterDev.ProPR.Domain.Events;
 /// </param>
 public sealed record ThreadResolvedDomainEvent(
     Guid ClientId,
+    string OrganizationUrl,
+    string ProjectId,
     string RepositoryId,
     int PullRequestId,
     string ThreadId,

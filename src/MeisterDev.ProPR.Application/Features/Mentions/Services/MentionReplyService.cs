@@ -197,9 +197,10 @@ public sealed partial class MentionReplyService(
         // nothing anybody can see.
         await this.RecordSpendAsync(job, answer, cancellationToken);
 
-        // Post the reply to the ADO thread.
+        // The question text is passed with the answer. Adapters that reply inside the thread ignore it;
+        // those that post a new comment on the pull request open it with a blockquote of the question.
         var replyCommentId = await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
-            .ReplyAsync(job.ClientId, job.ReviewThreadReference, answer.Text, cancellationToken);
+            .ReplyAsync(job.ClientId, job.ReviewThreadReference, answer.Text, cancellationToken, job.MentionText);
 
         // Completing the job carries the comment id that was just posted. Nothing that can throw may sit
         // between posting the answer and completing the job: a cancellation in that gap leaves the answer
@@ -394,7 +395,7 @@ public sealed partial class MentionReplyService(
         try
         {
             await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
-                .ReplyAsync(job.ClientId, job.ReviewThreadReference, BudgetExhaustedReply, ct);
+                .ReplyAsync(job.ClientId, job.ReviewThreadReference, BudgetExhaustedReply, ct, job.MentionText);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {

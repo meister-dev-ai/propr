@@ -24,6 +24,11 @@ namespace MeisterDev.ProPR.Application.Tests.Services;
 /// </summary>
 public sealed class ThreadMemoryServiceTests
 {
+    /// <summary>The host that issued the repository identifiers in this fixture.</summary>
+    private const string Host = "https://dev.azure.com/org";
+
+    private const string Project = "proj";
+
     private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid ProtocolId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001");
 
@@ -189,6 +194,8 @@ public sealed class ThreadMemoryServiceTests
     private static ThreadResolvedDomainEvent ResolvedEvent(string commentHistory, string? filePath) =>
         new(
             ClientId,
+            Host,
+            Project,
             "repo-1",
             42,
             "7",
@@ -213,10 +220,10 @@ public sealed class ThreadMemoryServiceTests
     public async Task HandleThreadReopenedAsync_RecordExists_AppendsRemovedEntryWithDeletedReason()
     {
         var (_, repo, _, activityLog, service) = CreateService();
-        repo.RemoveByThreadAsync(ClientId, "repo-1", "7", Arg.Any<CancellationToken>())
+        repo.RemoveByThreadAsync(ClientId, Host, Project, "repo-1", "7", Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, "7", DateTimeOffset.UtcNow);
+        var evt = new ThreadReopenedDomainEvent(ClientId, Host, Project, "repo-1", 42, "7", DateTimeOffset.UtcNow);
         await service.HandleThreadReopenedAsync(evt);
 
         await activityLog.Received(1)
@@ -231,10 +238,10 @@ public sealed class ThreadMemoryServiceTests
     public async Task HandleThreadReopenedAsync_NoRecord_AppendsRemovedEntryWithNoOpReason()
     {
         var (_, repo, _, activityLog, service) = CreateService();
-        repo.RemoveByThreadAsync(ClientId, "repo-1", "7", Arg.Any<CancellationToken>())
+        repo.RemoveByThreadAsync(ClientId, Host, Project, "repo-1", "7", Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, "7", DateTimeOffset.UtcNow);
+        var evt = new ThreadReopenedDomainEvent(ClientId, Host, Project, "repo-1", 42, "7", DateTimeOffset.UtcNow);
         await service.HandleThreadReopenedAsync(evt);
 
         await activityLog.Received(1)
@@ -248,10 +255,10 @@ public sealed class ThreadMemoryServiceTests
     public async Task HandleThreadReopenedAsync_RepositoryThrows_DoesNotThrow()
     {
         var (_, repo, _, _, service) = CreateService();
-        repo.RemoveByThreadAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        repo.RemoveByThreadAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("db error"));
 
-        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, "7", DateTimeOffset.UtcNow);
+        var evt = new ThreadReopenedDomainEvent(ClientId, Host, Project, "repo-1", 42, "7", DateTimeOffset.UtcNow);
         var ex = await Record.ExceptionAsync(() => service.HandleThreadReopenedAsync(evt));
 
         Assert.Null(ex);
@@ -262,7 +269,7 @@ public sealed class ThreadMemoryServiceTests
     {
         var (_, _, _, activityLog, service) = CreateService();
 
-        await service.RecordNoOpAsync(ClientId, "repo-1", 42, "7", "Active", "Active", "still_active");
+        await service.RecordNoOpAsync(ClientId, Host, Project, "repo-1", 42, "7", "Active", "Active", "still_active");
 
         await activityLog.Received(1)
             .AppendAsync(
@@ -280,7 +287,7 @@ public sealed class ThreadMemoryServiceTests
             .ThrowsAsync(new Exception("log unavailable"));
 
         var ex = await Record.ExceptionAsync(() =>
-            service.RecordNoOpAsync(ClientId, "repo-1", 42, "7", null, "Active", "still_active"));
+            service.RecordNoOpAsync(ClientId, Host, Project, "repo-1", 42, "7", null, "Active", "still_active"));
 
         Assert.Null(ex);
     }
@@ -365,7 +372,7 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<float>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<ThreadMemoryMatchDto>());
-        repo.FindByFilePathAsync(ClientId, "repo", "package.json", Arg.Any<int>(), Arg.Any<CancellationToken>())
+        repo.FindByFilePathAsync(ClientId, Host, Project, "repo", "package.json", Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(
                 new List<ThreadMemoryMatchDto>
                 {
@@ -400,7 +407,7 @@ public sealed class ThreadMemoryServiceTests
 
         // The lookup is made in the canonical stored form, whichever form the caller supplied.
         await repo.Received(1)
-            .FindByFilePathAsync(ClientId, "repo", "package.json", Arg.Any<int>(), Arg.Any<CancellationToken>());
+            .FindByFilePathAsync(ClientId, Host, Project, "repo", "package.json", Arg.Any<int>(), Arg.Any<CancellationToken>());
         await recorder.Received(1)
             .RecordMemoryEventAsync(
                 ProtocolId,
@@ -692,13 +699,16 @@ public sealed class ThreadMemoryServiceTests
             .Returns(new List<ThreadMemoryMatchDto>());
         repo.FindByFilePathAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                var lookupPath = call.ArgAt<string>(2);
+                // The host and project now sit ahead of the repository, so the file path is argument four.
+                var lookupPath = call.ArgAt<string>(4);
                 return stored is not null &&
                        string.Equals(stored.FilePath, lookupPath, StringComparison.OrdinalIgnoreCase)
                     ? new List<ThreadMemoryMatchDto>
@@ -774,6 +784,8 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<ThreadMemoryMatchDto>());
@@ -826,6 +838,8 @@ public sealed class ThreadMemoryServiceTests
             .Returns(new List<ThreadMemoryMatchDto>());
         repo.FindByFilePathAsync(
                 Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
@@ -885,6 +899,8 @@ public sealed class ThreadMemoryServiceTests
             .Returns(new List<ThreadMemoryMatchDto>());
         repo.FindByFilePathAsync(
                 Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
@@ -951,6 +967,8 @@ public sealed class ThreadMemoryServiceTests
             });
         repo.FindByFilePathAsync(
                 Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
@@ -1299,6 +1317,8 @@ public sealed class ThreadMemoryServiceTests
             .Returns([0.2f, 0.8f]);
         repo.FindSimilarInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 42,
                 Arg.Any<float[]>(),
@@ -1317,6 +1337,8 @@ public sealed class ThreadMemoryServiceTests
 
         var match = await service.FindDuplicateSuppressionMatchAsync(
             ClientId,
+            Host,
+            Project,
             "repo-1",
             42,
             "/src/Foo.cs",
@@ -1340,6 +1362,8 @@ public sealed class ThreadMemoryServiceTests
             .ThrowsAsync(new InvalidOperationException("embedding unavailable"));
         repo.FindByPullRequestFilePathAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 42,
                 "src/Foo.cs",
@@ -1358,6 +1382,8 @@ public sealed class ThreadMemoryServiceTests
 
         var match = await service.FindDuplicateSuppressionMatchAsync(
             ClientId,
+            Host,
+            Project,
             "repo-1",
             42,
             "/src/Foo.cs",
@@ -1380,6 +1406,8 @@ public sealed class ThreadMemoryServiceTests
             .ThrowsAsync(new InvalidOperationException("embedding unavailable"));
         repo.FindByPullRequestFilePathAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 42,
                 "src/Foo.cs",
@@ -1389,6 +1417,8 @@ public sealed class ThreadMemoryServiceTests
 
         await service.FindDuplicateSuppressionMatchAsync(
             ClientId,
+            Host,
+            Project,
             "repo-1",
             42,
             "/src/Foo.cs",
@@ -1396,6 +1426,8 @@ public sealed class ThreadMemoryServiceTests
 
         await service.FindDuplicateSuppressionMatchAsync(
             ClientId,
+            Host,
+            Project,
             "repo-1",
             42,
             "/src/Foo.cs",
@@ -1406,6 +1438,8 @@ public sealed class ThreadMemoryServiceTests
         await repo.Received(2)
             .FindByPullRequestFilePathAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 42,
                 "src/Foo.cs",
@@ -1426,6 +1460,8 @@ public sealed class ThreadMemoryServiceTests
             .ThrowsAsync(new InvalidOperationException("embedding unavailable"));
         repo.FindByPullRequestFilePathAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 42,
                 Arg.Any<string>(),
@@ -1435,6 +1471,8 @@ public sealed class ThreadMemoryServiceTests
 
         await service.FindDuplicateSuppressionMatchAsync(
             ClientId,
+            Host,
+            Project,
             "repo-1",
             42,
             candidateFilePath,
@@ -1443,6 +1481,8 @@ public sealed class ThreadMemoryServiceTests
         await repo.Received(1)
             .FindByPullRequestFilePathAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 42,
                 "src/Foo.cs",
@@ -1459,6 +1499,8 @@ public sealed class ThreadMemoryServiceTests
             .Returns([0.5f]);
         repo.FindSimilarInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 42,
                 Arg.Any<float[]>(),
@@ -1468,6 +1510,8 @@ public sealed class ThreadMemoryServiceTests
             .ThrowsAsync(new InvalidOperationException("repository unavailable"));
         repo.FindByPullRequestFilePathAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo-1",
                 42,
                 "src/Foo.cs",
@@ -1477,6 +1521,8 @@ public sealed class ThreadMemoryServiceTests
 
         var match = await service.FindDuplicateSuppressionMatchAsync(
             ClientId,
+            Host,
+            Project,
             "repo-1",
             42,
             "/src/Foo.cs",

@@ -37,6 +37,8 @@ public interface IThreadMemoryService
     /// </summary>
     Task RecordNoOpAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadId,
@@ -84,6 +86,8 @@ public interface IThreadMemoryService
     /// </summary>
     Task<HistoricalDuplicateSuppressionMatchDto> FindDuplicateSuppressionMatchAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string? filePath,

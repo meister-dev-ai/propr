@@ -24,6 +24,16 @@ internal sealed class ThreadPassHandledThreadConfiguration : IEntityTypeConfigur
             .HasColumnName("client_id")
             .IsRequired();
 
+        builder.Property(t => t.OrganizationUrl)
+            .HasColumnName("organization_url")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(t => t.ProjectId)
+            .HasColumnName("project_id")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
         builder.Property(t => t.RepositoryId)
             .HasColumnName("repository_id")
             .IsRequired();
@@ -55,6 +65,8 @@ internal sealed class ThreadPassHandledThreadConfiguration : IEntityTypeConfigur
         builder.HasIndex(t => new
             {
                 t.ClientId,
+                t.OrganizationUrl,
+                t.ProjectId,
                 t.RepositoryId,
                 t.PullRequestId,
                 t.ThreadId,

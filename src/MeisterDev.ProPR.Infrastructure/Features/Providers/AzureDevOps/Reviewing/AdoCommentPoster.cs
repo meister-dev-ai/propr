@@ -111,6 +111,8 @@ public sealed class AdoCommentPoster(
                 token),
             botId,
             clientId,
+            organizationUrl,
+            projectId,
             repositoryId,
             pullRequestId,
             iterationId,
@@ -133,6 +135,8 @@ public sealed class AdoCommentPoster(
         AdoThreadFactory threadFactory,
         Guid? botId,
         Guid? clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         int iterationId,
@@ -168,6 +172,8 @@ public sealed class AdoCommentPoster(
                 existingThreads,
                 botId,
                 clientId,
+                organizationUrl,
+                projectId,
                 repositoryId,
                 pullRequestId,
                 iterationId,
@@ -229,6 +235,8 @@ public sealed class AdoCommentPoster(
         IReadOnlyList<PrCommentThread>? existingThreads,
         Guid? botId,
         Guid? clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         int iterationId,
@@ -254,6 +262,8 @@ public sealed class AdoCommentPoster(
             normalizedFilePath,
             botId,
             clientId,
+            organizationUrl,
+            projectId,
             repositoryId,
             pullRequestId,
             diagnostics,
@@ -284,6 +294,8 @@ public sealed class AdoCommentPoster(
         string? normalizedFilePath,
         Guid? botId,
         Guid? clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         PostingDiagnosticsBuilder diagnostics,
@@ -306,6 +318,8 @@ public sealed class AdoCommentPoster(
         // in the key, which is what survives the drift observed between increments.
         var postedFindingMatch = await this.FindPostedFindingDuplicateAsync(
             clientId,
+            organizationUrl,
+            projectId,
             repositoryId,
             pullRequestId,
             comment.Message,
@@ -326,6 +340,8 @@ public sealed class AdoCommentPoster(
 
         var historicalMatch = await this.FindHistoricalDuplicateMatchAsync(
             clientId,
+            organizationUrl,
+            projectId,
             repositoryId,
             pullRequestId,
             normalizedFilePath,
@@ -396,6 +412,8 @@ public sealed class AdoCommentPoster(
     /// </summary>
     private async Task<PostedFindingMatchDto> FindPostedFindingDuplicateAsync(
         Guid? clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string message,
@@ -410,6 +428,8 @@ public sealed class AdoCommentPoster(
         {
             return await postedFindingIndex.FindDuplicateAsync(
                 clientId.Value,
+                organizationUrl,
+                projectId,
                 repositoryId,
                 pullRequestId,
                 message,
@@ -978,6 +998,8 @@ public sealed class AdoCommentPoster(
 
     private async Task<HistoricalDuplicateSuppressionMatchDto> FindHistoricalDuplicateMatchAsync(
         Guid? clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string? filePath,
@@ -1002,6 +1024,8 @@ public sealed class AdoCommentPoster(
         {
             return await threadMemoryService.FindDuplicateSuppressionMatchAsync(
                 clientId.Value,
+                organizationUrl,
+                projectId,
                 repositoryId,
                 pullRequestId,
                 filePath,

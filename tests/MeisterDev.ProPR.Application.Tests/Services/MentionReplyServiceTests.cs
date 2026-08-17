@@ -61,7 +61,8 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(Task.FromResult<string?>(null));
         this._providerRegistry.GetReviewThreadReplyPublisher(Arg.Any<ScmProvider>())
             .Returns(this._threadReplier);
@@ -194,7 +195,8 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(Task.FromResult(postedCommentId));
     }
 
@@ -224,7 +226,8 @@ public sealed class MentionReplyServiceTests
                 job.ClientId,
                 job.ReviewThreadReference,
                 answer,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>());
         await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -241,7 +244,7 @@ public sealed class MentionReplyServiceTests
 
         // Assert: no PR fetch, no reply, no state change
         await this._prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(null!, null!, null!, 0, 0);
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!, default, default);
     }
 
     [Fact]
@@ -280,7 +283,7 @@ public sealed class MentionReplyServiceTests
                 job.Id,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>());
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!, default, default);
     }
 
     [Fact]
@@ -293,7 +296,8 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .ThrowsAsyncForAnyArgs<HttpRequestException>();
 
         // Act
@@ -401,7 +405,8 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(_ =>
             {
                 // The run is cancelled the instant the answer lands on the pull request.
@@ -429,7 +434,7 @@ public sealed class MentionReplyServiceTests
         await this._sut.ProcessAsync(job);
 
         await this._prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(null!, null!, null!, 0, 0);
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!, default, default);
         await this._jobRepository.Received(1)
             .SetFailedAsync(
                 job.Id,
@@ -519,6 +524,26 @@ public sealed class MentionReplyServiceTests
             .SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    ///     The question travels with the answer, because a provider that cannot reply inside a thread opens
+    ///     its comment with a quote of it. Only the caller knows which comment the answer answers.
+    /// </summary>
+    [Fact]
+    public async Task ProcessAsync_CarriesTheQuestionToThePublisherForQuoting()
+    {
+        var job = MakeJob();
+        SetupAnsweredMention(job, MakeAnswer());
+
+        await this._sut.ProcessAsync(job);
+
+        await this._threadReplier.Received(1).ReplyAsync(
+            job.ClientId,
+            job.ReviewThreadReference,
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>(),
+            job.MentionText);
+    }
+
     [Fact]
     public async Task ProcessAsync_HardCapAlreadyReached_MakesNoModelCallAndSaysWhy()
     {
@@ -536,7 +561,8 @@ public sealed class MentionReplyServiceTests
             job.ClientId,
             job.ReviewThreadReference,
             Arg.Is<string>(text => text.Contains("budget", StringComparison.OrdinalIgnoreCase)),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>());
         await this._jobRepository.Received(1).SetBudgetHeldAsync(
             job.Id,
             Arg.Any<int?>(),
@@ -614,7 +640,7 @@ public sealed class MentionReplyServiceTests
 
         await this.CreateService().ProcessAsync(job);
 
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!, default, default);
         await this._jobRepository.DidNotReceiveWithAnyArgs().SetFailedAsync(default, default!);
     }
 
@@ -659,7 +685,8 @@ public sealed class MentionReplyServiceTests
             job.ClientId,
             job.ReviewThreadReference,
             "An answer.",
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>());
         await this._jobRepository.Received(1)
             .SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await this._jobRepository.DidNotReceiveWithAnyArgs().SetBudgetHeldAsync(default, default, default, default, default, default);
@@ -802,7 +829,8 @@ public sealed class MentionReplyServiceTests
             job.ClientId,
             job.ReviewThreadReference,
             "An answer.",
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>());
         await this._jobRepository.Received(1)
             .SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await this._jobRepository.DidNotReceiveWithAnyArgs().SetFailedAsync(default, default!);
@@ -818,7 +846,8 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .ThrowsAsyncForAnyArgs<HttpRequestException>();
 
         await this.CreateService().ProcessAsync(job);

@@ -77,6 +77,22 @@ public sealed class ProviderActivationServiceTests
             throw new NotSupportedException();
         }
 
+        public bool SupportsActivePullRequestDiscovery(ScmProvider provider)
+        {
+            return false;
+        }
+
+        public bool SupportsReviewThreadReply(ScmProvider provider)
+        {
+            return false;
+        }
+
+        public bool RequiresReviewThreadIdentifier(ScmProvider provider)
+        {
+            return true;
+        }
+
+
         public ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider)
         {
             throw new NotSupportedException();

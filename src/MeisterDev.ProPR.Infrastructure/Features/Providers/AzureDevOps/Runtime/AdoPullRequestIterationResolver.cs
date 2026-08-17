@@ -3,6 +3,8 @@
 
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 
@@ -23,6 +25,23 @@ public sealed partial class AdoPullRequestIterationResolver(
         int pullRequestId,
         CancellationToken ct = default)
     {
+        // An iteration is an Azure DevOps concept, and this is its only implementation, so every caller
+        // reaches it whatever provider the pull request belongs to. Refused here rather than at the host:
+        // a GitLab or Forgejo address has no Azure DevOps connection behind it, an absent credential is
+        // answered by acquiring a token from the platform's own identity, and the call would present that
+        // token to somebody else's server before failing. Callers already treat a failure as "no iteration"
+        // and carry on, so this changes what leaves the process, not what they do.
+        var provider = await ProviderResolutionUtilities.ResolveProviderAsync(
+            organizationUrl,
+            clientId,
+            connectionRepository,
+            ct);
+
+        if (provider != ScmProvider.AzureDevOps)
+        {
+            throw new InvalidOperationException($"Pull request iterations are an Azure DevOps concept, and {organizationUrl} is a {provider} host.");
+        }
+
         var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
             connectionRepository,
             clientId,

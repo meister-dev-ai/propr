@@ -22,6 +22,8 @@ public sealed class PostedFindingRepository(
     /// <inheritdoc />
     public async Task<PostedFindingSimilarityDto?> FindClosestInPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         float[] queryVector,
@@ -54,6 +56,8 @@ public sealed class PostedFindingRepository(
                 .AsNoTracking()
                 .Where(r =>
                     r.ClientId == clientId &&
+                    r.OrganizationUrl == organizationUrl &&
+                    r.ProjectId == projectId &&
                     r.RepositoryId == repositoryId &&
                     r.PullRequestId == pullRequestId)
                 .Select(r => new
@@ -95,12 +99,15 @@ public sealed class PostedFindingRepository(
                 // is taken per group rather than from the first record: a thread id is only unique within one
                 // pull request, so probing a mixed batch under one scope would both miss existing rows and
                 // discard legitimate new ones.
-                var seen = new HashSet<(Guid ClientId, string RepositoryId, int PullRequestId, string ThreadId)>();
+                var seen = new HashSet<(Guid ClientId, string OrganizationUrl, string ProjectId, string RepositoryId, int PullRequestId, string ThreadId)>();
                 var added = 0;
 
-                foreach (var scope in records.GroupBy(r => new { r.ClientId, r.RepositoryId, r.PullRequestId }))
+                foreach (var scope in records.GroupBy(r =>
+                             new { r.ClientId, r.OrganizationUrl, r.ProjectId, r.RepositoryId, r.PullRequestId }))
                 {
                     var clientId = scope.Key.ClientId;
+                    var organizationUrl = scope.Key.OrganizationUrl;
+                    var projectId = scope.Key.ProjectId;
                     var repositoryId = scope.Key.RepositoryId;
                     var pullRequestId = scope.Key.PullRequestId;
                     var candidateThreadIds = scope.Select(r => r.ProviderThreadId).Distinct().ToList();
@@ -109,6 +116,8 @@ public sealed class PostedFindingRepository(
                         .AsNoTracking()
                         .Where(r =>
                             r.ClientId == clientId &&
+                            r.OrganizationUrl == organizationUrl &&
+                            r.ProjectId == projectId &&
                             r.RepositoryId == repositoryId &&
                             r.PullRequestId == pullRequestId &&
                             candidateThreadIds.Contains(r.ProviderThreadId))
@@ -117,13 +126,19 @@ public sealed class PostedFindingRepository(
 
                     foreach (var threadId in alreadyIndexed)
                     {
-                        seen.Add((clientId, repositoryId, pullRequestId, threadId));
+                        seen.Add((clientId, organizationUrl, projectId, repositoryId, pullRequestId, threadId));
                     }
                 }
 
                 foreach (var record in records)
                 {
-                    var key = (record.ClientId, record.RepositoryId, record.PullRequestId, record.ProviderThreadId);
+                    var key = (
+                        record.ClientId,
+                        record.OrganizationUrl,
+                        record.ProjectId,
+                        record.RepositoryId,
+                        record.PullRequestId,
+                        record.ProviderThreadId);
                     if (!seen.Add(key))
                     {
                         continue;

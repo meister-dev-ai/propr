@@ -32,6 +32,12 @@ public sealed class ThreadPassHandledThread
     public Guid ClientId { get; set; }
 
     /// <summary>Provider-native repository identifier.</summary>
+    /// <summary>The host that issued <see cref="RepositoryId" />, and so the scope it is unique within.</summary>
+    public string OrganizationUrl { get; set; } = string.Empty;
+
+    /// <summary>The project within the host, empty where the host addresses repositories without one.</summary>
+    public string ProjectId { get; set; } = string.Empty;
+
     public string RepositoryId { get; set; } = string.Empty;
 
     /// <summary>Provider pull request number.</summary>

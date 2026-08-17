@@ -87,7 +87,9 @@ public sealed partial class CodeInsightHistoryImporter(
         var jobsImported = 0;
         var outcomeThreads = 0;
         var humanThreads = 0;
-        var pullRequests = new HashSet<(string RepositoryId, long PullRequestId)>();
+        // Counted per host as well: two providers numbering a pull request alike are two pull requests.
+        var pullRequests =
+            new HashSet<(string OrganizationUrl, string ProjectId, string RepositoryId, long PullRequestId)>();
 
         var pendingJobIds = pending.Select(job => job.JobId).ToHashSet();
 
@@ -95,7 +97,8 @@ public sealed partial class CodeInsightHistoryImporter(
         // request reviewed ten times reads them once rather than ten times. Grouped over every job read rather
         // than only the ones still to import, because asking for outcomes after a findings-only run is the
         // expected way to use this: those jobs are already collected, and their threads have still never been read.
-        foreach (var group in jobs.GroupBy(job => (job.RepositoryId, job.PullRequestId)))
+        foreach (var group in jobs.GroupBy(job =>
+                     (job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId)))
         {
             var groupHasPendingJobs = group.Any(job => pendingJobIds.Contains(job.JobId));
 
@@ -146,6 +149,8 @@ public sealed partial class CodeInsightHistoryImporter(
             {
                 var (outcomes, humans) = await this.ReplayThreadsAsync(
                     request.ClientId,
+                    group.Key.OrganizationUrl,
+                    group.Key.ProjectId,
                     group.Key.RepositoryId,
                     group.Key.PullRequestId,
                     anchors,
@@ -248,6 +253,8 @@ public sealed partial class CodeInsightHistoryImporter(
                 .Take(maxJobs)
                 .Select(job => new JobRow(
                     job.Id,
+                    job.OrganizationUrl,
+                    job.ProjectId,
                     job.RepositoryId,
                     job.PullRequestId,
                     job.IterationId,
@@ -369,6 +376,8 @@ public sealed partial class CodeInsightHistoryImporter(
     /// </summary>
     private async Task<(int Outcomes, int Human)> ReplayThreadsAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         long pullRequestId,
         ThreadAnchors anchors,
@@ -389,6 +398,8 @@ public sealed partial class CodeInsightHistoryImporter(
                 await dispositionService.HandleThreadResolvedAsync(
                     new ThreadResolvedDomainEvent(
                         clientId,
+                        organizationUrl,
+                        projectId,
                         repositoryId,
                         (int)pullRequestId,
                         thread.ThreadId,
@@ -489,6 +500,8 @@ public sealed partial class CodeInsightHistoryImporter(
     /// <summary>One historical review job, with the columns the revision key is derived from.</summary>
     private readonly record struct JobRow(
         Guid JobId,
+        string OrganizationUrl,
+        string ProjectId,
         string RepositoryId,
         int PullRequestId,
         int IterationId,

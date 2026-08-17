@@ -28,6 +28,8 @@ public sealed class ReviewThreadMemoryServiceAdapter(IThreadMemoryService inner)
 
     public Task RecordNoOpAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadId,
@@ -38,6 +40,8 @@ public sealed class ReviewThreadMemoryServiceAdapter(IThreadMemoryService inner)
     {
         return inner.RecordNoOpAsync(
             clientId,
+            organizationUrl,
+            projectId,
             repositoryId,
             pullRequestId,
             threadId,
@@ -82,6 +86,8 @@ public sealed class ReviewThreadMemoryServiceAdapter(IThreadMemoryService inner)
 
     public Task<HistoricalDuplicateSuppressionMatchDto> FindDuplicateSuppressionMatchAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string? filePath,
@@ -90,6 +96,8 @@ public sealed class ReviewThreadMemoryServiceAdapter(IThreadMemoryService inner)
     {
         return inner.FindDuplicateSuppressionMatchAsync(
             clientId,
+            organizationUrl,
+            projectId,
             repositoryId,
             pullRequestId,
             filePath,

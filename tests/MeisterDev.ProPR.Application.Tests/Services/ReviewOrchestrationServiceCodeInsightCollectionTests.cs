@@ -258,7 +258,7 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                 .Returns(minimumSeverityToPost);
 
             var prScanRepository = Substitute.For<IReviewPrScanRepository>();
-            prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
                 .Returns((ReviewPrScan?)null);
 
             var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();

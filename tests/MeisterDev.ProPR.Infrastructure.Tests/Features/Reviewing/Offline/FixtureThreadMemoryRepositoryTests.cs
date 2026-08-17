@@ -38,7 +38,14 @@ public sealed class FixtureThreadMemoryRepositoryTests
         };
         var repository = new FixtureThreadMemoryRepository(accessor);
 
-        var matches = await repository.FindByFilePathAsync(Guid.NewGuid(), "repo", "docs/notes.md", 10, CancellationToken.None);
+        var matches = await repository.FindByFilePathAsync(
+            Guid.NewGuid(),
+            "https://provider.example",
+            "project",
+            "repo",
+            "docs/notes.md",
+            10,
+            CancellationToken.None);
 
         Assert.Empty(matches);
     }

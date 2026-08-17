@@ -150,6 +150,8 @@ public sealed partial class ProxyThreadMemoryService(
     /// <inheritdoc />
     public Task RecordNoOpAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadId,
@@ -175,6 +177,8 @@ public sealed partial class ProxyThreadMemoryService(
     /// <inheritdoc />
     public Task<HistoricalDuplicateSuppressionMatchDto> FindDuplicateSuppressionMatchAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string? filePath,

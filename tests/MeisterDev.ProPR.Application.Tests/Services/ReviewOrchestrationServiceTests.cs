@@ -37,7 +37,7 @@ public partial class ReviewOrchestrationServiceTests
         ILogger<ReviewOrchestrationService> logger) CreateDeps()
     {
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
         var clientRegistry = Substitute.For<IClientRegistry>();
         clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -2045,8 +2045,8 @@ public partial class ReviewOrchestrationServiceTests
             .Returns(pr);
 
         // Scan exists with same iteration ID as job.IterationId (1 → "1")
-        var existingScan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        var existingScan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(existingScan));
 
         var service = CreateService(
@@ -2171,6 +2171,8 @@ public partial class ReviewOrchestrationServiceTests
         await prScanRepository.Received(1)
             .SetReviewWatermarkAsync(
                 job.ClientId,
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 job.RepositoryId,
                 job.PullRequestId,
                 job.IterationId.ToString(),
@@ -2955,8 +2957,8 @@ public partial class ReviewOrchestrationServiceTests
             .Returns(CreateReviewResult());
 
         // Scan shows prior iteration was 1
-        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(scan));
 
         // Prior job (iteration 1) has both Changed.cs and Unchanged.cs
@@ -3053,9 +3055,11 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<IChatClient?>())
             .Returns(CreateReviewResult());
 
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(
-                Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+                Task.FromResult<ReviewPrScan?>(
+                    new ReviewPrScan(
+                        Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
 
         var priorJob = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
         priorJob.SetReviewRevision(new ReviewRevision("old-head", "base-sha", null, "old-head", "base-sha...old-head"));
@@ -3134,9 +3138,11 @@ public partial class ReviewOrchestrationServiceTests
             [changedFile]);
 
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(
-                Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+                Task.FromResult<ReviewPrScan?>(
+                    new ReviewPrScan(
+                        Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
 
         var failedPriorJob = BuildPriorJob(job, 1, "src/Changed.cs");
         failedPriorJob.Status = JobStatus.Failed;
@@ -3235,7 +3241,7 @@ public partial class ReviewOrchestrationServiceTests
             [changedFile]);
 
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
 
         var failedPriorJob = BuildPriorJob(job, 1, "src/Changed.cs");
@@ -3340,8 +3346,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<IChatClient?>())
             .Returns(CreateReviewResult());
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(scan));
 
         var priorBaseline = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
@@ -3428,8 +3434,8 @@ public partial class ReviewOrchestrationServiceTests
             .Returns(CreateReviewResult());
 
         // Scan shows prior iteration 1 (so compareToIterationId will be 1)
-        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(scan));
 
         // No prior completed job
@@ -3504,9 +3510,11 @@ public partial class ReviewOrchestrationServiceTests
             [new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff")]);
 
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(
-                Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+                Task.FromResult<ReviewPrScan?>(
+                    new ReviewPrScan(
+                        Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
         jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3600,9 +3608,11 @@ public partial class ReviewOrchestrationServiceTests
             [new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff")]);
 
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(
-                Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+                Task.FromResult<ReviewPrScan?>(
+                    new ReviewPrScan(
+                        Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
 
         // Superseded prior at the old revision that reviewed all its in-scope files (full coverage).
         var supersededBaseline = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
@@ -3827,8 +3837,8 @@ public partial class ReviewOrchestrationServiceTests
             .Returns(pr);
 
         // Scan shows prior iteration 1
-        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(scan));
 
         // Prior job has files (all will be carried forward since delta is empty)
@@ -3906,8 +3916,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<IChatClient?>())
             .Returns(CreateReviewResult());
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(scan));
 
         // Prior job: Changed.cs and Unchanged.cs; only Unchanged.cs will be carried forward
@@ -4023,13 +4033,9 @@ public partial class ReviewOrchestrationServiceTests
 
         // Existing scan with same iteration key → no new iteration
         var existingScan = new ReviewPrScan(
-            Guid.NewGuid(),
-            job.ClientId,
-            job.RepositoryId,
-            job.PullRequestId,
-            job.IterationId.ToString());
+            Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, job.IterationId.ToString());
 
-        prScanRepository.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(job.ClientId, Arg.Any<string>(), Arg.Any<string>(), job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(existingScan));
 
         // PR thread authored by reviewer with no user replies → no new replies
@@ -4107,7 +4113,7 @@ public partial class ReviewOrchestrationServiceTests
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
 
         // No existing scan → new iteration
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
 
         var changedFile = new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "diff");

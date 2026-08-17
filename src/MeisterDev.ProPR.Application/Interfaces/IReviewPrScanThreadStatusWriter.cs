@@ -16,12 +16,16 @@ public interface IReviewPrScanThreadStatusWriter
     ///     column is written. Does nothing when the pull request has no scan record.
     /// </summary>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="organizationUrl">The host that issued the repository identifier.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="statusByThreadId">The status to store, keyed by thread id.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task SetLastSeenStatusesAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         IReadOnlyDictionary<string, string?> statusByThreadId,

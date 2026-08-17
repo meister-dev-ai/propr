@@ -41,7 +41,13 @@ public sealed partial class ReviewJobReuse(
     {
         ArgumentNullException.ThrowIfNull(job);
 
-        var scan = await scans.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, ct);
+        var scan = await scans.GetAsync(
+            job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            ct);
         var iterationKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
         var isNewIteration = scan is null || scan.LastProcessedCommitId != iterationKey;
 

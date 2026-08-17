@@ -154,9 +154,15 @@ public sealed class ProxyThreadMemoryServiceTests
     {
         var service = this.Create(Respond(HttpStatusCode.OK, "{}"));
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.RecordNoOpAsync(Guid.NewGuid(), "repo", 1, "thread", null, "resolved", "because"));
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.RecordNoOpAsync(
+            Guid.NewGuid(), "https://provider.example", "project", "repo", 1, "thread", null, "resolved", "because"));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.DismissFindingAsync(Guid.NewGuid(), "src/a.cs", "message", null));
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.FindDuplicateSuppressionMatchAsync(Guid.NewGuid(), "repo", 1, "src/a.cs", "message"));
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.FindDuplicateSuppressionMatchAsync(
+            Guid.NewGuid(),
+            "https://provider.example",
+            "project",
+            "repo",
+            1, "src/a.cs", "message"));
     }
 
     private Task<ReviewResult> ReconsiderAsync(ProxyThreadMemoryService service, ReviewResult draft)

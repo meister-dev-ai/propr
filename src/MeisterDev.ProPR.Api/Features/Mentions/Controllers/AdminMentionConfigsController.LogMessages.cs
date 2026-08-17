@@ -1,6 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Domain.Enums;
+
 namespace MeisterDev.ProPR.Api.Controllers;
 
 public sealed partial class AdminMentionConfigsController
@@ -29,4 +32,16 @@ public sealed partial class AdminMentionConfigsController
         Level = LogLevel.Information,
         Message = "Mention configuration for client {ClientId} refused: the client already answers in that project")]
     private static partial void LogMentionConfigConflict(ILogger logger, Guid clientId);
+
+    // The scope path itself stays out of the record. It is caller-supplied and the refusal is what matters;
+    // the reason is enough to tell a misconfiguration from an attempt to name somewhere the client has no
+    // connection to.
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Mention configuration for client {ClientId} on {Provider} refused: {Refusal}")]
+    private static partial void LogMentionConfigScopeRefused(
+        ILogger logger,
+        Guid clientId,
+        ScmProvider provider,
+        MentionScopeRefusal refusal);
 }

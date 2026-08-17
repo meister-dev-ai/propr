@@ -766,6 +766,8 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
                 memoryRepository.GetDigestsForPullRequestAsync(
                         Arg.Any<Guid>(),
                         Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
                         Arg.Any<int>(),
                         Arg.Any<MemorySource>(),
                         Arg.Any<int>(),
@@ -936,6 +938,8 @@ public sealed class JobsMultiClientJwtTests(JobsMultiClientJwtTests.MultiClientJ
                     .Returns(Task.FromResult<IReadOnlyList<ThreadMemoryDigestDto>>([]));
                 memoryRepository.GetDigestsForPullRequestAsync(
                         Arg.Any<Guid>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
                         Arg.Any<string>(),
                         Arg.Any<int>(),
                         Arg.Any<MemorySource>(),

@@ -57,6 +57,8 @@ public sealed class ThreadPassServiceTests
             Arg.Any<CancellationToken>());
         await harness.PrScans.Received(1).SetThreadPassWatermarkAsync(
             ClientId,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             RepositoryId,
             PullRequestId,
             "7",
@@ -147,12 +149,16 @@ public sealed class ThreadPassServiceTests
 
         await harness.PrScans.Received(1).SetLastSeenReplyCountsAsync(
             ClientId,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             RepositoryId,
             PullRequestId,
             Arg.Is<IReadOnlyDictionary<string, int>>(counts => counts.ContainsKey(ThreadId)),
             Arg.Any<CancellationToken>());
         await harness.PrScans.DidNotReceive().SetThreadPassWatermarkAsync(
             Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
@@ -463,6 +469,8 @@ public sealed class ThreadPassServiceTests
             Arg.Any<Guid>(),
             Arg.Any<Guid>(),
             Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
             Arg.Any<int>(),
@@ -470,6 +478,8 @@ public sealed class ThreadPassServiceTests
             Arg.Any<CancellationToken>());
         await harness.PrScans.DidNotReceive().SetLastSeenReplyCountsAsync(
             Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<string, int>>(),
@@ -497,6 +507,8 @@ public sealed class ThreadPassServiceTests
             harness.ThreadPassJobs.RecordHandledThreadAsync(
                 harness.Job.Id,
                 ClientId,
+                ScopePath,
+                ProjectKey,
                 RepositoryId,
                 PullRequestId,
                 ThreadId,
@@ -520,11 +532,15 @@ public sealed class ThreadPassServiceTests
         await harness.PrScans.DidNotReceive().SetThreadPassWatermarkAsync(
             Arg.Any<Guid>(),
             Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
         await harness.PrScans.DidNotReceive().RetainOnlyThreadsAsync(
             Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<IReadOnlyCollection<string>>(),
@@ -545,6 +561,8 @@ public sealed class ThreadPassServiceTests
 
         await harness.PrScans.Received(1).RetainOnlyThreadsAsync(
             ClientId,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             RepositoryId,
             PullRequestId,
             Arg.Is<IReadOnlyCollection<string>>(ids => ids.Count == 0),
@@ -565,11 +583,15 @@ public sealed class ThreadPassServiceTests
         await harness.PrScans.DidNotReceive().RetainOnlyThreadsAsync(
             Arg.Any<Guid>(),
             Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<IReadOnlyCollection<string>>(),
             Arg.Any<CancellationToken>());
         await harness.PrScans.Received(1).SetThreadPassWatermarkAsync(
             ClientId,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             RepositoryId,
             PullRequestId,
             "7",
@@ -599,6 +621,8 @@ public sealed class ThreadPassServiceTests
         await harness.PrScans.DidNotReceive().SetThreadPassWatermarkAsync(
             Arg.Any<Guid>(),
             Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -618,6 +642,8 @@ public sealed class ThreadPassServiceTests
 
         await harness.PrScans.Received(1).SetLastSeenReplyCountsAsync(
             ClientId,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             RepositoryId,
             PullRequestId,
             Arg.Is<IReadOnlyDictionary<string, int>>(counts => counts[ThreadId] == 1),
@@ -996,12 +1022,16 @@ public sealed class ThreadPassServiceTests
             Arg.Any<CancellationToken>());
         await harness.PrScans.Received(1).SetLastSeenReplyCountsAsync(
             ClientId,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             RepositoryId,
             PullRequestId,
             Arg.Is<IReadOnlyDictionary<string, int>>(counts => counts.ContainsKey(ThreadId)),
             Arg.Any<CancellationToken>());
         await harness.PrScans.DidNotReceive().SetThreadPassWatermarkAsync(
             Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
@@ -1084,7 +1114,7 @@ public sealed class ThreadPassServiceTests
                 "7",
                 "7|abc");
 
-            this._scan = new ReviewPrScan(Guid.NewGuid(), ClientId, RepositoryId, PullRequestId, "7")
+            this._scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", RepositoryId, PullRequestId, "7")
             {
                 LastThreadPassRevisionKey = "6",
             };
@@ -1101,6 +1131,8 @@ public sealed class ThreadPassServiceTests
             this.ThreadPassJobs.TryBeginAttemptAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
             this.ThreadPassJobs.GetHandledThreadKeysAsync(
                     ClientId,
+                    ScopePath,
+                    ProjectKey,
                     RepositoryId,
                     PullRequestId,
                     Arg.Any<string>(),
@@ -1342,6 +1374,8 @@ public sealed class ThreadPassServiceTests
         {
             this.ThreadPassJobs.GetHandledThreadKeysAsync(
                     ClientId,
+                    ScopePath,
+                    ProjectKey,
                     RepositoryId,
                     PullRequestId,
                     Arg.Any<string>(),
@@ -1534,7 +1568,7 @@ public sealed class ThreadPassServiceTests
 
         private void ApplyScan()
         {
-            this.PrScans.GetAsync(ClientId, RepositoryId, PullRequestId, Arg.Any<CancellationToken>())
+            this.PrScans.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), RepositoryId, PullRequestId, Arg.Any<CancellationToken>())
                 .Returns(this._scan);
         }
     }

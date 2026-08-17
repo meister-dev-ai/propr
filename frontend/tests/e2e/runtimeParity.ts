@@ -113,6 +113,11 @@ export async function installLiveRuntimeApiStubs(page: Page, testInfo: TestInfo)
             isAvailable: true,
             message: null,
           },
+          {
+            key: 'mention-answering',
+            isAvailable: true,
+            message: null,
+          },
         ],
       }),
     })

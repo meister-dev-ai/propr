@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Discovery;
@@ -48,18 +49,20 @@ internal sealed class GitHubDiscoveryService(
                 .AsReadOnly();
         }
 
-        using var request = await context.CreateAuthenticatedRequestAsync(
-            GitHubConnectionVerifier.BuildApiUri(host, "/user/orgs", "per_page=100"),
-            ct: ct);
-        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitHub scope discovery failed with status {(int)response.StatusCode}.");
-        }
-
-        var organizations = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubOrganizationResponse>>(ct)
-                            ?? [];
+        // Read across pages: an operator whose account belongs to more organizations than one page holds
+        // would otherwise be offered a truncated list with nothing said about the rest.
+        var organizations = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.LoadPageAsync<GitHubOrganizationResponse>(
+                context,
+                host,
+                "/user/orgs",
+                page,
+                pageSize,
+                "organization",
+                pageCt),
+            organization => organization.Login ?? string.Empty,
+            "GitHub's organization listing",
+            ct);
 
         var scopePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -107,30 +110,32 @@ internal sealed class GitHubDiscoveryService(
                 .AsReadOnly();
         }
 
-        var path = string.Equals(normalizedScopePath, context.AuthenticatedLogin, StringComparison.OrdinalIgnoreCase)
+        var isPersonalScope = string.Equals(
+            normalizedScopePath,
+            context.AuthenticatedLogin,
+            StringComparison.OrdinalIgnoreCase);
+        var path = isPersonalScope
             ? "/user/repos"
             : $"/orgs/{Uri.EscapeDataString(normalizedScopePath)}/repos";
-        var query = string.Equals(normalizedScopePath, context.AuthenticatedLogin, StringComparison.OrdinalIgnoreCase)
-            ? "per_page=100&affiliation=owner,collaborator,organization_member"
-            : "per_page=100&type=all";
+        var filter = isPersonalScope
+            ? "affiliation=owner,collaborator,organization_member"
+            : "type=all";
 
-        using var request = await context.CreateAuthenticatedRequestAsync(
-            GitHubConnectionVerifier.BuildApiUri(host, path, query),
-            ct: ct);
-        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
-
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return [];
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitHub repository discovery failed with status {(int)response.StatusCode}.");
-        }
-
-        var discoveredRepositories = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubRepositoryResponse>>(ct)
-                                     ?? [];
+        // Read to the end for an owner with more repositories than one page holds. A truncated list would
+        // offer only part of the owner's repositories, with nothing to say the rest exist.
+        var discoveredRepositories = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.LoadPageAsync<GitHubRepositoryResponse>(
+                context,
+                host,
+                path,
+                page,
+                pageSize,
+                "repository",
+                pageCt,
+                filter),
+            repository => repository.Id.ToString(CultureInfo.InvariantCulture),
+            $"GitHub's repository listing for {normalizedScopePath}",
+            ct);
 
         return discoveredRepositories
             .Where(repository => !string.IsNullOrWhiteSpace(repository.FullName) &&
@@ -142,6 +147,46 @@ internal sealed class GitHubDiscoveryService(
                 repository.FullName!.Trim()))
             .ToList()
             .AsReadOnly();
+    }
+
+    /// <summary>Reads one page of a GitHub listing, following its own answer about whether more remains.</summary>
+    /// <remarks>
+    ///     A repository listing answers 404 for a scope the connection cannot see, which is an empty result
+    ///     rather than a failure: an operator who picked an owner they have no access to is told by the empty
+    ///     list, where a fault would suggest the connection itself is broken.
+    /// </remarks>
+    private async Task<ProviderRestPager.RestPage<T>> LoadPageAsync<T>(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        ProviderHostRef host,
+        string path,
+        int page,
+        int pageSize,
+        string collectionKind,
+        CancellationToken ct,
+        string? filter = null)
+    {
+        var pageQuery = string.Create(
+            CultureInfo.InvariantCulture,
+            $"per_page={pageSize}&page={page}");
+        var query = string.IsNullOrEmpty(filter) ? pageQuery : $"{pageQuery}&{filter}";
+
+        using var request = await context.CreateAuthenticatedRequestAsync(
+            GitHubConnectionVerifier.BuildApiUri(host, path, query),
+            ct: ct);
+        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new ProviderRestPager.RestPage<T>([], HasMore: false);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitHub {collectionKind} discovery failed with status {(int)response.StatusCode}.");
+        }
+
+        var items = await response.Content.ReadFromJsonAsync<IReadOnlyList<T>>(ct) ?? [];
+        return new ProviderRestPager.RestPage<T>(items, ProviderPaginationHeaders.ReadGitHubHasMore(response));
     }
 
     private async Task<IReadOnlyList<GitHubRepositoryResponse>> ListInstallationRepositoriesAsync(

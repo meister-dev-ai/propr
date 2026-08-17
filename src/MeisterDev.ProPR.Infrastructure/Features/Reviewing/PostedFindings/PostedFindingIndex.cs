@@ -47,6 +47,8 @@ public sealed partial class PostedFindingIndex(
     /// <inheritdoc />
     public async Task<PostedFindingMatchDto> FindDuplicateAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string findingMessage,
@@ -72,6 +74,8 @@ public sealed partial class PostedFindingIndex(
             // only evidence that would show the threshold set too high.
             var closest = await repository.FindClosestInPullRequestAsync(
                 clientId,
+                organizationUrl,
+                projectId,
                 repositoryId,
                 pullRequestId,
                 queryVector,

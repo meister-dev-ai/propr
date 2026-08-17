@@ -343,8 +343,8 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
                 // Stands in for a provider adapter: the pass reaches the thread-status fetch first, and the
                 // real adapter contributes the account its connection authenticates as into the resolver it
                 // is handed there. A scan has to exist for that fetch to happen at all.
-                scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
-                    .Returns(new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7"));
+                scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>())
+                    .Returns(new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-1", 42, "7"));
                 threadStatusFetcher.GetReviewerThreadStatusesAsync(
                         "https://dev.azure.com/org",
                         "project",

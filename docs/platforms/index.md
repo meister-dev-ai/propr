@@ -42,6 +42,31 @@ Any combination not in the table is refused when you save the connection, with a
 modes that provider does accept - so you find out at save time rather than at the first connection
 attempt. `appInstallation` in particular is GitHub-only.
 
+### Mention answering
+
+[Answering an @-mention](../concepts/how-it-works.md#asking-propr-a-question) needs two things from a
+provider: a way to find the open pull requests to read, and a way to answer where the question was asked.
+All four providers support both, so a mention configuration can be created for any of them. A provider
+supporting only one is refused when the configuration is saved, with a message naming the missing half.
+
+Where the answer is posted depends on the provider:
+
+| Provider | A question on a line of code | A question in the pull request conversation |
+|---|---|---|
+| Azure DevOps | replied to in the thread | replied to in the thread |
+| GitHub | replied to in the review thread | a new comment quoting the question |
+| GitLab | replied to in the discussion | replied to in the discussion |
+| Forgejo | a review carrying the answer, quoting the question | the same |
+
+A quoting answer is used where the provider has no thread to reply into. It is the form Forgejo's and
+GitHub's own **quote reply** buttons produce, and blockquotes nest, so a follow-up that quotes an answer
+keeps the sequence readable.
+
+A mention inside a blockquote is treated as a repetition, not a question, so an answer that quotes the
+original mention does not trigger another answer. Quote an earlier message and
+mention the reviewer outside the quote and it is a new question, whoever wrote either comment - including
+an installation where the reviewer identity is an account people also post from.
+
 ## Enabling a provider family
 
 Only **Azure DevOps** and **GitLab** are enabled by default installation-wide. **GitHub** and

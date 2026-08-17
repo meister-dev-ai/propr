@@ -113,19 +113,25 @@ has been superseded.
 
 ## Asking ProPR a question
 
-Mention the client's configured reviewer identity in a pull request comment - `@<guid>` on Azure
-DevOps, `@login` on GitHub, GitLab and Forgejo - and ProPR answers in that same thread, using the
-pull request as context. It is a question-and-answer path, not a re-review: no new findings are
-posted and no comments are resolved.
+Mention the client's configured reviewer identity in a pull request comment and ProPR answers it, using
+the pull request as context. The identity is `@<guid>` on Azure DevOps and `@login` on GitHub, GitLab and
+Forgejo. Answering posts no findings and resolves no comments. Comments on a line of code and comments in
+the pull request's conversation are both scanned.
+
+The answer is posted into the thread containing the question where the provider has one. On Forgejo, and
+in the conversation of a GitHub pull request, there is no thread, so the answer is a new comment that
+opens with a markdown blockquote of the question. See
+[the platform notes](../platforms/index.md#mention-answering).
 
 Answering mentions is configured in its own right, on the client's **Mentions** tab. A mention
-configuration names one project and the repositories within it this client answers on. Organization,
-project and repositories are picked from what the client's credentials can already reach, and each
-repository is stored by the provider's own id so a rename does not stop answers. The conversations in a
-repository nobody claimed are never read, and a client with no mention configuration answers nothing. The
-scan does list the open pull requests of the whole project before narrowing to the claimed repositories,
-so it sees that unclaimed ones exist; it never opens their comments. Claiming a repository takes effect
-from that moment: questions asked before it are not answered.
+configuration names a provider, where the client is reached, and the repositories it answers on. On
+Azure DevOps that is an organization and a project; on GitHub and GitLab it is one of the client's
+connections and then an owner, organization or group. Every level is picked from what the client's
+credentials can already reach, and each repository is stored by the provider's own id so a rename does
+not stop answers. The conversations in a repository nobody claimed are never read, and a client with no
+mention configuration answers nothing: the scan asks each provider only about the repositories the
+configuration claims. Claiming a repository takes effect from that moment: questions asked before it are
+not answered.
 
 Two clients may claim the same repository, and neither is told about the other. What decides who answers is
 the identity the comment addresses. If the two clients resolve different reviewer identities, only the one

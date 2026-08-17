@@ -21,12 +21,13 @@ internal sealed partial class StubAdoThreadReplier(ILogger<StubAdoThreadReplier>
         Guid clientId,
         ReviewThreadRef thread,
         string replyText,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? quotedComment = null)
     {
         return Task.FromResult<string?>(null);
     }
 
-    /// <inheritdoc cref="ReplyAsync(Guid, ReviewThreadRef, string, CancellationToken)" />
+    /// <inheritdoc cref="ReplyAsync(Guid, ReviewThreadRef, string, CancellationToken, string)" />
     public Task<string?> ReplyAsync(
         string organizationUrl,
         string projectId,

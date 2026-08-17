@@ -19,6 +19,11 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly Guid SeedClientId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+
+    /// <summary>The host that issued the repository identifiers below, and so the scope they are unique within.</summary>
+    private const string SeedHost = "https://provider.example";
+
+    private const string SeedProject = "project";
     private readonly List<MeisterProPRDbContext> _contexts = [];
     private MeisterProPRDbContext _dbContext = null!;
     private EfReviewPrScanRepository _repo = null!;
@@ -56,19 +61,64 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
         }
     }
 
+    /// <summary>
+    ///     Two hosts hand out small repository identifiers freely, so one client can hold a GitLab project 4
+    ///     and a Forgejo repository 4 and have a pull request 7 in each. They are two pull requests and keep
+    ///     two records: sharing one made a months-old review of the first look like a review of the second, and
+    ///     an installation that reviews only the first increment declined the second as already reviewed.
+    /// </summary>
+    [Fact]
+    public async Task TwoHostsSharingARepositoryIdentifierAndNumber_KeepSeparateRecords()
+    {
+        const string gitLab = "http://localhost:8090";
+        const string forgejo = "http://localhost:8091";
+
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, forgejo, "local_admin", "4", 7, "forgejo-head");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, gitLab, "meister-dev", "4", 7, "gitlab-head");
+
+        var onForgejo = await this._repo.GetAsync(SeedClientId, forgejo, "local_admin", "4", 7);
+        var onGitLab = await this._repo.GetAsync(SeedClientId, gitLab, "meister-dev", "4", 7);
+
+        Assert.Equal("forgejo-head", onForgejo?.LastProcessedCommitId);
+        Assert.Equal("gitlab-head", onGitLab?.LastProcessedCommitId);
+        Assert.NotEqual(onForgejo!.Id, onGitLab!.Id);
+    }
+
+    /// <summary>A host nobody has written for has no record, rather than another host's.</summary>
+    [Fact]
+    public async Task AHostWithNoRecordOfItsOwn_ReadsNothing()
+    {
+        await this._repo.SetReviewWatermarkAsync(
+            SeedClientId,
+            "http://localhost:8091",
+            "local_admin",
+            "4",
+            7,
+            "forgejo-head");
+
+        var onAnotherHost = await this._repo.GetAsync(
+            SeedClientId,
+            "http://localhost:8090",
+            "meister-dev",
+            "4",
+            7);
+
+        Assert.Null(onAnotherHost);
+    }
+
     [Fact]
     public async Task GetAsync_WhenNotExists_ReturnsNull()
     {
-        var result = await this._repo.GetAsync(Guid.NewGuid(), "repo", 1);
+        var result = await this._repo.GetAsync(Guid.NewGuid(), SeedHost, SeedProject, "repo", 1);
         Assert.Null(result);
     }
 
     [Fact]
     public async Task SetReviewWatermarkAsync_WhenNoScanExists_CreatesTheRecord()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-1", 42, "iter-3");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-1", 42, "iter-3");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-1", 42);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-1", 42);
         Assert.NotNull(retrieved);
         Assert.Equal(SeedClientId, retrieved.ClientId);
         Assert.Equal("repo-1", retrieved.RepositoryId);
@@ -80,21 +130,25 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetReviewWatermarkAsync_WhenThreadsExist_LeavesEveryThreadRowUntouched()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-upd", 10, "iter-1");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-upd", 10, "iter-1");
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-upd",
             10,
             new Dictionary<string, int> { ["101"] = 3, ["202"] = 1 });
         await this._repo.SetLastSeenStatusesAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-upd",
             10,
             new Dictionary<string, string?> { ["101"] = "Active", ["202"] = "Fixed" });
 
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-upd", 10, "iter-5");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-upd", 10, "iter-5");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-upd", 10);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-upd", 10);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-5", retrieved.LastProcessedCommitId);
         Assert.Equal(2, retrieved.Threads.Count);
@@ -109,25 +163,31 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetLastSeenReplyCountsAsync_UpdatesOnlyTheNamedThread()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-threads", 7, "iter-2");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-threads", 7, "iter-2");
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-threads",
             7,
             new Dictionary<string, int> { ["101"] = 3, ["202"] = 1 });
         await this._repo.SetLastSeenStatusesAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-threads",
             7,
             new Dictionary<string, string?> { ["101"] = "Active", ["202"] = "Active" });
 
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-threads",
             7,
             new Dictionary<string, int> { ["101"] = 9 });
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-threads", 7);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-threads", 7);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-2", retrieved.LastProcessedCommitId);
         Assert.Contains(
@@ -141,25 +201,31 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetLastSeenStatusesAsync_UpdatesOnlyTheNamedThread()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-status", 8, "iter-2");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-status", 8, "iter-2");
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-status",
             8,
             new Dictionary<string, int> { ["101"] = 3, ["202"] = 1 });
         await this._repo.SetLastSeenStatusesAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-status",
             8,
             new Dictionary<string, string?> { ["101"] = "Active", ["202"] = "Active" });
 
         await this._repo.SetLastSeenStatusesAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-status",
             8,
             new Dictionary<string, string?> { ["101"] = null });
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-status", 8);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-status", 8);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-2", retrieved.LastProcessedCommitId);
         Assert.Contains(
@@ -175,24 +241,30 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     {
         await this._repo.SetLastSeenStatusesAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-absent",
             3,
             new Dictionary<string, string?> { ["17"] = "Fixed" });
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-absent",
             3,
             new Dictionary<string, int> { ["17"] = 2 });
 
-        Assert.Null(await this._repo.GetAsync(SeedClientId, "repo-absent", 3));
+        Assert.Null(await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-absent", 3));
     }
 
     [Fact]
     public async Task RetainOnlyThreadsAsync_RemovesTheThreadsNoLongerNamed()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-replace", 99, "iter-1");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-replace", 99, "iter-1");
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-replace",
             99,
             new Dictionary<string, int> { ["10"] = 2, ["20"] = 1 });
@@ -200,12 +272,14 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
         // Thread 10 is still reported, thread 20 has vanished, thread 30 is new.
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-replace",
             99,
             new Dictionary<string, int> { ["10"] = 5, ["30"] = 0 });
-        await this._repo.RetainOnlyThreadsAsync(SeedClientId, "repo-replace", 99, ["10", "30"]);
+        await this._repo.RetainOnlyThreadsAsync(SeedClientId, SeedHost, SeedProject, "repo-replace", 99, ["10", "30"]);
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-replace", 99);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-replace", 99);
         Assert.NotNull(retrieved);
         Assert.Equal(2, retrieved.Threads.Count);
         Assert.Contains(retrieved.Threads, t => t.ThreadId == "10" && t.LastSeenReplyCount == 5);
@@ -216,14 +290,18 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task InterleavedWatermarkAndThreadStatusWrites_BothSurvive()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-interleave", 5, "iter-1");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-interleave", 5, "iter-1");
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-interleave",
             5,
             new Dictionary<string, int> { ["10"] = 4 });
         await this._repo.SetLastSeenStatusesAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-interleave",
             5,
             new Dictionary<string, string?> { ["10"] = "Active" });
@@ -233,16 +311,18 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
 
         // The status writer reads first, the watermark writer advances in between, and only then does the
         // status writer apply the one fact it owns.
-        Assert.NotNull(await statusWriter.GetAsync(SeedClientId, "repo-interleave", 5));
+        Assert.NotNull(await statusWriter.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-interleave", 5));
 
-        await watermarkWriter.SetReviewWatermarkAsync(SeedClientId, "repo-interleave", 5, "iter-2");
+        await watermarkWriter.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-interleave", 5, "iter-2");
         await statusWriter.SetLastSeenStatusesAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-interleave",
             5,
             new Dictionary<string, string?> { ["10"] = "Fixed" });
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-interleave", 5);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-interleave", 5);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-2", retrieved.LastProcessedCommitId);
         Assert.Contains(
@@ -253,9 +333,11 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task RacingWatermarkAdvances_LastWriteWinsAndKeepsChildRows()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-race", 6, "iter-1");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-race", 6, "iter-1");
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-race",
             6,
             new Dictionary<string, int> { ["10"] = 4 });
@@ -264,13 +346,13 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
         var secondWriter = new EfReviewPrScanRepository(this.CreateDbContext());
 
         // Both writers observe the same starting state before either applies its advance.
-        Assert.NotNull(await firstWriter.GetAsync(SeedClientId, "repo-race", 6));
-        Assert.NotNull(await secondWriter.GetAsync(SeedClientId, "repo-race", 6));
+        Assert.NotNull(await firstWriter.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-race", 6));
+        Assert.NotNull(await secondWriter.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-race", 6));
 
-        await firstWriter.SetReviewWatermarkAsync(SeedClientId, "repo-race", 6, "iter-2");
-        await secondWriter.SetReviewWatermarkAsync(SeedClientId, "repo-race", 6, "iter-3");
+        await firstWriter.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-race", 6, "iter-2");
+        await secondWriter.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-race", 6, "iter-3");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-race", 6);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-race", 6);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-3", retrieved.LastProcessedCommitId);
         Assert.Contains(retrieved.Threads, t => t.ThreadId == "10" && t.LastSeenReplyCount == 4);
@@ -279,16 +361,18 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetThreadPassWatermarkAsync_LeavesTheReviewWatermarkAndTheThreadCountersAlone()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-thread-wm", 8, "iter-1");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-thread-wm", 8, "iter-1");
         await this._repo.SetLastSeenReplyCountsAsync(
             SeedClientId,
+            SeedHost,
+            SeedProject,
             "repo-thread-wm",
             8,
             new Dictionary<string, int> { ["10"] = 4 });
 
-        await this._repo.SetThreadPassWatermarkAsync(SeedClientId, "repo-thread-wm", 8, "iter-2");
+        await this._repo.SetThreadPassWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-thread-wm", 8, "iter-2");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-thread-wm", 8);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-thread-wm", 8);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-1", retrieved.LastProcessedCommitId);
         Assert.Equal("iter-2", retrieved.LastThreadPassRevisionKey);
@@ -298,9 +382,9 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetThreadPassWatermarkAsync_WhenNoScanExists_CreatesTheRecordWithoutInventingAReviewWatermark()
     {
-        await this._repo.SetThreadPassWatermarkAsync(SeedClientId, "repo-thread-first", 9, "iter-3");
+        await this._repo.SetThreadPassWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-thread-first", 9, "iter-3");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-thread-first", 9);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-thread-first", 9);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-3", retrieved.LastThreadPassRevisionKey);
         Assert.Equal(string.Empty, retrieved.LastProcessedCommitId);
@@ -309,11 +393,11 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetReviewWatermarkAsync_LeavesTheThreadWatermarkAlone()
     {
-        await this._repo.SetThreadPassWatermarkAsync(SeedClientId, "repo-both-wm", 11, "iter-3");
+        await this._repo.SetThreadPassWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-both-wm", 11, "iter-3");
 
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-both-wm", 11, "iter-4");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-both-wm", 11, "iter-4");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-both-wm", 11);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-both-wm", 11);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-4", retrieved.LastProcessedCommitId);
         Assert.Equal("iter-3", retrieved.LastThreadPassRevisionKey);
@@ -322,20 +406,20 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetReviewWatermarkAsync_DifferentPrs_StoresSeparately()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-sep", 1, "iter-1");
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-sep", 2, "iter-1");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-sep", 1, "iter-1");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-sep", 2, "iter-1");
 
-        Assert.NotNull(await this._repo.GetAsync(SeedClientId, "repo-sep", 1));
-        Assert.NotNull(await this._repo.GetAsync(SeedClientId, "repo-sep", 2));
-        Assert.Null(await this._repo.GetAsync(SeedClientId, "repo-sep", 3));
+        Assert.NotNull(await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-sep", 1));
+        Assert.NotNull(await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-sep", 2));
+        Assert.Null(await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-sep", 3));
     }
 
     [Fact]
     public async Task SetPendingReviewRevisionAsync_NoRecordYet_CreatesOneWithNeitherWatermarkSet()
     {
-        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, "repo-pending-new", 21, "iter-5");
+        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-new", 21, "iter-5");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-pending-new", 21);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-new", 21);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-5", retrieved.PendingReviewRevisionKey);
         Assert.NotNull(retrieved.PendingReviewDetectedAt);
@@ -353,13 +437,13 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetPendingReviewRevisionAsync_SameRevisionAgain_LeavesTheDetectionTimeAlone()
     {
-        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, "repo-pending-same", 22, "iter-5");
-        var firstDetectedAt = (await this._repo.GetAsync(SeedClientId, "repo-pending-same", 22))!
+        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-same", 22, "iter-5");
+        var firstDetectedAt = (await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-same", 22))!
             .PendingReviewDetectedAt;
 
-        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, "repo-pending-same", 22, "iter-5");
+        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-same", 22, "iter-5");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-pending-same", 22);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-same", 22);
         Assert.NotNull(retrieved);
         Assert.Equal(firstDetectedAt, retrieved.PendingReviewDetectedAt);
     }
@@ -367,13 +451,13 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetPendingReviewRevisionAsync_NewRevision_MovesTheDetectionTime()
     {
-        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, "repo-pending-moved", 23, "iter-5");
-        var firstDetectedAt = (await this._repo.GetAsync(SeedClientId, "repo-pending-moved", 23))!
+        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-moved", 23, "iter-5");
+        var firstDetectedAt = (await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-moved", 23))!
             .PendingReviewDetectedAt;
 
-        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, "repo-pending-moved", 23, "iter-6");
+        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-moved", 23, "iter-6");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-pending-moved", 23);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-moved", 23);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-6", retrieved.PendingReviewRevisionKey);
         Assert.NotEqual(firstDetectedAt, retrieved.PendingReviewDetectedAt);
@@ -385,11 +469,11 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
     [Fact]
     public async Task SetPendingReviewRevisionAsync_AndBothWatermarks_KeepTheirOwnValues()
     {
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-pending-wm", 24, "iter-1");
-        await this._repo.SetThreadPassWatermarkAsync(SeedClientId, "repo-pending-wm", 24, "iter-2");
-        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, "repo-pending-wm", 24, "iter-3");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-wm", 24, "iter-1");
+        await this._repo.SetThreadPassWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-wm", 24, "iter-2");
+        await this._repo.SetPendingReviewRevisionAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-wm", 24, "iter-3");
 
-        var retrieved = await this._repo.GetAsync(SeedClientId, "repo-pending-wm", 24);
+        var retrieved = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-wm", 24);
         Assert.NotNull(retrieved);
         Assert.Equal("iter-1", retrieved.LastProcessedCommitId);
         Assert.Equal("iter-2", retrieved.LastThreadPassRevisionKey);
@@ -397,9 +481,9 @@ public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixtu
 
         // And a later review of the pending revision retires it by writing its own watermark over the same
         // value, which is the whole mechanism by which the state clears.
-        await this._repo.SetReviewWatermarkAsync(SeedClientId, "repo-pending-wm", 24, "iter-3");
+        await this._repo.SetReviewWatermarkAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-wm", 24, "iter-3");
 
-        var reviewed = await this._repo.GetAsync(SeedClientId, "repo-pending-wm", 24);
+        var reviewed = await this._repo.GetAsync(SeedClientId, SeedHost, SeedProject, "repo-pending-wm", 24);
         Assert.NotNull(reviewed);
         Assert.Equal(reviewed.PendingReviewRevisionKey, reviewed.LastProcessedCommitId);
     }

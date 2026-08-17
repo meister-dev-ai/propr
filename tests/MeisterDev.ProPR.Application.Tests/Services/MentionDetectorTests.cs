@@ -49,4 +49,48 @@ public sealed class MentionDetectorTests
     {
         Assert.False(MentionDetector.IsMentioned("This is a regular comment with no mentions.", ReviewerGuid));
     }
+
+    /// <summary>
+    ///     A quoted mention is a repetition of an earlier message, not a question. Where a provider offers no
+    ///     thread to reply into, an answer opens with a quote of what it answers, so reading the quote as a
+    ///     question would have every answer produce another one.
+    /// </summary>
+    [Fact]
+    public void IsMentioned_MentionOnlyInsideAQuote_ReturnsFalse()
+    {
+        var quotedAnswer = $"> @<{ReviewerGuid}> What is this supposed to do?\n\nIt sorts ascending.";
+
+        Assert.False(MentionDetector.IsMentioned(quotedAnswer, ReviewerGuid));
+    }
+
+    /// <summary>Quotes nest, and a quote of a quote is still a quote.</summary>
+    [Fact]
+    public void IsMentioned_MentionInsideANestedQuote_ReturnsFalse()
+    {
+        var quotedTwice = $"> > @<{ReviewerGuid}> What is this?\n> \n> It is nothing.\n\nUnderstood.";
+
+        Assert.True(MentionDetector.IsMentioned(quotedTwice, ReviewerGuid) is false);
+    }
+
+    [Fact]
+    public void IsMentioned_MentionAskedUnderAQuote_ReturnsTrue()
+    {
+        var followUp = $"> It sorts ascending.\n\n@<{ReviewerGuid}> then why is it labelled latest?";
+
+        Assert.True(MentionDetector.IsMentioned(followUp, ReviewerGuid));
+    }
+
+    /// <summary>Markdown allows a blockquote to be indented, up to three spaces before the marker.</summary>
+    [Fact]
+    public void IsMentioned_MentionInsideAnIndentedQuote_ReturnsFalse()
+    {
+        Assert.False(MentionDetector.IsMentioned($"  > @<{ReviewerGuid}> What is this?", ReviewerGuid));
+    }
+
+    /// <summary>A greater-than sign inside a line is not a quote, and must not hide a real question.</summary>
+    [Fact]
+    public void IsMentioned_GreaterThanSignMidLine_StillReturnsTrue()
+    {
+        Assert.True(MentionDetector.IsMentioned($"@<{ReviewerGuid}> is a > b here?", ReviewerGuid));
+    }
 }

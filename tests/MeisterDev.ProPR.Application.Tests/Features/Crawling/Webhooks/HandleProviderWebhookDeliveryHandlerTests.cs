@@ -13,6 +13,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace MeisterDev.ProPR.Application.Tests.Features.Crawling.Webhooks;
 
@@ -743,6 +744,68 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                 null,
                 Arg.Any<CancellationToken>());
         providerRegistry.DidNotReceiveWithAnyArgs().GetWebhookIngressService(default);
+        await synchronizationService.DidNotReceiveWithAnyArgs().SynchronizeAsync(default!);
+    }
+
+    /// <summary>
+    ///     A provider is entitled to send events this product does not act on, and answering those with a
+    ///     client error is counted against the hook until the provider disables it, taking the deliveries
+    ///     that do matter with it. A payload that is genuinely broken still earns its 400.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_AnEventProPrDoesNotActOn_IsAcknowledgedRatherThanRejected()
+    {
+        var configuration = CreateConfiguration([WebhookEventType.PullRequestCommented]);
+        var ingressService = Substitute.For<IWebhookIngressService>();
+        var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
+        var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
+        var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
+
+        configurationRepository.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>())
+            .Returns(configuration);
+        providerRegistry.GetWebhookIngressService(ScmProvider.AzureDevOps).Returns(ingressService);
+        secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
+        ingressService.VerifyAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        ingressService.ParseAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsyncForAnyArgs(new UnsupportedWebhookEventException("GitLab sent Note Hook."));
+        deliveryLogRepository.AddAsync(default, default, default!, default, default, default, default, default, default, default!, default)
+            .ReturnsForAnyArgs(_ => Task.FromResult(CreateLogEntry(WebhookDeliveryOutcome.Ignored, 200)));
+
+        var sut = new HandleProviderWebhookDeliveryHandler(
+            configurationRepository,
+            deliveryLogRepository,
+            providerRegistry,
+            Substitute.For<IClientRegistry>(),
+            secretProtectionCodec,
+            NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
+
+        var result = await sut.HandleAsync(
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.AzureDevOps,
+                "path-key",
+                CreateHeaders(),
+                "{\"object_kind\":\"note\"}",
+                WebhookDeliveryProcessingMode.Process),
+            CancellationToken.None);
+
+        Assert.Equal(WebhookDeliveryOutcome.Ignored, result.DeliveryOutcome);
+        Assert.Equal(200, result.HttpStatusCode);
         await synchronizationService.DidNotReceiveWithAnyArgs().SynchronizeAsync(default!);
     }
 

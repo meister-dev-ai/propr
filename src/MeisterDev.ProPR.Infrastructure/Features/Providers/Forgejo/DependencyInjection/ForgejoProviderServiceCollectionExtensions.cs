@@ -24,20 +24,22 @@ internal static class ForgejoProviderServiceCollectionExtensions
         services.TryAddScoped<ForgejoWebhookSignatureVerifier>();
         services.TryAddScoped<ForgejoWebhookEventClassifier>();
         services.TryAddScoped<ForgejoWebhookPayloadParser>();
-        // No IReviewThreadStatusWriter and no IReviewThreadReplyPublisher, so Forgejo advertises neither
-        // reviewThreadStatus nor reviewThreadReply and callers degrade on the advertised set.
-        // Forgejo's REST API exposes no thread: a review comment carries a path, a position and the review it
-        // was submitted under, and nothing that names the conversation it sits in. The routes it does offer
-        // create a comment on a review, never a reply to one, and the request to add threaded replies was
-        // closed upstream without one. Gitea added a reply route after the fork and it has not been ported.
-        // Posting a fresh comment at the same path and line would render near the conversation without being
-        // part of it, and after threads began carrying their provider's own identifier Forgejo carries none
-        // to anchor such a comment to, so the capability stays unadvertised rather than approximated.
+        // No IReviewThreadStatusWriter, so Forgejo advertises no reviewThreadStatus and callers degrade on
+        // the advertised set. Forgejo's REST API exposes no thread: a review comment carries a path, a
+        // position and the review it was submitted under, and nothing that names the conversation it sits in,
+        // so there is no thread to mark resolved.
+        //
+        // Replying is a different question, and Forgejo answers it by convention rather than by structure:
+        // its own quote reply posts a new comment opening with a markdown blockquote of the one it answers,
+        // and quotes nest, so a conversation stays followable. ForgejoReviewThreadReplyPublisher does exactly
+        // that, which is why reviewThreadReply is advertised where reviewThreadStatus is not.
         services.TryAddScoped<ForgejoReviewThreadStatusProvider>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewThreadReplyPublisher, ForgejoReviewThreadReplyPublisher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewWorkspaceRemoteResolver, ForgejoReviewWorkspaceRemoteResolver>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewerThreadStatusFetcher, ForgejoReviewThreadStatusProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderRepositoryExclusionFetcher, ForgejoRepositoryExclusionFetcher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderPullRequestFetcher, ForgejoPullRequestFetcher>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IActivePullRequestDiscoveryProvider, ForgejoActivePrFetcher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ILinkedItemProvider, ForgejoLinkedItemProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewContextToolsFactory, ForgejoReviewContextToolsFactory>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IRepositoryDiscoveryProvider, ForgejoDiscoveryService>());

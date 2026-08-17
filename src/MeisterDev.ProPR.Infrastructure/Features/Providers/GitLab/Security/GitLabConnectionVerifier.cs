@@ -67,9 +67,13 @@ internal sealed class GitLabConnectionVerifier(
         EnsureGitLab(host);
 
         var normalizedPath = relativePath.StartsWith('/') ? relativePath : "/" + relativePath;
-        var builder = new UriBuilder(host.HostBaseUrl)
+        var baseUri = new Uri(host.HostBaseUrl);
+
+        // The connection's own path is kept, so a self-managed instance served under a sub-path reaches its
+        // API rather than the host's root.
+        var builder = new UriBuilder(baseUri)
         {
-            Path = $"/api/v4{normalizedPath}",
+            Path = $"{baseUri.AbsolutePath.TrimEnd('/')}/api/v4{normalizedPath}",
             Query = query ?? string.Empty,
         };
 

@@ -21,6 +21,16 @@ internal sealed class ReviewPrScanConfiguration : IEntityTypeConfiguration<Revie
             .HasColumnName("client_id")
             .IsRequired();
 
+        builder.Property(s => s.OrganizationUrl)
+            .HasColumnName("organization_url")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(s => s.ProjectId)
+            .HasColumnName("project_id")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
         builder.Property(s => s.RepositoryId)
             .HasColumnName("repository_id")
             .IsRequired();
@@ -59,7 +69,10 @@ internal sealed class ReviewPrScanConfiguration : IEntityTypeConfiguration<Revie
             .HasForeignKey(t => t.ReviewPrScanId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(s => new { s.ClientId, s.RepositoryId, s.PullRequestId })
+        // The host and project belong in the key: a repository identifier is unique only within the host that
+        // issued it, and two providers both handing out small integers otherwise share one row per pull
+        // request number.
+        builder.HasIndex(s => new { s.ClientId, s.OrganizationUrl, s.ProjectId, s.RepositoryId, s.PullRequestId })
             .IsUnique()
             .HasDatabaseName("uq_review_pr_scans_pr");
     }

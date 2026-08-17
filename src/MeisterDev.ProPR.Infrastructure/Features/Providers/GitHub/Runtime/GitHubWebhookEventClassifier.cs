@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
@@ -14,9 +15,11 @@ internal sealed class GitHubWebhookEventClassifier
         JsonElement payload,
         ReviewerIdentity? configuredReviewer = null)
     {
+        // A hook subscribed to more than pull requests sends push, issue-comment and check deliveries too.
+        // Those are ordinary and unhandled, not broken, so they are reported as such and acknowledged.
         if (!string.Equals(eventName, "pull_request", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Unsupported GitHub webhook event type.");
+            throw new UnsupportedWebhookEventException($"GitHub sent {eventName}, which ProPR does not act on.");
         }
 
         var action = ReadRequiredString(payload, "action");

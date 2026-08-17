@@ -26,6 +26,21 @@ public sealed class NoOpScmProviderRegistry : IScmProviderRegistry
         throw CreateUnavailableException(provider);
     }
 
+    public bool SupportsActivePullRequestDiscovery(ScmProvider provider)
+    {
+        return false;
+    }
+
+    public bool SupportsReviewThreadReply(ScmProvider provider)
+    {
+        return false;
+    }
+
+    public bool RequiresReviewThreadIdentifier(ScmProvider provider)
+    {
+        return true;
+    }
+
     public ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider)
     {
         throw CreateUnavailableException(provider);

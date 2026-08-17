@@ -90,11 +90,15 @@ public partial class ReviewOrchestrationServiceTests
         await prScanRepository.DidNotReceive().SetLastSeenReplyCountsAsync(
             Arg.Any<Guid>(),
             Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<string, int>>(),
             Arg.Any<CancellationToken>());
         await prScanRepository.DidNotReceive().SetLastSeenStatusesAsync(
             Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<string, string?>>(),
@@ -102,11 +106,15 @@ public partial class ReviewOrchestrationServiceTests
         await prScanRepository.DidNotReceive().SetThreadPassWatermarkAsync(
             Arg.Any<Guid>(),
             Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
         await prScanRepository.Received(1).SetReviewWatermarkAsync(
             job.ClientId,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             job.RepositoryId,
             job.PullRequestId,
             Arg.Any<string>(),

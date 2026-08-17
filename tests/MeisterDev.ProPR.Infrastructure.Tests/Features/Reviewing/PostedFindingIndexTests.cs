@@ -20,6 +20,11 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing;
 /// </summary>
 public sealed class PostedFindingIndexTests
 {
+    /// <summary>The host that issued the repository identifiers in this fixture.</summary>
+    private const string Host = "https://provider.example";
+
+    private const string Project = "project";
+
     private static readonly Guid ClientId = new("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid JobId = new("bbbbbbbb-0000-0000-0000-000000000001");
 
@@ -32,6 +37,8 @@ public sealed class PostedFindingIndexTests
         var postedFindingId = Guid.NewGuid();
         repository.FindClosestInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<float[]>(),
@@ -39,7 +46,7 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<CancellationToken>())
             .Returns(new PostedFindingSimilarityDto(postedFindingId, "4242", 0.91f));
 
-        var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
+        var match = await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "The delete path races.");
 
         Assert.True(match.IsDuplicate);
         Assert.Equal("4242", match.ProviderThreadId);
@@ -59,6 +66,8 @@ public sealed class PostedFindingIndexTests
             .Returns(new[] { 0.5f });
         repository.FindClosestInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<float[]>(),
@@ -66,7 +75,7 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<CancellationToken>())
             .Returns(new PostedFindingSimilarityDto(Guid.NewGuid(), "4242", 0.62f));
 
-        var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
+        var match = await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "The delete path races.");
 
         Assert.False(match.IsDuplicate);
         Assert.Equal(0.62f, match.NearMissScore);
@@ -83,6 +92,8 @@ public sealed class PostedFindingIndexTests
             .Returns(new[] { 0.5f });
         repository.FindClosestInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<float[]>(),
@@ -90,11 +101,13 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<CancellationToken>())
             .Returns((PostedFindingSimilarityDto?)null);
 
-        await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
+        await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "The delete path races.");
 
         await repository.Received(1)
             .FindClosestInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<float[]>(),
@@ -110,6 +123,8 @@ public sealed class PostedFindingIndexTests
             .Returns(new[] { 0.5f });
         repository.FindClosestInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<float[]>(),
@@ -117,7 +132,7 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<CancellationToken>())
             .Returns(new PostedFindingSimilarityDto(Guid.NewGuid(), "4242", 0.91f, AutoResolvedByProPr: true));
 
-        var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
+        var match = await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "The delete path races.");
 
         Assert.True(match.IsDuplicate);
         Assert.True(match.AutoResolvedByProPr);
@@ -131,6 +146,8 @@ public sealed class PostedFindingIndexTests
             .Returns(new[] { 0.5f });
         repository.FindClosestInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<float[]>(),
@@ -138,7 +155,7 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<CancellationToken>())
             .Returns((PostedFindingSimilarityDto?)null);
 
-        var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "Something else entirely.");
+        var match = await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "Something else entirely.");
 
         Assert.False(match.IsDuplicate);
         Assert.False(match.IsDegraded);
@@ -151,7 +168,7 @@ public sealed class PostedFindingIndexTests
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("no embedding model bound"));
 
-        var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
+        var match = await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "The delete path races.");
 
         Assert.False(match.IsDuplicate);
         Assert.True(match.IsDegraded);
@@ -167,8 +184,8 @@ public sealed class PostedFindingIndexTests
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("no embedding model bound"));
 
-        await index.FindDuplicateAsync(ClientId, "repo", 7, "First finding.");
-        var second = await index.FindDuplicateAsync(ClientId, "repo", 7, "Second finding.");
+        await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "First finding.");
+        var second = await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "Second finding.");
 
         await embedder.Received(1)
             .GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>());
@@ -183,6 +200,8 @@ public sealed class PostedFindingIndexTests
             .Returns(new[] { 0.5f });
         repository.FindClosestInPullRequestAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<float[]>(),
@@ -190,7 +209,7 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("store unavailable"));
 
-        var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
+        var match = await index.FindDuplicateAsync(ClientId, Host, Project, "repo", 7, "The delete path races.");
 
         Assert.False(match.IsDuplicate);
         Assert.True(match.IsDegraded);

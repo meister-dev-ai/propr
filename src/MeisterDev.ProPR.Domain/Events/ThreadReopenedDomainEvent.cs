@@ -9,6 +9,8 @@ namespace MeisterDev.ProPR.Domain.Events;
 /// </summary>
 public sealed record ThreadReopenedDomainEvent(
     Guid ClientId,
+    string OrganizationUrl,
+    string ProjectId,
     string RepositoryId,
     int PullRequestId,
     string ThreadId,

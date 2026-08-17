@@ -96,6 +96,8 @@ public sealed class PrReviewViewController(
 
         var originatedDigests = await memoryRepository.GetDigestsForPullRequestAsync(
             clientId,
+            query.ProviderScopePath,
+            query.ProviderProjectKey,
             query.RepositoryId,
             query.PullRequestId.Value,
             MemorySource.ThreadResolved,
@@ -143,6 +145,8 @@ public sealed class PrReviewViewController(
 
         var threadPasses = await threadPassRepository.GetForPullRequestAsync(
             clientId,
+            query.ProviderScopePath,
+            query.ProviderProjectKey,
             query.RepositoryId,
             query.PullRequestId.Value,
             ThreadPassLimit,
@@ -170,6 +174,8 @@ public sealed class PrReviewViewController(
         var pendingReview = await ResolvePendingReviewAsync(
             prScanReader,
             clientId,
+            query.ProviderScopePath,
+            query.ProviderProjectKey,
             query.RepositoryId,
             query.PullRequestId.Value,
             cancellationToken);
@@ -211,6 +217,8 @@ public sealed class PrReviewViewController(
     private static async Task<PendingReviewDto?> ResolvePendingReviewAsync(
         IReviewPrScanReader? prScanReader,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         CancellationToken cancellationToken)
@@ -220,7 +228,13 @@ public sealed class PrReviewViewController(
             return null;
         }
 
-        var scan = await prScanReader.GetAsync(clientId, repositoryId, pullRequestId, cancellationToken);
+        var scan = await prScanReader.GetAsync(
+            clientId,
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            cancellationToken);
         if (scan is null || string.IsNullOrEmpty(scan.PendingReviewRevisionKey))
         {
             return null;

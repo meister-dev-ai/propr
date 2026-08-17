@@ -9,6 +9,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 /// <summary>Default registry for provider-family capability adapters.</summary>
 internal sealed class ScmProviderRegistry(
     IEnumerable<IRepositoryDiscoveryProvider> repositoryDiscoveryProviders,
+    IEnumerable<IActivePullRequestDiscoveryProvider> activePullRequestDiscoveryProviders,
     IEnumerable<ICodeReviewQueryService> codeReviewQueryServices,
     IEnumerable<ICodeReviewPublicationService> codeReviewPublicationServices,
     IEnumerable<IReviewDiscoveryProvider> reviewDiscoveryProviders,
@@ -37,6 +38,10 @@ internal sealed class ScmProviderRegistry(
     private readonly IReadOnlyDictionary<ScmProvider, IRepositoryDiscoveryProvider>
         _repositoryDiscoveryProvidersByProvider =
             repositoryDiscoveryProviders.ToDictionary(provider => provider.Provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, IActivePullRequestDiscoveryProvider>
+        _activePullRequestDiscoveryProvidersByProvider =
+            activePullRequestDiscoveryProviders.ToDictionary(provider => provider.Provider);
 
     private readonly IReadOnlyDictionary<ScmProvider, IReviewAssignmentService> _reviewAssignmentServicesByProvider =
         reviewAssignmentServices.ToDictionary(provider => provider.Provider);
@@ -69,9 +74,14 @@ internal sealed class ScmProviderRegistry(
 
     public IReadOnlyList<string> GetRegisteredCapabilities(ScmProvider provider)
     {
-        var capabilities = new List<string>(11);
+        var capabilities = new List<string>(12);
 
         AddCapability(capabilities, this._repositoryDiscoveryProvidersByProvider, provider, "repositoryDiscovery");
+        AddCapability(
+            capabilities,
+            this._activePullRequestDiscoveryProvidersByProvider,
+            provider,
+            "activePullRequestDiscovery");
         AddCapability(capabilities, this._codeReviewQueryServicesByProvider, provider, "codeReviewQuery");
         AddCapability(capabilities, this._codeReviewPublicationServicesByProvider, provider, "codeReviewPublication");
         AddCapability(capabilities, this._reviewDiscoveryProvidersByProvider, provider, "reviewDiscovery");
@@ -92,6 +102,22 @@ internal sealed class ScmProviderRegistry(
             this._repositoryDiscoveryProvidersByProvider,
             provider,
             nameof(IRepositoryDiscoveryProvider));
+    }
+
+    public bool SupportsActivePullRequestDiscovery(ScmProvider provider)
+    {
+        return this._activePullRequestDiscoveryProvidersByProvider.ContainsKey(provider);
+    }
+
+    public bool SupportsReviewThreadReply(ScmProvider provider)
+    {
+        return this._reviewThreadReplyPublishersByProvider.ContainsKey(provider);
+    }
+
+    public bool RequiresReviewThreadIdentifier(ScmProvider provider)
+    {
+        return !this._reviewThreadReplyPublishersByProvider.TryGetValue(provider, out var publisher)
+               || publisher.RequiresThreadIdentifier;
     }
 
     public ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider)

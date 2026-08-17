@@ -49,7 +49,7 @@ public sealed class PullRequestSynchronizationServiceTests
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-1", 42, "7");
         scan.Threads.Add(
             new ReviewPrScanThread
             {
@@ -59,7 +59,7 @@ public sealed class PullRequestSynchronizationServiceTests
                 LastSeenStatus = "Active",
             });
 
-        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>())
             .Returns(scan);
         threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 "https://dev.azure.com/org",
@@ -120,6 +120,8 @@ public sealed class PullRequestSynchronizationServiceTests
         await scanRepository.Received(1)
             .SetLastSeenStatusesAsync(
                 ClientId,
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 "repo-1",
                 42,
                 Arg.Is<IReadOnlyDictionary<string, string?>>(statuses =>
@@ -214,7 +216,7 @@ public sealed class PullRequestSynchronizationServiceTests
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-1", 42, "7");
         scan.Threads.Add(
             new ReviewPrScanThread
             {
@@ -224,7 +226,7 @@ public sealed class PullRequestSynchronizationServiceTests
                 LastSeenStatus = "Active",
             });
 
-        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>())
             .Returns(scan);
         threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 "https://dev.azure.com/org",
@@ -295,7 +297,7 @@ public sealed class PullRequestSynchronizationServiceTests
             .Returns(failedJob);
 
         // A scan with a fresh reviewer reply exists — under the old rules this would re-trigger a review.
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-1", 42, "7");
         scan.Threads.Add(
             new ReviewPrScanThread
             {
@@ -304,7 +306,7 @@ public sealed class PullRequestSynchronizationServiceTests
                 LastSeenReplyCount = 0,
                 LastSeenStatus = "Active",
             });
-        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>())
             .Returns(scan);
         threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 "https://dev.azure.com/org",
@@ -577,7 +579,7 @@ public sealed class PullRequestSynchronizationServiceTests
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-1", 42, "7");
         scan.Threads.Add(
             new ReviewPrScanThread
             {
@@ -587,7 +589,7 @@ public sealed class PullRequestSynchronizationServiceTests
                 LastSeenStatus = "Active",
             });
 
-        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>()).Returns(scan);
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>()).Returns(scan);
         threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 "https://dev.azure.com/org",
                 "project",
@@ -808,6 +810,8 @@ public sealed class PullRequestSynchronizationServiceTests
         Assert.Equal(PullRequestSynchronizationReviewDecision.SubsequentIncrementSkipped, outcome.ReviewDecision);
         await pendingReviewWriter.Received(1).SetPendingReviewRevisionAsync(
             ClientId,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             "repo-1",
             42,
             "revision-b",
@@ -856,6 +860,8 @@ public sealed class PullRequestSynchronizationServiceTests
         await pendingReviewWriter.DidNotReceive().SetPendingReviewRevisionAsync(
             Arg.Any<Guid>(),
             Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -886,6 +892,8 @@ public sealed class PullRequestSynchronizationServiceTests
         var pendingReviewWriter = Substitute.For<IReviewPrScanPendingReviewWriter>();
         pendingReviewWriter.SetPendingReviewRevisionAsync(
                 Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<string>(),
@@ -937,7 +945,7 @@ public sealed class PullRequestSynchronizationServiceTests
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "revision-a");
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-1", 42, "revision-a");
         scan.Threads.Add(
             new ReviewPrScanThread
             {
@@ -946,7 +954,7 @@ public sealed class PullRequestSynchronizationServiceTests
                 LastSeenReplyCount = 0,
                 LastSeenStatus = "Active",
             });
-        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>())
             .Returns(scan);
         threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 "https://dev.azure.com/org",
@@ -1064,7 +1072,7 @@ public sealed class PullRequestSynchronizationServiceTests
             .Returns([]);
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
-        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>())
             .Returns((ReviewPrScan?)null);
 
         var sut = new PullRequestSynchronizationService(
@@ -1108,8 +1116,8 @@ public sealed class PullRequestSynchronizationServiceTests
                 42,
                 Arg.Any<CancellationToken>())
             .Returns((EngagedReviewRevision?)null);
-        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
-            .Returns(new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "revision-a"));
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>())
+            .Returns(new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-1", 42, "revision-a"));
 
         var sut = new PullRequestSynchronizationService(
             jobs,
@@ -1395,8 +1403,8 @@ public sealed class PullRequestSynchronizationServiceTests
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
-        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>()).Returns(scan);
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", "repo-1", 42, "7");
+        scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-1", 42, Arg.Any<CancellationToken>()).Returns(scan);
 
         var sut = new PullRequestSynchronizationService(
             jobs,

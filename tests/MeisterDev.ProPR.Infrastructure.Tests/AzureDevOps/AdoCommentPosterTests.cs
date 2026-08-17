@@ -17,6 +17,11 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 /// </summary>
 public class AdoCommentPosterTests
 {
+    /// <summary>The Azure DevOps organization these fixtures post into.</summary>
+    private const string Host = "https://dev.azure.com/org";
+
+    private const string Project = "project";
+
     [Theory]
     [InlineData(CommentSeverity.Error)]
     [InlineData(CommentSeverity.Warning)]
@@ -767,6 +772,8 @@ public class AdoCommentPosterTests
             factory,
             PosterBotId,
             clientId: null,
+            organizationUrl: Host,
+            projectId: Project,
             repositoryId: "repo",
             pullRequestId: 1,
             iterationId: 1,

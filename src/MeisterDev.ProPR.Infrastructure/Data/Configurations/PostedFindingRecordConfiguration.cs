@@ -21,6 +21,16 @@ internal sealed class PostedFindingRecordConfiguration : IEntityTypeConfiguratio
             .HasColumnName("client_id")
             .IsRequired();
 
+        builder.Property(r => r.OrganizationUrl)
+            .HasColumnName("organization_url")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(r => r.ProjectId)
+            .HasColumnName("project_id")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
         builder.Property(r => r.RepositoryId)
             .HasColumnName("repository_id")
             .HasMaxLength(256)
@@ -78,12 +88,12 @@ internal sealed class PostedFindingRecordConfiguration : IEntityTypeConfiguratio
 
         // One row per posted thread. A posting pass that runs twice for the same thread, which a retry after a
         // partial publication failure does, refreshes the row instead of indexing the same thread twice.
-        builder.HasIndex(r => new { r.ClientId, r.RepositoryId, r.PullRequestId, r.ProviderThreadId })
+        builder.HasIndex(r => new { r.ClientId, r.OrganizationUrl, r.ProjectId, r.RepositoryId, r.PullRequestId, r.ProviderThreadId })
             .IsUnique()
             .HasDatabaseName("uq_posted_finding_records_thread");
 
         // Every lookup is scoped to one pull request before the vector search runs.
-        builder.HasIndex(r => new { r.ClientId, r.RepositoryId, r.PullRequestId })
+        builder.HasIndex(r => new { r.ClientId, r.OrganizationUrl, r.ProjectId, r.RepositoryId, r.PullRequestId })
             .HasDatabaseName("ix_posted_finding_records_pull_request");
 
         // HNSW index for approximate nearest-neighbour cosine similarity search.

@@ -6,26 +6,25 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 namespace MeisterDev.ProPR.Application.Interfaces;
 
 /// <summary>
-///     Fetches recently updated active pull requests for mention scanning.
+///     Discovers the recently updated active pull requests a mention scan should read, whichever provider
+///     the configuration names.
 /// </summary>
+/// <remarks>
+///     Implemented by a composite that resolves the provider named in the query and hands the work to that
+///     provider's <see cref="IActivePullRequestDiscoveryProvider" />, the same way pull-request fetching is
+///     resolved.
+/// </remarks>
 public interface IActivePrFetcher
 {
-    /// <summary>
-    ///     Fetches all active pull requests in a project that were updated
-    ///     at or after <paramref name="updatedAfter" />.
-    /// </summary>
-    /// <param name="organizationUrl">ADO organization URL.</param>
-    /// <param name="projectId">ADO project identifier.</param>
-    /// <param name="updatedAfter">
-    ///     Minimum last-update timestamp. Passed as <c>minLastUpdateDate</c> to the ADO PR list query.
-    /// </param>
-    /// <param name="clientId">Optional client ID for per-client credential retrieval.</param>
+    /// <summary>Discovers the active pull requests updated at or after the query's watermark.</summary>
+    /// <param name="query">What to ask, and which provider to ask.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A read-only list of recently updated active pull request references.</returns>
-    Task<IReadOnlyList<ActivePullRequestRef>> GetRecentlyUpdatedPullRequestsAsync(
-        string organizationUrl,
-        string projectId,
-        DateTimeOffset updatedAfter,
-        Guid? clientId = null,
+    /// <returns>What the tick found, and whether it covered every repository the query claimed.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     No discovery implementation is registered for the query's provider. Reported rather than handled
+    ///     by another provider's code, which would reach a foreign host with the wrong client.
+    /// </exception>
+    Task<ActivePullRequestDiscovery> GetRecentlyUpdatedPullRequestsAsync(
+        ActivePullRequestQuery query,
         CancellationToken cancellationToken = default);
 }

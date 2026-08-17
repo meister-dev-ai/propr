@@ -7,8 +7,15 @@ namespace MeisterDev.ProPR.Domain.Entities;
 ///     Tracks the last processed provider revision key for a pull request per client, enabling the
 ///     system to skip re-evaluation when no new commits have been pushed and to detect when thread
 ///     replies require a conversational response.
-///     One row per (ClientId, RepositoryId, PullRequestId) triple.
+///     One row per (ClientId, OrganizationUrl, ProjectId, RepositoryId, PullRequestId).
 /// </summary>
+/// <remarks>
+///     The host and project are part of the identity because a repository identifier is only unique within
+///     the host that issued it. Two providers hand out small integers freely, so one client holding a GitLab
+///     project 4 and a Forgejo repository 4 would otherwise share a row for every pull request number they
+///     have in common — and read each other's watermarks. That is the same identity
+///     <c>review_jobs</c> is keyed on, and the reason the engaged-revision lookup beside it was already safe.
+/// </remarks>
 public sealed class ReviewPrScan
 {
     /// <summary>
@@ -16,6 +23,8 @@ public sealed class ReviewPrScan
     /// </summary>
     /// <param name="id">Unique identifier — must not be <see cref="Guid.Empty" />.</param>
     /// <param name="clientId">Owning client identifier — must not be <see cref="Guid.Empty" />.</param>
+    /// <param name="organizationUrl">The host the repository identifier was issued by.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">ADO repository identifier — must not be null or whitespace.</param>
     /// <param name="pullRequestId">ADO pull request number — must be greater than zero.</param>
     /// <param name="lastProcessedCommitId">
@@ -26,10 +35,12 @@ public sealed class ReviewPrScan
     public ReviewPrScan(
         Guid id,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string lastProcessedCommitId)
-        : this(id, clientId, repositoryId, pullRequestId)
+        : this(id, clientId, organizationUrl, projectId, repositoryId, pullRequestId)
     {
         if (string.IsNullOrEmpty(lastProcessedCommitId))
         {
@@ -44,6 +55,8 @@ public sealed class ReviewPrScan
     private ReviewPrScan(
         Guid id,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId)
     {
@@ -55,6 +68,11 @@ public sealed class ReviewPrScan
         if (clientId == Guid.Empty)
         {
             throw new ArgumentException("ClientId must not be empty.", nameof(clientId));
+        }
+
+        if (string.IsNullOrWhiteSpace(organizationUrl))
+        {
+            throw new ArgumentException("OrganizationUrl must not be null or whitespace.", nameof(organizationUrl));
         }
 
         if (string.IsNullOrWhiteSpace(repositoryId))
@@ -69,6 +87,11 @@ public sealed class ReviewPrScan
 
         this.Id = id;
         this.ClientId = clientId;
+        this.OrganizationUrl = organizationUrl;
+
+        // Empty is allowed where the host needs no project to address a repository, which is every provider
+        // but Azure DevOps. It still takes part in the identity, so it is stored rather than dropped.
+        this.ProjectId = projectId ?? string.Empty;
         this.RepositoryId = repositoryId;
         this.PullRequestId = pullRequestId;
         this.LastProcessedCommitId = string.Empty;
@@ -85,6 +108,8 @@ public sealed class ReviewPrScan
     /// </summary>
     /// <param name="id">Unique identifier.</param>
     /// <param name="clientId">Owning client identifier.</param>
+    /// <param name="organizationUrl">The host the repository identifier was issued by.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="threadPassRevisionKey">The revision key the thread pass has now checked the threads at.</param>
@@ -92,6 +117,8 @@ public sealed class ReviewPrScan
     public static ReviewPrScan ForThreadPass(
         Guid id,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadPassRevisionKey)
@@ -103,7 +130,7 @@ public sealed class ReviewPrScan
                 nameof(threadPassRevisionKey));
         }
 
-        return new ReviewPrScan(id, clientId, repositoryId, pullRequestId)
+        return new ReviewPrScan(id, clientId, organizationUrl, projectId, repositoryId, pullRequestId)
         {
             LastThreadPassRevisionKey = threadPassRevisionKey,
         };
@@ -116,6 +143,8 @@ public sealed class ReviewPrScan
     /// </summary>
     /// <param name="id">Unique identifier.</param>
     /// <param name="clientId">Owning client identifier.</param>
+    /// <param name="organizationUrl">The host the repository identifier was issued by.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="pendingReviewRevisionKey">The revision the pull request now sits at, unreviewed.</param>
@@ -124,6 +153,8 @@ public sealed class ReviewPrScan
     public static ReviewPrScan ForPendingReview(
         Guid id,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string pendingReviewRevisionKey,
@@ -136,7 +167,7 @@ public sealed class ReviewPrScan
                 nameof(pendingReviewRevisionKey));
         }
 
-        return new ReviewPrScan(id, clientId, repositoryId, pullRequestId)
+        return new ReviewPrScan(id, clientId, organizationUrl, projectId, repositoryId, pullRequestId)
         {
             PendingReviewRevisionKey = pendingReviewRevisionKey,
             PendingReviewDetectedAt = detectedAt,
@@ -149,7 +180,13 @@ public sealed class ReviewPrScan
     /// <summary>FK to the client that owns this scan record.</summary>
     public Guid ClientId { get; init; }
 
-    /// <summary>ADO repository identifier.</summary>
+    /// <summary>The host that issued <see cref="RepositoryId" />, and so the scope it is unique within.</summary>
+    public string OrganizationUrl { get; init; }
+
+    /// <summary>The project within the host, empty where the host addresses repositories without one.</summary>
+    public string ProjectId { get; init; } = string.Empty;
+
+    /// <summary>Provider repository identifier, unique only within <see cref="OrganizationUrl" />.</summary>
     public string RepositoryId { get; init; }
 
     /// <summary>ADO pull request number.</summary>

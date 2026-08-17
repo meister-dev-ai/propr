@@ -31,8 +31,12 @@ internal sealed partial class AdoThreadReplier(
         Guid clientId,
         ReviewThreadRef thread,
         string replyText,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? quotedComment = null)
     {
+        // quotedComment is ignored. The interface carries it for the providers that answer with a new
+        // comment on the pull request and need to show which comment they are answering. Azure DevOps posts
+        // the reply into the thread, where the comment being answered is already directly above it.
         AdoProviderAdapterHelpers.EnsureAzureDevOps(thread.Review.Repository.Host);
 
         if (!int.TryParse(thread.ExternalThreadId, out var threadId) || threadId < 1)
@@ -51,7 +55,7 @@ internal sealed partial class AdoThreadReplier(
             ct);
     }
 
-    /// <inheritdoc cref="ReplyAsync(Guid, ReviewThreadRef, string, CancellationToken)" />
+    /// <inheritdoc cref="ReplyAsync(Guid, ReviewThreadRef, string, CancellationToken, string)" />
     public async Task<string?> ReplyAsync(
         string organizationUrl,
         string projectId,

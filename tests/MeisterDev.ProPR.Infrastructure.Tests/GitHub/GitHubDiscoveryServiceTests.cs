@@ -24,7 +24,7 @@ public sealed class GitHubDiscoveryServiceTests
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
             "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
-            "https://api.github.com/user/orgs?per_page=100" => CreateJsonResponse(
+            "https://api.github.com/user/orgs?per_page=100&page=1" => CreateJsonResponse(
                 new[]
                 {
                     new { login = "acme" },
@@ -51,7 +51,7 @@ public sealed class GitHubDiscoveryServiceTests
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
             "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
-            "https://api.github.com/user/repos?per_page=100&affiliation=owner,collaborator,organization_member" =>
+            "https://api.github.com/user/repos?per_page=100&page=1&affiliation=owner,collaborator,organization_member" =>
                 CreateJsonResponse(
                     new[]
                     {

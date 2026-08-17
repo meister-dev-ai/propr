@@ -24,6 +24,11 @@ namespace MeisterDev.ProPR.CodeInsights.Tests.Persistence;
 /// </summary>
 public sealed class ThreadMemoryCodeInsightEnrichmentTests
 {
+    /// <summary>The host that issued the repository identifiers in this fixture.</summary>
+    private const string Host = "https://provider.example";
+
+    private const string Project = "project";
+
     private static readonly Guid ClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid FindingId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
@@ -174,6 +179,8 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
     {
         return new ThreadResolvedDomainEvent(
             ClientId,
+            Host,
+            Project,
             "repo-1",
             7,
             "9001",

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
@@ -14,9 +15,11 @@ internal sealed class GitLabWebhookEventClassifier
         JsonElement payload,
         ReviewerIdentity? configuredReviewer = null)
     {
+        // A hook configured for everything sends note, push and pipeline deliveries too. Those are ordinary
+        // and unhandled, not broken, so they are reported as such and acknowledged rather than refused.
         if (!string.Equals(eventName, "Merge Request Hook", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Unsupported GitLab webhook event type.");
+            throw new UnsupportedWebhookEventException($"GitLab sent {eventName}, which ProPR does not act on.");
         }
 
         if (!string.Equals(
@@ -24,7 +27,7 @@ internal sealed class GitLabWebhookEventClassifier
                 "merge_request",
                 StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Unsupported GitLab webhook payload type.");
+            throw new UnsupportedWebhookEventException("GitLab sent a payload that is not about a merge request.");
         }
 
         var action = ReadRequiredString(payload, "object_attributes", "action");

@@ -196,7 +196,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
         var clientRegistry = Substitute.For<IClientRegistry>();
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
 
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
         var reviewerId = Guid.NewGuid();
         var reviewerIdentity = new ReviewerIdentity(

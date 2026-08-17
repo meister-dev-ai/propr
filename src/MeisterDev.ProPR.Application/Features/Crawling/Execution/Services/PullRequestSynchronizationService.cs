@@ -519,6 +519,8 @@ public sealed class PullRequestSynchronizationService(
         {
             return await threadPassJobs.CancelActiveForPullRequestAsync(
                 request.ClientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
                 ct);
@@ -634,6 +636,8 @@ public sealed class PullRequestSynchronizationService(
         {
             var scan = await prScanRepository.GetAsync(
                 request.ClientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
                 ct);
@@ -770,6 +774,8 @@ public sealed class PullRequestSynchronizationService(
         {
             await prScanPendingReviewWriter.SetPendingReviewRevisionAsync(
                 request.ClientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
                 revisionKey,
@@ -798,6 +804,8 @@ public sealed class PullRequestSynchronizationService(
         {
             return await prScanRepository.GetAsync(
                 request.ClientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
                 ct);
@@ -1006,6 +1014,8 @@ public sealed class PullRequestSynchronizationService(
         {
             var scan = await prScanRepository.GetAsync(
                 request.ClientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
                 ct);
@@ -1040,6 +1050,8 @@ public sealed class PullRequestSynchronizationService(
                 {
                     var resolved = new ThreadResolvedDomainEvent(
                         request.ClientId,
+                        request.ProviderScopePath,
+                        request.ProviderProjectKey,
                         request.RepositoryId,
                         request.PullRequestId,
                         thread.ThreadId,
@@ -1065,6 +1077,8 @@ public sealed class PullRequestSynchronizationService(
                     await threadMemoryService.HandleThreadReopenedAsync(
                         new ThreadReopenedDomainEvent(
                             request.ClientId,
+                            request.ProviderScopePath,
+                            request.ProviderProjectKey,
                             request.RepositoryId,
                             request.PullRequestId,
                             thread.ThreadId,
@@ -1354,6 +1368,8 @@ public sealed class PullRequestSynchronizationService(
 
         await prScanRepository.SetLastSeenStatusesAsync(
             existingScan.ClientId,
+            existingScan.OrganizationUrl,
+            existingScan.ProjectId,
             existingScan.RepositoryId,
             existingScan.PullRequestId,
             statusByThreadId,

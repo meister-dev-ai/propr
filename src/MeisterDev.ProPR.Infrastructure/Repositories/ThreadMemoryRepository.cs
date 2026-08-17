@@ -21,7 +21,7 @@ public sealed class ThreadMemoryRepository(
     MeisterProPRDbContext db,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : IThreadMemoryRepository
 {
-    private const int UpsertColumnCount = 15;
+    private const int UpsertColumnCount = 17;
 
     /// <summary>
     ///     Selects the display fields of a memory record and nothing else. Naming the columns keeps the
@@ -69,6 +69,8 @@ public sealed class ThreadMemoryRepository(
     /// <inheritdoc />
     public async Task<bool> RemoveByThreadAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         string threadId,
         CancellationToken ct = default)
@@ -77,6 +79,8 @@ public sealed class ThreadMemoryRepository(
             innerDb => innerDb.ThreadMemoryRecords
                 .Where(r =>
                     r.ClientId == clientId &&
+                    r.OrganizationUrl == organizationUrl &&
+                    r.ProjectId == projectId &&
                     r.RepositoryId == repositoryId &&
                     r.ThreadId == threadId)
                 .ExecuteDeleteAsync(ct),
@@ -193,6 +197,8 @@ public sealed class ThreadMemoryRepository(
     /// <inheritdoc />
     public async Task<PagedResult<ThreadMemoryDigestDto>> GetDigestsForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         MemorySource source,
@@ -210,6 +216,8 @@ public sealed class ThreadMemoryRepository(
                 var query = innerDb.ThreadMemoryRecords
                     .AsNoTracking()
                     .Where(r => r.ClientId == clientId
+                                && r.OrganizationUrl == organizationUrl
+                                && r.ProjectId == projectId
                                 && r.RepositoryId == repositoryId
                                 && r.PullRequestId == pullRequestId
                                 && r.MemorySource == source);
@@ -277,6 +285,8 @@ public sealed class ThreadMemoryRepository(
     /// <inheritdoc />
     public async Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByFilePathAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         string filePath,
         int topN,
@@ -294,6 +304,8 @@ public sealed class ThreadMemoryRepository(
                 .AsNoTracking()
                 .Where(r =>
                     r.ClientId == clientId &&
+                    r.OrganizationUrl == organizationUrl &&
+                    r.ProjectId == projectId &&
                     r.RepositoryId == repositoryId &&
                     r.FilePath != null &&
                     EF.Functions.ILike(r.FilePath, exactPattern))
@@ -316,6 +328,8 @@ public sealed class ThreadMemoryRepository(
     /// <inheritdoc />
     public async Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarInPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         float[] queryVector,
@@ -332,6 +346,8 @@ public sealed class ThreadMemoryRepository(
             innerDb => innerDb.ThreadMemoryRecords
                 .Where(r =>
                     r.ClientId == clientId &&
+                    r.OrganizationUrl == organizationUrl &&
+                    r.ProjectId == projectId &&
                     r.RepositoryId == repositoryId &&
                     r.PullRequestId == pullRequestId)
                 .Select(r => new
@@ -368,6 +384,8 @@ public sealed class ThreadMemoryRepository(
     /// <inheritdoc />
     public async Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByPullRequestFilePathAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string filePath,
@@ -386,6 +404,8 @@ public sealed class ThreadMemoryRepository(
                 .AsNoTracking()
                 .Where(r =>
                     r.ClientId == clientId &&
+                    r.OrganizationUrl == organizationUrl &&
+                    r.ProjectId == projectId &&
                     r.RepositoryId == repositoryId &&
                     r.PullRequestId == pullRequestId &&
                     r.FilePath != null &&
@@ -434,7 +454,7 @@ public sealed class ThreadMemoryRepository(
         sql.AppendLine(
             """
             INSERT INTO thread_memory_records
-                (id, client_id, thread_id, repository_id, pull_request_id, file_path,
+                (id, client_id, organization_url, project_id, thread_id, repository_id, pull_request_id, file_path,
                  change_excerpt, comment_history_digest, resolution_summary, embedding_vector,
                  memory_source, resolution_intent, resolution_clarity, created_at, updated_at)
             VALUES
@@ -445,11 +465,13 @@ public sealed class ThreadMemoryRepository(
             var record = records[index];
             var parameterOffset = index * UpsertColumnCount;
             valueTuples.Add(
-                $"    ({{{parameterOffset}}}, {{{parameterOffset + 1}}}, {{{parameterOffset + 2}}}, {{{parameterOffset + 3}}}, {{{parameterOffset + 4}}}, {{{parameterOffset + 5}}}, {{{parameterOffset + 6}}}, {{{parameterOffset + 7}}}, {{{parameterOffset + 8}}}, {{{parameterOffset + 9}}}, {{{parameterOffset + 10}}}, {{{parameterOffset + 11}}}, {{{parameterOffset + 12}}}, {{{parameterOffset + 13}}}, {{{parameterOffset + 14}}})");
+                $"    ({{{parameterOffset}}}, {{{parameterOffset + 1}}}, {{{parameterOffset + 2}}}, {{{parameterOffset + 3}}}, {{{parameterOffset + 4}}}, {{{parameterOffset + 5}}}, {{{parameterOffset + 6}}}, {{{parameterOffset + 7}}}, {{{parameterOffset + 8}}}, {{{parameterOffset + 9}}}, {{{parameterOffset + 10}}}, {{{parameterOffset + 11}}}, {{{parameterOffset + 12}}}, {{{parameterOffset + 13}}}, {{{parameterOffset + 14}}}, {{{parameterOffset + 15}}}, {{{parameterOffset + 16}}})");
             parameters.AddRange(
             [
                 record.Id,
                 record.ClientId,
+                record.OrganizationUrl,
+                record.ProjectId,
                 record.ThreadId,
                 record.RepositoryId,
                 record.PullRequestId,
@@ -469,7 +491,7 @@ public sealed class ThreadMemoryRepository(
         sql.AppendLine(string.Join(",\n", valueTuples));
         sql.AppendLine(
             """
-            ON CONFLICT (client_id, repository_id, thread_id) DO UPDATE SET
+            ON CONFLICT (client_id, organization_url, project_id, repository_id, thread_id) DO UPDATE SET
                 pull_request_id        = EXCLUDED.pull_request_id,
                 file_path              = EXCLUDED.file_path,
                 change_excerpt         = EXCLUDED.change_excerpt,

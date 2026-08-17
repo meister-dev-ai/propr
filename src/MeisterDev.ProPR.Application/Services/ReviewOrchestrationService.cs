@@ -2040,6 +2040,8 @@ public sealed partial class ReviewOrchestrationService(
             var iterationKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
             await prScanRepository.SetReviewWatermarkAsync(
                 job.ClientId,
+                job.OrganizationUrl,
+                job.ProjectId,
                 job.RepositoryId,
                 job.PullRequestId,
                 iterationKey,

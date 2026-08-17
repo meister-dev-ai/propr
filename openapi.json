@@ -7987,6 +7987,352 @@
         }
       }
     },
+    "/admin/clients/{clientId}/providers/{provider}/discovery/scopes": {
+      "get": {
+        "tags": [
+          "ClientProviderDiscovery"
+        ],
+        "summary": "Lists the owners, organizations, or groups the connection can reach.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "Provider family the connection belongs to.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ScmProvider"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "query",
+            "description": "Provider-connection identifier.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The scopes the connection can reach.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderScopeOptionResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderScopeOptionResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderScopeOptionResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection is unusable, or the provider refused the request.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an administrator of the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The provider family has no discovery in this deployment.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This installation is not entitled to answer mentions.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/providers/{provider}/discovery/repositories": {
+      "get": {
+        "tags": [
+          "ClientProviderDiscovery"
+        ],
+        "summary": "Lists the repositories in one scope the connection can reach.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "Provider family the connection belongs to.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ScmProvider"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "query",
+            "description": "Provider-connection identifier.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scopePath",
+            "in": "query",
+            "description": "The owner, organization, or group to list within.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The repositories in that scope.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderRepositoryOptionResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderRepositoryOptionResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderRepositoryOptionResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection is unusable, the scope is missing, or the provider refused.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an administrator of the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The provider family has no discovery in this deployment.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This installation is not entitled to answer mentions.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/provider-connections/{connectionId}/scopes": {
       "get": {
         "tags": [
@@ -30869,6 +31215,45 @@
         "additionalProperties": false,
         "description": "Operator-facing provider operational status response."
       },
+      "ProviderRepositoryOptionResponse": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "description": "The provider-native identifier, which survives a rename.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The repository's path, for reading.",
+            "nullable": true
+          },
+          "scopePath": {
+            "type": "string",
+            "description": "The owner, organization, or group it belongs to.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One repository a connection can reach within a scope."
+      },
+      "ProviderScopeOptionResponse": {
+        "type": "object",
+        "properties": {
+          "scopePath": {
+            "type": "string",
+            "description": "What the provider is addressed by, and what a configuration stores.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "What to show an operator.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One owner, organization, or group a connection can reach."
+      },
       "PullRequestHistoryItem": {
         "type": "object",
         "properties": {
@@ -34908,6 +35293,9 @@
     },
     {
       "name": "ClientProviderConnections"
+    },
+    {
+      "name": "ClientProviderDiscovery"
     },
     {
       "name": "ClientProviderScopes"

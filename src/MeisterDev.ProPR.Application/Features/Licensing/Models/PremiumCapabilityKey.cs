@@ -18,6 +18,13 @@ public static class PremiumCapabilityKey
     /// <summary>Capability key for guided crawl configuration and automated crawl setup.</summary>
     public const string CrawlConfigs = "crawl-configs";
 
+    /// <summary>
+    ///     Capability key for answering <c>@</c>-mentions in pull request comments. Separate from crawl
+    ///     configurations, which it used to be gated on: one licenses finding pull requests to review, this
+    ///     licenses answering questions asked in them, and an installation can be entitled to either alone.
+    /// </summary>
+    public const string MentionAnswering = "mention-answering";
+
     /// <summary>Capability key for configuring and enforcing USD spend budgets.</summary>
     public const string Budgeting = "budgeting";
 
@@ -42,6 +49,7 @@ public static class PremiumCapabilityKey
         DistributedExecution,
         MultipleScmProviders,
         CrawlConfigs,
+        MentionAnswering,
         Budgeting,
         CodeInsights,
     ];

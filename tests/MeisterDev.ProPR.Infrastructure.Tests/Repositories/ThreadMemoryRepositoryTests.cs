@@ -23,6 +23,11 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 [Collection("PostgresIntegration")]
 public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
+    /// <summary>The host that issued the repository identifiers in this fixture.</summary>
+    private const string Host = "https://provider.example";
+
+    private const string Project = "project";
+
     private const string RepoId = "test-repo";
     private static readonly Guid ClientA = Guid.Parse("cccccccc-0000-0000-0000-000000000001");
     private static readonly Guid ClientB = Guid.Parse("cccccccc-0000-0000-0000-000000000002");
@@ -178,8 +183,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
             resolutionClarity: ResolutionClarity.AcceptedWithoutChange);
         await this._repo.UpsertAsync(record);
 
-        var semantic = await this._repo.FindSimilarInPullRequestAsync(ClientA, RepoId, 88, V(1f), 5, 0.5f);
-        var byPath = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 88, "src/Outcome.cs", 5);
+        var semantic = await this._repo.FindSimilarInPullRequestAsync(ClientA, Host, Project, RepoId, 88, V(1f), 5, 0.5f);
+        var byPath = await this._repo.FindByPullRequestFilePathAsync(ClientA, Host, Project, RepoId, 88, "src/Outcome.cs", 5);
 
         var semanticMatch = Assert.Single(semantic, m => m.ThreadId == "114");
         Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, semanticMatch.Intent);
@@ -202,6 +207,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         {
             Id = record1.Id,
             ClientId = record1.ClientId,
+            OrganizationUrl = record1.OrganizationUrl,
+            ProjectId = record1.ProjectId,
             ThreadId = record1.ThreadId,
             RepositoryId = record1.RepositoryId,
             PullRequestId = record1.PullRequestId,
@@ -252,7 +259,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     {
         await this._repo.UpsertAsync(CreateRecord(ClientA, 1, 400));
 
-        var deleted = await this._repo.RemoveByThreadAsync(ClientA, RepoId, "400");
+        var deleted = await this._repo.RemoveByThreadAsync(ClientA, Host, Project, RepoId, "400");
 
         Assert.True(deleted);
         Assert.False(await this._db.ThreadMemoryRecords.AnyAsync(r => r.ThreadId == "400" && r.ClientId == ClientA));
@@ -261,7 +268,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     [Fact]
     public async Task RemoveByThreadAsync_NoRecord_ReturnsFalseWithoutError()
     {
-        var deleted = await this._repo.RemoveByThreadAsync(ClientA, RepoId, "99999");
+        var deleted = await this._repo.RemoveByThreadAsync(ClientA, Host, Project, RepoId, "99999");
         Assert.False(deleted);
     }
 
@@ -370,7 +377,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         await this._repo.UpsertAsync(otherRepo);
         await this._repo.UpsertAsync(otherPath);
 
-        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "package.json", 5);
+        var results = await this._repo.FindByFilePathAsync(ClientA, Host, Project, RepoId, "package.json", 5);
 
         Assert.Collection(
             results,
@@ -394,7 +401,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var record = CreateRecord(ClientA, 1, 805, filePath: "SRC/Package.JSON");
         await this._repo.UpsertAsync(record);
 
-        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "src/package.json", 5);
+        var results = await this._repo.FindByFilePathAsync(ClientA, Host, Project, RepoId, "src/package.json", 5);
 
         Assert.Single(results);
         Assert.Equal("805", results[0].ThreadId);
@@ -406,7 +413,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var record = CreateRecord(ClientA, 77, 806, filePath: "SRC/Package.JSON");
         await this._repo.UpsertAsync(record);
 
-        var results = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 77, "src/package.json", 5);
+        var results = await this._repo.FindByPullRequestFilePathAsync(ClientA, Host, Project, RepoId, 77, "src/package.json", 5);
 
         Assert.Single(results);
         Assert.Equal("806", results[0].ThreadId);
@@ -516,6 +523,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var digests = await this._repo.GetDigestsForPullRequestAsync(
             ClientA,
+            Host,
+            Project,
             RepoId,
             55,
             MemorySource.ThreadResolved,
@@ -535,6 +544,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var digests = await this._repo.GetDigestsForPullRequestAsync(
             ClientA,
+            Host,
+            Project,
             RepoId,
             60,
             MemorySource.ThreadResolved,
@@ -563,7 +574,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     public async Task FindSimilarInPullRequestAsync_InvalidSimilarity_Throws()
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            this._repo.FindSimilarInPullRequestAsync(ClientA, RepoId, 1, V(1f), 1, -0.1f));
+            this._repo.FindSimilarInPullRequestAsync(ClientA, Host, Project, RepoId, 1, V(1f), 1, -0.1f));
     }
 
     // ---------------------------------------------------------------------------
@@ -583,6 +594,41 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         return v;
     }
 
+    /// <summary>
+    ///     A memory is an aid to a later review of the same pull request, and two providers can number a pull
+    ///     request alike on repositories whose identifiers also match. Reading one host's corpus must not
+    ///     return the other's, or a finding is suppressed against a conversation from a different repository.
+    /// </summary>
+    [Fact]
+    public async Task MemoriesOfTwoHostsSharingARepositoryIdentifier_AreReadApart()
+    {
+        const string gitLab = "http://localhost:8090";
+        const string forgejo = "http://localhost:8091";
+
+        await this._repo.UpsertAsync(CreateRecord(ClientA, 7, 900, organizationUrl: forgejo));
+        await this._repo.UpsertAsync(CreateRecord(ClientA, 7, 901, organizationUrl: gitLab));
+
+        var onForgejo = await this._repo.GetDigestsForPullRequestAsync(
+            ClientA,
+            forgejo,
+            Project,
+            RepoId,
+            7,
+            MemorySource.ThreadResolved,
+            50);
+        var onGitLab = await this._repo.GetDigestsForPullRequestAsync(
+            ClientA,
+            gitLab,
+            Project,
+            RepoId,
+            7,
+            MemorySource.ThreadResolved,
+            50);
+
+        Assert.Equal("900", Assert.Single(onForgejo.Items).ThreadId);
+        Assert.Equal("901", Assert.Single(onGitLab.Items).ThreadId);
+    }
+
     private static ThreadMemoryRecord CreateRecord(
         Guid clientId,
         int prId,
@@ -592,7 +638,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         string repositoryId = RepoId,
         DateTimeOffset? updatedAt = null,
         ThreadResolutionIntent? resolutionIntent = null,
-        ResolutionClarity? resolutionClarity = null)
+        ResolutionClarity? resolutionClarity = null,
+        string organizationUrl = Host)
     {
         var timestamp = updatedAt ?? DateTimeOffset.UtcNow;
 
@@ -600,6 +647,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         {
             Id = Guid.NewGuid(),
             ClientId = clientId,
+            OrganizationUrl = organizationUrl,
+            ProjectId = Project,
             ThreadId = threadId.ToString(CultureInfo.InvariantCulture),
             RepositoryId = repositoryId,
             PullRequestId = prId,

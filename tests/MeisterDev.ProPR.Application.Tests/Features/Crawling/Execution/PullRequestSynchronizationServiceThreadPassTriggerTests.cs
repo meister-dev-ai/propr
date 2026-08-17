@@ -161,6 +161,8 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
         var harness = new Harness();
         harness.ThreadPassJobs.CancelActiveForPullRequestAsync(
                 ClientId,
+                ScopePath,
+                ProjectKey,
                 RepositoryId,
                 PullRequestId,
                 Arg.Any<CancellationToken>())
@@ -173,7 +175,7 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
             outcome.ActionSummaries,
             summary => summary.Contains("thread pass(es)", StringComparison.Ordinal));
         await harness.ThreadPassJobs.Received(1)
-            .CancelActiveForPullRequestAsync(ClientId, RepositoryId, PullRequestId, Arg.Any<CancellationToken>());
+            .CancelActiveForPullRequestAsync(ClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId, Arg.Any<CancellationToken>());
     }
 
     private sealed class Harness
@@ -190,7 +192,7 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
 
         public Harness()
         {
-            this._scan = new ReviewPrScan(Guid.NewGuid(), ClientId, RepositoryId, PullRequestId, "7")
+            this._scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "https://provider.example", "project", RepositoryId, PullRequestId, "7")
             {
                 LastThreadPassRevisionKey = "6",
             };
@@ -329,7 +331,7 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
 
         private void ApplyScan()
         {
-            this._scanRepository.GetAsync(ClientId, RepositoryId, PullRequestId, Arg.Any<CancellationToken>())
+            this._scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), RepositoryId, PullRequestId, Arg.Any<CancellationToken>())
                 .Returns(this._scan);
         }
 

@@ -27,8 +27,13 @@ redeploys, and is not configured through an environment variable - see
 | Parallel review execution | `parallel-review-execution` | One review at a time, working on one file at a time, however many replicas run and whatever the concurrency settings say; a submission made while another review is queued or running is refused with HTTP 409 and a license message |
 | Distributed review execution | `distributed-execution` | No runner can enroll and none can lease; reviews run in the control plane as before |
 | Multiple SCM providers | `multiple-scm-providers` | One SCM provider connection per client |
-| Crawl configurations | `crawl-configs` | No scheduled crawling, no @-mention scanning, and crawl-setup discovery is refused; reviews come from webhooks or the API |
+| Crawl configurations | `crawl-configs` | No scheduled crawling and crawl-setup discovery is refused; reviews come from webhooks or the API |
+| Mention answering | `mention-answering` | No @-mention scanning, so a question asked of the reviewer in a pull request comment goes unanswered |
 | Budgeting | `budgeting` | No USD spend caps or budget enforcement; the tenant Budget and Spend views are refused with the same license message |
+
+Mention answering used to be gated on `crawl-configs`. On upgrade, an installation that had overridden
+`crawl-configs` keeps that setting for `mention-answering` as well, so what it was entitled to does not
+change. An installation that had never overridden it keeps the default for both.
 
 Queue depth follows from the same capability. With it, one API instance drains the queue several
 reviews at a time, as many as `WORKER_MAX_CONCURRENT_REVIEW_JOBS` allows; see
@@ -63,9 +68,9 @@ disabled rather than removing it, so you can see what a license would give you.
 Dropping back to Community does not delete anything. Your crawl configurations, budget caps, and
 additional provider connections stay in the database exactly as you left them.
 
-They stop being exercised, though. Scheduled crawling and @-mention scanning stop running, and budget
-caps stop being enforced, until the capability is available again. Nothing warns you per configuration
-row - the feature simply goes quiet.
+They stop being exercised, though. Scheduled crawling stops running with `crawl-configs`, @-mention
+scanning stops with `mention-answering`, and budget caps stop being enforced with `budgeting`, until each
+capability is available again. Nothing warns you per configuration row - the feature simply goes quiet.
 
 If you are not sure a license is what refused you, [troubleshooting](../operate/troubleshooting.md) routes
 the symptom to the page that fixes it.

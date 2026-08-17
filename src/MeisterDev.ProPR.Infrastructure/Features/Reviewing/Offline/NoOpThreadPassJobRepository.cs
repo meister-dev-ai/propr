@@ -99,6 +99,8 @@ public sealed class NoOpThreadPassJobRepository : IThreadPassJobRepository
     /// <inheritdoc />
     public Task<IReadOnlyList<ThreadPassJob>> GetForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         int maxCount,
@@ -116,6 +118,8 @@ public sealed class NoOpThreadPassJobRepository : IThreadPassJobRepository
     /// <inheritdoc />
     public Task<int> CancelActiveForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         CancellationToken ct = default)
@@ -134,6 +138,8 @@ public sealed class NoOpThreadPassJobRepository : IThreadPassJobRepository
     /// <inheritdoc />
     public Task<IReadOnlyList<ThreadPassHandledThreadKey>> GetHandledThreadKeysAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string revisionKey,
@@ -146,6 +152,8 @@ public sealed class NoOpThreadPassJobRepository : IThreadPassJobRepository
     public Task RecordHandledThreadAsync(
         Guid jobId,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadId,

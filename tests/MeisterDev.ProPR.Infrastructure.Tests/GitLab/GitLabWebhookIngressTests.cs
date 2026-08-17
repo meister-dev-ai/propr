@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -150,5 +151,40 @@ public sealed class GitLabWebhookIngressTests
         var envelope = await sut.ParseAsync(clientId, host, headers, payload);
 
         Assert.Equal("pull_request.updated", envelope.DeliveryKind);
+    }
+
+    /// <summary>
+    ///     A hook configured for everything sends note, push and pipeline deliveries alongside the merge
+    ///     request ones. Those are well-formed and simply not acted on, and saying they were malformed
+    ///     answers the provider with a client error it counts against the hook until it disables it.
+    /// </summary>
+    [Theory]
+    [InlineData("Note Hook", "note")]
+    [InlineData("Push Hook", "push")]
+    [InlineData("Pipeline Hook", "pipeline")]
+    public async Task ParseAsync_AnEventProPrDoesNotActOn_IsReportedAsUnsupportedRatherThanMalformed(
+        string eventName,
+        string objectKind)
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var sut = new GitLabWebhookIngressService(
+            GitLabTestHelpers.CreateConnectionRepository(clientId, host, "webhook-secret"),
+            new GitLabWebhookTokenVerifier(),
+            new GitLabWebhookPayloadParser(new GitLabWebhookEventClassifier()),
+            Substitute.For<IClientRegistry>());
+        var payload = "{" +
+                      $"\"object_kind\":\"{objectKind}\"," +
+                      "\"project\":{\"id\":101,\"path_with_namespace\":\"acme/platform/propr\",\"namespace\":\"Acme Platform\"}," +
+                      "\"object_attributes\":{\"id\":4201,\"note\":\"@propr what does this do?\"}" +
+                      "}";
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["X-Gitlab-Token"] = "webhook-secret",
+            ["X-Gitlab-Event"] = eventName,
+            ["X-Gitlab-Event-UUID"] = "delivery-1",
+        };
+
+        await Assert.ThrowsAsync<UnsupportedWebhookEventException>(() => sut.ParseAsync(clientId, host, headers, payload));
     }
 }

@@ -25,12 +25,14 @@ public static class MentionDetector
     /// <returns><c>true</c> if the content mentions the reviewer; otherwise <c>false</c>.</returns>
     public static bool IsMentioned(string content, Guid reviewerGuid)
     {
-        if (string.IsNullOrWhiteSpace(content))
+        var asked = StripQuotedLines(content);
+
+        if (string.IsNullOrWhiteSpace(asked))
         {
             return false;
         }
 
-        return content.Contains($"@<{reviewerGuid}>", StringComparison.OrdinalIgnoreCase);
+        return asked.Contains($"@<{reviewerGuid}>", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -41,7 +43,9 @@ public static class MentionDetector
     {
         ArgumentNullException.ThrowIfNull(reviewer);
 
-        if (string.IsNullOrWhiteSpace(content))
+        var asked = StripQuotedLines(content);
+
+        if (string.IsNullOrWhiteSpace(asked))
         {
             return false;
         }
@@ -49,12 +53,61 @@ public static class MentionDetector
         return reviewer.Host.Provider switch
         {
             ScmProvider.AzureDevOps => Guid.TryParse(reviewer.ExternalUserId, out var reviewerGuid) &&
-                                       IsMentioned(content, reviewerGuid),
+                                       asked.Contains($"@<{reviewerGuid}>", StringComparison.OrdinalIgnoreCase),
             ScmProvider.GitHub or ScmProvider.GitLab or ScmProvider.Forgejo => ContainsLoginMention(
-                content,
+                asked,
                 reviewer.Login),
             _ => false,
         };
+    }
+
+    /// <summary>
+    ///     Drops markdown blockquote lines, so a mention is read from what the comment says rather than from
+    ///     what it repeats.
+    /// </summary>
+    /// <remarks>
+    ///     Quoting is how a reply refers to an earlier message where the provider offers no thread, and it is
+    ///     what ProPR's own answers do on GitHub and Forgejo. A quoted mention is therefore a repetition, not
+    ///     a question: reading it as one would have an answer that quotes a question be taken for a new
+    ///     question, answered, and quoted in turn, on every scan.
+    ///     Keyed on the quote rather than on who wrote the comment, because the two are not the same thing. An
+    ///     installation whose reviewer identity is an account a person also posts from would lose every real
+    ///     question to an author check, and a person quoting an earlier message to ask something new is asking
+    ///     something new whoever they are.
+    /// </remarks>
+    private static string StripQuotedLines(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return string.Empty;
+        }
+
+        if (!content.Contains('>', StringComparison.Ordinal))
+        {
+            return content;
+        }
+
+        var kept = content
+            .ReplaceLineEndings("\n")
+            .Split('\n')
+            .Where(line => !IsQuotedLine(line));
+
+        return string.Join('\n', kept);
+    }
+
+    /// <summary>
+    ///     Reports whether a line opens a markdown blockquote. Markdown allows up to three spaces of
+    ///     indentation before the marker, and nesting only repeats it.
+    /// </summary>
+    private static bool IsQuotedLine(string line)
+    {
+        var index = 0;
+        while (index < line.Length && index < 3 && line[index] == ' ')
+        {
+            index++;
+        }
+
+        return index < line.Length && line[index] == '>';
     }
 
     private static bool ContainsLoginMention(string content, string login)

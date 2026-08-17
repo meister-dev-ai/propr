@@ -108,12 +108,7 @@ public sealed class PrCrawlServiceTests
 
     private static ReviewPrScan MakeScan(int prId, int iterationId, params ReviewPrScanThread[] threads)
     {
-        var scan = new ReviewPrScan(
-            Guid.NewGuid(),
-            DefaultConfig.ClientId,
-            "repo-1",
-            prId,
-            iterationId.ToString());
+        var scan = new ReviewPrScan(Guid.NewGuid(), DefaultConfig.ClientId, "https://provider.example", "project", "repo-1", prId, iterationId.ToString());
 
         foreach (var thread in threads)
         {
@@ -379,6 +374,8 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         this._prScanRepository.GetAsync(
                 DefaultConfig.ClientId,
+                DefaultConfig.ProviderScopePath,
+                DefaultConfig.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())
@@ -442,6 +439,8 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         this._prScanRepository.GetAsync(
                 config.ClientId,
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())
@@ -499,6 +498,8 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         this._prScanRepository.GetAsync(
                 DefaultConfig.ClientId,
+                DefaultConfig.ProviderScopePath,
+                DefaultConfig.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())
@@ -528,6 +529,8 @@ public sealed class PrCrawlServiceTests
             .RecordNoOpAsync(
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -553,16 +556,15 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         this._prScanRepository.GetAsync(
                 DefaultConfig.ClientId,
+                DefaultConfig.ProviderScopePath,
+                DefaultConfig.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<ReviewPrScan?>(
                     new ReviewPrScan(
-                        Guid.NewGuid(),
-                        DefaultConfig.ClientId,
-                        pr.Repository.ExternalRepositoryId,
-                        pr.CodeReview.Number,
+                        Guid.NewGuid(), DefaultConfig.ClientId, "https://provider.example", "project", pr.Repository.ExternalRepositoryId, pr.CodeReview.Number,
                         "revision-1")));
         this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 DefaultConfig.ProviderScopePath,
@@ -622,6 +624,8 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         this._prScanRepository.GetAsync(
                 DefaultConfig.ClientId,
+                DefaultConfig.ProviderScopePath,
+                DefaultConfig.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())
@@ -670,6 +674,8 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         this._prScanRepository.GetAsync(
                 DefaultConfig.ClientId,
+                DefaultConfig.ProviderScopePath,
+                DefaultConfig.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())
@@ -700,6 +706,8 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         this._prScanRepository.GetAsync(
                 DefaultConfig.ClientId,
+                DefaultConfig.ProviderScopePath,
+                DefaultConfig.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())
@@ -750,6 +758,8 @@ public sealed class PrCrawlServiceTests
             .Returns(completedJob);
         this._prScanRepository.GetAsync(
                 DefaultConfig.ClientId,
+                DefaultConfig.ProviderScopePath,
+                DefaultConfig.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())
@@ -799,6 +809,8 @@ public sealed class PrCrawlServiceTests
             .Returns(completedJob);
         this._prScanRepository.GetAsync(
                 DefaultConfig.ClientId,
+                DefaultConfig.ProviderScopePath,
+                DefaultConfig.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 Arg.Any<CancellationToken>())

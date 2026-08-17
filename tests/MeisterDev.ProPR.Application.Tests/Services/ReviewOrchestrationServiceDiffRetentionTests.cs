@@ -110,7 +110,7 @@ public sealed class ReviewOrchestrationServiceDiffRetentionTests
                 .Returns((string?)null);
 
             var prScanRepository = Substitute.For<IReviewPrScanRepository>();
-            prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
                 .Returns((ReviewPrScan?)null);
 
             var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();

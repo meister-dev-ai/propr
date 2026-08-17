@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Mentions.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Interfaces;
@@ -35,6 +36,10 @@ public static class MentionsModuleServiceCollectionExtensions
             // What the scan reads to decide which repositories this installation answers on. Without a
             // database there is nothing to configure and nothing to scan.
             services.AddScoped<IMentionConfigurationRepository, MentionConfigurationRepository>();
+
+            // Registered beside the repository it guards, because both read the client connections a
+            // configuration is judged against.
+            services.AddScoped<IMentionConfigurationScopeValidator, MentionConfigurationScopeValidator>();
 
             // Rebuilds provenance a crash left unwritten. Registered under the same gate as the job repository
             // it reads, and as the provenance store the review-archive module registers, so it exists exactly

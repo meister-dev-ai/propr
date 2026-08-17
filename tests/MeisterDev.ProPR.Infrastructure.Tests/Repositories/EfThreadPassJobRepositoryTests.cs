@@ -154,11 +154,11 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
         var job = CreatePass("7|aaa");
         await this._repository.TryClaimAsync(job);
 
-        await this._repository.RecordHandledThreadAsync(job.Id, SeedClientId, RepositoryId, PullRequestId, "17", 2, "7");
-        await this._repository.RecordHandledThreadAsync(job.Id, SeedClientId, RepositoryId, PullRequestId, "17", 2, "7");
-        await this._repository.RecordHandledThreadAsync(job.Id, SeedClientId, RepositoryId, PullRequestId, "17", 3, "7");
+        await this._repository.RecordHandledThreadAsync(job.Id, SeedClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId, "17", 2, "7");
+        await this._repository.RecordHandledThreadAsync(job.Id, SeedClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId, "17", 2, "7");
+        await this._repository.RecordHandledThreadAsync(job.Id, SeedClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId, "17", 3, "7");
 
-        var handled = await this._repository.GetHandledThreadKeysAsync(SeedClientId, RepositoryId, PullRequestId, "7");
+        var handled = await this._repository.GetHandledThreadKeysAsync(SeedClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId, "7");
         Assert.Equal(2, handled.Count);
     }
 
@@ -172,6 +172,8 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
         await this._repository.RecordHandledThreadAsync(
             earlier.Id,
             SeedClientId,
+            ScopePath,
+            ProjectKey,
             RepositoryId,
             PullRequestId,
             "17",
@@ -182,12 +184,14 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
 
         var atNewRevision = await this._repository.GetHandledThreadKeysAsync(
             SeedClientId,
+            ScopePath,
+            ProjectKey,
             RepositoryId,
             PullRequestId,
             "8");
 
         Assert.Empty(atNewRevision);
-        Assert.Single(await this._repository.GetHandledThreadKeysAsync(SeedClientId, RepositoryId, PullRequestId, "7"));
+        Assert.Single(await this._repository.GetHandledThreadKeysAsync(SeedClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId, "7"));
     }
 
     [Fact]
@@ -233,6 +237,8 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
 
         var cancelled = await this._repository.CancelActiveForPullRequestAsync(
             SeedClientId,
+            ScopePath,
+            ProjectKey,
             RepositoryId,
             PullRequestId);
 
@@ -240,7 +246,7 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
         var stored = await this.CreateDbContext().ThreadPassJobs.AsNoTracking()
             .FirstAsync(candidate => candidate.Id == job.Id);
         Assert.Equal(ThreadPassJobStatus.Cancelled, stored.Status);
-        Assert.Equal(0, await this._repository.CancelActiveForPullRequestAsync(SeedClientId, RepositoryId, PullRequestId));
+        Assert.Equal(0, await this._repository.CancelActiveForPullRequestAsync(SeedClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId));
     }
 
     [Fact]
@@ -403,6 +409,8 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
         await this._repository.RecordHandledThreadAsync(
             first.Id,
             SeedClientId,
+            ScopePath,
+            ProjectKey,
             RepositoryId,
             PullRequestId,
             "17",
@@ -413,7 +421,7 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
         var second = CreatePass("8|two");
         await this._repository.TryClaimAsync(second);
 
-        var passes = await this._repository.GetForPullRequestAsync(SeedClientId, RepositoryId, PullRequestId, 10);
+        var passes = await this._repository.GetForPullRequestAsync(SeedClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId, 10);
 
         Assert.Equal(2, passes.Count);
         Assert.Single(passes.First(pass => pass.Id == first.Id).HandledThreads);

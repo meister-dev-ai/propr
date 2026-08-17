@@ -30,7 +30,12 @@ public interface IThreadMemoryRepository
     ///     Removes the record for the given thread.
     /// </summary>
     /// <returns><see langword="true" /> if a record was deleted; <see langword="false" /> (no-op) if none existed.</returns>
-    Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, string threadId, CancellationToken ct = default);
+    Task<bool> RemoveByThreadAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        string threadId, CancellationToken ct = default);
 
     /// <summary>
     ///     Removes the record with the given <paramref name="id" />, scoped to the owning client.
@@ -73,6 +78,8 @@ public interface IThreadMemoryRepository
     /// </summary>
     Task<PagedResult<ThreadMemoryDigestDto>> GetDigestsForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         MemorySource source,
@@ -97,6 +104,8 @@ public interface IThreadMemoryRepository
     /// </summary>
     Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByFilePathAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         string filePath,
         int topN,
@@ -108,6 +117,8 @@ public interface IThreadMemoryRepository
     /// </summary>
     Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarInPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         float[] queryVector,
@@ -121,6 +132,8 @@ public interface IThreadMemoryRepository
     /// </summary>
     Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByPullRequestFilePathAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string filePath,

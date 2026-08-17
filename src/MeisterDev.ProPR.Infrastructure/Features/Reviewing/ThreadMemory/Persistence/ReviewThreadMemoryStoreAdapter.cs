@@ -26,11 +26,13 @@ public sealed class ReviewThreadMemoryStoreAdapter(IThreadMemoryRepository inner
 
     public Task<bool> RemoveByThreadAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         string threadId,
         CancellationToken ct = default)
     {
-        return inner.RemoveByThreadAsync(clientId, repositoryId, threadId, ct);
+        return inner.RemoveByThreadAsync(clientId, organizationUrl, projectId, repositoryId, threadId, ct);
     }
 
     public Task<bool> RemoveByIdAsync(Guid id, Guid clientId, CancellationToken ct = default)
@@ -61,13 +63,15 @@ public sealed class ReviewThreadMemoryStoreAdapter(IThreadMemoryRepository inner
 
     public Task<PagedResult<ThreadMemoryDigestDto>> GetDigestsForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         MemorySource source,
         int limit,
         CancellationToken ct = default)
     {
-        return inner.GetDigestsForPullRequestAsync(clientId, repositoryId, pullRequestId, source, limit, ct);
+        return inner.GetDigestsForPullRequestAsync(clientId, organizationUrl, projectId, repositoryId, pullRequestId, source, limit, ct);
     }
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarAsync(
@@ -82,16 +86,20 @@ public sealed class ReviewThreadMemoryStoreAdapter(IThreadMemoryRepository inner
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByFilePathAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         string filePath,
         int topN,
         CancellationToken ct = default)
     {
-        return inner.FindByFilePathAsync(clientId, repositoryId, filePath, topN, ct);
+        return inner.FindByFilePathAsync(clientId, organizationUrl, projectId, repositoryId, filePath, topN, ct);
     }
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarInPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         float[] queryVector,
@@ -101,6 +109,8 @@ public sealed class ReviewThreadMemoryStoreAdapter(IThreadMemoryRepository inner
     {
         return inner.FindSimilarInPullRequestAsync(
             clientId,
+            organizationUrl,
+            projectId,
             repositoryId,
             pullRequestId,
             queryVector,
@@ -111,12 +121,14 @@ public sealed class ReviewThreadMemoryStoreAdapter(IThreadMemoryRepository inner
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByPullRequestFilePathAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string filePath,
         int topN,
         CancellationToken ct = default)
     {
-        return inner.FindByPullRequestFilePathAsync(clientId, repositoryId, pullRequestId, filePath, topN, ct);
+        return inner.FindByPullRequestFilePathAsync(clientId, organizationUrl, projectId, repositoryId, pullRequestId, filePath, topN, ct);
     }
 }

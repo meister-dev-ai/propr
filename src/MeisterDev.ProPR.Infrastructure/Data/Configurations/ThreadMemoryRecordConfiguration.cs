@@ -27,6 +27,16 @@ internal sealed class ThreadMemoryRecordConfiguration : IEntityTypeConfiguration
             .HasMaxLength(256)
             .IsRequired();
 
+        builder.Property(r => r.OrganizationUrl)
+            .HasColumnName("organization_url")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(r => r.ProjectId)
+            .HasColumnName("project_id")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
         builder.Property(r => r.RepositoryId)
             .HasColumnName("repository_id")
             .HasMaxLength(256)
@@ -116,7 +126,7 @@ internal sealed class ThreadMemoryRecordConfiguration : IEntityTypeConfiguration
             .HasDatabaseName("ix_thread_memory_records_keywords_gin");
 
         // Unique constraint: at-most-one record per ADO thread per client per repository.
-        builder.HasIndex(r => new { r.ClientId, r.RepositoryId, r.ThreadId })
+        builder.HasIndex(r => new { r.ClientId, r.OrganizationUrl, r.ProjectId, r.RepositoryId, r.ThreadId })
             .IsUnique()
             .HasDatabaseName("uq_thread_memory_records_thread");
 
@@ -128,8 +138,8 @@ internal sealed class ThreadMemoryRecordConfiguration : IEntityTypeConfiguration
             .HasDatabaseName("ix_thread_memory_records_client_updated_at");
 
         // Memories are also read scoped to one pull request, which is the PR review view's hot path.
-        builder.HasIndex(r => new { r.ClientId, r.RepositoryId, r.PullRequestId, r.UpdatedAt })
-            .IsDescending(false, false, false, true)
+        builder.HasIndex(r => new { r.ClientId, r.OrganizationUrl, r.ProjectId, r.RepositoryId, r.PullRequestId, r.UpdatedAt })
+            .IsDescending(false, false, false, false, false, true)
             .HasDatabaseName("ix_thread_memory_records_client_pr_updated_at");
 
         // HNSW index for approximate nearest-neighbour cosine similarity search.

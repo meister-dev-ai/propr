@@ -3,7 +3,11 @@
 
 using FluentValidation;
 using FluentValidation.Results;
+using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Features.Licensing.Support;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Web;
@@ -27,15 +31,36 @@ public sealed partial class AdminMentionConfigsController(
     IMentionConfigurationRepository mentionConfigRepo,
     IUserRepository userRepository,
     IClientAdminService clientAdminService,
-    IClientAdoOrganizationScopeRepository organizationScopeRepository,
+    IMentionConfigurationScopeValidator scopeValidator,
     ILogger<AdminMentionConfigsController> logger,
-    IProviderActivationService? providerActivationService = null) : ControllerBase
+    IProviderActivationService? providerActivationService = null,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private const string DisabledProviderMessage =
         "The selected provider family is currently disabled by system administration.";
 
     private const string NoRepositoriesMessage =
         "A mention configuration must name at least one repository.";
+
+    /// <summary>
+    ///     Returns 409 on every action here when the installation is not entitled to answer mentions.
+    /// </summary>
+    /// <remarks>
+    ///     MentionScanWorker checks the same capability before it scans, which prevents answers being posted.
+    ///     It is checked here too, because a request does not pass through the worker: without this check a
+    ///     configuration can be created and read back on an installation that will never act on it. The
+    ///     crawl-configuration endpoints check their capability on reads as well as writes for the same reason,
+    ///     and the tab renders the capability message instead of an empty list.
+    /// </remarks>
+    private async Task<IActionResult?> RequireMentionAnsweringCapabilityAsync(CancellationToken ct)
+    {
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.MentionAnswering,
+            ct);
+
+        return capability is null ? null : new PremiumFeatureUnavailableResult(capability);
+    }
 
     /// <summary>Lists mention configurations visible to the caller.</summary>
     /// <param name="clientId">Optional client filter. Non-admin callers are restricted to their own clients regardless.</param>
@@ -53,6 +78,12 @@ public sealed partial class AdminMentionConfigsController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireMentionAnsweringCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         if (clientId is { } requested)
@@ -134,6 +165,12 @@ public sealed partial class AdminMentionConfigsController(
             return auth;
         }
 
+        var capability = await this.RequireMentionAnsweringCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         var validation = this.Validate(await validator.ValidateAsync(request, ct));
         if (validation is not null)
         {
@@ -160,13 +197,13 @@ public sealed partial class AdminMentionConfigsController(
         var scopePath = NormalizeScopePath(request.ProviderScopePath);
         var projectKey = request.ProviderProjectKey?.Trim() ?? string.Empty;
 
-        if (request.Provider == ScmProvider.AzureDevOps && !await this.IsKnownOrganizationAsync(request.ClientId, scopePath, ct))
+        // Before anything is written, and for every provider. A scope path with nothing behind it reaches a
+        // provider client at scan time carrying whatever credential the runtime can find.
+        var scopeVerdict = await scopeValidator.ValidateAsync(request.ClientId, request.Provider, scopePath, ct);
+        if (!scopeVerdict.IsAccepted)
         {
-            return this.BadRequest(
-                new
-                {
-                    error = "That Azure DevOps organization is not configured for this client. Add and enable it first.",
-                });
+            LogMentionConfigScopeRefused(logger, request.ClientId, request.Provider, scopeVerdict.Refusal);
+            return this.BadRequest(new { error = scopeVerdict.Message });
         }
 
         var existing = await mentionConfigRepo.GetByClientAsync(request.ClientId, ct);
@@ -240,6 +277,12 @@ public sealed partial class AdminMentionConfigsController(
             return auth;
         }
 
+        var capability = await this.RequireMentionAnsweringCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         var validation = this.Validate(await validator.ValidateAsync(request, ct));
         if (validation is not null)
         {
@@ -258,6 +301,8 @@ public sealed partial class AdminMentionConfigsController(
             return authorization;
         }
 
+        // No scope check here: a patch carries an interval, an active flag and a repository list, and none of
+        // them can move the configuration to another provider or another host. Add one the moment it can.
         IReadOnlyList<MentionRepoFilterDto>? filters = null;
         if (request.RepoFilters is not null)
         {
@@ -304,6 +349,12 @@ public sealed partial class AdminMentionConfigsController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireMentionAnsweringCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         var existing = await mentionConfigRepo.GetByIdAsync(configId, ct);
@@ -387,27 +438,6 @@ public sealed partial class AdminMentionConfigsController(
     private static string NormalizeScopePath(string? scopePath)
     {
         return string.IsNullOrWhiteSpace(scopePath) ? string.Empty : scopePath.Trim().TrimEnd('/');
-    }
-
-    /// <summary>Reports whether a scope path names an Azure DevOps organization this client has enabled.</summary>
-    /// <remarks>
-    ///     A scope path that matches no configured organization has no credential behind it, and the runtime
-    ///     answers an absent credential by falling back to the platform's own identity. Storing such a path
-    ///     would therefore point a scan, carrying that identity, at whatever host was typed. Requiring the
-    ///     organization to be one the client has already set up is the same rule the form applies, enforced
-    ///     where a request that skipped the form still has to pass.
-    /// </remarks>
-    private async Task<bool> IsKnownOrganizationAsync(Guid clientId, string scopePath, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(scopePath))
-        {
-            return false;
-        }
-
-        var scopes = await organizationScopeRepository.GetByClientIdAsync(clientId, ct);
-        return scopes.Any(scope =>
-            scope.IsEnabled &&
-            string.Equals(NormalizeScopePath(scope.OrganizationUrl), scopePath, StringComparison.OrdinalIgnoreCase));
     }
 
     // Narrowed to the one constraint that means "this client already covers this project". Treating every

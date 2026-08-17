@@ -3,172 +3,270 @@ import {
   listAdoCrawlFilters,
   listAdoOrganizationScopes,
   listAdoProjects,
-  type AdoCrawlFilterOptionDto,
-  type AdoProjectOptionDto,
-  type ClientAdoOrganizationScopeDto,
 } from '@/services/adoDiscoveryService'
+import { listProviderConnections, type ScmProviderFamily } from '@/services/providerConnectionsService'
+import {
+  listProviderRepositoryOptions,
+  listProviderScopeOptions,
+} from '@/services/providerDiscoveryService'
+
+/** An option in the first dropdown: an Azure DevOps organization scope, or a provider connection. */
+export interface MentionHostOption {
+  /** Identifies the option. An organization scope id on Azure DevOps, a connection id otherwise. */
+  id: string
+  label: string
+  /** Stored as the configuration's providerScopePath. */
+  scopePath: string
+  /** The connection id passed to the discovery endpoints. */
+  connectionId: string
+}
+
+/** An option in the second dropdown: an Azure DevOps project, or an owner, organization or group. */
+export interface MentionScopeOption {
+  /** Stored as the configuration's providerProjectKey. */
+  id: string
+  label: string
+}
+
+/** A repository the configuration can select. */
+export interface MentionRepositoryOption {
+  repositoryId: string
+  displayName: string
+  canonicalSourceRef?: string
+  sourceProvider?: string
+}
 
 /**
- * Drives the organization, project and repository pickers on the mention configuration form.
+ * Loads the three dropdowns on the mention configuration form for any provider.
  *
- * Discovery hands back the provider's own repository id as the canonical source reference, which is the
- * same key mention scanning matches on. Picking a repository therefore fills the stored filter directly,
- * with no name-to-id lookup in between.
+ * The form has the same three levels on every provider, and the configuration stores the same three values:
+ * a scope path, a project key, and repositories by their provider-native id. Only the endpoints differ. Azure
+ * DevOps has organization scopes the client configures separately, then projects within one, so the first two
+ * levels come from listAdoOrganizationScopes and listAdoProjects. GitHub, GitLab and Forgejo are reached at
+ * their connection's own host, so the first level is the client's connections for that provider and the
+ * second is listProviderScopeOptions, which returns owners, organizations or groups.
  */
 export function useMentionConfigDiscovery(clientId: () => string) {
   const state = reactive({
-    organizationScopeId: '',
-    organizationScopes: [] as ClientAdoOrganizationScopeDto[],
+    provider: 'azureDevOps' as ScmProviderFamily,
+
+    hostId: '',
+    hosts: [] as MentionHostOption[],
+    loadingHosts: false,
+    hostError: '',
+
+    scopeId: '',
+    scopes: [] as MentionScopeOption[],
     loadingScopes: false,
     scopeError: '',
 
-    projectId: '',
-    projects: [] as AdoProjectOptionDto[],
-    loadingProjects: false,
-    projectError: '',
-
-    repositories: [] as AdoCrawlFilterOptionDto[],
+    repositories: [] as MentionRepositoryOption[],
     loadingRepositories: false,
     repositoryError: '',
 
-    // Set when an existing configuration points at an organization this client can no longer reach, so the
-    // form can fall back to showing the stored repositories instead of an empty picker.
+    // True when a saved configuration's scope path matches none of the client's current connections or
+    // organization scopes. The form then lists the stored repositories instead of an empty dropdown.
     unresolvedScope: false,
   })
 
-  // Each loader carries a ticket. A slower earlier response must not overwrite the answer to a later
-  // selection, so a stale ticket discards its own result.
-  let scopesTicket = 0
-  let projectsTicket = 0
-  let repositoriesTicket = 0
+  // Each loader increments its own counter before starting and compares afterwards, so a response that
+  // arrives after a newer request was made is discarded instead of overwriting it.
+  let hostsRequestId = 0
+  let scopesRequestId = 0
+  let repositoriesRequestId = 0
 
-  // Guarding each loader is not enough on its own. Resolving a saved configuration spans several awaits and
-  // decides what to select between them, so closing the form part way through has to invalidate the whole
-  // sequence: otherwise its continuation matches the configuration it was opened for against whatever list
-  // is loaded by then, and selects that project in a form the operator opened for something else.
-  let sessionTicket = 0
+  // Per-loader counters are not enough for resolveForEdit, which awaits several loads and chooses what to
+  // select between them. Closing or reopening the form has to invalidate that whole sequence, or a
+  // continuation from the previous form matches its saved configuration against the list loaded for the new
+  // one and selects the wrong scope.
+  let formRequestId = 0
 
-  const selectedScope = computed(() =>
-    state.organizationScopes.find((scope) => scope.id === state.organizationScopeId),
-  )
+  const selectedHost = computed(() => state.hosts.find((host) => host.id === state.hostId))
 
-  /** The organization url of the current selection, which is what a configuration stores as its scope path. */
-  const scopePath = computed(() => selectedScope.value?.organizationUrl ?? '')
+  /** The scope path of the current selection, which is what a configuration stores. */
+  const scopePath = computed(() => selectedHost.value?.scopePath ?? '')
 
-  function repositoryIdOf(option: AdoCrawlFilterOptionDto) {
-    return option.canonicalSourceRef?.value ?? ''
-  }
-
-  function providerOf(option: AdoCrawlFilterOptionDto) {
-    return option.canonicalSourceRef?.provider ?? undefined
-  }
+  const isAzureDevOps = computed(() => state.provider === 'azureDevOps')
 
   function toMessage(cause: unknown, fallback: string) {
     return cause instanceof Error && cause.message ? cause.message : fallback
   }
 
   function clearRepositories() {
-    repositoriesTicket += 1
+    repositoriesRequestId += 1
     state.repositories = []
     state.loadingRepositories = false
     state.repositoryError = ''
   }
 
-  function clearProjects() {
-    projectsTicket += 1
-    state.projectId = ''
-    state.projects = []
-    state.loadingProjects = false
-    state.projectError = ''
+  function clearScopes() {
+    scopesRequestId += 1
+    state.scopeId = ''
+    state.scopes = []
+    state.loadingScopes = false
+    state.scopeError = ''
     clearRepositories()
   }
 
   function reset() {
-    sessionTicket += 1
-    scopesTicket += 1
-    state.organizationScopeId = ''
-    state.organizationScopes = []
-    state.loadingScopes = false
-    state.scopeError = ''
+    formRequestId += 1
+    hostsRequestId += 1
+    state.hostId = ''
+    state.hosts = []
+    state.loadingHosts = false
+    state.hostError = ''
     state.unresolvedScope = false
-    clearProjects()
+    clearScopes()
   }
 
-  async function loadOrganizationScopes() {
-    const ticket = ++scopesTicket
+  /**
+   * Points the form at a provider. Everything picked under the previous one is dropped, because a repository
+   * belonging to one provider must not be submitted against another.
+   */
+  async function selectProvider(provider: ScmProviderFamily) {
+    reset()
+    state.provider = provider
+    await loadHosts()
+  }
+
+  async function loadHosts() {
+    const requestId = ++hostsRequestId
+    state.loadingHosts = true
+    state.hostError = ''
+
+    try {
+      const hosts = isAzureDevOps.value
+        ? await loadAzureOrganizations()
+        : await loadProviderConnections(state.provider)
+
+      if (requestId !== hostsRequestId) {
+        return
+      }
+
+      state.hosts = hosts
+    } catch (cause) {
+      if (requestId !== hostsRequestId) {
+        return
+      }
+
+      state.hosts = []
+      state.hostError = toMessage(cause, 'Failed to load where this client is reached.')
+    } finally {
+      if (requestId === hostsRequestId) {
+        state.loadingHosts = false
+      }
+    }
+  }
+
+  // Azure DevOps organizations are configured per client and stored by ProPR, so they are read from ProPR
+  // rather than from the provider. The other providers have no such record: their host is the connection's
+  // own, so loadProviderConnections below lists the client's connections instead.
+  async function loadAzureOrganizations(): Promise<MentionHostOption[]> {
+    const scopes = await listAdoOrganizationScopes(clientId())
+    return scopes
+      .filter((scope) => Boolean(scope.isEnabled))
+      .map((scope) => ({
+        id: scope.id,
+        label: scope.displayName || scope.organizationUrl,
+        scopePath: scope.organizationUrl,
+        connectionId: scope.connectionId,
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label))
+  }
+
+  async function loadProviderConnections(provider: ScmProviderFamily): Promise<MentionHostOption[]> {
+    const connections = await listProviderConnections(clientId())
+    return connections
+      .filter((connection) => connection.providerFamily === provider && connection.isActive)
+      .map((connection) => ({
+        id: connection.id,
+        label: connection.displayName || connection.hostBaseUrl,
+        scopePath: connection.hostBaseUrl,
+        connectionId: connection.id,
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label))
+  }
+
+  async function loadScopes(hostId: string) {
+    const requestId = ++scopesRequestId
     state.loadingScopes = true
     state.scopeError = ''
 
     try {
-      const scopes = (await listAdoOrganizationScopes(clientId()))
-        .filter((scope) => Boolean(scope.isEnabled))
-        .sort((left, right) => (left.displayName ?? '').localeCompare(right.displayName ?? ''))
+      const host = state.hosts.find((candidate) => candidate.id === hostId)
 
-      if (ticket !== scopesTicket) {
+      // Azure DevOps projects are listed from the organization scope selected above; the other providers list
+      // owners, organizations or groups from the connection. Both produce a MentionScopeOption whose id is
+      // stored as the configuration's project key.
+      const scopes = isAzureDevOps.value
+        ? (await listAdoProjects(clientId(), hostId)).map((project) => ({
+            id: project.projectId ?? '',
+            label: project.projectName || project.projectId || '',
+          }))
+        : (await listProviderScopeOptions(clientId(), state.provider, host?.connectionId ?? '')).map((scope) => ({
+            id: scope.scopePath ?? '',
+            label: scope.displayName || scope.scopePath || '',
+          }))
+
+      if (requestId !== scopesRequestId || state.hostId !== hostId) {
         return
       }
 
-      state.organizationScopes = scopes
+      state.scopes = scopes
+        .filter((scope) => scope.id.length > 0)
+        .sort((left, right) => left.label.localeCompare(right.label))
     } catch (cause) {
-      if (ticket !== scopesTicket) {
+      if (requestId !== scopesRequestId || state.hostId !== hostId) {
         return
       }
 
-      state.organizationScopes = []
-      state.scopeError = toMessage(cause, 'Failed to load organizations.')
+      state.scopes = []
+      state.scopeError = toMessage(cause, 'Failed to load what this connection can reach.')
     } finally {
-      if (ticket === scopesTicket) {
+      if (requestId === scopesRequestId && state.hostId === hostId) {
         state.loadingScopes = false
       }
     }
   }
 
-  async function loadProjects(scopeId: string) {
-    const ticket = ++projectsTicket
-    state.loadingProjects = true
-    state.projectError = ''
-
-    try {
-      const projects = (await listAdoProjects(clientId(), scopeId)).sort((left, right) =>
-        (left.projectName ?? '').localeCompare(right.projectName ?? ''),
-      )
-
-      if (ticket !== projectsTicket || state.organizationScopeId !== scopeId) {
-        return
-      }
-
-      state.projects = projects
-    } catch (cause) {
-      if (ticket !== projectsTicket || state.organizationScopeId !== scopeId) {
-        return
-      }
-
-      state.projects = []
-      state.projectError = toMessage(cause, 'Failed to load Azure DevOps projects.')
-    } finally {
-      if (ticket === projectsTicket && state.organizationScopeId === scopeId) {
-        state.loadingProjects = false
-      }
-    }
-  }
-
-  async function loadRepositories(scopeId: string, projectId: string) {
-    const ticket = ++repositoriesTicket
+  async function loadRepositories(hostId: string, scopeId: string) {
+    const requestId = ++repositoriesRequestId
     state.loadingRepositories = true
     state.repositoryError = ''
 
     try {
-      const repositories = (await listAdoCrawlFilters(clientId(), scopeId, projectId))
-        .filter((option) => repositoryIdOf(option).length > 0)
-        .sort((left, right) => (left.displayName ?? '').localeCompare(right.displayName ?? ''))
+      const host = state.hosts.find((candidate) => candidate.id === hostId)
 
-      if (ticket !== repositoriesTicket || state.organizationScopeId !== scopeId || state.projectId !== projectId) {
+      // Two endpoints because the identifiers differ. Azure DevOps repositories are addressed through the
+      // organization scope and project and carry a canonical source reference; on the other providers the
+      // discovery endpoint returns the provider's own repository id, which the configuration stores.
+      const repositories = isAzureDevOps.value
+        ? (await listAdoCrawlFilters(clientId(), hostId, scopeId)).map((option) => ({
+            repositoryId: option.canonicalSourceRef?.value ?? '',
+            displayName: option.displayName ?? '',
+            canonicalSourceRef: option.canonicalSourceRef?.value ?? undefined,
+            sourceProvider: option.canonicalSourceRef?.provider ?? undefined,
+          }))
+        : (
+            await listProviderRepositoryOptions(clientId(), state.provider, host?.connectionId ?? '', scopeId)
+          ).map((option) => ({
+            repositoryId: option.repositoryId ?? '',
+            displayName: option.displayName ?? '',
+            canonicalSourceRef: option.repositoryId ?? undefined,
+            sourceProvider: state.provider,
+          }))
+
+      if (requestId !== repositoriesRequestId || state.hostId !== hostId || state.scopeId !== scopeId) {
         return
       }
 
       state.repositories = repositories
+        .filter((repository) => repository.repositoryId.length > 0)
+        .sort((left, right) =>
+          (left.displayName || left.repositoryId).localeCompare(right.displayName || right.repositoryId),
+        )
     } catch (cause) {
-      if (ticket !== repositoriesTicket || state.organizationScopeId !== scopeId || state.projectId !== projectId) {
+      if (requestId !== repositoriesRequestId || state.hostId !== hostId || state.scopeId !== scopeId) {
         return
       }
 
@@ -176,30 +274,30 @@ export function useMentionConfigDiscovery(clientId: () => string) {
       state.repositoryError = toMessage(cause, 'Failed to load repositories.')
     } finally {
       if (
-        ticket === repositoriesTicket &&
-        state.organizationScopeId === scopeId &&
-        state.projectId === projectId
+        requestId === repositoriesRequestId &&
+        state.hostId === hostId &&
+        state.scopeId === scopeId
       ) {
         state.loadingRepositories = false
       }
     }
   }
 
-  async function selectOrganizationScope(scopeId: string) {
-    state.organizationScopeId = scopeId
-    clearProjects()
+  async function selectHost(hostId: string) {
+    state.hostId = hostId
+    clearScopes()
 
-    if (scopeId) {
-      await loadProjects(scopeId)
+    if (hostId) {
+      await loadScopes(hostId)
     }
   }
 
-  async function selectProject(projectId: string) {
-    state.projectId = projectId
+  async function selectScope(scopeId: string) {
+    state.scopeId = scopeId
     clearRepositories()
 
-    if (state.organizationScopeId && projectId) {
-      await loadRepositories(state.organizationScopeId, projectId)
+    if (state.hostId && scopeId) {
+      await loadRepositories(state.hostId, scopeId)
     }
   }
 
@@ -207,18 +305,23 @@ export function useMentionConfigDiscovery(clientId: () => string) {
    * Points the pickers at what a saved configuration already targets, so editing offers repository names
    * rather than bare ids.
    */
-  async function resolveForEdit(savedScopePath: string, savedProjectKey: string) {
+  async function resolveForEdit(
+    provider: ScmProviderFamily,
+    savedScopePath: string,
+    savedProjectKey: string,
+  ) {
     reset()
-    const session = sessionTicket
+    state.provider = provider
+    const formRequest = formRequestId
 
-    await loadOrganizationScopes()
-    if (session !== sessionTicket) {
+    await loadHosts()
+    if (formRequest !== formRequestId) {
       return
     }
 
     const wanted = savedScopePath.trim().replace(/\/+$/, '').toLowerCase()
-    const match = state.organizationScopes.find(
-      (scope) => (scope.organizationUrl ?? '').trim().replace(/\/+$/, '').toLowerCase() === wanted,
+    const match = state.hosts.find(
+      (host) => host.scopePath.trim().replace(/\/+$/, '').toLowerCase() === wanted,
     )
 
     if (!match?.id) {
@@ -226,13 +329,13 @@ export function useMentionConfigDiscovery(clientId: () => string) {
       return
     }
 
-    state.organizationScopeId = match.id
-    await loadProjects(match.id)
-    if (session !== sessionTicket) {
+    state.hostId = match.id
+    await loadScopes(match.id)
+    if (formRequest !== formRequestId) {
       return
     }
 
-    state.projectId = savedProjectKey
+    state.scopeId = savedProjectKey
     if (savedProjectKey) {
       await loadRepositories(match.id, savedProjectKey)
     }
@@ -241,11 +344,11 @@ export function useMentionConfigDiscovery(clientId: () => string) {
   return {
     state,
     scopePath,
-    repositoryIdOf,
-    providerOf,
-    loadOrganizationScopes,
-    selectOrganizationScope,
-    selectProject,
+    isAzureDevOps,
+    loadHosts,
+    selectProvider,
+    selectHost,
+    selectScope,
     resolveForEdit,
     reset,
   }

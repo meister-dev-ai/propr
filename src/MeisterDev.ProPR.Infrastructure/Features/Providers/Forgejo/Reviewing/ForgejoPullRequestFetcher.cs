@@ -183,6 +183,89 @@ internal sealed class ForgejoPullRequestFetcher(
         return await this.FetchExistingThreadsAsync(context, host, repositoryPath, pullRequestId, cancellationToken);
     }
 
+    /// <summary>
+    ///     Reads the pull request's own conversation. Forgejo keeps those comments on the issue timeline, not
+    ///     among the review comments the rest of this adapter reads, so a question asked there is invisible
+    ///     without this. Each comment is its own conversation, because Forgejo threads nothing here either.
+    /// </summary>
+    public async Task<IReadOnlyList<PrCommentThread>> FetchConversationThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("Forgejo pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.Forgejo, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, cancellationToken);
+
+        var comments = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.GetConversationCommentPageAsync(
+                context,
+                host,
+                repositoryPath,
+                pullRequestId,
+                page,
+                pageSize,
+                pageCt),
+            comment => comment.Id.ToString(CultureInfo.InvariantCulture),
+            $"Forgejo's conversation listing for pull request {pullRequestId}",
+            cancellationToken);
+
+        return comments
+            .Select(comment => new PrCommentThread(
+                comment.Id.ToString(CultureInfo.InvariantCulture),
+
+                // No file and no line: this comment sits on the pull request, not on the diff.
+                null,
+                null,
+                [
+                    new PrThreadComment(
+                        comment.User?.Login ?? "Unknown",
+                        comment.Body ?? string.Empty,
+                        null,
+                        comment.Id,
+                        comment.CreatedAt,
+                        false),
+                ],
+                "Active"))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private async Task<ProviderRestPager.RestPage<ForgejoIssueCommentResponse>> GetConversationCommentPageAsync(
+        ForgejoConnectionVerifier.ForgejoConnectionContext context,
+        ProviderHostRef host,
+        string repositoryPath,
+        int pullRequestId,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
+            ForgejoConnectionVerifier.BuildApiUri(
+                host,
+                $"/repos/{repositoryPath}/issues/{pullRequestId.ToString(CultureInfo.InvariantCulture)}/comments",
+                BuildPageQuery(page, pageSize)),
+            context.Connection.Secret);
+        using var response = await httpClientFactory.CreateClient("ForgejoProvider").SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"Forgejo conversation lookup failed with status {(int)response.StatusCode}.");
+        }
+
+        var comments = await response.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoIssueCommentResponse>>(ct) ?? [];
+        return new ProviderRestPager.RestPage<ForgejoIssueCommentResponse>(
+            comments,
+            TotalCount: ProviderPaginationHeaders.ReadForgejoTotalCount(response));
+    }
+
     public async Task<PullRequest> FetchThreadContextAsync(
         string organizationUrl,
         string projectId,
@@ -782,6 +865,15 @@ internal sealed class ForgejoPullRequestFetcher(
     private sealed record ForgejoRepositoryResponse(
         [property: JsonPropertyName("full_name")]
         string? FullName);
+
+    private sealed record ForgejoIssueCommentResponse(
+        [property: JsonPropertyName("id")] long Id,
+        [property: JsonPropertyName("body")] string? Body,
+        [property: JsonPropertyName("created_at")]
+        DateTimeOffset? CreatedAt,
+        [property: JsonPropertyName("user")] ForgejoCommentUserResponse? User);
+
+    private sealed record ForgejoCommentUserResponse([property: JsonPropertyName("login")] string? Login);
 
     private sealed record ForgejoPullRequestResponse(
         [property: JsonPropertyName("title")] string? Title,

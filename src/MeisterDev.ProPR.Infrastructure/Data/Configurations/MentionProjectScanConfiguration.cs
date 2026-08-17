@@ -25,6 +25,9 @@ internal sealed class MentionProjectScanConfiguration : IEntityTypeConfiguration
             .HasColumnName("last_scanned_at")
             .IsRequired();
 
+        builder.Property(s => s.LastCompleteScanAt)
+            .HasColumnName("last_complete_scan_at");
+
         builder.Property(s => s.UpdatedAt)
             .HasColumnName("updated_at")
             .IsRequired();

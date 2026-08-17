@@ -53,7 +53,7 @@ public sealed class GitLabDiscoveryServiceTests
             request.RequestUri!.AbsoluteUri switch
             {
                 "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
-                "https://gitlab.example.com/api/v4/groups?per_page=100&min_access_level=10" => GitLabTestHelpers
+                "https://gitlab.example.com/api/v4/groups?per_page=100&page=1&min_access_level=10" => GitLabTestHelpers
                     .CreateJsonResponse(
                         new[]
                         {
@@ -82,7 +82,7 @@ public sealed class GitLabDiscoveryServiceTests
             request.RequestUri!.AbsoluteUri switch
             {
                 "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
-                "https://gitlab.example.com/api/v4/groups/acme%2Fplatform/projects?include_subgroups=true&simple=true&per_page=100"
+                "https://gitlab.example.com/api/v4/groups/acme%2Fplatform/projects?per_page=100&page=1&include_subgroups=true&simple=true"
                     => GitLabTestHelpers.CreateJsonResponse(
                         new[]
                         {

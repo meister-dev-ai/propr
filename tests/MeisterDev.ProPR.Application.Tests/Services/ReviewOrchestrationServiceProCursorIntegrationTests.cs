@@ -249,7 +249,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             .Returns(false);
 
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
-        prScanRepository.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(job.ClientId, Arg.Any<string>(), Arg.Any<string>(), job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
             .Returns((ReviewPrScan?)null);
 
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
@@ -407,7 +407,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             .Returns(true);
 
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
-        prScanRepository.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
+        prScanRepository.GetAsync(job.ClientId, Arg.Any<string>(), Arg.Any<string>(), job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
             .Returns((ReviewPrScan?)null);
 
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();

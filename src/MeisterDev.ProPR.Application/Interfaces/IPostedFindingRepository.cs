@@ -18,6 +18,8 @@ public interface IPostedFindingRepository
     /// </summary>
     Task<PostedFindingSimilarityDto?> FindClosestInPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         float[] queryVector,

@@ -15,11 +15,7 @@ public class ReviewPrScanTests
         string lastProcessedCommitId = "abc123")
     {
         return new ReviewPrScan(
-            id ?? Guid.NewGuid(),
-            clientId ?? Guid.NewGuid(),
-            repositoryId,
-            pullRequestId,
-            lastProcessedCommitId);
+            id ?? Guid.NewGuid(), clientId ?? Guid.NewGuid(), "https://provider.example", "project", repositoryId, pullRequestId, lastProcessedCommitId);
     }
 
     [Fact]
@@ -28,7 +24,7 @@ public class ReviewPrScanTests
         var id = Guid.NewGuid();
         var clientId = Guid.NewGuid();
 
-        var scan = new ReviewPrScan(id, clientId, "my-repo", 42, "sha-abc");
+        var scan = new ReviewPrScan(id, clientId, "https://provider.example", "project", "my-repo", 42, "sha-abc");
 
         Assert.Equal(id, scan.Id);
         Assert.Equal(clientId, scan.ClientId);

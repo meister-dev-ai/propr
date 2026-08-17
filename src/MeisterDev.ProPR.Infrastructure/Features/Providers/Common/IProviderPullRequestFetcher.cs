@@ -42,6 +42,30 @@ internal interface IProviderPullRequestFetcher
     }
 
     /// <summary>
+    ///     Fetches the comments in the pull request's own conversation, which belong to no review thread.
+    /// </summary>
+    /// <remarks>
+    ///     Kept apart from <see cref="FetchThreadsAsync" /> rather than folded into it, because the review
+    ///     prompt, the file reviewer and the thread pass all read the thread set and none of them wants
+    ///     comments that sit on no file. Only mention scanning asks for these: a question addressed to the
+    ///     reviewer is as likely to be asked in the conversation as on a line of code.
+    ///     The default is empty, which is right for a provider whose thread set already holds these comments:
+    ///     Azure DevOps models every pull request comment as a thread, so it needs no separate read. Every
+    ///     other adapter overrides this, GitLab included — it returns standalone notes from the same
+    ///     discussions endpoint as the rest, but its thread read drops them for being anchored to no file.
+    /// </remarks>
+    Task<IReadOnlyList<PrCommentThread>> FetchConversationThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PrCommentThread>>([]);
+    }
+
+    /// <summary>
     ///     Fetches pull-request metadata and comment threads with no changed-file content, for the thread
     ///     pass. Default implementation performs a full fetch, which every adapter overrides; the fallback
     ///     exists so a new adapter is correct before it is cheap.

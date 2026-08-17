@@ -25,6 +25,12 @@ public sealed class PostedFindingRecord
     public Guid ClientId { get; init; }
 
     /// <summary>Provider repository identifier. Required, at most 256 characters.</summary>
+    /// <summary>The host that issued <see cref="RepositoryId" />, and so the scope it is unique within.</summary>
+    public string OrganizationUrl { get; init; } = string.Empty;
+
+    /// <summary>The project within the host, empty where the host addresses repositories without one.</summary>
+    public string ProjectId { get; init; } = string.Empty;
+
     public string RepositoryId { get; init; } = string.Empty;
 
     /// <summary>Pull request number the finding was posted on. Must be greater than zero.</summary>

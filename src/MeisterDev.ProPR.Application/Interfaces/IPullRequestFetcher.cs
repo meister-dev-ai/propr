@@ -111,6 +111,32 @@ public interface IPullRequestFetcher
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    ///     Fetches the comments in the pull request's own conversation, which belong to no review thread.
+    /// </summary>
+    /// <remarks>
+    ///     Asked for separately from the thread set, because the review prompt, the file reviewer and the
+    ///     thread pass all read that set and none of them wants comments sitting on no file. Only mention
+    ///     scanning asks for these, since a question addressed to the reviewer is as likely to be asked in the
+    ///     conversation as on a line of code. Empty for the providers whose thread set already holds them.
+    /// </remarks>
+    /// <param name="organizationUrl">Provider scope path.</param>
+    /// <param name="projectId">Provider project key.</param>
+    /// <param name="repositoryId">Provider-native repository identifier.</param>
+    /// <param name="pullRequestId">The pull request number.</param>
+    /// <param name="clientId">Optional client ID for credential retrieval.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    Task<IReadOnlyList<PrCommentThread>> FetchConversationThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PrCommentThread>>([]);
+    }
+
+    /// <summary>
     ///     Fetches what is needed to reason about a pull request's conversation: its metadata, its status, the
     ///     identity the connection authenticated as, and its comment threads. <c>ChangedFiles</c> comes back
     ///     empty, because none of the file content is downloaded; a caller that needs one file's diff asks for

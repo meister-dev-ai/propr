@@ -108,6 +108,8 @@ public sealed partial class ThreadMemoryController(
         {
             await this.ResetLastSeenStatusAsync(
                 clientId,
+                existing.OrganizationUrl,
+                existing.ProjectId,
                 existing.RepositoryId,
                 existing.PullRequestId,
                 existing.ThreadId,
@@ -196,6 +198,8 @@ public sealed partial class ThreadMemoryController(
 
     private async Task ResetLastSeenStatusAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadId,
@@ -203,21 +207,23 @@ public sealed partial class ThreadMemoryController(
     {
         try
         {
-            var scan = await scanRepository.GetAsync(clientId, repositoryId, pullRequestId, ct);
-            if (scan is null)
-            {
-                return;
-            }
-
-            var thread = scan.Threads.FirstOrDefault(t =>
-                string.Equals(t.ThreadId, threadId, StringComparison.Ordinal));
-            if (thread is null)
+            var scan = await scanRepository.GetAsync(
+                clientId,
+                organizationUrl,
+                projectId,
+                repositoryId,
+                pullRequestId,
+                ct);
+            if (scan?.Threads.Any(thread => string.Equals(thread.ThreadId, threadId, StringComparison.Ordinal))
+                is not true)
             {
                 return;
             }
 
             await scanRepository.SetLastSeenStatusesAsync(
                 clientId,
+                organizationUrl,
+                projectId,
                 repositoryId,
                 pullRequestId,
                 new Dictionary<string, string?>(StringComparer.Ordinal) { [threadId] = null },

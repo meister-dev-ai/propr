@@ -59,6 +59,28 @@ public interface IMentionReplyJobRepository
         CancellationToken ct = default);
 
     /// <summary>
+    ///     The provider-native identifiers of the comments ProPR itself posted on one pull request, so a scan
+    ///     can tell its own answers from the questions it is looking for.
+    /// </summary>
+    /// <remarks>
+    ///     To the provider an answer is an ordinary comment, and it is newer than every watermark. If it
+    ///     repeats the reviewer's handle outside a blockquote, the next scan reads it as a new question and
+    ///     answers it, and so on for as long as the pull request is open. The comparison is against the
+    ///     identifiers ProPR recorded posting, not against the comment's author: on an installation whose
+    ///     reviewer identity is an account a person also posts from, an author check would refuse real
+    ///     questions.
+    ///     Deliberately not scoped to a client, for the same reason
+    ///     <see cref="ExistsForCommentAsync" /> is not: another client's answer is still ProPR's answer.
+    /// </remarks>
+    /// <param name="repositoryId">Provider-native repository identifier.</param>
+    /// <param name="pullRequestId">Provider pull request number.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    Task<IReadOnlySet<string>> GetPostedReplyCommentIdsAsync(
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Atomic compare-and-swap on <see cref="MentionJobStatus" />.
     ///     Returns <c>false</c> if the current status does not equal <paramref name="from" />.
     /// </summary>

@@ -311,6 +311,90 @@ internal sealed class GitHubPullRequestFetcher(
             : null;
     }
 
+    /// <summary>
+    ///     Reads the pull request's own conversation. GitHub keeps those comments on the issue timeline, not
+    ///     in the review-thread connection the rest of this adapter reads, so a question asked there is
+    ///     invisible without this. Each comment is its own conversation, because GitHub threads nothing here.
+    /// </summary>
+    public async Task<IReadOnlyList<PrCommentThread>> FetchConversationThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitHub pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.GitHub, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, cancellationToken);
+
+        var comments = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.GetConversationCommentPageAsync(
+                context,
+                host,
+                repositoryPath,
+                pullRequestId,
+                page,
+                pageSize,
+                pageCt),
+            comment => comment.Id.ToString(CultureInfo.InvariantCulture),
+            $"GitHub's conversation listing for pull request {pullRequestId}",
+            cancellationToken);
+
+        return comments
+            .Select(comment => new PrCommentThread(
+                comment.Id.ToString(CultureInfo.InvariantCulture),
+
+                // No file and no line: this comment sits on the pull request, not on the diff. That absence
+                // is what tells the reply publisher to answer with a quote rather than into a thread.
+                null,
+                null,
+                [
+                    new PrThreadComment(
+                        comment.User?.Login ?? "Unknown",
+                        comment.Body ?? string.Empty,
+                        null,
+                        comment.Id,
+                        comment.CreatedAt,
+                        false),
+                ],
+                "Active"))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private async Task<ProviderRestPager.RestPage<GitHubIssueCommentResponse>> GetConversationCommentPageAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        ProviderHostRef host,
+        string repositoryPath,
+        int pullRequestId,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        using var request = await context.CreateAuthenticatedRequestAsync(
+            GitHubConnectionVerifier.BuildApiUri(
+                host,
+                $"/repos/{repositoryPath}/issues/{pullRequestId.ToString(CultureInfo.InvariantCulture)}/comments",
+                BuildPageQuery(page, pageSize)),
+            ct: ct);
+        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitHub conversation lookup failed with status {(int)response.StatusCode}.");
+        }
+
+        var comments = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubIssueCommentResponse>>(ct) ?? [];
+        return new ProviderRestPager.RestPage<GitHubIssueCommentResponse>(
+            comments,
+            ProviderPaginationHeaders.ReadGitHubHasMore(response));
+    }
+
     private async Task<string> ResolveRepositoryPathAsync(
         GitHubConnectionVerifier.GitHubConnectionContext context,
         ProviderHostRef host,
@@ -756,6 +840,15 @@ internal sealed class GitHubPullRequestFetcher(
     private sealed record GitHubRepositoryResponse(
         [property: JsonPropertyName("full_name")]
         string? FullName);
+
+    private sealed record GitHubIssueCommentResponse(
+        [property: JsonPropertyName("id")] long Id,
+        [property: JsonPropertyName("body")] string? Body,
+        [property: JsonPropertyName("created_at")]
+        DateTimeOffset? CreatedAt,
+        [property: JsonPropertyName("user")] GitHubCommentUserResponse? User);
+
+    private sealed record GitHubCommentUserResponse([property: JsonPropertyName("login")] string? Login);
 
     private sealed record GitHubPullRequestResponse(
         [property: JsonPropertyName("title")] string? Title,

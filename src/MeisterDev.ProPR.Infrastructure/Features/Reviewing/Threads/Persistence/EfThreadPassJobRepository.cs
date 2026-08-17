@@ -253,6 +253,8 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
     /// <inheritdoc />
     public async Task<IReadOnlyList<ThreadPassJob>> GetForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         int maxCount,
@@ -262,6 +264,8 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
             .AsNoTracking()
             .Include(job => job.HandledThreads)
             .Where(job => job.ClientId == clientId
+                          && job.OrganizationUrl == organizationUrl
+                          && job.ProjectId == projectId
                           && job.RepositoryId == repositoryId
                           && job.PullRequestId == pullRequestId)
             .OrderByDescending(job => job.CreatedAt)
@@ -314,12 +318,16 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
     /// <inheritdoc />
     public async Task<int> CancelActiveForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         CancellationToken ct = default)
     {
         return await dbContext.ThreadPassJobs
             .Where(job => job.ClientId == clientId
+                          && job.OrganizationUrl == organizationUrl
+                          && job.ProjectId == projectId
                           && job.RepositoryId == repositoryId
                           && job.PullRequestId == pullRequestId
                           && InFlightStatuses.Contains(job.Status))
@@ -374,6 +382,8 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
     /// <inheritdoc />
     public async Task<IReadOnlyList<ThreadPassHandledThreadKey>> GetHandledThreadKeysAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string revisionKey,
@@ -385,6 +395,8 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
         var rows = await dbContext.ThreadPassHandledThreads
             .AsNoTracking()
             .Where(row => row.ClientId == clientId
+                          && row.OrganizationUrl == organizationUrl
+                          && row.ProjectId == projectId
                           && row.RepositoryId == repositoryId
                           && row.PullRequestId == pullRequestId
                           && row.RevisionKey == revisionKey)
@@ -400,6 +412,8 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
     public async Task RecordHandledThreadAsync(
         Guid jobId,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadId,
@@ -412,6 +426,8 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
             Id = Guid.NewGuid(),
             ThreadPassJobId = jobId,
             ClientId = clientId,
+            OrganizationUrl = organizationUrl,
+            ProjectId = projectId,
             RepositoryId = repositoryId,
             PullRequestId = pullRequestId,
             ThreadId = threadId,

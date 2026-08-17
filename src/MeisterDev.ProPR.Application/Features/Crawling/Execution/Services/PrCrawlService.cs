@@ -310,6 +310,8 @@ public sealed partial class PrCrawlService(
         {
             var scan = await prScanRepository.GetAsync(
                 config.ClientId,
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 ct);
@@ -515,6 +517,8 @@ public sealed partial class PrCrawlService(
         {
             var scan = await prScanRepository!.GetAsync(
                 config.ClientId,
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
                 ct);
@@ -563,6 +567,8 @@ public sealed partial class PrCrawlService(
                 {
                     var resolved = new ThreadResolvedDomainEvent(
                         config.ClientId,
+                        config.ProviderScopePath,
+                        config.ProviderProjectKey,
                         pr.Repository.ExternalRepositoryId,
                         pr.CodeReview.Number,
                         thread.ThreadId,
@@ -588,6 +594,8 @@ public sealed partial class PrCrawlService(
                     await threadMemoryService!.HandleThreadReopenedAsync(
                         new ThreadReopenedDomainEvent(
                             config.ClientId,
+                            config.ProviderScopePath,
+                            config.ProviderProjectKey,
                             pr.Repository.ExternalRepositoryId,
                             pr.CodeReview.Number,
                             thread.ThreadId,
@@ -632,6 +640,8 @@ public sealed partial class PrCrawlService(
 
         await prScanRepository!.SetLastSeenStatusesAsync(
             existingScan.ClientId,
+            existingScan.OrganizationUrl,
+            existingScan.ProjectId,
             existingScan.RepositoryId,
             existingScan.PullRequestId,
             statusByThreadId,

@@ -1073,6 +1073,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("LastCompleteScanAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_complete_scan_at");
+
                     b.Property<DateTimeOffset>("LastScannedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_scanned_at");
@@ -1400,6 +1404,20 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("iteration_id");
 
+                    b.Property<string>("OrganizationUrl")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("organization_url");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("project_id");
+
                     b.Property<string>("ProviderThreadId")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -1432,10 +1450,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("EmbeddingVector"), "hnsw");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("EmbeddingVector"), new[] { "vector_cosine_ops" });
 
-                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId")
+                    b.HasIndex("ClientId", "OrganizationUrl", "ProjectId", "RepositoryId", "PullRequestId")
                         .HasDatabaseName("ix_posted_finding_records_pull_request");
 
-                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "ProviderThreadId")
+                    b.HasIndex("ClientId", "OrganizationUrl", "ProjectId", "RepositoryId", "PullRequestId", "ProviderThreadId")
                         .IsUnique()
                         .HasDatabaseName("uq_posted_finding_records_thread");
 
@@ -2517,6 +2535,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDefaultValue("")
                         .HasColumnName("last_thread_pass_revision_key");
 
+                    b.Property<string>("OrganizationUrl")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("organization_url");
+
                     b.Property<DateTimeOffset?>("PendingReviewDetectedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("pending_review_detected_at");
@@ -2527,6 +2552,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasDefaultValue("")
                         .HasColumnName("pending_review_revision_key");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("project_id");
 
                     b.Property<int>("PullRequestId")
                         .HasColumnType("integer")
@@ -2543,7 +2575,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId")
+                    b.HasIndex("ClientId", "OrganizationUrl", "ProjectId", "RepositoryId", "PullRequestId")
                         .IsUnique()
                         .HasDatabaseName("uq_review_pr_scans_pr");
 
@@ -2804,6 +2836,20 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDefaultValue((short)0)
                         .HasColumnName("memory_source");
 
+                    b.Property<string>("OrganizationUrl")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("organization_url");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("project_id");
+
                     b.Property<int>("PullRequestId")
                         .HasColumnType("integer")
                         .HasColumnName("pull_request_id");
@@ -2857,12 +2903,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_thread_memory_records_client_updated_at");
 
-                    b.HasIndex("ClientId", "RepositoryId", "ThreadId")
+                    b.HasIndex("ClientId", "OrganizationUrl", "ProjectId", "RepositoryId", "ThreadId")
                         .IsUnique()
                         .HasDatabaseName("uq_thread_memory_records_thread");
 
-                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "UpdatedAt")
-                        .IsDescending(false, false, false, true)
+                    b.HasIndex("ClientId", "OrganizationUrl", "ProjectId", "RepositoryId", "PullRequestId", "UpdatedAt")
+                        .IsDescending(false, false, false, false, false, true)
                         .HasDatabaseName("ix_thread_memory_records_client_pr_updated_at");
 
                     b.ToTable("thread_memory_records", (string)null);
@@ -2881,6 +2927,20 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<int>("ObservedReplyCount")
                         .HasColumnType("integer")
                         .HasColumnName("observed_reply_count");
+
+                    b.Property<string>("OrganizationUrl")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("organization_url");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("project_id");
 
                     b.Property<int>("PullRequestId")
                         .HasColumnType("integer")
@@ -2915,7 +2975,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.HasIndex("ThreadPassJobId");
 
-                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "ThreadId", "ObservedReplyCount", "RevisionKey")
+                    b.HasIndex("ClientId", "OrganizationUrl", "ProjectId", "RepositoryId", "PullRequestId", "ThreadId", "ObservedReplyCount", "RevisionKey")
                         .IsUnique()
                         .HasDatabaseName("uq_thread_pass_handled_threads_key");
 

@@ -137,10 +137,14 @@ internal sealed class GitHubConnectionVerifier(
         EnsureGitHub(host);
 
         var normalizedPath = relativePath.StartsWith('/') ? relativePath : "/" + relativePath;
-        var baseUrl = GetApiBaseUrl(host);
-        var builder = new UriBuilder(baseUrl)
+        var baseUri = new Uri(GetApiBaseUrl(host));
+
+        // Appended to the base path rather than replacing it. GitHub Enterprise Server serves its API under
+        // /api/v3, and assigning the path outright dropped that prefix, so every REST call to an enterprise
+        // host went to the web address of the resource instead of its API.
+        var builder = new UriBuilder(baseUri)
         {
-            Path = normalizedPath,
+            Path = baseUri.AbsolutePath.TrimEnd('/') + normalizedPath,
             Query = query ?? string.Empty,
         };
 

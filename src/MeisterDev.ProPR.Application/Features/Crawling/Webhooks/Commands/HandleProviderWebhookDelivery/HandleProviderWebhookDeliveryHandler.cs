@@ -129,6 +129,16 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
                 command.Payload,
                 ct);
         }
+        catch (UnsupportedWebhookEventException)
+        {
+            // Acknowledged rather than refused. The delivery is well-formed and simply describes something
+            // this product does not act on, and a provider that is told its request was bad counts that
+            // against the hook until it disables it, taking the events that do matter with it.
+            var eventType = TryReadEventHeader(command.Provider, command.Headers) ?? "unknown";
+            var ignored = CreateIgnoredDecision();
+            await this.PersistLogAsync(configuration.Id, eventType, null, null, null, null, ignored, ct);
+            return CompleteDecision(activity, startedAt, providerTagValue, eventType, true, ignored);
+        }
         catch (InvalidOperationException)
         {
             var rejected = CreateRejectedDecision(
@@ -143,15 +153,7 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
         var classification = Classify(delivery);
         if (classification is null)
         {
-            var ignored = NormalizeDecision(
-                new WebhookRoutingDecision(
-                    WebhookDeliveryOutcome.Ignored,
-                    OkStatusCode,
-                    "ignored",
-                    [
-                        "Ignored delivery because the event type is unsupported or disabled for this webhook configuration.",
-                    ],
-                    "Unsupported or disabled event type."));
+            var ignored = CreateIgnoredDecision();
             await this.PersistLogAsync(
                 configuration.Id,
                 delivery.EventName,
@@ -166,15 +168,7 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
 
         if (!configuration.EnabledEvents.Contains(classification.EventType))
         {
-            var ignored = NormalizeDecision(
-                new WebhookRoutingDecision(
-                    WebhookDeliveryOutcome.Ignored,
-                    OkStatusCode,
-                    "ignored",
-                    [
-                        "Ignored delivery because the event type is unsupported or disabled for this webhook configuration.",
-                    ],
-                    "Unsupported or disabled event type."));
+            var ignored = CreateIgnoredDecision();
             await this.PersistLogAsync(
                 configuration.Id,
                 delivery.EventName,
@@ -776,6 +770,27 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
         WebhookDeliveryCounter.Add(1, tags);
         WebhookDeliveryDuration.Record(stopwatch.Elapsed.TotalSeconds, tags);
         return decision;
+    }
+
+    /// <summary>
+    ///     A delivery that is well-formed and describes something this product does not act on: acknowledged
+    ///     rather than refused, because a provider told its request was bad counts that against the hook until
+    ///     it disables it, taking the deliveries that do matter with it.
+    /// </summary>
+    /// <remarks>
+    ///     One shape for all three ways of arriving here — an event type no classifier handles, a payload about
+    ///     something other than a pull request, and an event this configuration has turned off. They are the
+    ///     same answer to the caller, and writing it three times invites two of them to drift.
+    /// </remarks>
+    private static WebhookRoutingDecision CreateIgnoredDecision()
+    {
+        return NormalizeDecision(
+            new WebhookRoutingDecision(
+                WebhookDeliveryOutcome.Ignored,
+                OkStatusCode,
+                "ignored",
+                ["Ignored delivery because the event type is unsupported or disabled for this webhook configuration."],
+                "Unsupported or disabled event type."));
     }
 
     private static WebhookRoutingDecision CreateRejectedDecision(int httpStatusCode, string? reason)

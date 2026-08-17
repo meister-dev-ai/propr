@@ -118,6 +118,8 @@ public sealed class PrReviewViewControllerThreadPassTests
         var memoryRepository = Substitute.For<IThreadMemoryRepository>();
         memoryRepository.GetDigestsForPullRequestAsync(
                 ClientId,
+                ScopePath,
+                ProjectKey,
                 RepositoryId,
                 PullRequestId,
                 Arg.Any<MemorySource>(),
@@ -128,6 +130,8 @@ public sealed class PrReviewViewControllerThreadPassTests
         var threadPasses = Substitute.For<IThreadPassJobRepository>();
         threadPasses.GetForPullRequestAsync(
                 ClientId,
+                ScopePath,
+                ProjectKey,
                 RepositoryId,
                 PullRequestId,
                 Arg.Any<int>(),

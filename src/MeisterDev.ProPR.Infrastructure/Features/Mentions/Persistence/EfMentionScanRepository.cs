@@ -32,6 +32,7 @@ public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : I
             .ExecuteUpdateAsync(
                 s => s
                     .SetProperty(p => p.LastScannedAt, record.LastScannedAt)
+                    .SetProperty(p => p.LastCompleteScanAt, record.LastCompleteScanAt)
                     .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow),
                 ct);
 

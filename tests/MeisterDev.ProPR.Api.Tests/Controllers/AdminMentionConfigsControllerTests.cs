@@ -3,9 +3,13 @@
 
 using FluentValidation;
 using MeisterDev.ProPR.Api.Controllers;
+using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Api.Validators;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Features.Mentions.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -106,6 +110,62 @@ public sealed class AdminMentionConfigsControllerTests
         await repo.DidNotReceive().GetAllActiveAsync(Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    ///     An installation not entitled to answer mentions accepts no configuration for it. The worker holds
+    ///     the same capability before it scans, which is what stops answers being posted, but the worker is not
+    ///     a boundary a request passes: without this a configuration can be stored, and read back, on an
+    ///     installation that will never act on it.
+    /// </summary>
+    [Fact]
+    public async Task Create_WhenTheInstallationCannotAnswerMentions_IsRefusedBeforeAnythingIsStored()
+    {
+        var repo = CreateRepo();
+        var controller = CreateController(
+            repo,
+            clientRoles: AdminOf(OwnedClient),
+            licensing: UnavailableMentionAnswering());
+
+        var result = await controller.Create(
+            Request(),
+            new CreateMentionConfigRequestValidator(),
+            CancellationToken.None);
+
+        Assert.IsType<PremiumFeatureUnavailableResult>(result);
+        await repo.DidNotReceiveWithAnyArgs().AddAsync(default, default, default!, default!, default, default!);
+    }
+
+    /// <summary>Reading is held the same way, so the tab renders the refusal rather than an empty list.</summary>
+    [Fact]
+    public async Task List_WhenTheInstallationCannotAnswerMentions_IsRefused()
+    {
+        var controller = CreateController(
+            CreateRepo(),
+            clientRoles: AdminOf(OwnedClient),
+            licensing: UnavailableMentionAnswering());
+
+        var result = await controller.List(OwnedClient, CancellationToken.None);
+
+        Assert.IsType<PremiumFeatureUnavailableResult>(result);
+    }
+
+    private static ILicensingCapabilityService UnavailableMentionAnswering()
+    {
+        var licensing = Substitute.For<ILicensingCapabilityService>();
+        licensing.GetCapabilityAsync(PremiumCapabilityKey.MentionAnswering, Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new CapabilitySnapshot(
+                        PremiumCapabilityKey.MentionAnswering,
+                        "Mention answering",
+                        true,
+                        true,
+                        PremiumCapabilityOverrideState.Disabled,
+                        false,
+                        "Mention answering is currently disabled for this installation.")));
+
+        return licensing;
+    }
+
     [Theory]
     [InlineData("https://attacker.example")]
     [InlineData("http://127.0.0.1")]
@@ -156,6 +216,154 @@ public sealed class AdminMentionConfigsControllerTests
             CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceiveWithAnyArgs().AddAsync(default, default, default!, default!, default, default!);
+    }
+
+    /// <summary>
+    ///     One rule, proven for each provider family. The check it replaced ran only for Azure DevOps, so
+    ///     naming any other provider stored whatever URL was sent, and a scan later offered the platform's own
+    ///     identity to it.
+    /// </summary>
+    [Theory]
+    [InlineData(ScmProvider.AzureDevOps, "https://dev.azure.com/somebody-else")]
+    [InlineData(ScmProvider.GitHub, "https://github.enterprise.invalid")]
+    [InlineData(ScmProvider.GitLab, "https://gitlab.invalid")]
+    [InlineData(ScmProvider.Forgejo, "https://forgejo.invalid")]
+    public async Task Create_NamingAScopePathTheClientHasNoConnectionFor_IsRefused(
+        ScmProvider provider,
+        string scopePath)
+    {
+        var repo = CreateRepo();
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient));
+
+        var result = await controller.Create(
+            Request(scopePath: scopePath, provider: provider),
+            new CreateMentionConfigRequestValidator(),
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceiveWithAnyArgs().AddAsync(default, default, default!, default!, default, default!);
+    }
+
+    [Theory]
+    [InlineData(ScmProvider.GitHub, "https://github.com")]
+    [InlineData(ScmProvider.GitLab, "https://gitlab.com")]
+    [InlineData(ScmProvider.Forgejo, "https://codeberg.org")]
+    public async Task Create_NamingAConnectionTheClientHolds_IsAccepted(ScmProvider provider, string scopePath)
+    {
+        var repo = CreateRepo();
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient));
+
+        var result = await controller.Create(
+            Request(scopePath: scopePath, provider: provider),
+            new CreateMentionConfigRequestValidator(),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result);
+    }
+
+    /// <summary>A trailing separator and a difference in case are the same endpoint to every provider.</summary>
+    [Theory]
+    [InlineData("https://github.com/")]
+    [InlineData("https://GitHub.com")]
+    public async Task Create_NamingAConnectionSpelledDifferently_IsAccepted(string scopePath)
+    {
+        var repo = CreateRepo();
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient));
+
+        var result = await controller.Create(
+            Request(scopePath: scopePath, provider: ScmProvider.GitHub),
+            new CreateMentionConfigRequestValidator(),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result);
+    }
+
+    [Fact]
+    public async Task Create_NamingADeactivatedConnection_IsRefused()
+    {
+        var repo = CreateRepo();
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns([Connection(ScmProvider.GitHub, "https://github.com", isActive: false)]);
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), connections: connections);
+
+        var result = await controller.Create(
+            Request(scopePath: "https://github.com", provider: ScmProvider.GitHub),
+            new CreateMentionConfigRequestValidator(),
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceiveWithAnyArgs().AddAsync(default, default, default!, default!, default, default!);
+    }
+
+    /// <summary>
+    ///     Two providers can sit at one host. The provider named in the request is what decides which
+    ///     connection counts, so naming one and being scanned through the other is not possible.
+    /// </summary>
+    [Fact]
+    public async Task Create_NamingAHostTheClientHoldsForAnotherProvider_IsRefused()
+    {
+        var repo = CreateRepo();
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns([Connection(ScmProvider.Forgejo, "https://git.example.com")]);
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), connections: connections);
+
+        var result = await controller.Create(
+            Request(scopePath: "https://git.example.com", provider: ScmProvider.GitHub),
+            new CreateMentionConfigRequestValidator(),
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceiveWithAnyArgs().AddAsync(default, default, default!, default!, default, default!);
+    }
+
+    [Fact]
+    public async Task Create_ForAProviderThisDeploymentCannotDiscover_IsRefusedSayingSo()
+    {
+        var repo = CreateRepo();
+        var registry = Substitute.For<IScmProviderRegistry>();
+        registry.SupportsActivePullRequestDiscovery(Arg.Any<ScmProvider>()).Returns(false);
+        registry.SupportsReviewThreadReply(Arg.Any<ScmProvider>()).Returns(true);
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), providerRegistry: registry);
+
+        var result = await controller.Create(
+            Request(scopePath: "https://github.com", provider: ScmProvider.GitHub),
+            new CreateMentionConfigRequestValidator(),
+            CancellationToken.None);
+
+        var refusal = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains(
+            "discover pull requests",
+            refusal.Value?.ToString() ?? string.Empty,
+            StringComparison.OrdinalIgnoreCase);
+        await repo.DidNotReceiveWithAnyArgs().AddAsync(default, default, default!, default!, default, default!);
+    }
+
+    /// <summary>
+    ///     Answering needs both halves. A provider that can be read but offers no way to reply inside a review
+    ///     conversation would take a configuration, scan on it, and answer nothing.
+    /// </summary>
+    [Fact]
+    public async Task Create_ForAProviderThatCannotReplyInAConversation_IsRefusedSayingSo()
+    {
+        var repo = CreateRepo();
+        var registry = Substitute.For<IScmProviderRegistry>();
+        registry.SupportsActivePullRequestDiscovery(Arg.Any<ScmProvider>()).Returns(true);
+        registry.SupportsReviewThreadReply(Arg.Any<ScmProvider>()).Returns(false);
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), providerRegistry: registry);
+
+        var result = await controller.Create(
+            Request(scopePath: "https://codeberg.org", provider: ScmProvider.Forgejo),
+            new CreateMentionConfigRequestValidator(),
+            CancellationToken.None);
+
+        var refusal = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains(
+            "reply",
+            refusal.Value?.ToString() ?? string.Empty,
+            StringComparison.OrdinalIgnoreCase);
         await repo.DidNotReceiveWithAnyArgs().AddAsync(default, default, default!, default!, default, default!);
     }
 
@@ -381,11 +589,12 @@ public sealed class AdminMentionConfigsControllerTests
 
     private static CreateMentionConfigRequest Request(
         string scopePath = "https://dev.azure.com/org",
-        IReadOnlyList<MentionRepoFilterRequest>? repoFilters = null)
+        IReadOnlyList<MentionRepoFilterRequest>? repoFilters = null,
+        ScmProvider provider = ScmProvider.AzureDevOps)
     {
         return new CreateMentionConfigRequest(
             OwnedClient,
-            ScmProvider.AzureDevOps,
+            provider,
             scopePath,
             "proj",
             repoFilters ?? [new MentionRepoFilterRequest("repo-guid")]);
@@ -456,22 +665,77 @@ public sealed class AdminMentionConfigsControllerTests
         Assert.IsType<ValidationProblemDetails>(Assert.IsType<ObjectResult>(result).Value);
     }
 
+    /// <summary>
+    ///     Connections the client really holds, so a refusal for a provider other than Azure DevOps can only be
+    ///     the scope check.
+    /// </summary>
+    private static IClientScmConnectionRepository ConfiguredConnections()
+    {
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                Connection(ScmProvider.GitHub, "https://github.com"),
+                Connection(ScmProvider.GitLab, "https://gitlab.com"),
+                Connection(ScmProvider.Forgejo, "https://codeberg.org"),
+            ]);
+        return connections;
+    }
+
+    private static ClientScmConnectionDto Connection(ScmProvider provider, string hostBaseUrl, bool isActive = true)
+    {
+        return new ClientScmConnectionDto(
+            Guid.NewGuid(),
+            OwnedClient,
+            provider,
+            hostBaseUrl,
+            ScmAuthenticationKind.PersonalAccessToken,
+            provider.ToString(),
+            isActive,
+            "verified",
+            DateTimeOffset.UtcNow,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>A deployment that can both discover pull requests and reply in them, for every provider.</summary>
+    private static IScmProviderRegistry DiscoveryForEveryProvider()
+    {
+        var registry = Substitute.For<IScmProviderRegistry>();
+        registry.SupportsActivePullRequestDiscovery(Arg.Any<ScmProvider>()).Returns(true);
+        registry.SupportsReviewThreadReply(Arg.Any<ScmProvider>()).Returns(true);
+        return registry;
+    }
+
     private static AdminMentionConfigsController CreateController(
         IMentionConfigurationRepository repo,
         IUserRepository? users = null,
         bool isAdmin = false,
         IReadOnlyDictionary<Guid, ClientRole>? clientRoles = null,
-        IClientAdoOrganizationScopeRepository? organizationScopes = null)
+        IClientAdoOrganizationScopeRepository? organizationScopes = null,
+        IClientScmConnectionRepository? connections = null,
+        IScmProviderRegistry? providerRegistry = null,
+        ILicensingCapabilityService? licensing = null)
     {
         var clients = Substitute.For<IClientAdminService>();
         clients.ExistsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        // The real rule, not a stand-in for it, so every endpoint test exercises what a request has to pass.
+        var scopeValidator = new MentionConfigurationScopeValidator(
+            connections ?? ConfiguredConnections(),
+            providerRegistry ?? DiscoveryForEveryProvider(),
+            organizationScopes ?? ConfiguredOrganizations());
 
         var controller = new AdminMentionConfigsController(
             repo,
             users ?? Substitute.For<IUserRepository>(),
             clients,
-            organizationScopes ?? ConfiguredOrganizations(),
-            NullLogger<AdminMentionConfigsController>.Instance)
+            scopeValidator,
+            NullLogger<AdminMentionConfigsController>.Instance,
+            null,
+            licensing)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

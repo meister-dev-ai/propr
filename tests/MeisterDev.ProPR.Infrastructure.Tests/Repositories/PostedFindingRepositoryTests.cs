@@ -21,6 +21,11 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 [Collection("PostgresIntegration")]
 public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
+    /// <summary>The host that issued the repository identifiers in this fixture.</summary>
+    private const string Host = "https://provider.example";
+
+    private const string Project = "project";
+
     private const string RepoId = "posted-finding-repo";
     private static readonly Guid ClientA = Guid.Parse("dddddddd-0000-0000-0000-000000000001");
     private static readonly Guid ClientB = Guid.Parse("dddddddd-0000-0000-0000-000000000002");
@@ -75,7 +80,7 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
     {
         await this._repo.AddMissingAsync([Record(ClientA, 22092, "101", V(1f, 0f))]);
 
-        var match = await this._repo.FindClosestInPullRequestAsync(ClientA, RepoId, 22092, V(1f, 0f), 0.85f);
+        var match = await this._repo.FindClosestInPullRequestAsync(ClientA, Host, Project, RepoId, 22092, V(1f, 0f), 0.85f);
 
         Assert.NotNull(match);
         Assert.Equal("101", match.ProviderThreadId);
@@ -88,7 +93,7 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
         // An orthogonal vector is similarity 0, which is what a genuinely unrelated finding looks like.
         await this._repo.AddMissingAsync([Record(ClientA, 22092, "102", V(1f, 0f))]);
 
-        var match = await this._repo.FindClosestInPullRequestAsync(ClientA, RepoId, 22092, V(0f, 1f), 0.85f);
+        var match = await this._repo.FindClosestInPullRequestAsync(ClientA, Host, Project, RepoId, 22092, V(0f, 1f), 0.85f);
 
         Assert.Null(match);
     }
@@ -103,7 +108,7 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
             Record(ClientA, 99999, "203", V(1f, 0f)),
         ]);
 
-        var match = await this._repo.FindClosestInPullRequestAsync(ClientA, RepoId, 22092, V(1f, 0f), 0.85f);
+        var match = await this._repo.FindClosestInPullRequestAsync(ClientA, Host, Project, RepoId, 22092, V(1f, 0f), 0.85f);
 
         Assert.Null(match);
     }
@@ -117,7 +122,7 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
             Record(ClientA, 22092, "302", V(0.9f, 0.1f)),
         ]);
 
-        var match = await this._repo.FindClosestInPullRequestAsync(ClientA, RepoId, 22092, V(1f, 0f), 0.5f);
+        var match = await this._repo.FindClosestInPullRequestAsync(ClientA, Host, Project, RepoId, 22092, V(1f, 0f), 0.5f);
 
         Assert.NotNull(match);
         Assert.Equal("301", match.ProviderThreadId);
@@ -185,17 +190,40 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
         return vector;
     }
 
+    /// <summary>
+    ///     Two providers can number a pull request alike on repositories whose identifiers also match. A
+    ///     finding posted on one must not make a genuine finding on the other read as already raised, which is
+    ///     a finding silently withheld from a customer.
+    /// </summary>
+    [Fact]
+    public async Task FindingsOfTwoHostsSharingARepositoryIdentifier_AreJudgedApart()
+    {
+        const string gitLab = "http://localhost:8090";
+        const string forgejo = "http://localhost:8091";
+
+        await this._repo.AddMissingAsync([Record(ClientA, 7, "4242", V(1f, 0f), organizationUrl: forgejo)]);
+
+        var onForgejo = await this._repo.FindClosestInPullRequestAsync(ClientA, forgejo, Project, RepoId, 7, V(1f, 0f), 0.85f);
+        var onGitLab = await this._repo.FindClosestInPullRequestAsync(ClientA, gitLab, Project, RepoId, 7, V(1f, 0f), 0.85f);
+
+        Assert.NotNull(onForgejo);
+        Assert.Null(onGitLab);
+    }
+
     private static PostedFindingRecord Record(
         Guid clientId,
         int pullRequestId,
         string providerThreadId,
         float[] vector,
-        string repositoryId = RepoId)
+        string repositoryId = RepoId,
+        string organizationUrl = Host)
     {
         return new PostedFindingRecord
         {
             Id = Guid.NewGuid(),
             ClientId = clientId,
+            OrganizationUrl = organizationUrl,
+            ProjectId = Project,
             RepositoryId = repositoryId,
             PullRequestId = pullRequestId,
             ProviderThreadId = providerThreadId,

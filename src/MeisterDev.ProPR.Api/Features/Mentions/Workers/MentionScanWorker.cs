@@ -66,22 +66,24 @@ public sealed partial class MentionScanWorker(
         {
             await using var scope = scopeFactory.CreateAsyncScope();
 
-            var crawlCapability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            var mentionCapability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
                 scope.ServiceProvider.GetService<ILicensingCapabilityService>(),
-                PremiumCapabilityKey.CrawlConfigs,
+                PremiumCapabilityKey.MentionAnswering,
                 stoppingToken);
 
-            if (crawlCapability is not null)
+            if (mentionCapability is not null)
             {
                 outcome = "skipped_premium_disabled";
-                activity?.SetStatus(ActivityStatusCode.Ok, "crawl_configs_disabled");
+                activity?.SetStatus(ActivityStatusCode.Ok, "mention_answering_disabled");
                 return;
             }
 
-            var crawlConfigRepository = scope.ServiceProvider.GetService<ICrawlConfigurationRepository>();
-            if (crawlConfigRepository is not null)
+            // The configurations the scan is about to read, so what telemetry reports is what the cycle
+            // works on. It used to report crawl configurations, from when mention scanning read those.
+            var mentionConfigRepository = scope.ServiceProvider.GetService<IMentionConfigurationRepository>();
+            if (mentionConfigRepository is not null)
             {
-                var activeConfigs = await crawlConfigRepository.GetAllActiveAsync(stoppingToken);
+                var activeConfigs = await mentionConfigRepository.GetAllActiveAsync(stoppingToken);
                 activeConfigCount = activeConfigs.Count;
                 providerScope =
                     ReviewJobTelemetry.DescribeProviderScope(activeConfigs.Select(config => config.Provider));

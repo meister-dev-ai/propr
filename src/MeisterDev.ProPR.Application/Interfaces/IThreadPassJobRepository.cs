@@ -126,12 +126,16 @@ public interface IThreadPassJobRepository
 
     /// <summary>Returns every pass recorded for one pull request, newest first.</summary>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="organizationUrl">The host that issued the repository identifier.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="maxCount">The most passes to return.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<IReadOnlyList<ThreadPassJob>> GetForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         int maxCount,
@@ -153,11 +157,15 @@ public interface IThreadPassJobRepository
     ///     Cancels every pass still in flight for one pull request, and reports how many there were.
     /// </summary>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="organizationUrl">The host that issued the repository identifier.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<int> CancelActiveForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         CancellationToken ct = default);
@@ -178,12 +186,16 @@ public interface IThreadPassJobRepository
     ///     the comment count it acted at.
     /// </summary>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="organizationUrl">The host that issued the repository identifier.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="revisionKey">The stored revision key the asking pass is running at.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<IReadOnlyList<ThreadPassHandledThreadKey>> GetHandledThreadKeysAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string revisionKey,
@@ -196,6 +208,8 @@ public interface IThreadPassJobRepository
     /// </summary>
     /// <param name="jobId">The pass identifier.</param>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="organizationUrl">The host that issued the repository identifier.</param>
+    /// <param name="projectId">The project within that host, empty where the host has none.</param>
     /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="threadId">Provider-native thread identifier.</param>
@@ -205,6 +219,8 @@ public interface IThreadPassJobRepository
     Task RecordHandledThreadAsync(
         Guid jobId,
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string threadId,

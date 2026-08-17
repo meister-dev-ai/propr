@@ -25,7 +25,12 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
         return Task.CompletedTask;
     }
 
-    public Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, string threadId, CancellationToken ct = default)
+    public Task<bool> RemoveByThreadAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        string threadId, CancellationToken ct = default)
     {
         return Task.FromResult(false);
     }
@@ -58,6 +63,8 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
 
     public Task<PagedResult<ThreadMemoryDigestDto>> GetDigestsForPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         MemorySource source,
@@ -79,6 +86,8 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByFilePathAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         string filePath,
         int topN,
@@ -89,6 +98,8 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarInPullRequestAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         float[] queryVector,
@@ -101,6 +112,8 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByPullRequestFilePathAsync(
         Guid clientId,
+        string organizationUrl,
+        string projectId,
         string repositoryId,
         int pullRequestId,
         string filePath,

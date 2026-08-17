@@ -21,6 +21,11 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 /// </summary>
 public sealed class AdoCommentPosterPostedFindingIndexTests
 {
+    /// <summary>The host that issued the repository identifiers in this fixture.</summary>
+    private const string Host = "https://dev.azure.com/org";
+
+    private const string Project = "project";
+
     private static readonly Guid BotId = new("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static readonly Guid ClientId = new("dddddddd-dddd-dddd-dddd-dddddddddddd");
     private static readonly Guid PostedFindingId = new("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
@@ -38,6 +43,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -63,6 +70,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -87,6 +96,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -111,6 +122,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -134,6 +147,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -161,6 +176,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -188,6 +205,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -212,6 +231,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -243,6 +264,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -268,6 +291,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -287,6 +312,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         await index.Received(1)
             .FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 "The delete path re-checks ownership after the fetch.",
@@ -299,6 +326,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -324,6 +353,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -348,6 +379,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var index = Substitute.For<IPostedFindingIndex>();
         index.FindDuplicateAsync(
                 ClientId,
+                Host,
+                Project,
                 "repo",
                 7,
                 Arg.Any<string>(),
@@ -451,6 +484,8 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
             factory,
             BotId,
             ClientId,
+            organizationUrl: Host,
+            projectId: Project,
             repositoryId: "repo",
             pullRequestId: 7,
             iterationId: 3,

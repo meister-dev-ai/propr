@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Discovery;
@@ -25,18 +26,21 @@ internal sealed class GitLabDiscoveryService(
     {
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
 
-        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
-            GitLabConnectionVerifier.BuildApiUri(host, "/groups", "per_page=100&min_access_level=10"),
-            context.Connection.Secret);
-        using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitLab scope discovery failed with status {(int)response.StatusCode}.");
-        }
-
-        var groups = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitLabGroupResponse>>(ct)
-                     ?? [];
+        // Read across pages: an operator belonging to more groups than one page holds would otherwise be
+        // offered a truncated list with nothing said about the rest.
+        var groups = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.LoadPageAsync<GitLabGroupResponse>(
+                context,
+                host,
+                "/groups",
+                page,
+                pageSize,
+                "scope",
+                pageCt,
+                "min_access_level=10"),
+            group => group.FullPath ?? group.Path ?? string.Empty,
+            "GitLab's group listing",
+            ct);
 
         var scopePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -76,9 +80,51 @@ internal sealed class GitLabDiscoveryService(
         var path = isPersonalScope
             ? "/projects"
             : $"/groups/{Uri.EscapeDataString(normalizedScopePath)}/projects";
-        var query = isPersonalScope
-            ? "owned=true&membership=true&simple=true&per_page=100"
-            : "include_subgroups=true&simple=true&per_page=100";
+        var filter = isPersonalScope
+            ? "owned=true&membership=true&simple=true"
+            : "include_subgroups=true&simple=true";
+
+        // A group with more projects than one page holds is read to the end, nested subgroups included. A
+        // truncated list would offer only part of the group's projects.
+        var repositories = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.LoadPageAsync<GitLabProjectResponse>(
+                context,
+                host,
+                path,
+                page,
+                pageSize,
+                "repository",
+                pageCt,
+                filter),
+            project => project.Id.ToString(CultureInfo.InvariantCulture),
+            $"GitLab's project listing for {normalizedScopePath}",
+            ct);
+
+        return repositories
+            .Where(project => !string.IsNullOrWhiteSpace(project.PathWithNamespace))
+            .Select(project => ToRepository(host, project))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    /// <summary>Reads one page of a GitLab listing, following the host's own answer about the next page.</summary>
+    /// <remarks>
+    ///     A 404 is a scope the connection cannot see, which is an empty result rather than a failure: an
+    ///     operator who picked a group they have no access to is told by the empty list, where a fault would
+    ///     suggest the connection itself is broken.
+    /// </remarks>
+    private async Task<ProviderRestPager.RestPage<T>> LoadPageAsync<T>(
+        GitLabConnectionVerifier.GitLabConnectionContext context,
+        ProviderHostRef host,
+        string path,
+        int page,
+        int pageSize,
+        string collectionKind,
+        CancellationToken ct,
+        string? filter = null)
+    {
+        var pageQuery = string.Create(CultureInfo.InvariantCulture, $"per_page={pageSize}&page={page}");
+        var query = string.IsNullOrEmpty(filter) ? pageQuery : $"{pageQuery}&{filter}";
 
         using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
             GitLabConnectionVerifier.BuildApiUri(host, path, query),
@@ -87,22 +133,16 @@ internal sealed class GitLabDiscoveryService(
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            return [];
+            return new ProviderRestPager.RestPage<T>([], HasMore: false);
         }
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"GitLab repository discovery failed with status {(int)response.StatusCode}.");
+            throw new InvalidOperationException($"GitLab {collectionKind} discovery failed with status {(int)response.StatusCode}.");
         }
 
-        var repositories = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitLabProjectResponse>>(ct)
-                           ?? [];
-
-        return repositories
-            .Where(project => !string.IsNullOrWhiteSpace(project.PathWithNamespace))
-            .Select(project => ToRepository(host, project))
-            .ToList()
-            .AsReadOnly();
+        var items = await response.Content.ReadFromJsonAsync<IReadOnlyList<T>>(ct) ?? [];
+        return new ProviderRestPager.RestPage<T>(items, ProviderPaginationHeaders.ReadGitLabHasMore(response));
     }
 
     private static RepositoryRef ToRepository(ProviderHostRef host, GitLabProjectResponse project)

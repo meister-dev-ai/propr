@@ -196,7 +196,13 @@ public sealed partial class ThreadPassService(
         // Read before the pull request, because it determines what the pull request fetch has to request.
         // Only a pass that evaluates code needs the changed-file names, and a pass with only replies to
         // answer should not spend a provider call listing files nothing will read.
-        var scan = await prScans.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, ct);
+        var scan = await prScans.GetAsync(
+            job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            ct);
         var revisionMoved = !string.Equals(
             scan?.LastThreadPassRevisionKey,
             job.RevisionKey,
@@ -253,6 +259,8 @@ public sealed partial class ThreadPassService(
 
         var handled = await threadPassJobs.GetHandledThreadKeysAsync(
             job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
             job.RepositoryId,
             job.PullRequestId,
             job.RevisionKey,
@@ -323,6 +331,8 @@ public sealed partial class ThreadPassService(
             {
                 await prScans.RetainOnlyThreadsAsync(
                     job.ClientId,
+                    job.OrganizationUrl,
+                    job.ProjectId,
                     job.RepositoryId,
                     job.PullRequestId,
                     observedByThreadId.Keys,
@@ -331,6 +341,8 @@ public sealed partial class ThreadPassService(
 
             await prScans.SetThreadPassWatermarkAsync(
                 job.ClientId,
+                job.OrganizationUrl,
+                job.ProjectId,
                 job.RepositoryId,
                 job.PullRequestId,
                 job.RevisionKey,
@@ -477,6 +489,8 @@ public sealed partial class ThreadPassService(
         await threadPassJobs.RecordHandledThreadAsync(
             job.Id,
             job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
             job.RepositoryId,
             job.PullRequestId,
             threadId,
@@ -486,6 +500,8 @@ public sealed partial class ThreadPassService(
 
         await prScans.SetLastSeenReplyCountsAsync(
             job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
             job.RepositoryId,
             job.PullRequestId,
             new Dictionary<string, int>(StringComparer.Ordinal) { [threadId] = observed },

@@ -22,6 +22,11 @@ namespace MeisterDev.ProPR.Application.Tests.Services;
 /// </summary>
 public sealed class ThreadMemoryGroundingGateTests
 {
+    /// <summary>The host that issued the repository identifiers in this fixture.</summary>
+    private const string Host = "https://dev.azure.com/org";
+
+    private const string Project = "proj";
+
     private static readonly Guid ClientId = Guid.Parse("dddddddd-0000-0000-0000-000000000001");
 
     [Theory]
@@ -121,7 +126,7 @@ public sealed class ThreadMemoryGroundingGateTests
         ThreadResolutionIntent intent,
         ThreadAnchorCodeChange codeChange,
         string commentHistory) =>
-        new(ClientId, "repo-1", 42, "7", "src/Foo.cs", null, commentHistory, DateTimeOffset.UtcNow, intent, codeChange);
+        new(ClientId, Host, Project, "repo-1", 42, "7", "src/Foo.cs", null, commentHistory, DateTimeOffset.UtcNow, intent, codeChange);
 
     private static (
         IThreadMemoryEmbedder embedder,
