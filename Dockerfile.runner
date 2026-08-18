@@ -47,12 +47,20 @@ RUN set -eux; \
         case "$library" in \
             */libc.so.*|*/libm.so.*|*/libgcc_s.so.*|*/libstdc++.so.*|*/libpthread.so.*|*/libdl.so.*) continue ;; \
         esac; \
-        install -D "$library" "/git-root$library"; \
+        # Staged under /usr/lib even when ldd reports /lib, because /lib is a symlink to usr/lib in the
+        # runtime image. A real /git-root/lib directory cannot be copied over that symlink: buildkit fails
+        # the COPY with "cannot copy to non-directory". Which prefix ldd reports depends on the package
+        # versions apt resolves, so this is not stable across rebuilds.
+        case "$library" in \
+            /lib/*) staged="/git-root/usr$library" ;; \
+            *)      staged="/git-root$library" ;; \
+        esac; \
+        install -D "$library" "$staged"; \
     done
 
 # Runtime stage
 # mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra
-FROM mcr.microsoft.com/dotnet/aspnet@sha256:f5b3b2e2e548828d50e349726f51a5de001286f02c4bbde77db0dd34eb9f55ff AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet@sha256:f9bd6be9b5ab75b8196bff0f0972580edaea7fa8ca04e6ef530950e33caee5b0 AS runtime
 WORKDIR /app
 
 COPY --from=gittools /git-root/ /
