@@ -1,7 +1,7 @@
 # Build context: repository root (example/docker-compose sets context: ../..)
 # Stage 1: Build
 # node:26-alpine
-FROM node@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS builder
+FROM node@sha256:bde0dae02f2b12d2bce5ee72b2432f0e511767b7b2dc4dd3b064df11ae422fee AS builder
 WORKDIR /app
 # Copy openapi.json from repo root for code generation
 COPY openapi.json ./openapi.json
@@ -22,7 +22,7 @@ RUN npm run build
 # native library closure (libtiff, freetype, libgd, nghttp2). Serving the built
 # SPA needs none of them, and dropping them clears the libtiff CVEs (no Alpine
 # fix available) that the full alpine tag carries.
-FROM docker.io/library/nginx@sha256:45b82ed5f285b90d63df07ba70430fdd8f25624b416617d9e6dc93412b2006dc
+FROM docker.io/library/nginx@sha256:8541484afbc9c8a5a8a99b379568ebbc957f658583ec9448fc43104229c03cf8
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Run as the unprivileged nginx user (uid 101, already present in the base image)
