@@ -52,7 +52,7 @@ RUN set -eux; \
 
 # Runtime stage
 # mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra
-FROM mcr.microsoft.com/dotnet/aspnet@sha256:f9bd6be9b5ab75b8196bff0f0972580edaea7fa8ca04e6ef530950e33caee5b0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet@sha256:f5b3b2e2e548828d50e349726f51a5de001286f02c4bbde77db0dd34eb9f55ff AS runtime
 WORKDIR /app
 
 COPY --from=gittools /git-root/ /
