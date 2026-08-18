@@ -31,6 +31,7 @@ export const routeParity: RouteParityItem[] = [
   { id: 'thread-memory', workflowName: 'Platform admin thread memory diagnostics' },
   { id: 'provider-settings', workflowName: 'Platform provider activation' },
   { id: 'licensing', workflowName: 'Platform admin licensing' },
+  { id: 'usage-statistics', workflowName: 'Platform admin anonymous usage statistics' },
   { id: 'runners', workflowName: 'Tenant admin runners' },
   { id: 'client-detail-providers', workflowName: 'Client provider shortcut' },
   { id: 'pr-review', workflowName: 'Client-access PR review request' },

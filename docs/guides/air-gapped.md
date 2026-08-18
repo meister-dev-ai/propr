@@ -3,9 +3,13 @@
 Install and operate ProPR where the only things it can reach are your SCM host, your model endpoint, and
 your own infrastructure.
 
-Nothing in ProPR calls home: no license server, no catalog download, and no service of ours in the path
-your code takes - see [where your code goes](../reference/security.md#where-your-code-goes). What follows is
-what you have to bring inside the boundary, what needs no network at all, and what still has to cross one.
+No license server, no catalog download, and no service of ours in the path your code takes - see
+[where your code goes](../reference/security.md#where-your-code-goes). One outbound request exists: the daily
+anonymous usage snapshot described in [usage statistics](../reference/usage-statistics.md). It carries no code
+and nothing that identifies your repositories, your organization or your people, and its only persistent value
+is a random installation identifier. On an isolated network the attempt fails without an error, and an
+administrator can switch it off. What follows is what you have to bring inside the boundary, what needs no
+network at all, and what still has to cross one.
 
 ## What has to be inside the boundary
 
@@ -57,6 +61,10 @@ Three family-specific consequences of a private endpoint:
   [support matrix](../platforms/index.md#support-matrix).
 - **Your own collectors**, if you configured a trace or log endpoint - see
   [observability](../operate/observability.md).
+- **`telemetry.meister-dev.ai`**, once a day, unless you switch the anonymous usage snapshot off under
+  **Administration → Usage Statistics**. On an isolated network the attempt fails and the snapshot is
+  discarded, and nothing degrades either way - see
+  [usage statistics](../reference/usage-statistics.md).
 
 ## Confirm it worked
 
@@ -70,6 +78,8 @@ Three family-specific consequences of a private endpoint:
    [trigger a review](../reference/api.md#trigger-a-review).
 5. Read your egress logs for that review. Your SCM host and your model endpoint should be the only
    destinations.
+6. Switch the anonymous usage snapshot off to stop the daily attempt, then confirm
+   `telemetry.meister-dev.ai` no longer appears in your egress logs.
 
 If a verification or a health check fails, [troubleshooting](../operate/troubleshooting.md) routes the
 symptom.

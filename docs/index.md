@@ -45,6 +45,7 @@ Questions, not symptoms. If something is broken rather than unclear, start at
 | Which probe do I point my orchestrator at? | [operate/observability.md](operate/observability.md) |
 | How do I automate all of this? | [reference/api.md](reference/api.md) |
 | Does this need a commercial license? | [reference/editions.md](reference/editions.md) |
+| What does my installation report about itself, and how do I switch it off? | [reference/usage-statistics.md](reference/usage-statistics.md) |
 | What does *increment*, *lens* or *logical model* mean? | [glossary.md](glossary.md) |
 
 ## Every page
@@ -114,6 +115,7 @@ about which one to reach for first.
 | [reference/api.md](reference/api.md) | You are scripting setup, or triggering reviews from CI |
 | [reference/security.md](reference/security.md) | You are reviewing the boundaries: where code goes, what is stored, secrets, sessions, access control |
 | [reference/editions.md](reference/editions.md) | Something is refused and you suspect it needs a commercial license |
+| [reference/usage-statistics.md](reference/usage-statistics.md) | You are reviewing the daily anonymous snapshot an installation sends, field by field |
 | [reference/source-license-map.md](reference/source-license-map.md) | You need the generated list of commercial-only source files |
 | [glossary.md](glossary.md) | A page used a term this product invented |
 

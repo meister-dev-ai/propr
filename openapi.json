@@ -2234,6 +2234,482 @@
         }
       }
     },
+    "/admin/usage-statistics": {
+      "get": {
+        "tags": [
+          "AdminUsageStatistics"
+        ],
+        "summary": "Returns the current setting, the last send outcome, and any update information.",
+        "responses": {
+          "200": {
+            "description": "The current anonymous usage statistics state.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The installation has no database, so there is no state to report."
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "AdminUsageStatistics"
+        ],
+        "summary": "Turns anonymous usage statistics on or off. Refused while a commercial license is installed.",
+        "requestBody": {
+          "description": "The requested state.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminUsageStatisticsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminUsageStatisticsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminUsageStatisticsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated anonymous usage statistics state.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A commercial license governs the setting.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The installation has no database, so there is no state to change."
+          }
+        }
+      }
+    },
+    "/admin/usage-statistics/preview": {
+      "get": {
+        "tags": [
+          "AdminUsageStatistics"
+        ],
+        "summary": "Returns the exact payload the next ping would carry, without sending it.",
+        "responses": {
+          "200": {
+            "description": "The literal request body a ping would post.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsPreviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsPreviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsPreviewDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The installation has no database, so no payload can be built."
+          }
+        }
+      }
+    },
+    "/admin/usage-statistics/send": {
+      "post": {
+        "tags": [
+          "AdminUsageStatistics"
+        ],
+        "summary": "Runs a send cycle now instead of waiting for the daily one.\n\nEvery rule the background loop applies still applies here, so an installation that is switched\n    off or has not shown the notice sends nothing, and one that already sent today is told it is\n    not due. The response says which of those happened.",
+        "responses": {
+          "200": {
+            "description": "What the cycle decided, and the state after it.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSendResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSendResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSendResultDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The installation has no database, so there is nothing to send."
+          }
+        }
+      }
+    },
+    "/admin/usage-statistics/notice/shown": {
+      "post": {
+        "tags": [
+          "AdminUsageStatistics"
+        ],
+        "summary": "Records that the consent notice reached an administrator, which is what opens the send gate in a\ncommunity installation. Idempotent.",
+        "responses": {
+          "200": {
+            "description": "The updated anonymous usage statistics state.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The installation has no database, so there is no state to record."
+          }
+        }
+      }
+    },
+    "/admin/usage-statistics/notice/dismiss": {
+      "post": {
+        "tags": [
+          "AdminUsageStatistics"
+        ],
+        "summary": "Hides the consent notice for this installation. Dismissal changes nothing about what is sent.",
+        "responses": {
+          "200": {
+            "description": "The updated anonymous usage statistics state.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The installation has no database, so there is no state to record."
+          }
+        }
+      }
+    },
     "/admin/identity/users": {
       "get": {
         "tags": [
@@ -28642,6 +29118,20 @@
         "additionalProperties": false,
         "description": "Request body for updating one provider family's activation state."
       },
+      "PatchAdminUsageStatisticsRequest": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the installation should send a daily snapshot."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Patch payload for the anonymous usage statistics toggle."
+      },
       "PatchAdminWebhookConfigRequest": {
         "type": "object",
         "properties": {
@@ -30346,6 +30836,42 @@
           }
         },
         "additionalProperties": { }
+      },
+      "ProductAdvisory": {
+        "required": [
+          "id",
+          "severity"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable identifier for the advisory.",
+            "nullable": true
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity as the vendor published it.",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "description": "Short headline for the advisory.",
+            "nullable": true
+          },
+          "affectedVersions": {
+            "type": "string",
+            "description": "The versions the advisory applies to.",
+            "nullable": true
+          },
+          "link": {
+            "type": "string",
+            "description": "Where to read the details.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One security advisory, as it arrives in the response to a usage-statistics ping."
       },
       "PromptOverrideDto": {
         "type": "object",
@@ -34999,6 +35525,169 @@
         "additionalProperties": false,
         "description": "Replace-tenant-provider request payload."
       },
+      "UsageStatisticsEdition": {
+        "enum": [
+          "community",
+          "commercial"
+        ],
+        "type": "string",
+        "description": "The edition an installation reports in its anonymous usage statistics.\n\nTwo values, always. This is a wire type rather than a reuse of the licensing enum on purpose: a\n    licensing state added later for a trial, an expiry or a grace period must not reach the vendor, and a\n    separate enum with an exhaustive mapping makes that a compile-time obligation rather than a promise."
+      },
+      "UsageStatisticsPreviewDto": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "Where this payload would be posted.",
+            "nullable": true
+          },
+          "contentType": {
+            "type": "string",
+            "description": "The media type it would be posted as.",
+            "nullable": true
+          },
+          "payload": {
+            "type": "string",
+            "description": "The literal request body, byte for byte.",
+            "nullable": true
+          },
+          "payloadDocumentationUrl": {
+            "type": "string",
+            "description": "Where each field is documented.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The exact payload the next ping would carry.\n\nThe payload is handed over as the serialized text rather than as an object, because an object would\n    be written a second time by the API's own serializer and the preview would then be a re-rendering of\n    the snapshot instead of the thing that goes on the wire."
+      },
+      "UsageStatisticsSendDecision": {
+        "enum": [
+          "disabled",
+          "awaitingConsent",
+          "notDue",
+          "sent"
+        ],
+        "type": "string",
+        "description": "Why one send cycle did or did not reach the network."
+      },
+      "UsageStatisticsSendResultDto": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/UsageStatisticsSendDecision"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/UsageStatisticsSettingsDto"
+          }
+        },
+        "additionalProperties": false,
+        "description": "What an administrator's request to send now actually did.\n\nThe decision travels back because the interesting answers are the ones where nothing was sent: an\n    installation that is switched off, one that has not shown the notice yet, and one that already sent\n    today all look identical from the settings page otherwise."
+      },
+      "UsageStatisticsSettingsDto": {
+        "type": "object",
+        "properties": {
+          "edition": {
+            "$ref": "#/components/schemas/UsageStatisticsEdition"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether a snapshot would currently be sent."
+          },
+          "communityOptIn": {
+            "type": "boolean",
+            "description": "The stored toggle, which is what applies when no license is installed."
+          },
+          "managedByLicense": {
+            "type": "boolean",
+            "description": "Whether the control is locked because a commercial license is installed."
+          },
+          "consentGateSatisfied": {
+            "type": "boolean",
+            "description": "Whether an administrator has seen what sending means."
+          },
+          "noticeRequired": {
+            "type": "boolean",
+            "description": "Whether the consent notice still has to be shown."
+          },
+          "lastAttemptAt": {
+            "type": "string",
+            "description": "When a send was last attempted.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastAttemptSucceeded": {
+            "type": "boolean",
+            "description": "Whether that attempt reached the receiver.",
+            "nullable": true
+          },
+          "lastAttemptDetail": {
+            "type": "string",
+            "description": "A short description of the last outcome.",
+            "nullable": true
+          },
+          "lastSuccessAt": {
+            "type": "string",
+            "description": "When a snapshot last reached the receiver.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "pingEndpoint": {
+            "type": "string",
+            "description": "The exact address a snapshot is posted to.",
+            "nullable": true
+          },
+          "payloadDocumentationUrl": {
+            "type": "string",
+            "description": "Where the payload is documented field by field.",
+            "nullable": true
+          },
+          "privacyContact": {
+            "type": "string",
+            "description": "Where privacy questions about the payload go.",
+            "nullable": true
+          },
+          "update": {
+            "$ref": "#/components/schemas/UsageStatisticsUpdateStatusDto"
+          }
+        },
+        "additionalProperties": false,
+        "description": "What the administration UI shows about anonymous usage statistics."
+      },
+      "UsageStatisticsUpdateStatusDto": {
+        "type": "object",
+        "properties": {
+          "currentVersion": {
+            "type": "string",
+            "description": "The running release version.",
+            "nullable": true
+          },
+          "latestVersion": {
+            "type": "string",
+            "description": "The newest release the receiver reported, when it reported one.",
+            "nullable": true
+          },
+          "updateAvailable": {
+            "type": "boolean",
+            "description": "Whether the running version differs from the newest one reported."
+          },
+          "advisories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductAdvisory"
+            },
+            "description": "Security advisories the receiver reported for the running version.",
+            "nullable": true
+          },
+          "receivedAt": {
+            "type": "string",
+            "description": "When this information arrived.",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What the last successful ping said about newer releases and security advisories.\n\nAbsent information renders nothing. An installation that has never pinged, or has usage statistics\n    off, sees no badge and no error."
+      },
       "WebhookConfigurationResponse": {
         "type": "object",
         "properties": {
@@ -35257,6 +35946,9 @@
     },
     {
       "name": "AdminRunners"
+    },
+    {
+      "name": "AdminUsageStatistics"
     },
     {
       "name": "AdminUsers"

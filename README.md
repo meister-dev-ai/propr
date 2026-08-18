@@ -30,6 +30,10 @@ come in, or on demand from CI.
   are all stored and inspectable from the management UI - no log spelunking.
 - **Built to stay out of the way.** Token-aware reviews, per-file passes, and relevance filtering
   keep the signal high and the cost down.
+- **Anonymous usage statistics, documented field by field.** An installation sends one anonymous snapshot of
+  itself a day, carrying a random installation id, the version, the edition, and counters reported as ranges.
+  Every field is listed in [usage statistics](docs/reference/usage-statistics.md), the admin UI shows the
+  request body before it is sent, and it can be switched off.
 
 ## Get started
 
@@ -69,6 +73,7 @@ entry points:
 | [API reference](docs/reference/api.md) | You are scripting setup, or triggering reviews from CI |
 | [Security](docs/reference/security.md) | You are reviewing where code goes, secrets, sessions, and tenant isolation |
 | [Editions](docs/reference/editions.md) | Something is refused and you suspect it needs a commercial license |
+| [Usage statistics](docs/reference/usage-statistics.md) | You need the field-by-field payload of the daily anonymous snapshot, and how to switch it off |
 
 ## License
 

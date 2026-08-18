@@ -21,14 +21,21 @@
            worse than no link. The route guard and the server both repeat the check. -->
       <RouterLink v-if="canViewCodeQuality" :to="{ name: 'code-quality' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'code-quality' }"><i class="fi fi-rr-chart-histogram"></i> Code Quality</RouterLink>
       <div v-if="hasAnyAdministrationAccess" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
-        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' || $route.name === 'runners' || $route.name === 'runners-all' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
+        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' || $route.name === 'usage-statistics' || $route.name === 'runners' || $route.name === 'runners-all' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
           <i class="fi fi-rr-shield-check"></i> Administration
+          <!-- A dot rather than a count or an error colour. Shown only to platform administrators, who are
+               the only ones who can act on it. -->
+          <span v-if="showUpdateBadge" class="update-dot" data-testid="update-available-dot" role="img" :title="updateBadgeTitle" :aria-label="updateBadgeTitle"></span>
           <i class="fi fi-rr-angle-small-down ml-1 text-xs"></i>
         </button>
         <div v-if="adminDropdownOpen" class="dropdown-menu">
           <RouterLink v-if="defaultTenantAdminRoute" :to="defaultTenantAdminRoute" class="dropdown-item" :class="{ 'active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-building"></i> Tenants</RouterLink>
           <RouterLink v-if="canViewReviewerPerformance" :to="{ name: 'reviewer-performance' }" class="dropdown-item" :class="{ 'active': $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-chart-line-up"></i> Reviewer Performance</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'licensing' }" class="dropdown-item" :class="{ 'active': $route.name === 'licensing' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-badge"></i> Licensing</RouterLink>
+          <RouterLink v-if="isAdmin" :to="{ name: 'usage-statistics' }" class="dropdown-item" :class="{ 'active': $route.name === 'usage-statistics' }" @click="adminDropdownOpen = false">
+            <i class="fi fi-rr-info"></i> Usage Statistics
+            <span v-if="showUpdateBadge" class="update-dot" data-testid="update-available-item-dot" role="img" :title="updateBadgeTitle" :aria-label="updateBadgeTitle"></span>
+          </RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'provider-settings' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'thread-memory' }" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
@@ -61,14 +68,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useSession } from '@/composables/useSession'
+import { useUsageStatistics } from '@/composables/useUsageStatistics'
 import icon from '@/assets/logo_standalone.png'
 import githubMark from '@/assets/icons/github.svg?raw'
 
 const router = useRouter()
 const { logout: endSession, isAdmin, clientRoles, tenantRoles, edition, isCapabilityAvailable } = useSession()
+const {
+  updateAvailable,
+  advisories,
+  load: loadUsageStatistics,
+  reset: resetUsageStatistics,
+} = useUsageStatistics()
 
 /** True for global admins or users with any visible client role. */
 const canViewClients = computed(
@@ -102,6 +116,32 @@ const canViewReviewerPerformance = computed(
 const hasAnyAdministrationAccess = computed(
   () => isAdmin.value || canAccessTenantAdministration.value,
 )
+
+/**
+ * No badge when there is nothing to compare. An installation with usage statistics off, or one that has never
+ * reached the receiver, has no reported version, so nothing is rendered.
+ */
+const showUpdateBadge = computed(() => isAdmin.value && updateAvailable.value)
+
+const updateBadgeTitle = computed(() =>
+  advisories.value.length > 0
+    ? 'A security advisory applies to the version you are running'
+    : 'A newer release is available',
+)
+
+onMounted(refreshUpdateStatus)
+watch(isAdmin, refreshUpdateStatus)
+
+// The header renders only while a session is active, so this unmounts on sign-out. Clearing here stops the
+// next session from rendering the previous session's installation state.
+onUnmounted(resetUsageStatistics)
+
+// Forced, because the header mounts once per session and the cached state may belong to the previous one.
+function refreshUpdateStatus(): void {
+  if (isAdmin.value) {
+    void loadUsageStatistics(true)
+  }
+}
 
 const defaultTenantAdminRoute = computed(() => {
   return canAccessTenantAdministration.value ? { name: 'tenant-directory' } : null
@@ -269,6 +309,16 @@ async function logout() {
 .app-edition-badge-commercial {
   background: rgba(34, 197, 94, 0.16);
   color: var(--color-success);
+}
+
+.update-dot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-inline-start: 0.35rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-warning);
+  vertical-align: super;
 }
 
 /* Dropdown */

@@ -724,6 +724,41 @@ Diagnostics are scoped to a single review; there is no cross-review trace query.
 Reading a protocol to answer a specific symptom starts at
 [troubleshooting](../operate/troubleshooting.md), which names the page that fixes each one.
 
+## Anonymous usage statistics
+
+Six platform-administrator endpoints cover the daily anonymous snapshot. Each field of that snapshot, and the
+reason it is collected, is described in [usage statistics](usage-statistics.md).
+
+`GET /api/admin/usage-statistics` returns the current state: whether sending is on, whether a commercial
+license governs the control, the last send attempt and its outcome, and the newest version and advisories the
+receiver last reported.
+
+`PATCH /api/admin/usage-statistics` with `{"enabled": false}` switches sending off. It answers `409` while a
+commercial license is installed, because the license governs the setting there.
+
+`GET /api/admin/usage-statistics/preview` returns the request body the next snapshot would carry, built by the
+same code that sends it. Requesting it sends nothing, in any state.
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  https://localhost:5443/api/admin/usage-statistics/preview
+```
+
+`POST /api/admin/usage-statistics/send` runs a send cycle now instead of waiting for the daily one. Every
+rule the daily loop applies still applies, so an installation that is switched off or has not shown the notice
+sends nothing, and one that already sent today is told it is not due. The response carries a `decision` of
+`sent`, `disabled`, `awaitingConsent` or `notDue`, and the state after the attempt.
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  https://localhost:5443/api/admin/usage-statistics/send
+```
+
+`POST /api/admin/usage-statistics/notice/shown` records that the consent notice reached an administrator,
+which opens the send gate on a community installation. The administration UI calls it when the notice renders;
+it is idempotent. `POST /api/admin/usage-statistics/notice/dismiss` hides the notice and changes nothing about
+what is sent.
+
 ## Health endpoints behind the proxy
 
 Through the bundled reverse proxy, the API is reached under `/api/` - that prefix is stripped before

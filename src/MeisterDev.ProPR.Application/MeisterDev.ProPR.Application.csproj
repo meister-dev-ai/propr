@@ -31,4 +31,24 @@
         </AssemblyAttribute>
     </ItemGroup>
 
+    <!--
+        Where anonymous usage statistics are posted, fixed when this assembly is compiled.
+
+        Empty on a normal build, which means the production receiver. A local or staging image is built with
+        `-p:UsageStatisticsEndpoint=http://host:port/v1/ping`, and what that image sends to is then a property
+        of the image rather than of its environment: no variable can redirect a running installation, and none
+        can silence one either. A value that is not an absolute http or https address stops the host at
+        startup rather than falling back to production.
+    -->
+    <PropertyGroup>
+        <UsageStatisticsEndpoint Condition="'$(UsageStatisticsEndpoint)' == ''"></UsageStatisticsEndpoint>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>UsageStatisticsEndpoint</_Parameter1>
+            <_Parameter2>$(UsageStatisticsEndpoint)</_Parameter2>
+        </AssemblyAttribute>
+    </ItemGroup>
+
 </Project>

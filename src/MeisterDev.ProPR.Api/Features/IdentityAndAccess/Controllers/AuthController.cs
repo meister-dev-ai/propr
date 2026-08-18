@@ -9,8 +9,10 @@ using MeisterDev.ProPR.Api.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Application.Features.Licensing.Dtos;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Features.UsageStatistics.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -28,7 +30,8 @@ public sealed class AuthController(
     IJwtTokenService jwtTokenService,
     IAccountLockoutService accountLockoutService,
     SessionPolicy sessionPolicy,
-    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
+    ILicensingCapabilityService? licensingCapabilityService = null,
+    UsageStatisticsService? usageStatisticsService = null) : ControllerBase
 {
     /// <summary>Authenticate with username and password; returns a JWT access token and refresh token.</summary>
     [AllowAnonymous]
@@ -87,6 +90,8 @@ public sealed class AuthController(
         // survives across tabs and reloads without XSS exposure. The access token stays in the body.
         RefreshTokenCookie.Set(this.Response, rawRefreshToken, refreshToken.ExpiresAt, this.Request.IsHttps);
 
+        await this.RecordAdministratorSignInAsync(user, ct);
+
         return this.Ok(
             new
             {
@@ -94,6 +99,40 @@ public sealed class AuthController(
                 expiresIn = 900,
                 tokenType = "Bearer",
             });
+    }
+
+    /// <summary>
+    ///     Records that a platform administrator has signed in, for the usage-statistics consent gate.
+    ///     <para>
+    ///         This opens the gate on an installation that shows no consent notice, which is any installation
+    ///         with a commercial license. A community installation opens its gate when the notice renders, and
+    ///         is unaffected here.
+    ///     </para>
+    ///     <para>
+    ///         Sign-in must not depend on this call, so a failure is ignored. The gate stays shut until the
+    ///         next sign-in, and nothing is sent while it is shut.
+    ///     </para>
+    /// </summary>
+    private async Task RecordAdministratorSignInAsync(AppUser user, CancellationToken ct)
+    {
+        if (usageStatisticsService is null || user.GlobalRole != AppUserRole.Admin)
+        {
+            return;
+        }
+
+        try
+        {
+            await usageStatisticsService.RecordAdministratorSignInAsync(ct);
+        }
+        // Caught broadly on purpose. Narrowing this would mean naming the persistence exceptions the write can
+        // produce, and EF's DbUpdateException is not visible here: the Api project takes no Entity Framework
+        // dependency. Since the contract is that sign-in never fails for this, a type this layer cannot name
+        // must not be the one that gets through.
+#pragma warning disable CA1031
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
     }
 
     /// <summary>Exchange the refresh-token cookie (or body, for legacy callers) for a new JWT access token.</summary>

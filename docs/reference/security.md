@@ -12,6 +12,11 @@ telemetry containing your code.
 A tenant can constrain this further by restricting which AI provider families and which endpoint hosts
 its clients may use. See [tenant compliance](../ai/compliance.md).
 
+One outbound request of ours exists outside that path: a daily anonymous snapshot of the installation itself,
+carrying a random installation identifier, the version, the edition and counters reported as ranges. Every
+field is listed in [usage statistics](usage-statistics.md), an administrator can read the request body before
+it is sent, and community installations can switch it off.
+
 ## What ProPR stores
 
 Reviews, findings, and protocol traces are always persisted - that is the product's history and the

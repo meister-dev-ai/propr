@@ -9,6 +9,9 @@ const clientRoles = ref<Record<string, number>>({})
 const tenantRoles = ref<Record<string, number>>({})
 const edition = ref<'community' | 'commercial'>('commercial')
 const availableCapabilities = ref<string[]>([])
+const updateAvailable = ref(false)
+const advisories = ref<Array<{ id: string; severity: string }>>([])
+const loadUsageStatisticsMock = vi.fn()
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
@@ -29,6 +32,14 @@ vi.mock('@/composables/useSession', () => ({
     tenantRoles,
     edition: computed(() => edition.value),
     isCapabilityAvailable: (key: string) => availableCapabilities.value.includes(key),
+  }),
+}))
+
+vi.mock('@/composables/useUsageStatistics', () => ({
+  useUsageStatistics: () => ({
+    updateAvailable: computed(() => updateAvailable.value),
+    advisories: computed(() => advisories.value),
+    load: loadUsageStatisticsMock,
   }),
 }))
 
@@ -57,6 +68,8 @@ describe('AppHeader', () => {
     tenantRoles.value = {}
     edition.value = 'commercial'
     availableCapabilities.value = []
+    updateAvailable.value = false
+    advisories.value = []
   })
 
   it('shows Tenants inside the Administration dropdown for tenant administrators', async () => {
@@ -224,5 +237,57 @@ describe('AppHeader', () => {
     await wrapper.get('.dropdown-toggle').trigger('click')
 
     expect(wrapper.text()).not.toContain('Reviewer Performance')
+  })
+
+  it('offers Usage Statistics to a platform administrator', async () => {
+    isAdmin.value = true
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    const link = wrapper.findAllComponents(RouterLinkStub)
+      .find((component) => component.text().includes('Usage Statistics'))
+
+    expect(link?.props('to')).toEqual({ name: 'usage-statistics' })
+  })
+
+  it('hides Usage Statistics from a tenant administrator', async () => {
+    // The setting is installation-wide, as is the identity in the payload.
+    tenantRoles.value = { 'tenant-1': 1 }
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    expect(wrapper.text()).not.toContain('Usage Statistics')
+  })
+
+  it('marks a newer release with a dot', async () => {
+    isAdmin.value = true
+    updateAvailable.value = true
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.find('[data-testid="update-available-dot"]').exists()).toBe(true)
+  })
+
+  it('shows nothing when the receiver has reported nothing', async () => {
+    // Nothing is rendered when there is no reported version to compare against, for example on an
+    // installation with usage statistics off.
+    isAdmin.value = true
+    updateAvailable.value = false
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.find('[data-testid="update-available-dot"]').exists()).toBe(false)
+  })
+
+  it('does not mark an update for a user who cannot act on it', async () => {
+    tenantRoles.value = { 'tenant-1': 1 }
+    updateAvailable.value = true
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.find('[data-testid="update-available-dot"]').exists()).toBe(false)
+    expect(loadUsageStatisticsMock).not.toHaveBeenCalled()
   })
 })

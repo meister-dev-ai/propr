@@ -162,6 +162,14 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      // What this installation reports about itself, and the control over it. Platform administrators only,
+      // because the setting and the identity in the payload are installation-wide.
+      path: '/usage-statistics',
+      name: 'usage-statistics',
+      component: () => import('@/features/usage-statistics/views/UsageStatisticsView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       // The whole installation's fleet. Reserved to platform administrators, because it spans tenants and
       // administering one is not grounds for reading the rest — the same rule the API applies.
       path: '/runners',

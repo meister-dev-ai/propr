@@ -1614,6 +1614,419 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/usage-statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the current setting, the last send outcome, and any update information. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The current anonymous usage statistics state. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["UsageStatisticsSettingsDto"];
+                        "application/json": components["schemas"]["UsageStatisticsSettingsDto"];
+                        "text/json": components["schemas"]["UsageStatisticsSettingsDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation has no database, so there is no state to report. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Turns anonymous usage statistics on or off. Refused while a commercial license is installed. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The requested state. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchAdminUsageStatisticsRequest"];
+                    "text/json": components["schemas"]["PatchAdminUsageStatisticsRequest"];
+                    "application/*+json": components["schemas"]["PatchAdminUsageStatisticsRequest"];
+                };
+            };
+            responses: {
+                /** @description The updated anonymous usage statistics state. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["UsageStatisticsSettingsDto"];
+                        "application/json": components["schemas"]["UsageStatisticsSettingsDto"];
+                        "text/json": components["schemas"]["UsageStatisticsSettingsDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description A commercial license governs the setting. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation has no database, so there is no state to change. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/admin/usage-statistics/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the exact payload the next ping would carry, without sending it. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The literal request body a ping would post. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["UsageStatisticsPreviewDto"];
+                        "application/json": components["schemas"]["UsageStatisticsPreviewDto"];
+                        "text/json": components["schemas"]["UsageStatisticsPreviewDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation has no database, so no payload can be built. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/usage-statistics/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Runs a send cycle now instead of waiting for the daily one.
+         *
+         *     Every rule the background loop applies still applies here, so an installation that is switched
+         *         off or has not shown the notice sends nothing, and one that already sent today is told it is
+         *         not due. The response says which of those happened.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description What the cycle decided, and the state after it. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["UsageStatisticsSendResultDto"];
+                        "application/json": components["schemas"]["UsageStatisticsSendResultDto"];
+                        "text/json": components["schemas"]["UsageStatisticsSendResultDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation has no database, so there is nothing to send. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/usage-statistics/notice/shown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Records that the consent notice reached an administrator, which is what opens the send gate in a
+         *     community installation. Idempotent.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The updated anonymous usage statistics state. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["UsageStatisticsSettingsDto"];
+                        "application/json": components["schemas"]["UsageStatisticsSettingsDto"];
+                        "text/json": components["schemas"]["UsageStatisticsSettingsDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation has no database, so there is no state to record. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/usage-statistics/notice/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hides the consent notice for this installation. Dismissal changes nothing about what is sent. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The updated anonymous usage statistics state. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["UsageStatisticsSettingsDto"];
+                        "application/json": components["schemas"]["UsageStatisticsSettingsDto"];
+                        "text/json": components["schemas"]["UsageStatisticsSettingsDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation has no database, so there is no state to record. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/identity/users": {
         parameters: {
             query?: never;
@@ -19091,6 +19504,11 @@ export interface components {
             /** @description Whether the provider family should be enabled installation-wide. */
             isEnabled: boolean;
         };
+        /** @description Patch payload for the anonymous usage statistics toggle. */
+        PatchAdminUsageStatisticsRequest: {
+            /** @description Whether the installation should send a daily snapshot. */
+            enabled: boolean;
+        };
         /**
          * @description Request body for patching an admin-managed webhook configuration.
          *     Omit a field to leave it unchanged. Set `reviewTemperature` to null to clear the override.
@@ -19763,6 +20181,19 @@ export interface components {
             instance?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /** @description One security advisory, as it arrives in the response to a usage-statistics ping. */
+        ProductAdvisory: {
+            /** @description Stable identifier for the advisory. */
+            id: string | null;
+            /** @description Severity as the vendor published it. */
+            severity: string | null;
+            /** @description Short headline for the advisory. */
+            title?: string | null;
+            /** @description The versions the advisory applies to. */
+            affectedVersions?: string | null;
+            /** @description Where to read the details. */
+            link?: string | null;
         };
         /** @description Data transfer object for a per-client or per-crawl-config AI prompt override. */
         PromptOverrideDto: {
@@ -22323,6 +22754,104 @@ export interface components {
             allowedEmailDomains?: string[] | null;
             isEnabled: boolean;
             autoCreateUsers: boolean;
+        };
+        /**
+         * @description The edition an installation reports in its anonymous usage statistics.
+         *
+         *     Two values, always. This is a wire type rather than a reuse of the licensing enum on purpose: a
+         *         licensing state added later for a trial, an expiry or a grace period must not reach the vendor, and a
+         *         separate enum with an exhaustive mapping makes that a compile-time obligation rather than a promise.
+         * @enum {string}
+         */
+        UsageStatisticsEdition: "community" | "commercial";
+        /**
+         * @description The exact payload the next ping would carry.
+         *
+         *     The payload is handed over as the serialized text rather than as an object, because an object would
+         *         be written a second time by the API's own serializer and the preview would then be a re-rendering of
+         *         the snapshot instead of the thing that goes on the wire.
+         */
+        UsageStatisticsPreviewDto: {
+            /** @description Where this payload would be posted. */
+            endpoint?: string | null;
+            /** @description The media type it would be posted as. */
+            contentType?: string | null;
+            /** @description The literal request body, byte for byte. */
+            payload?: string | null;
+            /** @description Where each field is documented. */
+            payloadDocumentationUrl?: string | null;
+        };
+        /**
+         * @description Why one send cycle did or did not reach the network.
+         * @enum {string}
+         */
+        UsageStatisticsSendDecision: "disabled" | "awaitingConsent" | "notDue" | "sent";
+        /**
+         * @description What an administrator's request to send now actually did.
+         *
+         *     The decision travels back because the interesting answers are the ones where nothing was sent: an
+         *         installation that is switched off, one that has not shown the notice yet, and one that already sent
+         *         today all look identical from the settings page otherwise.
+         */
+        UsageStatisticsSendResultDto: {
+            decision?: components["schemas"]["UsageStatisticsSendDecision"];
+            settings?: components["schemas"]["UsageStatisticsSettingsDto"];
+        };
+        /** @description What the administration UI shows about anonymous usage statistics. */
+        UsageStatisticsSettingsDto: {
+            edition?: components["schemas"]["UsageStatisticsEdition"];
+            /** @description Whether a snapshot would currently be sent. */
+            enabled?: boolean;
+            /** @description The stored toggle, which is what applies when no license is installed. */
+            communityOptIn?: boolean;
+            /** @description Whether the control is locked because a commercial license is installed. */
+            managedByLicense?: boolean;
+            /** @description Whether an administrator has seen what sending means. */
+            consentGateSatisfied?: boolean;
+            /** @description Whether the consent notice still has to be shown. */
+            noticeRequired?: boolean;
+            /**
+             * Format: date-time
+             * @description When a send was last attempted.
+             */
+            lastAttemptAt?: string | null;
+            /** @description Whether that attempt reached the receiver. */
+            lastAttemptSucceeded?: boolean | null;
+            /** @description A short description of the last outcome. */
+            lastAttemptDetail?: string | null;
+            /**
+             * Format: date-time
+             * @description When a snapshot last reached the receiver.
+             */
+            lastSuccessAt?: string | null;
+            /** @description The exact address a snapshot is posted to. */
+            pingEndpoint?: string | null;
+            /** @description Where the payload is documented field by field. */
+            payloadDocumentationUrl?: string | null;
+            /** @description Where privacy questions about the payload go. */
+            privacyContact?: string | null;
+            update?: components["schemas"]["UsageStatisticsUpdateStatusDto"];
+        };
+        /**
+         * @description What the last successful ping said about newer releases and security advisories.
+         *
+         *     Absent information renders nothing. An installation that has never pinged, or has usage statistics
+         *         off, sees no badge and no error.
+         */
+        UsageStatisticsUpdateStatusDto: {
+            /** @description The running release version. */
+            currentVersion?: string | null;
+            /** @description The newest release the receiver reported, when it reported one. */
+            latestVersion?: string | null;
+            /** @description Whether the running version differs from the newest one reported. */
+            updateAvailable?: boolean;
+            /** @description Security advisories the receiver reported for the running version. */
+            advisories?: components["schemas"]["ProductAdvisory"][] | null;
+            /**
+             * Format: date-time
+             * @description When this information arrived.
+             */
+            receivedAt?: string | null;
         };
         /** @description Response payload for one webhook configuration. */
         WebhookConfigurationResponse: {

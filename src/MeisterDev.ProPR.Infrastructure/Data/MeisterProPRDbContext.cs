@@ -165,6 +165,12 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Installation-wide override rows for premium capability state.</summary>
     public DbSet<PremiumCapabilityOverrideRecord> PremiumCapabilityOverrides => this.Set<PremiumCapabilityOverrideRecord>();
 
+    /// <summary>Singleton random identifier this installation reports in anonymous usage statistics.</summary>
+    public DbSet<UsageStatisticsIdentityRecord> UsageStatisticsIdentity => this.Set<UsageStatisticsIdentityRecord>();
+
+    /// <summary>Singleton anonymous usage statistics preference, consent state and send history.</summary>
+    public DbSet<UsageStatisticsSettingsRecord> UsageStatisticsSettings => this.Set<UsageStatisticsSettingsRecord>();
+
     /// <summary>Explicit ProCursor source associations for crawl configurations.</summary>
     public DbSet<CrawlConfigurationProCursorSourceRecord> CrawlConfigurationProCursorSources =>
         this.Set<CrawlConfigurationProCursorSourceRecord>();

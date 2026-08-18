@@ -3,6 +3,18 @@
 FROM mcr.microsoft.com/dotnet/sdk@sha256:72dd743782f2ae7e5476fd64f6a460045e3998dc862218b80e6944cba79a01b0 AS build
 WORKDIR /source
 
+# The release version, stamped into the assembly so the running product can report it on the Usage Statistics
+# page and in the daily anonymous snapshot. An unstamped build reports "0.0.0-dev" rather than the SDK's
+# 1.0.0 default, so a local build is not mistaken for a release.
+ARG PRODUCT_VERSION=0.0.0-dev
+
+# Where anonymous usage statistics are posted, fixed into this image. Build a local or staging image with,
+# for example:
+#   podman build --build-arg USAGE_STATISTICS_ENDPOINT=http://host.containers.internal:5000/v1/ping .
+# The value cannot be changed once the image is built, so the destination is a property of the image rather
+# than of its environment.
+ARG USAGE_STATISTICS_ENDPOINT=https://telemetry.meister-dev.ai/v1/ping
+
 COPY MeisterDev.ProPR.slnx .
 COPY src/ src/
 COPY tests/ tests/
@@ -10,7 +22,9 @@ COPY tests/ tests/
 RUN dotnet restore
 
 RUN dotnet publish src/MeisterDev.ProPR.Api/MeisterDev.ProPR.Api.csproj \
-    -c Release -o /app --no-restore
+    -c Release -o /app --no-restore \
+    -p:InformationalVersion="${PRODUCT_VERSION}" \
+    -p:UsageStatisticsEndpoint="${USAGE_STATISTICS_ENDPOINT}"
 
 # Tree-sitter native prune (feature 070, research.md R5). The TreeSitter.DotNet
 # package ships ~28 grammar natives across 8 RIDs (~51 MB). The Api publish is

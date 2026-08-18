@@ -163,6 +163,8 @@ jobs:
           push: true
           pull: true
           tags: ${{ steps.tags.outputs.backend }}
+          build-args: |
+            PRODUCT_VERSION=${{ steps.version.outputs.version }}
           labels: |
             org.opencontainers.image.title=Meister DEV ProPR
             org.opencontainers.image.version=${{ steps.version.outputs.version }}

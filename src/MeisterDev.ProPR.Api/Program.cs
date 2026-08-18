@@ -46,6 +46,7 @@ using MeisterDev.ProPR.Infrastructure.Features.ReviewArchive;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.UsageReporting;
+using MeisterDev.ProPR.Infrastructure.Features.UsageStatistics;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.Infrastructure.Services;
 using MeisterDev.ProPR.Observability;
@@ -120,6 +121,7 @@ try
     builder.Services.AddPromptCustomizationModule(builder.Configuration, builder.Environment);
     builder.Services.AddUsageReportingModule(builder.Configuration, builder.Environment);
     builder.Services.AddLicensingModule(builder.Configuration, builder.Environment);
+    builder.Services.AddUsageStatisticsModule(builder.Configuration, builder.Environment);
     builder.Services.AddReviewArchiveModule(builder.Configuration, builder.Environment);
     builder.Services.AddCodeInsightsModule(builder.Configuration, builder.Environment);
     builder.Services.AddProCursorRemoteMode(builder.Configuration);
@@ -363,6 +365,15 @@ try
     if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
     {
         builder.Services.AddHostedService(sp => sp.GetRequiredService<RunnerRegistryPruneWorker>());
+    }
+
+    // UsageStatisticsSendWorker sends the daily anonymous usage snapshot. Gated on the database because the
+    // consent state, the opt-out and the installation identity are stored there; without one the loop has
+    // nothing to read and cannot determine whether sending is permitted.
+    builder.Services.AddSingleton<UsageStatisticsSendWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<UsageStatisticsSendWorker>());
     }
 
     // CodeInsightClassificationWorker classifies collected findings by type, post-hoc. It depends on the

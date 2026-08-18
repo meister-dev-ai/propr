@@ -5176,6 +5176,88 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("tenant_sso_providers", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.UsageStatisticsIdentityRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("InstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instance_id");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("usage_statistics_identity", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.UsageStatisticsSettingsRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AdvisoriesJson")
+                        .HasColumnType("text")
+                        .HasColumnName("advisories_json");
+
+                    b.Property<bool>("CommunityOptIn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("community_opt_in");
+
+                    b.Property<DateTimeOffset?>("ConsentGateSatisfiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consent_gate_satisfied_at");
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<string>("LastAttemptDetail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("last_attempt_detail");
+
+                    b.Property<bool?>("LastAttemptSucceeded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("last_attempt_succeeded");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<string>("LatestVersion")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("latest_version");
+
+                    b.Property<DateTimeOffset?>("NoticeDismissedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("notice_dismissed_at");
+
+                    b.Property<DateTimeOffset?>("UpdateInformationReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("update_information_received_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("usage_statistics_settings", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.UserClientRoleRecord", b =>
                 {
                     b.Property<Guid>("Id")

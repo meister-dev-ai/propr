@@ -1736,6 +1736,32 @@ let aiConnectionsByClient: Record<string, any[]> = {
   ],
 }
 
+let usageStatisticsSettings = {
+  edition: 'community',
+  // Starts before the gate opens, with nothing sent yet, so local development exercises the acknowledgement
+  // the notice sends on render.
+  enabled: false,
+  communityOptIn: true,
+  managedByLicense: false,
+  consentGateSatisfied: false,
+  noticeRequired: true,
+  lastAttemptAt: null as string | null,
+  lastAttemptSucceeded: null as boolean | null,
+  lastAttemptDetail: null as string | null,
+  lastSuccessAt: null as string | null,
+  pingEndpoint: 'https://telemetry.meister-dev.ai/v1/ping',
+  payloadDocumentationUrl:
+    'https://github.com/meister-dev-ai/propr/blob/main/docs/reference/usage-statistics.md',
+  privacyContact: 'privacy@meister-dev.ai',
+  update: {
+    currentVersion: '1.0.0.alpha.0049',
+    latestVersion: '1.0.0.alpha.0050',
+    updateAvailable: true,
+    advisories: [] as unknown[],
+    receivedAt: new Date(Date.now() - 6 * 3600000).toISOString(),
+  },
+}
+
 let providerActivationStatuses = [
   {
     providerFamily: 'azureDevOps',
@@ -3450,6 +3476,91 @@ export const handlers = [
         : connection,
     )
     return HttpResponse.json({ status: 'verified', summary: 'Verified against the provider catalog.' })
+  }),
+
+  http.get(`${base}/admin/usage-statistics`, async () => {
+    await delay(140)
+    return HttpResponse.json(usageStatisticsSettings)
+  }),
+
+  http.patch(`${base}/admin/usage-statistics`, async ({ request }) => {
+    await delay(180)
+
+    if (usageStatisticsSettings.managedByLicense) {
+      return HttpResponse.json(
+        { error: 'Anonymous usage statistics are managed by your commercial license.' },
+        { status: 409 },
+      )
+    }
+
+    const body = await request.json() as any
+    usageStatisticsSettings = {
+      ...usageStatisticsSettings,
+      communityOptIn: body.enabled === true,
+      enabled: body.enabled === true && usageStatisticsSettings.consentGateSatisfied,
+    }
+    return HttpResponse.json(usageStatisticsSettings)
+  }),
+
+  http.post(`${base}/admin/usage-statistics/send`, async () => {
+    await delay(220)
+
+    // The mock applies the same rules the service does, so local development also sees the outcomes in which
+    // nothing was sent.
+    if (!usageStatisticsSettings.enabled) {
+      return HttpResponse.json({
+        decision: usageStatisticsSettings.consentGateSatisfied ? 'disabled' : 'awaitingConsent',
+        settings: usageStatisticsSettings,
+      })
+    }
+
+    const now = new Date().toISOString()
+    usageStatisticsSettings = {
+      ...usageStatisticsSettings,
+      lastAttemptAt: now,
+      lastAttemptSucceeded: true,
+      lastAttemptDetail: 'Delivered.',
+      lastSuccessAt: now,
+    }
+
+    return HttpResponse.json({ decision: 'sent', settings: usageStatisticsSettings })
+  }),
+
+  http.get(`${base}/admin/usage-statistics/preview`, async () => {
+    await delay(140)
+    return HttpResponse.json({
+      endpoint: usageStatisticsSettings.pingEndpoint,
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        schemaVersion: 1,
+        instanceId: '8f14e45f-ceea-467a-9b2e-8c1f5f2f2a11',
+        productVersion: usageStatisticsSettings.update.currentVersion,
+        edition: usageStatisticsSettings.edition,
+        activeUsers: '2-5',
+        pullRequestsPerWeek: '21-100',
+        findingsRaisedPerWeek: '51-250',
+      }),
+      payloadDocumentationUrl: usageStatisticsSettings.payloadDocumentationUrl,
+    })
+  }),
+
+  http.post(`${base}/admin/usage-statistics/notice/shown`, async () => {
+    await delay(120)
+    usageStatisticsSettings = {
+      ...usageStatisticsSettings,
+      consentGateSatisfied: true,
+      enabled: usageStatisticsSettings.communityOptIn,
+    }
+    return HttpResponse.json(usageStatisticsSettings)
+  }),
+
+  http.post(`${base}/admin/usage-statistics/notice/dismiss`, async () => {
+    await delay(120)
+    usageStatisticsSettings = {
+      ...usageStatisticsSettings,
+      noticeRequired: false,
+    }
+    return HttpResponse.json(usageStatisticsSettings)
   }),
 
   http.get(`${base}/admin/providers`, async () => {
