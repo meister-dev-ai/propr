@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Workspace;
 using Microsoft.Extensions.Logging.Abstractions;
+using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 
@@ -12,6 +13,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     surrounding quotes, which matches no stored file path, so a file that did change is carried forward
 ///     with the previous iteration's comments instead of being reviewed.
 /// </summary>
+[Collection("GitCommandLine")]
 public sealed class MirrorDeltaQuotingTests : IDisposable
 {
     // Git hooks export GIT_DIR and GIT_INDEX_FILE, and a child git process inherits them. Without

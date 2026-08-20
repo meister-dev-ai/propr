@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -11,6 +12,7 @@ using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using FactAttribute = Xunit.SkippableFactAttribute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
@@ -23,7 +25,12 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 [Collection("PostgresIntegration")]
 public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
+    private const int ShortCeilingMinutes = 30;
+
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(2);
+
+    private static readonly IOptions<ReviewLeaseOptions> LeaseOptions =
+        Microsoft.Extensions.Options.Options.Create(new ReviewLeaseOptions());
 
     private DbContextOptions<MeisterProPRDbContext> _options = null!;
     private MeisterProPRDbContext _dbContext = null!;
@@ -40,7 +47,7 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
         this._dbContext = new MeisterProPRDbContext(this._options);
         await this._dbContext.ReviewJobs.ExecuteDeleteAsync();
         this._repo = this.CreateRepository(this._dbContext);
-        this._store = new ReviewJobLeaseStore(this._dbContext, this._repo);
+        this._store = new ReviewJobLeaseStore(this._dbContext, this._repo, LeaseOptions, NullLogger<ReviewJobLeaseStore>.Instance);
     }
 
     public async Task DisposeAsync()
@@ -60,8 +67,8 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
 
         await using var contextA = new MeisterProPRDbContext(this._options);
         await using var contextB = new MeisterProPRDbContext(this._options);
-        var storeA = new ReviewJobLeaseStore(contextA, this.CreateRepository(contextA));
-        var storeB = new ReviewJobLeaseStore(contextB, this.CreateRepository(contextB));
+        var storeA = new ReviewJobLeaseStore(contextA, this.CreateRepository(contextA), LeaseOptions, NullLogger<ReviewJobLeaseStore>.Instance);
+        var storeB = new ReviewJobLeaseStore(contextB, this.CreateRepository(contextB), LeaseOptions, NullLogger<ReviewJobLeaseStore>.Instance);
 
         var grants = await Task.WhenAll(
             storeA.TryClaimAsync(job.Id, "host-a", LeaseDuration),
@@ -397,8 +404,8 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
 
         await using var contextA = new MeisterProPRDbContext(this._options);
         await using var contextB = new MeisterProPRDbContext(this._options);
-        var storeA = new ReviewJobLeaseStore(contextA, this.CreateRepository(contextA));
-        var storeB = new ReviewJobLeaseStore(contextB, this.CreateRepository(contextB));
+        var storeA = new ReviewJobLeaseStore(contextA, this.CreateRepository(contextA), LeaseOptions, NullLogger<ReviewJobLeaseStore>.Instance);
+        var storeB = new ReviewJobLeaseStore(contextB, this.CreateRepository(contextB), LeaseOptions, NullLogger<ReviewJobLeaseStore>.Instance);
 
         var outcomes = await Task.WhenAll(
             storeA.TryReclaimAsync(expired, 3, 12),
@@ -682,6 +689,68 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
         Assert.True(renewal.Accepted);
         Assert.Equal(ReviewJobDirective.Continue, renewal.Directive);
         Assert.Equal(ReviewJobStopReason.None, renewal.StopReason);
+    }
+
+    /// <summary>
+    ///     A holder that is still renewing its lease and has not finished the review. The execution continues
+    ///     only while its renewals succeed, so the renewal is refused once the ceiling is passed and the job
+    ///     is failed with that reason. If the lease were left to expire, the expiry would be treated as an
+    ///     abandonment and the job would be reclaimed and run again.
+    /// </summary>
+    [Fact]
+    public async Task TryRenew_ForAJobPastTheDurationCeiling_StopsItAndRecordsWhy()
+    {
+        var job = await this.AddPendingJobAsync();
+        var lease = await this._store.TryClaimAsync(job.Id, "host-a", LeaseDuration);
+        Assert.NotNull(lease);
+
+        await this.BackdateProcessingStartAsync(job.Id, TimeSpan.FromMinutes(ShortCeilingMinutes + 1));
+        var store = new ReviewJobLeaseStore(
+            this._dbContext,
+            this._repo,
+            Microsoft.Extensions.Options.Options.Create(new ReviewLeaseOptions { MaxReviewDurationMinutes = ShortCeilingMinutes }),
+            NullLogger<ReviewJobLeaseStore>.Instance);
+
+        var renewal = await store.TryRenewAsync(lease!, LeaseDuration);
+
+        Assert.False(renewal.Accepted);
+        Assert.Equal(ReviewJobDirective.Stop, renewal.Directive);
+        Assert.Equal(ReviewJobStopReason.MaxDurationExceeded, renewal.StopReason);
+
+        var stored = await this.ReadJobAsync(job.Id);
+        Assert.Equal(JobStatus.Failed, stored.Status);
+        Assert.Contains($"{ShortCeilingMinutes}-minute", stored.ErrorMessage!, StringComparison.Ordinal);
+
+        // The classification, not only the message: it is what separates a job stopped for its duration from
+        // one that was interrupted, and the other terminal paths in this store record their own.
+        Assert.Equal(ReviewJobFailureReason.MaxDurationExceeded, stored.FailureReason);
+    }
+
+    [Fact]
+    public async Task TryRenew_ForAJobInsideTheDurationCeiling_KeepsRenewing()
+    {
+        var job = await this.AddPendingJobAsync();
+        var lease = await this._store.TryClaimAsync(job.Id, "host-a", LeaseDuration);
+        Assert.NotNull(lease);
+
+        await this.BackdateProcessingStartAsync(job.Id, TimeSpan.FromMinutes(ShortCeilingMinutes - 2));
+        var store = new ReviewJobLeaseStore(
+            this._dbContext,
+            this._repo,
+            Microsoft.Extensions.Options.Options.Create(new ReviewLeaseOptions { MaxReviewDurationMinutes = ShortCeilingMinutes }),
+            NullLogger<ReviewJobLeaseStore>.Instance);
+
+        var renewal = await store.TryRenewAsync(lease!, LeaseDuration);
+
+        Assert.True(renewal.Accepted);
+        Assert.Equal(JobStatus.Processing, (await this.ReadJobAsync(job.Id)).Status);
+    }
+
+    private async Task BackdateProcessingStartAsync(Guid jobId, TimeSpan by)
+    {
+        await this._dbContext.Database.ExecuteSqlRawAsync(
+            "UPDATE review_jobs SET processing_started_at = now() - make_interval(secs => {1}) WHERE id = {0}",
+            [jobId, by.TotalSeconds]);
     }
 
     private JobRepository CreateRepository(MeisterProPRDbContext context)

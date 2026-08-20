@@ -15,6 +15,9 @@ internal sealed class ReviewWorkspaceCleanupService(
     private readonly Lock _lock = new();
     private readonly Dictionary<string, int> _mirrorReferenceCounts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _workspaceReferenceCounts = new(StringComparer.Ordinal);
+    private readonly Lock _sizeCacheLock = new();
+    private readonly Dictionary<string, DirectoryFileBytes> _directoryFileBytes = new(StringComparer.Ordinal);
+    private int _sweepInProgress;
 
     public string RootPath => options.Value.RootPath;
 
@@ -40,14 +43,72 @@ internal sealed class ReviewWorkspaceCleanupService(
         }
     }
 
+    /// <summary>
+    ///     True while any review still holds a lease on this mirror. Callers that need the mirror to
+    ///     themselves — repacking it, for instance — have to see this false before they start.
+    /// </summary>
+    public bool IsMirrorReferenced(string mirrorPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mirrorPath);
+
+        lock (this._lock)
+        {
+            return IsReferenced(this._mirrorReferenceCounts, mirrorPath);
+        }
+    }
+
     public Task RunCleanupAsync(CancellationToken ct)
     {
         logger.LogDebug("Review workspace cleanup requested for root {RootPath}.", options.Value.RootPath);
 
         Directory.CreateDirectory(this.RootPath);
-        this.CleanupReleasedWorkspaces();
-        this.CleanupMirrorCache();
+
+        // Cleanup runs on every workspace preparation and is not required to run on any particular one, so a
+        // caller that arrives while a sweep is in flight returns without starting a second. That also keeps
+        // two sweeps from walking and deleting the same directories at the same time.
+        if (Interlocked.CompareExchange(ref this._sweepInProgress, 1, 0) == 1)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            this.LogReferenceCounts();
+            this.CleanupReleasedWorkspaces();
+            this.CleanupMirrorCache();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref this._sweepInProgress, 0);
+        }
+
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     How many mirrors and workspaces are currently leased. On an instance whose review queue has
+    ///     drained both return to zero; a count that stays above zero on an idle instance is a leaked lease,
+    ///     which pins its mirror and checkout against cleanup until the process restarts.
+    /// </summary>
+    private void LogReferenceCounts()
+    {
+        if (!logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        int mirrorCount;
+        int workspaceCount;
+        lock (this._lock)
+        {
+            mirrorCount = this._mirrorReferenceCounts.Count;
+            workspaceCount = this._workspaceReferenceCounts.Count;
+        }
+
+        logger.LogDebug(
+            "Review workspace leases held: {MirrorCount} mirror(s), {WorkspaceCount} workspace(s).",
+            mirrorCount,
+            workspaceCount);
     }
 
     private void CleanupReleasedWorkspaces()
@@ -97,11 +158,14 @@ internal sealed class ReviewWorkspaceCleanupService(
         }
 
         var budgetBytes = Math.Max(128, options.Value.MaxCacheSizeMegabytes) * 1024L * 1024L;
+        var measured = new HashSet<string>(StringComparer.Ordinal);
         var mirrors = Directory.EnumerateDirectories(mirrorsRoot)
             .Select(path => new DirectoryInfo(path))
-            .Select(directory => new MirrorEntry(directory, GetDirectorySize(directory.FullName), directory.LastWriteTimeUtc))
+            .Select(directory => new MirrorEntry(directory, this.GetDirectorySize(directory.FullName, measured), directory.LastWriteTimeUtc))
             .OrderBy(entry => entry.LastWriteTimeUtc)
             .ToList();
+        this.ForgetUnmeasuredDirectories(measured);
+
         var totalBytes = mirrors.Sum(entry => entry.SizeBytes);
         if (totalBytes <= budgetBytes)
         {
@@ -136,10 +200,80 @@ internal sealed class ReviewWorkspaceCleanupService(
         }
     }
 
-    private static long GetDirectorySize(string path)
+    /// <summary>
+    ///     A directory's total size, with the per-file <c>stat</c> calls remembered per directory and repeated
+    ///     only for directories whose own timestamp moved since the last sweep.
+    /// </summary>
+    /// <remarks>
+    ///     Measuring every file in every mirror on every workspace preparation made preparation cost grow
+    ///     with the size of the cache: a mirror accumulates a packfile per fetch, and the walk was paid even
+    ///     when the cache was far below its budget. Directory timestamps move when entries are added or
+    ///     removed, so a fetch re-measures the pack directory it wrote to and nothing else. A file whose
+    ///     content is rewritten in place without its directory changing keeps its previous size here, which
+    ///     is acceptable for a cache-budget decision: git's object files are written once and never edited,
+    ///     and the files that are rewritten (refs, FETCH_HEAD) are negligible next to a budget in megabytes.
+    /// </remarks>
+    private long GetDirectorySize(string path, HashSet<string> measured)
     {
-        return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Sum(file => new FileInfo(file).Length);
+        var directory = new DirectoryInfo(path);
+        if (!directory.Exists)
+        {
+            return 0;
+        }
+
+        // The same spelling the cache is keyed by, so a directory measured now is never pruned as unseen.
+        measured.Add(directory.FullName);
+
+        long totalBytes = 0;
+        try
+        {
+            foreach (var subdirectory in directory.EnumerateDirectories())
+            {
+                totalBytes += this.GetDirectorySize(subdirectory.FullName, measured);
+            }
+
+            totalBytes += this.GetFileBytes(directory);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // Another sweep or a dispose removed the directory while it was being measured. Whatever is
+            // gone is no longer occupying the cache budget.
+        }
+
+        return totalBytes;
+    }
+
+    private long GetFileBytes(DirectoryInfo directory)
+    {
+        var lastWriteTimeUtc = directory.LastWriteTimeUtc;
+        lock (this._sizeCacheLock)
+        {
+            if (this._directoryFileBytes.TryGetValue(directory.FullName, out var cached)
+                && cached.LastWriteTimeUtc == lastWriteTimeUtc)
+            {
+                return cached.Bytes;
+            }
+        }
+
+        var bytes = directory.EnumerateFiles().Sum(file => file.Length);
+        lock (this._sizeCacheLock)
+        {
+            this._directoryFileBytes[directory.FullName] = new DirectoryFileBytes(lastWriteTimeUtc, bytes);
+        }
+
+        return bytes;
+    }
+
+    /// <summary>Drops cache entries for directories that no longer exist, so a deleted mirror is not remembered.</summary>
+    private void ForgetUnmeasuredDirectories(HashSet<string> measured)
+    {
+        lock (this._sizeCacheLock)
+        {
+            foreach (var path in this._directoryFileBytes.Keys.Where(path => !measured.Contains(path)).ToList())
+            {
+                this._directoryFileBytes.Remove(path);
+            }
+        }
     }
 
     private static string GetWorkspaceRoot(ReviewRepositoryWorkspaceLease lease)
@@ -174,4 +308,6 @@ internal sealed class ReviewWorkspaceCleanupService(
     }
 
     private sealed record MirrorEntry(DirectoryInfo Directory, long SizeBytes, DateTime LastWriteTimeUtc);
+
+    private sealed record DirectoryFileBytes(DateTime LastWriteTimeUtc, long Bytes);
 }

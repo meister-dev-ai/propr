@@ -60,9 +60,14 @@ internal sealed class LocalGitReviewContextTools(
         return workspace.ReadFileAsync(this.NormalizePath(normalizedPath), this.ResolveBranchSide(normalizedBranch), ct);
     }
 
+    /// <remarks>
+    ///     Leading and trailing whitespace is part of the path. The repository file listing reports names as
+    ///     the revision stores them, so trimming here would send a different path to the read than the one
+    ///     the listing offered.
+    /// </remarks>
     protected override string NormalizePath(string path)
     {
-        return path.Trim().TrimStart('/').Replace('\\', '/');
+        return path.TrimStart('/').Replace('\\', '/');
     }
 
     internal Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)

@@ -159,6 +159,36 @@ The directory is a cache - losing it costs re-cloning, not data. But if you leav
 writable layer, as the example stack does, every restart re-clones everything. Mount a volume for it in
 any deployment you keep, and point `REVIEW_WORKSPACE_ROOT_PATH` at it.
 
+Sizing it means budgeting for two things that are bounded separately:
+
+- **The mirrors**, one per repository you review. `REVIEW_WORKSPACE_MAX_CACHE_SIZE_MEGABYTES` is the target
+  the eviction sweep works towards, and `REVIEW_WORKSPACE_FETCH_DEPTH_POLICY` decides how much of each
+  repository a mirror holds. A mirror is kept after the review that fetched it, and is evicted once the
+  mirrors together exceed the target. It is a target rather than a limit: the sweep skips any mirror a
+  running review still holds, so with several large repositories under review at once the total can sit
+  above it until those reviews end. Leave headroom for the mirrors of the reviews you expect to run
+  together.
+- **The checkouts**, one per review, holding the head revision. These are not counted against the cache
+  bound. Each is deleted as its review ends, so they occupy the disk only while reviews are running, and
+  `REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS` bounds how many are being written at once.
+  `REVIEW_WORKSPACE_RETENTION_MINUTES` does not hold a checkout whose review ended; it governs how long any
+  checkout directory that is not held by a running review waits before the sweep removes it. That is every
+  checkout no review deleted itself: one whose preparation failed before the review that would release it
+  began, one belonging to a review the process did not finish, one left by a delete that failed, and after a
+  restart every checkout on the disk, because which reviews were running is not carried across it. Budget for
+  that as well where restarts or failures are frequent: those directories occupy the disk for the retention
+  window rather than for the length of a review.
+
+So the disk has to hold the actual size of the mirrors of the repositories under review at once, which the
+target does not cap, plus what the sweep has trimmed the unreferenced mirrors down to, plus one checkout per
+running review, plus the checkouts awaiting the retention window. The target governs only the part the
+sweep can act on, so size the volume from the repositories you review rather than from the target, and keep
+the target below the space actually available: eviction waits until the mirrors together pass the target, so
+a target larger than the volume delays it until after the disk is full, and reviews fail during checkout with
+"No space left on device" instead of slowing down. The target is not a disk-space limit under any setting — it
+decides when unreferenced mirrors are trimmed, and a mirror a review is holding is not trimmed at all.
+See [review workspace](configuration.md#review-workspace).
+
 ## ProCursor as a separate service
 
 ProCursor runs as a separate internal service and is never exposed publicly: the API is the only public

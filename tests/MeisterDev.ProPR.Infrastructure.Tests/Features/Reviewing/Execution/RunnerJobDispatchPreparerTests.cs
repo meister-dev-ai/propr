@@ -213,7 +213,6 @@ public sealed class RunnerJobDispatchPreparerTests
                 "key",
                 "/mirror",
                 "/head",
-                "/base",
                 "head-sha",
                 "base-sha",
                 "merge-base",

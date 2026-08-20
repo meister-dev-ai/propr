@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Api.Tests.Fixtures;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterDev.ProPR.Api.Tests;
@@ -133,7 +135,10 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
         await using (var db = new MeisterProPRDbContext(options))
         {
             var repo = new JobRepository(db, new TestDbContextFactory(options), NullLogger<JobRepository>.Instance);
-            var leaseStore = new Infrastructure.Features.Reviewing.Execution.Persistence.ReviewJobLeaseStore(db, repo);
+            var leaseStore =
+                new Infrastructure.Features.Reviewing.Execution.Persistence.ReviewJobLeaseStore(
+                    db, repo, Options.Create(new ReviewLeaseOptions()),
+                    NullLogger<Infrastructure.Features.Reviewing.Execution.Persistence.ReviewJobLeaseStore>.Instance);
 
             var leased = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 100, 1);
             await repo.AddAsync(leased);

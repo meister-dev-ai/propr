@@ -40,6 +40,47 @@ public sealed class ProPrTelemetryOptionsTests
         Assert.Equal(new Uri("http://collector:4317"), options.OtlpEndpoint);
     }
 
+    /// <summary>
+    ///     Managed OpenTelemetry agents inject the endpoint under the name the OpenTelemetry specification
+    ///     gives it. While only the private name was read, the endpoint resolved to null in Azure, no trace
+    ///     pipeline was built, and no request or dependency telemetry was exported. The setting was present,
+    ///     so the configuration gave no indication of it.
+    /// </summary>
+    [Fact]
+    public void FromConfiguration_WithTheStandardEndpointVariable_EnablesTracing()
+    {
+        var options = Build(("OTEL_EXPORTER_OTLP_ENDPOINT", "http://agent:4317"));
+
+        Assert.True(options.TracingEnabled);
+        Assert.Equal(new Uri("http://agent:4317"), options.OtlpEndpoint);
+    }
+
+    /// <summary>
+    ///     The API declares <c>OTLP_ENDPOINT</c> with an empty value in appsettings.json, so the key is
+    ///     present whether or not an operator set it. A host supplying only the standard variable has to
+    ///     resolve that one.
+    /// </summary>
+    [Fact]
+    public void FromConfiguration_WithTheLegacyVariableDeclaredEmpty_StillReadsTheStandardOne()
+    {
+        var options = Build(
+            ("OTLP_ENDPOINT", string.Empty),
+            ("OTEL_EXPORTER_OTLP_ENDPOINT", "http://agent:4317"));
+
+        Assert.True(options.TracingEnabled);
+        Assert.Equal(new Uri("http://agent:4317"), options.OtlpEndpoint);
+    }
+
+    [Fact]
+    public void FromConfiguration_WithBothEndpointVariables_PrefersTheExplicitOne()
+    {
+        var options = Build(
+            ("OTLP_ENDPOINT", "http://explicit:4317"),
+            ("OTEL_EXPORTER_OTLP_ENDPOINT", "http://agent:4317"));
+
+        Assert.Equal(new Uri("http://explicit:4317"), options.OtlpEndpoint);
+    }
+
     [Theory]
     [InlineData("off", HttpClientTraceMode.Off)]
     [InlineData("OFF", HttpClientTraceMode.Off)]

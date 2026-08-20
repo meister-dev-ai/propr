@@ -5,11 +5,14 @@
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 
@@ -19,8 +22,22 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persisten
 ///     resolved by reading a row, checking it in memory, and writing it back: two hosts doing that would both
 ///     be told they won.
 /// </summary>
-public sealed class ReviewJobLeaseStore(MeisterProPRDbContext dbContext, IJobRepository jobs) : IReviewJobLeaseStore
+public sealed class ReviewJobLeaseStore(
+    MeisterProPRDbContext dbContext,
+    IJobRepository jobs,
+    IOptions<ReviewLeaseOptions> leaseOptions,
+    ILogger<ReviewJobLeaseStore> logger) : IReviewJobLeaseStore
 {
+    /// <summary>
+    ///     How long the protocol cleanup after a duration-ceiling failure may take before it is abandoned.
+    /// </summary>
+    /// <remarks>
+    ///     The renewal that carries the stop directive does not return until this call does, and the
+    ///     execution keeps working until it receives that directive. Short enough to stay well inside a
+    ///     heartbeat interval, so a slow database delays the stop by a fraction of one renewal at most.
+    /// </remarks>
+    private static readonly TimeSpan ProtocolCleanupTimeout = TimeSpan.FromSeconds(5);
+
     /// <inheritdoc />
     public Task<IReadOnlyList<ReviewJob>> GetClaimCandidatesAsync(
         int limit,
@@ -90,14 +107,30 @@ public sealed class ReviewJobLeaseStore(MeisterProPRDbContext dbContext, IJobRep
 
         // The predicate carries the guarantee: owner and generation must both still match, and the job must
         // still be executing. A holder that was reclaimed carries an older generation and renews nothing.
+        // The last clause applies the ceiling on one execution. An execution continues only while its
+        // renewals succeed, so refusing the renewal stops one that has run past the ceiling.
+        //
+        // A row without a start timestamp is renewed and stamped with one. The claim records the timestamp,
+        // so this covers a row that reached Processing another way: accepting it unstamped would leave that
+        // execution outside the ceiling for as long as it kept renewing, and refusing it would fail a job
+        // over a missing timestamp. Stamping it starts the allowance from this renewal.
         var renewed = await dbContext.Database.ExecuteSqlRawAsync(
             """
             UPDATE review_jobs
             SET lease_expires_at = now() + make_interval(secs => {3}),
-                last_heartbeat_at = now()
+                last_heartbeat_at = now(),
+                processing_started_at = COALESCE(processing_started_at, now())
             WHERE id = {0} AND lease_owner = {1} AND lease_generation = {2} AND status = 'Processing'
+              AND (processing_started_at IS NULL
+                   OR processing_started_at > now() - make_interval(secs => {4}))
             """,
-            [lease.JobId, lease.Owner, lease.Generation, leaseDuration.TotalSeconds],
+            [
+                lease.JobId,
+                lease.Owner,
+                lease.Generation,
+                leaseDuration.TotalSeconds,
+                leaseOptions.Value.MaxReviewDuration.TotalSeconds,
+            ],
             ct);
 
         if (renewed == 0)
@@ -129,7 +162,7 @@ public sealed class ReviewJobLeaseStore(MeisterProPRDbContext dbContext, IJobRep
         var current = await dbContext.ReviewJobs
             .AsNoTracking()
             .Where(j => j.Id == lease.JobId)
-            .Select(j => new { j.Status, j.LeaseGeneration, j.LeaseOwner })
+            .Select(j => new { j.Status, j.LeaseGeneration, j.LeaseOwner, j.ProcessingStartedAt })
             .SingleOrDefaultAsync(ct);
 
         if (current is null)
@@ -151,6 +184,17 @@ public sealed class ReviewJobLeaseStore(MeisterProPRDbContext dbContext, IJobRep
             return ReviewJobLeaseRenewal.Rejected;
         }
 
+        // The job is still executing, still owned by this caller, still on this generation, and the renewal
+        // was refused. Every predicate of the renewal statement has been re-checked above except the duration
+        // ceiling, so that is the clause that refused it. Deducing it leaves the database's clock as the only
+        // clock involved; comparing the elapsed time here would introduce this process's clock as a second
+        // one. A predicate added to that statement has to be re-checked above, or it will be reported as a
+        // duration breach.
+        if (current.Status == JobStatus.Processing && current.ProcessingStartedAt is not null)
+        {
+            return await this.FailForMaxDurationAsync(lease, ct);
+        }
+
         return current.Status switch
         {
             JobStatus.Stopped => ReviewJobLeaseRenewal.StoppedBecause(ReviewJobStopReason.OperatorStop),
@@ -159,6 +203,77 @@ public sealed class ReviewJobLeaseStore(MeisterProPRDbContext dbContext, IJobRep
             JobStatus.Cancelled => ReviewJobLeaseRenewal.StoppedBecause(ReviewJobStopReason.OperatorStop),
             _ => ReviewJobLeaseRenewal.Rejected,
         };
+    }
+
+    /// <summary>
+    ///     Fails the job for passing the ceiling on one execution, and only while this caller still holds it.
+    /// </summary>
+    /// <remarks>
+    ///     The read that led here is not part of the statement that refused the renewal, so between the two
+    ///     this process can be paused long enough for the lease to expire, another host to reclaim the job
+    ///     and start a new generation, and this call to arrive afterwards. An unfenced terminal write would
+    ///     then fail that host's running execution and clear its lease, so the transition carries the owner
+    ///     and generation it believes it holds and is refused if either has moved on.
+    ///     <para>
+    ///         The statement carries the whole terminal state: the status, the classified reason, the message,
+    ///         the completion stamp and the cleared lease. The classification is what tells an operator a
+    ///         failed job was stopped for its duration rather than interrupted, which the other terminal
+    ///         paths in this class record for the same purpose. Writing the status first and the rest afterwards would leave a job
+    ///         that is terminal but still stamped with an owner, and with no reason recorded, if the second
+    ///         write did not happen — which host shutdown, cancelling the token between the two, would cause.
+    ///         The protocol cleanup that follows is not part of that state and runs uncancellable, so a
+    ///         shutdown cannot stop it either.
+    ///     </para>
+    /// </remarks>
+    private async Task<ReviewJobLeaseRenewal> FailForMaxDurationAsync(ReviewJobLease lease, CancellationToken ct)
+    {
+        var reason = $"The review ran longer than the {leaseOptions.Value.MaxReviewDurationMinutes}-minute "
+                     + "ceiling on one execution and was stopped.";
+
+        var fenced = await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE review_jobs
+            SET status = 'Failed',
+                failure_reason = {4},
+                error_message = {3},
+                completed_at = now(),
+                lease_owner = NULL,
+                lease_expires_at = NULL,
+                last_heartbeat_at = NULL,
+                publishing_started_at = NULL
+            WHERE id = {0} AND lease_owner = {1} AND lease_generation = {2} AND status = 'Processing'
+            """,
+            [lease.JobId, lease.Owner, lease.Generation, reason, (int)ReviewJobFailureReason.MaxDurationExceeded],
+            ct);
+
+        if (fenced == 0)
+        {
+            return ReviewJobLeaseRenewal.Rejected;
+        }
+
+        // The row is terminal and unclaimable now, so this closes the protocols the execution left open
+        // against a job nobody else can be holding. CancellationToken.None: the durable state is already
+        // written, and a shutdown here would leave open protocol rows behind a completed transition.
+        //
+        // Failures are recorded and not propagated, and the wait is bounded. Throwing would reach the
+        // heartbeat as a transient renewal error, which retries rather than stopping; blocking would hold the
+        // heartbeat in this call. Either way the execution would keep running against a job the database
+        // already shows as failed, and could still reach publication. Open protocol rows are the smaller
+        // loss, and the durable state this stop rests on is already written.
+        using var cleanupTimeout = new CancellationTokenSource(ProtocolCleanupTimeout);
+        try
+        {
+            await jobs.SetFailedAsync(lease.JobId, reason, cleanupTimeout.Token);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Review job {JobId} was failed for exceeding its duration ceiling, but the protocol cleanup that follows did not complete.",
+                lease.JobId);
+        }
+
+        return ReviewJobLeaseRenewal.StoppedBecause(ReviewJobStopReason.MaxDurationExceeded);
     }
 
     /// <inheritdoc />

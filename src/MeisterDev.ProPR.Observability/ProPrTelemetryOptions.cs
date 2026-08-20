@@ -44,7 +44,11 @@ public sealed class ProPrTelemetryOptions
 
         return new ProPrTelemetryOptions
         {
-            OtlpEndpoint = ParseEndpoint(configuration["OTLP_ENDPOINT"]),
+            OtlpEndpoint = ParseEndpoint(
+                FirstConfigured(
+                    configuration,
+                    "OTLP_ENDPOINT",
+                    "OTEL_EXPORTER_OTLP_ENDPOINT")),
             HttpClientTraces = ParseHttpClientTraceMode(configuration["TELEMETRY_HTTP_CLIENT_TRACES"]),
             TraceSampleRatio = ParseSampleRatio(configuration["TELEMETRY_TRACE_SAMPLE_RATIO"]),
             IgnoredPaths = ParseIgnoredPaths(configuration["TELEMETRY_TRACE_IGNORED_PATHS"]),
@@ -89,6 +93,28 @@ public sealed class ProPrTelemetryOptions
         }
 
         return false;
+    }
+
+    /// <summary>
+    ///     The first of the supplied keys that carries a non-blank value.
+    /// </summary>
+    /// <remarks>
+    ///     Selecting the first non-null value would stop at a key that is declared with an empty value, and
+    ///     the API declares <c>OTLP_ENDPOINT</c> that way in appsettings.json. A host supplying only the
+    ///     standard variable would then resolve no endpoint and build no trace pipeline.
+    /// </remarks>
+    private static string? FirstConfigured(IConfiguration configuration, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = configuration[key];
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static Uri? ParseEndpoint(string? value)

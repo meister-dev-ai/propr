@@ -107,6 +107,30 @@ public sealed class ReviewLeaseOptions : IValidatableObject
     public int PublicationTimeoutMinutes { get; set; } = 30;
 
     /// <summary>
+    ///     How long one execution of a review may run before it is failed. The lease is renewed on a
+    ///     schedule of its own, so a job that keeps heartbeating is never taken away from its holder however
+    ///     long it takes: one review has run for 21 hours this way, holding a workspace and a core for the
+    ///     duration. The reclaim rules do not bound it, because they apply to a holder that stopped renewing,
+    ///     and neither does the stuck-publication sweep, which looks for jobs whose holder died. This setting
+    ///     bounds the case where the holder is still renewing and the review has not finished.
+    ///     <para>
+    ///         The ceiling is applied when a renewal is attempted, so an execution can overrun it by up to
+    ///         one <see cref="HeartbeatIntervalSeconds" /> before it is stopped, and a review that finishes
+    ///         inside that window publishes normally. The stop itself is not deferred once it is decided: the
+    ///         refused renewal cancels the token the review runs under, so it interrupts whatever the review
+    ///         was doing at that moment, which can include the posting of comments. Some of a review's
+    ///         comments can therefore be on the pull request of a job that ends as failed.
+    ///     </para>
+    ///     <para>
+    ///         <see cref="PublicationTimeoutMinutes" /> does not hold that off. It governs how long a job may
+    ///         sit in publication before a sweep treats it as stuck.
+    ///     </para>
+    ///     Bound to <c>REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES</c>.
+    /// </summary>
+    [Range(5, 1440, ErrorMessage = "MaxReviewDurationMinutes must be between 5 and 1440.")]
+    public int MaxReviewDurationMinutes { get; set; } = 180;
+
+    /// <summary>
     ///     The base URL this replica advertises to runners for job-scoped calls, when the installation runs
     ///     more than one control-plane replica. The workspace mirror is this replica's local disk and the
     ///     per-lease registries are this replica's process, so a runner must reach the replica that granted
@@ -127,6 +151,9 @@ public sealed class ReviewLeaseOptions : IValidatableObject
 
     /// <summary>The publication timeout as a <see cref="TimeSpan" />.</summary>
     public TimeSpan PublicationTimeout => TimeSpan.FromMinutes(this.PublicationTimeoutMinutes);
+
+    /// <summary>The ceiling on one execution of a review as a <see cref="TimeSpan" />.</summary>
+    public TimeSpan MaxReviewDuration => TimeSpan.FromMinutes(this.MaxReviewDurationMinutes);
 
     /// <summary>The heartbeat interval as a <see cref="TimeSpan" />.</summary>
     public TimeSpan HeartbeatInterval => TimeSpan.FromSeconds(this.HeartbeatIntervalSeconds);

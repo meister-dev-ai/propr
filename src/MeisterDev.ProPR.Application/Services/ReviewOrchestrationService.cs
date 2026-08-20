@@ -236,119 +236,11 @@ public sealed partial class ReviewOrchestrationService(
         var workspacePreparation = await this.PrepareWorkspaceForFetchAsync(job, prRef, ct);
         var earlyWorkspace = workspacePreparation.Workspace;
 
-        var pr = await this.TryFetchPullRequestWithCleanupAsync(
-            job,
-            compareToIterationId,
-            compareToReviewRevision,
-            earlyWorkspace,
-            workspacePreparation,
-            ct);
-        if (pr is null)
-        {
-            return null;
-        }
-
-        var providerCapabilities = providerRegistry.GetRegisteredCapabilities(job.Provider) ?? [];
-
-        // This is the execution-side copy of the rule intake also applies before queueing anything, and the
-        // two have to agree: this one deletes the job rather than recording a skip, so a review intake let
-        // through would otherwise vanish here with nothing said. A job that carries an explicit request
-        // passes both. Without new commits there is nothing to review; a reply is the thread pass's business.
-        if (!isNewIteration && !job.AllowUnchangedResubmission)
-        {
-            return await this.DisposeSkipAndFinalizeAsync(
-                job,
-                earlyWorkspace,
-                workspacePreparation,
-                () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
-                ct);
-        }
-
-        await this.AddOptionalReviewerIfSupportedAsync(job, reviewer, providerCapabilities, ct);
-
-        var (systemContext, carriedForwardPaths) = await this.BuildReviewContextAsync(
-            job,
-            pr,
-            baselineJob,
-            baselineIsFullCoverage,
-            resumeJob,
-            overrideChatClient,
-            runtimeCapabilities,
-            defaultReviewLogicalModelName,
-            workspacePreparation,
-            ct);
-
-        if (systemContext is null)
-        {
-            return await this.DisposeSkipAndFinalizeAsync(
-                job,
-                earlyWorkspace,
-                workspacePreparation,
-                () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
-                ct);
-        }
-
-        pr = await this.AttachLinkedItemsAsync(job, pr, systemContext, ct);
-
-        if (this.IsJobStopped(job))
-        {
-            LogJobCancelledBeforeFileReview(logger, job.Id);
-            return null;
-        }
-
-        var result = await this.DispatchFileReviewAsync(job, pr, systemContext, overrideChatClient, ct);
-
-        if (this.IsJobStopped(job))
-        {
-            LogJobCancelledAfterFileReview(logger, job.Id);
-            return null;
-        }
-
-        if (carriedForwardPaths.Count > 0)
-        {
-            result = result with { CarriedForwardFilePaths = carriedForwardPaths };
-        }
-
-        if (string.IsNullOrWhiteSpace(result.Summary) && result.Comments.Count == 0)
-        {
-            // Unlike the pre-dispatch skip paths, this one runs after DispatchFileReviewAsync,
-            // whose finally block already disposed the review workspace. Disposing again here
-            // would call DisposeAsync (and thus ReleaseLease) a second time on the same lease,
-            // which is not idempotent, so leave the workspace disposal to the dispatch path.
-            return await this.DisposeSkipAndFinalizeAsync(
-                job,
-                earlyWorkspace,
-                workspacePreparation,
-                () => LogSkippedEmptyReview(logger, job.Id, job.PullRequestId),
-                ct,
-                disposeWorkspace: false);
-        }
-
-        // Final status re-check immediately before the only step that posts to the provider. In a
-        // multi-instance deployment a manual stop may land on another instance and never reach this
-        // instance's cancellation token, so the persisted status is the last line of defence against
-        // publishing the review of a job an administrator has stopped (or that was cancelled/superseded).
-        if (this.IsJobStopped(job))
-        {
-            LogJobCancelledAfterFileReview(logger, job.Id);
-            return null;
-        }
-
-        await this.PublishReviewResultAsync(job, pr, result, compareToIterationId, ct);
-
-        await this.RetainIncrementDiffsAsync(job, pr, ct);
-
-        return new ReviewPipelineResult(pr);
-    }
-
-    private async Task<PullRequest?> TryFetchPullRequestWithCleanupAsync(
-        ReviewJob job,
-        int? compareToIterationId,
-        ReviewRevision? compareToReviewRevision,
-        IReviewRepositoryWorkspace? earlyWorkspace,
-        ReviewRepositoryWorkspacePreparationResult workspacePreparation,
-        CancellationToken ct)
-    {
+        // The workspace is released in one place, covering every exit from the pipeline below: a skip, a
+        // stop, a throw, and a published review. When disposal was spread across the exit paths, the
+        // cancelled-before-file-review path omitted it and leaked its lease, which held a mirror and a
+        // checkout as referenced for the remaining process lifetime. Disposal is idempotent, so the dispatch
+        // path releasing the workspace when file review ends needs no exception here.
         try
         {
             var pr = await this.FetchPullRequestAsync(
@@ -359,16 +251,93 @@ public sealed partial class ReviewOrchestrationService(
                 ct);
             if (pr is null)
             {
-                await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
                 return null;
             }
 
-            return pr;
+            var providerCapabilities = providerRegistry.GetRegisteredCapabilities(job.Provider) ?? [];
+
+            // This is the execution-side copy of the rule intake also applies before queueing anything, and the
+            // two have to agree: this one deletes the job rather than recording a skip, so a review intake let
+            // through would otherwise vanish here with nothing said. A job that carries an explicit request
+            // passes both. Without new commits there is nothing to review; a reply is the thread pass's business.
+            if (!isNewIteration && !job.AllowUnchangedResubmission)
+            {
+                return await this.SkipAndFinalizeAsync(
+                    job,
+                    () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
+                    ct);
+            }
+
+            await this.AddOptionalReviewerIfSupportedAsync(job, reviewer, providerCapabilities, ct);
+
+            var (systemContext, carriedForwardPaths) = await this.BuildReviewContextAsync(
+                job,
+                pr,
+                baselineJob,
+                baselineIsFullCoverage,
+                resumeJob,
+                overrideChatClient,
+                runtimeCapabilities,
+                defaultReviewLogicalModelName,
+                workspacePreparation,
+                ct);
+
+            if (systemContext is null)
+            {
+                return await this.SkipAndFinalizeAsync(
+                    job,
+                    () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
+                    ct);
+            }
+
+            pr = await this.AttachLinkedItemsAsync(job, pr, systemContext, ct);
+
+            if (this.IsJobStopped(job))
+            {
+                LogJobCancelledBeforeFileReview(logger, job.Id);
+                return null;
+            }
+
+            var result = await this.DispatchFileReviewAsync(job, pr, systemContext, overrideChatClient, ct);
+
+            if (this.IsJobStopped(job))
+            {
+                LogJobCancelledAfterFileReview(logger, job.Id);
+                return null;
+            }
+
+            if (carriedForwardPaths.Count > 0)
+            {
+                result = result with { CarriedForwardFilePaths = carriedForwardPaths };
+            }
+
+            if (string.IsNullOrWhiteSpace(result.Summary) && result.Comments.Count == 0)
+            {
+                return await this.SkipAndFinalizeAsync(
+                    job,
+                    () => LogSkippedEmptyReview(logger, job.Id, job.PullRequestId),
+                    ct);
+            }
+
+            // Final status re-check immediately before the only step that posts to the provider. In a
+            // multi-instance deployment a manual stop may land on another instance and never reach this
+            // instance's cancellation token, so the persisted status is the last line of defence against
+            // publishing the review of a job an administrator has stopped (or that was cancelled/superseded).
+            if (this.IsJobStopped(job))
+            {
+                LogJobCancelledAfterFileReview(logger, job.Id);
+                return null;
+            }
+
+            await this.PublishReviewResultAsync(job, pr, result, compareToIterationId, ct);
+
+            await this.RetainIncrementDiffsAsync(job, pr, ct);
+
+            return new ReviewPipelineResult(pr);
         }
-        catch
+        finally
         {
             await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
-            throw;
         }
     }
 
@@ -395,20 +364,12 @@ public sealed partial class ReviewOrchestrationService(
             .AddOptionalReviewerAsync(job.ClientId, job.CodeReviewReference, reviewer, ct);
     }
 
-    private async Task<ReviewPipelineResult?> DisposeSkipAndFinalizeAsync(
+    private async Task<ReviewPipelineResult?> SkipAndFinalizeAsync(
         ReviewJob job,
-        IReviewRepositoryWorkspace? earlyWorkspace,
-        ReviewRepositoryWorkspacePreparationResult workspacePreparation,
         Action logSkip,
-        CancellationToken ct,
-        bool disposeWorkspace = true)
+        CancellationToken ct)
     {
         logSkip();
-        if (disposeWorkspace)
-        {
-            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
-        }
-
         await this.SaveScanAndDeleteJobAsync(job, ct);
         return null;
     }

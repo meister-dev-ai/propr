@@ -15,11 +15,44 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
     // search there.
     private static readonly string GitExecutablePath = OperatingSystem.IsWindows() ? "git" : "/usr/bin/git";
 
+    /// <summary>
+    ///     Environment variables that tell git which repository to act on, whatever its working directory is.
+    /// </summary>
+    /// <remarks>
+    ///     Every command here names its repository by working directory. An inherited value for any of these
+    ///     overrides that without reporting an error: a mirror fetch would fetch into the inherited
+    ///     repository, and a commit-ish would be resolved against it. Git hooks export <c>GIT_DIR</c> and
+    ///     <c>GIT_INDEX_FILE</c> to every command they run, so a host process started from a hook passes them
+    ///     on.
+    /// </remarks>
+    private static readonly string[] RepositoryLocatingVariables =
+    [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_NAMESPACE",
+        "GIT_PREFIX",
+        "GIT_CEILING_DIRECTORIES",
+    ];
+
+    /// <param name="workingDirectory">Directory the command runs in.</param>
+    /// <param name="arguments">Arguments passed to git, one per element.</param>
+    /// <param name="environment">Extra environment entries; a null value removes the variable.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <param name="preserveStandardOutput">
+    ///     Read standard output exactly as written instead of line by line. Line-by-line reading rewrites line
+    ///     endings and appends a final newline, which is harmless for the output of a command that is parsed
+    ///     as lines, and wrong for a command whose output is file content.
+    /// </param>
     public async Task<GitCommandResult> RunAsync(
         string workingDirectory,
         IReadOnlyList<string> arguments,
         IReadOnlyDictionary<string, string?>? environment,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool preserveStandardOutput = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
         ArgumentNullException.ThrowIfNull(arguments);
@@ -48,6 +81,13 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
         startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
         startInfo.Environment["GIT_ASKPASS"] = "/bin/true";
 
+        // Each command below acts on the repository named by its working directory. An inherited override of
+        // that is removed before the command runs.
+        foreach (var variable in RepositoryLocatingVariables)
+        {
+            startInfo.Environment.Remove(variable);
+        }
+
         if (environment is not null)
         {
             foreach (var entry in environment)
@@ -64,8 +104,6 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
         }
 
         using var process = new Process { StartInfo = startInfo };
-        var standardOutput = new StringBuilder();
-        var standardError = new StringBuilder();
 
         logger.LogDebug(
             "Running git command in {WorkingDirectory}: git {Arguments}",
@@ -75,12 +113,14 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
         process.Start();
         process.StandardInput.Close();
 
-        var outputTask = ConsumeAsync(process.StandardOutput, standardOutput, ct);
-        var errorTask = ConsumeAsync(process.StandardError, standardError, ct);
+        var outputTask = preserveStandardOutput
+            ? process.StandardOutput.ReadToEndAsync(ct)
+            : ReadLinesAsync(process.StandardOutput, ct);
+        var errorTask = ReadLinesAsync(process.StandardError, ct);
         await process.WaitForExitAsync(ct);
         await Task.WhenAll(outputTask, errorTask);
 
-        return new GitCommandResult(process.ExitCode, standardOutput.ToString(), standardError.ToString());
+        return new GitCommandResult(process.ExitCode, await outputTask, await errorTask);
     }
 
     // Git arguments include user-controlled values (remote URLs, refs, branch names from the
@@ -90,8 +130,9 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
         return value.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
     }
 
-    private static async Task ConsumeAsync(StreamReader reader, StringBuilder buffer, CancellationToken ct)
+    private static async Task<string> ReadLinesAsync(StreamReader reader, CancellationToken ct)
     {
+        var buffer = new StringBuilder();
         while (true)
         {
             var line = await reader.ReadLineAsync(ct);
@@ -102,6 +143,8 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
 
             buffer.AppendLine(line);
         }
+
+        return buffer.ToString();
     }
 }
 

@@ -44,7 +44,6 @@ public sealed class LocalGitReviewContextToolsTests
             "workspace-key",
             "/tmp/mirror",
             "/tmp/source",
-            "/tmp/target",
             "head-sha",
             "base-sha",
             "merge-base",

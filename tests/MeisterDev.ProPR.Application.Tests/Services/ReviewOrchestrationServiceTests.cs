@@ -256,7 +256,8 @@ public partial class ReviewOrchestrationServiceTests
         IProviderActivationService? providerActivationService = null,
         IAiRuntimeResolver? aiRuntimeResolver = null,
         IClientScmConnectionRepository? scmConnectionRepository = null,
-        IPostedCommentOriginStore? postedCommentOriginStore = null)
+        IPostedCommentOriginStore? postedCommentOriginStore = null,
+        IReviewRepositoryWorkspaceManager? workspaceManager = null)
     {
         var fetcher = instructionFetcher ?? CreateDefaultInstructionFetcher();
         var evaluator = instructionEvaluator ?? CreateDefaultInstructionEvaluator();
@@ -290,7 +291,7 @@ public partial class ReviewOrchestrationServiceTests
             orchestrator,
             providerActivationService: providerActivationService,
             aiRuntimeResolver: aiRuntimeResolver,
-            workspaceManager: CreateDefaultWorkspaceManager(),
+            workspaceManager: workspaceManager ?? CreateDefaultWorkspaceManager(),
             scmConnectionRepository: scmConnectionRepository,
             postedCommentOriginStore: postedCommentOriginStore);
     }

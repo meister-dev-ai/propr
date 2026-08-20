@@ -26,4 +26,12 @@ public enum ReviewJobFailureReason
     ///     comments may already be posted, so the job is surfaced for a human rather than reclaimed.
     /// </summary>
     PublicationTimedOut = 2,
+
+    /// <summary>
+    ///     The execution ran past the ceiling on one execution and was stopped at a renewal. Distinct from a
+    ///     lease loss because nothing was interrupted or reclaimed: the job held its lease throughout and was
+    ///     stopped for how long it had been holding it. Comments it had already posted stay on the pull
+    ///     request, as with a publication timeout.
+    /// </summary>
+    MaxDurationExceeded = 3,
 }

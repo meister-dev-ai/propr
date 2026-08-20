@@ -41,6 +41,13 @@ public enum ReviewJobStopReason
     ///     above, which are decisions about the job itself rather than about who is running it.
     /// </summary>
     LeaseNoLongerHeld = 5,
+
+    /// <summary>
+    ///     The review ran past the ceiling on how long one execution may take. This concerns the job itself,
+    ///     not which party is running it, and the job is finalised as a failure carrying this reason. The
+    ///     review did not finish, and a fresh attempt would run the same work again.
+    /// </summary>
+    MaxDurationExceeded = 6,
 }
 
 /// <summary>

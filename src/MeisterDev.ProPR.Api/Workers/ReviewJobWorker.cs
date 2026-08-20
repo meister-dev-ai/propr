@@ -486,6 +486,7 @@ public sealed partial class ReviewJobWorker(
             ReviewJobStopReason.Superseded => "superseded",
             ReviewJobStopReason.BudgetCapReached => "budget_exceeded",
             ReviewJobStopReason.RegistrationRevoked => "revoked",
+            ReviewJobStopReason.MaxDurationExceeded => "duration_exceeded",
             _ => "lease_lost",
         };
     }

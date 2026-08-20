@@ -18,9 +18,10 @@ namespace MeisterDev.ProPR.Runner.Execution;
 ///         is what lets a host review code it has no standing permission to read.
 ///     </para>
 ///     <para>
-///         Both revisions are checked out, into a worktree each. A review compares two trees, and the tools
-///         that read the repository read them as "source" and "target"; a single checkout would leave the
-///         pipeline able to see what a file became and not what it was.
+///         Only the head revision is checked out. A review compares two trees, and the tools that read the
+///         repository read them as "source" and "target", but the target side is served from the mirror's
+///         object store at the base commit — so what a file was is still readable without writing a second
+///         complete copy of the repository to this host's disk.
 ///     </para>
 /// </summary>
 public sealed partial class WorkspaceFetcher(
@@ -82,9 +83,7 @@ public sealed partial class WorkspaceFetcher(
             "+refs/*:refs/*");
 
         var head = Path.Combine(workRoot, "source");
-        var target = Path.Combine(workRoot, "target");
         await RunGitAsync(mirror, ct, "worktree", "add", "--detach", "--force", head, manifest.Workspace.HeadSha);
-        await RunGitAsync(mirror, ct, "worktree", "add", "--detach", "--force", target, manifest.Workspace.BaseSha);
 
         // What the two revisions actually diverged from. Diffing head against the base tip instead would
         // report every change the target branch collected since, as though this review had made them.
@@ -103,7 +102,6 @@ public sealed partial class WorkspaceFetcher(
             manifest.JobId.ToString("D"),
             mirror,
             head,
-            target,
             manifest.Workspace.HeadSha,
             manifest.Workspace.BaseSha,
             mergeBase,

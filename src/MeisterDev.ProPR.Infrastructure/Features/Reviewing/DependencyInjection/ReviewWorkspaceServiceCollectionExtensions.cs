@@ -46,7 +46,12 @@ public static class ReviewWorkspaceServiceCollectionExtensions
 
                 if (!string.IsNullOrWhiteSpace(configuration["REVIEW_WORKSPACE_FETCH_DEPTH_POLICY"]))
                 {
-                    options.FetchDepthPolicy = configuration["REVIEW_WORKSPACE_FETCH_DEPTH_POLICY"]!;
+                    options.FetchDepthPolicy = configuration["REVIEW_WORKSPACE_FETCH_DEPTH_POLICY"]!.Trim();
+                }
+
+                if (int.TryParse(configuration["REVIEW_WORKSPACE_FETCH_DEPTH"], out var fetchDepth))
+                {
+                    options.FetchDepth = fetchDepth;
                 }
             })
             .ValidateDataAnnotations()
@@ -56,6 +61,7 @@ public static class ReviewWorkspaceServiceCollectionExtensions
         services.TryAddScoped<IReviewWorkspaceRemoteResolver, ProviderReviewWorkspaceRemoteResolver>();
         services.TryAddScoped<GitCommandRunner>();
         services.TryAddSingleton<ReviewWorkspaceCleanupService>();
+        services.TryAddSingleton<ReviewWorkspacePreparationThrottle>();
 
         return services;
     }

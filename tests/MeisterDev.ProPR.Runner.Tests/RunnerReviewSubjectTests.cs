@@ -262,7 +262,7 @@ public sealed class RunnerReviewSubjectTests
         public List<string> Reads { get; } = [];
 
         public ReviewRepositoryWorkspaceLease Lease { get; } = new(
-            Guid.Empty, "key", "/mirror", "/source", "/target", "head", "base", "merge-base",
+            Guid.Empty, "key", "/mirror", "/source", "head", "base", "merge-base",
             DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, "Active");
 
         public Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct) =>

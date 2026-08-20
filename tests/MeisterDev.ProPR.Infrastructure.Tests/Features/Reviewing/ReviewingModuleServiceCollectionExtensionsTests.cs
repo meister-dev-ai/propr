@@ -84,6 +84,78 @@ public sealed class ReviewingModuleServiceCollectionExtensionsTests
         Assert.Equal(2048, options.MaxCacheSizeMegabytes);
         Assert.Equal(8, options.MaxConcurrentPreparations);
         Assert.Equal("full", options.FetchDepthPolicy);
+        Assert.NotNull(provider.GetRequiredService<ReviewWorkspacePreparationThrottle>());
+    }
+
+    [Theory]
+    [InlineData("blobless")]
+    [InlineData("shallow")]
+    [InlineData("FULL")]
+    public void AddReviewWorkspaceServices_AcceptsEveryImplementedFetchDepthPolicy(string policy)
+    {
+        using var provider = BuildProviderWithFetchDepthPolicy(policy);
+
+        Assert.Equal(policy, provider.GetRequiredService<IOptions<ReviewWorkspaceOptions>>().Value.FetchDepthPolicy);
+    }
+
+    /// <summary>
+    ///     A policy name nothing implements used to bind and validate and then change nothing about the fetch,
+    ///     so a setting that reads like a mitigation quietly did not apply. It is refused at startup instead.
+    /// </summary>
+    [Fact]
+    public void AddReviewWorkspaceServices_RefusesAnUnimplementedFetchDepthPolicy()
+    {
+        using var provider = BuildProviderWithFetchDepthPolicy("treeless");
+
+        var failure = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<ReviewWorkspaceOptions>>().Value);
+        Assert.Contains("FetchDepthPolicy", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("blobless", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     The depth is read only under the shallow policy, so a value outside its range under one of the
+    ///     others is not a setting anything acts on. Refusing startup for it stopped deployments that carry
+    ///     one configuration across policies, and reported a range error against a setting documented as
+    ///     ignored.
+    /// </summary>
+    [Theory]
+    [InlineData("full")]
+    [InlineData("blobless")]
+    public void AddReviewWorkspaceServices_AcceptsADepthOutOfRangeUnderAPolicyThatIgnoresIt(string policy)
+    {
+        using var provider = BuildProviderWithFetchDepthPolicy(policy, "0");
+
+        Assert.Equal(0, provider.GetRequiredService<IOptions<ReviewWorkspaceOptions>>().Value.FetchDepth);
+    }
+
+    [Fact]
+    public void AddReviewWorkspaceServices_RefusesADepthOutOfRangeUnderTheShallowPolicy()
+    {
+        using var provider = BuildProviderWithFetchDepthPolicy("shallow", "0");
+
+        var failure = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<ReviewWorkspaceOptions>>().Value);
+        Assert.Contains("FetchDepth", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("shallow", failure.Message, StringComparison.Ordinal);
+    }
+
+    private static ServiceProvider BuildProviderWithFetchDepthPolicy(string policy, string? fetchDepth = null)
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ADO_SKIP_TOKEN_VALIDATION"] = "true",
+                    ["ADO_STUB_PR"] = "true",
+                    ["MEISTER_JWT_SECRET"] = "test-reviewing-module-jwt-secret-32!",
+                    ["REVIEW_WORKSPACE_FETCH_DEPTH_POLICY"] = policy,
+                    ["REVIEW_WORKSPACE_FETCH_DEPTH"] = fetchDepth,
+                })
+            .Build();
+
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewWorkspaceServices(configuration);
+        return services.BuildServiceProvider();
     }
 
     private static IConfiguration CreateConfiguration()

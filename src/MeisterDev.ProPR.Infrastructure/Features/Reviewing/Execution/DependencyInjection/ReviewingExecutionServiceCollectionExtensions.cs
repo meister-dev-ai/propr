@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Deduplication;
@@ -21,6 +22,7 @@ using MeisterDev.ProPR.ProRV.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
 
@@ -44,7 +46,9 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // TryAdd so the offline harness, which has no database, can register its own in-memory claiming.
         services.TryAddScoped<IReviewJobLeaseStore>(sp => new ReviewJobLeaseStore(
             sp.GetRequiredService<MeisterProPRDbContext>(),
-            sp.GetRequiredService<IJobRepository>()));
+            sp.GetRequiredService<IJobRepository>(),
+            sp.GetRequiredService<IOptions<ReviewLeaseOptions>>(),
+            sp.GetRequiredService<ILogger<ReviewJobLeaseStore>>()));
         // Singleton so the background worker and the control-plane stop endpoint share the same
         // per-job cancellation sources for prompt in-flight interruption on this instance.
         services.AddSingleton<IReviewJobCancellationRegistry, ReviewJobCancellationRegistry>();

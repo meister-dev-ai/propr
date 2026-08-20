@@ -68,7 +68,7 @@ internal static class StructuralReferenceToolTestHarness
     private sealed class DictionaryWorkspace(IReadOnlyDictionary<string, string> files) : IReviewRepositoryWorkspace
     {
         public ReviewRepositoryWorkspaceLease Lease { get; } = new(
-            Guid.NewGuid(), "workspace-key", "/tmp/mirror", "/tmp/source", "/tmp/target",
+            Guid.NewGuid(), "workspace-key", "/tmp/mirror", "/tmp/source",
             "head-sha", "base-sha", "merge-base", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "Active");
 
         public Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)

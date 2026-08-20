@@ -19,6 +19,12 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 {
     private readonly ConcurrentDictionary<Guid, ReviewJob> _jobs = new();
 
+    /// <summary>
+    ///     Serialises the writes that decide a job's end state. The dictionary is concurrent, the entities in
+    ///     it are not, and completion and failure are decided by different threads against the same fields.
+    /// </summary>
+    private readonly object _endStateLock = new();
+
     public Task AddAsync(ReviewJob job, CancellationToken ct = default)
     {
         this._jobs[job.Id] = job;
@@ -399,15 +405,44 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job) &&
-            job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+        lock (this._endStateLock)
         {
-            job.ErrorMessage = errorMessage;
-            job.Status = JobStatus.Failed;
-            job.CompletedAt = DateTimeOffset.UtcNow;
+            if (this._jobs.TryGetValue(id, out var job) &&
+                job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+            {
+                job.ErrorMessage = errorMessage;
+                job.Status = JobStatus.Failed;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+            }
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Fails a job while it is still processing, and reports whether this call is what failed it.
+    /// </summary>
+    /// <remarks>
+    ///     The durable store decides this in one conditional statement, and a caller that acts on the outcome
+    ///     — clearing the lease, reporting the execution as stopped — needs the same answer here.
+    ///     <see cref="SetFailedAsync" /> refuses only the deliberate terminal states, so a job that reached
+    ///     its own end state first would be failed by it and the caller would be told nothing about that.
+    /// </remarks>
+    public bool TryFailWhileProcessing(Guid id, string errorMessage, ReviewJobFailureReason reason)
+    {
+        lock (this._endStateLock)
+        {
+            if (!this._jobs.TryGetValue(id, out var job) || job.Status != JobStatus.Processing)
+            {
+                return false;
+            }
+
+            job.ErrorMessage = errorMessage;
+            job.SetFailureReason(reason);
+            job.Status = JobStatus.Failed;
+            job.CompletedAt = DateTimeOffset.UtcNow;
+            return true;
+        }
     }
 
     public Task DeleteAsync(Guid id, CancellationToken ct = default)
@@ -418,20 +453,25 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job) &&
-            job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+        // Under the same lock as the failing transitions: a review completes on its own thread while the
+        // heartbeat may be failing the job on another, and the two decide the same fields.
+        lock (this._endStateLock)
         {
-            job.ApplyResult(result);
-            job.Status = JobStatus.Completed;
-            job.CompletedAt = DateTimeOffset.UtcNow;
-
-            // Mirror the persistent store: a per-increment soft-capped run completes normally but records the
-            // breach so it can be surfaced as soft-capped, distinct from a hard cut.
-            if (result.BudgetSoftCapped
-                && result.BudgetSoftCapThresholdUsd is { } softCapThreshold
-                && result.BudgetSoftCapSpentUsd is { } softCapSpent)
+            if (this._jobs.TryGetValue(id, out var job) &&
+                job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
             {
-                job.SetBudgetBlock(BudgetScopeKind.Increment, BudgetCapKind.Soft, softCapThreshold, softCapSpent);
+                job.ApplyResult(result);
+                job.Status = JobStatus.Completed;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+
+                // Mirror the persistent store: a per-increment soft-capped run completes normally but records
+                // the breach so it can be surfaced as soft-capped, distinct from a hard cut.
+                if (result.BudgetSoftCapped
+                    && result.BudgetSoftCapThresholdUsd is { } softCapThreshold
+                    && result.BudgetSoftCapSpentUsd is { } softCapSpent)
+                {
+                    job.SetBudgetBlock(BudgetScopeKind.Increment, BudgetCapKind.Soft, softCapThreshold, softCapSpent);
+                }
             }
         }
 

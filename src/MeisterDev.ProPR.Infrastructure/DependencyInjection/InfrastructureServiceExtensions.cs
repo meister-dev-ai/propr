@@ -211,6 +211,11 @@ public static class InfrastructureServiceExtensions
                     opts.PublicationTimeoutMinutes = publicationTimeout;
                 }
 
+                if (int.TryParse(configuration["REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES"], out var maxReviewDuration))
+                {
+                    opts.MaxReviewDurationMinutes = maxReviewDuration;
+                }
+
                 if (!string.IsNullOrWhiteSpace(configuration["RUNNER_ADVERTISED_URL"]))
                 {
                     opts.AdvertisedRunnerUrl = configuration["RUNNER_ADVERTISED_URL"];

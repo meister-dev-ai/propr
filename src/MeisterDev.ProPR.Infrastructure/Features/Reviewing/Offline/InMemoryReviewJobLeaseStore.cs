@@ -4,9 +4,11 @@
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 
@@ -15,7 +17,9 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 ///     in-memory job store. There is no second claimant to race, so a lock around the same state transition
 ///     the database performs conditionally is enough to keep the semantics identical from the caller's side.
 /// </summary>
-public sealed class InMemoryReviewJobLeaseStore(InMemoryReviewJobRepository jobs) : IReviewJobLeaseStore
+public sealed class InMemoryReviewJobLeaseStore(
+    InMemoryReviewJobRepository jobs,
+    IOptions<ReviewLeaseOptions> leaseOptions) : IReviewJobLeaseStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -77,6 +81,40 @@ public sealed class InMemoryReviewJobLeaseStore(InMemoryReviewJobRepository jobs
             if (!IsHeldBy(job, lease))
             {
                 return ExplainRefusal(job, lease);
+            }
+
+            // The same ceiling the durable store applies. An execution continues only while its renewals
+            // succeed, so one that has run past the ceiling is refused its renewal and failed with that
+            // reason.
+            // The comparison is inclusive, matching the durable store: its predicate renews only while
+            // processing_started_at is strictly newer than now minus the ceiling, so an execution sitting
+            // exactly on the boundary is stopped there too.
+            if (job!.ProcessingStartedAt is { } processingStartedAt
+                && DateTimeOffset.UtcNow - processingStartedAt >= leaseOptions.Value.MaxReviewDuration)
+            {
+                // Conditional on the job still processing, as the durable store's statement is. The review
+                // runs on another thread and can reach its own end state while this decides to stop it; an
+                // unconditional failure would overwrite a review that had just completed, and the lease
+                // clearing and the stop directive below would then be reported about a job this call did not
+                // fail.
+                var failed = jobs.TryFailWhileProcessing(
+                    lease.JobId,
+                    $"The review ran longer than the {leaseOptions.Value.MaxReviewDurationMinutes}-minute ceiling "
+                    + "on one execution and was stopped.",
+                    ReviewJobFailureReason.MaxDurationExceeded);
+                if (!failed)
+                {
+                    // The durable statement matches no row in this case and the renewal is refused without a
+                    // write. The job is already terminal, so the execution stops on its own next checkpoint.
+                    return ReviewJobLeaseRenewal.Rejected;
+                }
+
+                // The durable repository clears the lease as part of failing a job, and a terminal job is
+                // documented as holding none. The in-memory repository sets the status only, so the lease and
+                // the publication marker are cleared here to match.
+                job.ClearLease();
+                job.ClearPublishing();
+                return ReviewJobLeaseRenewal.StoppedBecause(ReviewJobStopReason.MaxDurationExceeded);
             }
 
             var now = DateTimeOffset.UtcNow;

@@ -302,6 +302,7 @@ without progress exhausts its budget, and a graceful release during a deploy or 
 | `REVIEW_LEASE_MAX_RECLAIMS_PER_SWEEP` | How many jobs one sweep takes back | `20` | 1–500 | no |
 | `REVIEW_LEASE_RECLAIM_SWEEP_INTERVAL_SECONDS` | Seconds between reclaim sweeps | `30` | 5–3600 | no |
 | `REVIEW_LEASE_PUBLICATION_TIMEOUT_MINUTES` | How long publication may run before the job counts as stuck | `30` | 1–720 | no |
+| `REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES` | How long one execution of a review may run before it is failed | `180` | 5–1440 | no |
 
 A job that exhausts its reclaim budget is failed with a reason naming the lease loss, so it reads
 differently from a review that failed on its own merits.
@@ -311,14 +312,60 @@ gone: taking it back mid-publication is how the same review gets posted twice. P
 longer timeout, and a publication that outlives it fails the job distinctly rather than retrying it,
 because some comments may already be out.
 
+The reclaim rules above all deal with a holder that stopped renewing. A holder that keeps renewing is
+never taken off its job, however long it takes, so `REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES` is the
+ceiling on one execution: past it the next renewal is refused and the job is failed with that reason. It
+counts from when this attempt started processing, so a reclaimed job gets the full allowance again, which
+is what the reclaim budgets above bound.
+
+The check happens when a renewal is attempted, so an execution can overrun the ceiling by up to one
+`REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS` before it stops, and a review that finishes inside that window
+publishes normally. Once the stop is decided it is not deferred: the refused renewal cancels the token the
+review runs under, so it interrupts the review wherever it had got to, and that can be part-way through
+posting comments. A job stopped that way ends as failed, and comments it had already posted stay on the pull
+request. `REVIEW_LEASE_PUBLICATION_TIMEOUT_MINUTES` does not prevent this; it governs how long a job may sit
+in publication before a sweep treats it as stuck. Set the ceiling well above how long a review of your
+largest pull requests takes, so it is reached only by executions that are not progressing.
+
 ## Review workspace
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
 | `REVIEW_WORKSPACE_ROOT_PATH` | Where repository mirrors and per-review workspaces are stored | a directory under the service account's local application data | writable directory path | no |
-| `REVIEW_WORKSPACE_MAX_CACHE_SIZE_MEGABYTES` | Upper bound on the whole workspace root | `4096` | 128–1048576 | no |
-| `REVIEW_WORKSPACE_RETENTION_MINUTES` | How long a released workspace is kept before cleanup may remove it | `180` | 1–10080 | no |
+| `REVIEW_WORKSPACE_MAX_CACHE_SIZE_MEGABYTES` | Size the mirror eviction sweep works towards. Mirrors held by a running review are skipped, so the total can exceed it while those reviews run; per-review checkouts are not counted against it | `4096` | 128–1048576 | no |
+| `REVIEW_WORKSPACE_RETENTION_MINUTES` | How long an unreferenced workspace directory waits before the sweep removes it. This covers what a failed preparation, an interrupted review, an interrupted release, a failed delete, or a restart leaves behind; a review that ends normally deletes its own checkout at once | `180` | 1–10080 | no |
 | `REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS` | How many workspaces may be prepared at once | `4` | 1–128 | no |
+| `REVIEW_WORKSPACE_FETCH_DEPTH_POLICY` | How much of a repository a mirror fetch brings down | `full` | `full`, `blobless`, `shallow` | no |
+| `REVIEW_WORKSPACE_FETCH_DEPTH` | Commits fetched under the `shallow` policy. Ignored by the others, which also do not check the range | `200` | 1–100000 | no |
+
+One preparation fetches into a mirror and writes a checkout of the repository, so
+`REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS` is what bounds how much of the workspace disk is being
+written at any moment. Lower it on a small disk: running out of space during a checkout fails the review
+outright rather than slowing it down.
+
+The fetch depth policy trades local disk against fetching over the network:
+
+- `full` fetches commits, trees and file contents. Nothing is fetched again during a review.
+- `blobless` fetches commits and trees and leaves file contents on the server, to be downloaded when
+  something reads them. It needs a server that offers filtered fetches, which Azure DevOps and GitHub both
+  do. What it saves is the file contents of the revisions nothing reads, which in a repository with long
+  history is most of them. What it does not save is what a review actually reads: the head revision, which
+  every review checks out and a partial clone downloads as it does so, and the target-side files a review
+  compares against, which are downloaded from the base revision as they are read. So the saving grows with
+  the history behind a repository, not with its size at one commit, and the first review after the policy
+  changes pays for what it reads.
+- `shallow` fetches `REVIEW_WORKSPACE_FETCH_DEPTH` commits. The depth has to exceed the divergence of the
+  pull requests being reviewed: a merge base outside the fetched history cannot be resolved and the review
+  fails to prepare. Prefer `blobless` for that reason.
+
+Widening the policy applies on the next fetch of each existing mirror, not only to mirrors created
+afterwards: a mirror fetched under `shallow` has its boundary removed by the next fetch under `full` or
+`blobless`, and one fetched under `blobless` stops filtering under `full` or `shallow`.
+
+Leaving `blobless` costs one large fetch. The contents the filtered period omitted are not deferred to the
+first read: the widening fetch asks for them, so the first preparation after the change transfers and writes
+the file contents of every fetched revision, and reviews after it read locally. Expect that fetch to take as
+long as a fresh clone of the repository, and the mirror to grow to its unfiltered size.
 
 Why this wants a mounted volume: [review workspace](deploy.md#review-workspace).
 
@@ -502,13 +549,14 @@ credential instead: a managed identity, an Azure CLI login, or whatever else the
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
 | `OTLP_ENDPOINT` | OTLP collector to export traces to | none - no trace pipeline is built at all, so spans are never assembled | absolute URL | no |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | The same collector, under the name the OpenTelemetry specification gives it. Read when `OTLP_ENDPOINT` is unset or empty, which is what a managed OpenTelemetry agent injects | none | absolute URL | no |
 | `TELEMETRY_HTTP_CLIENT_TRACES` | Which outbound requests become spans. `foreground` skips unattended work: crawl cycles, mention scans and health probes | `foreground` | `foreground`, `all`, `off` | no |
 | `TELEMETRY_TRACE_SAMPLE_RATIO` | Head-sampling ratio applied to the traces that survive the filters | `1.0` - no sampler is installed, which leaves the standard `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` in charge | `0.0` to `1.0`, clamped into range | no |
 | `TELEMETRY_TRACE_IGNORED_PATHS` | Request path prefixes that are never traced, inbound or outbound | `/healthz,/livez,/metrics` | comma-separated path prefixes, leading `/` optional | no |
 | `LOKI_URL` | Grafana Loki instance to ship logs to | none - logs go to stdout only | absolute URL | pinned |
 | `ASPNETCORE_ENVIRONMENT` | The runtime environment name | `Production` when unset | `Production`, `Development`, or your own name | pinned |
 
-The three `TELEMETRY_` variables only do anything while `OTLP_ENDPOINT` is set, and none of them affect
+The three `TELEMETRY_` variables only do anything while an OTLP endpoint is configured, under either name, and none of them affect
 `/metrics`, which keeps counting every request either way. An unrecognised value is not an error: the
 trace mode falls back to `foreground` and an unparseable ratio to `1.0`, so a typo silently gets you the
 default rather than a failed start. Why you would change them:

@@ -88,10 +88,15 @@ sends can widen that scope. Every job-scoped call is re-authorized against the j
 lease owner and generation, so a superseded runner's calls fail closed. Revoking a runner, not its
 token, is the kill switch; deletion is refused while a lease is held.
 
-**Disk.** The control plane keeps a mirror and two worktrees per dispatched job under the review
-workspace root, and deletes them when the job is released or published. A runner keeps one working copy
-per job under `RUNNER_WORK_ROOT`, in plain text, for as long as the job runs. The host owns the
-remanence window; see the note in [configuration.md](../operate/configuration.md).
+**Disk.** The control plane keeps a mirror and one worktree per dispatched job under the review
+workspace root. The worktree holds the head revision; the target side of the review is read from the
+mirror's object store rather than checked out again. The worktree is removed when the job is released or
+published, and where that removal fails the directory stays until the retention sweep takes it, so a
+checkout can outlive its review by `REVIEW_WORKSPACE_RETENTION_MINUTES`. The mirror is not removed when
+the job ends: it is kept for the next review of that repository, and evicted only when the mirrors
+together exceed `REVIEW_WORKSPACE_MAX_CACHE_SIZE_MEGABYTES`. A runner keeps one working copy per job
+under `RUNNER_WORK_ROOT`, in plain text, for as long as the job runs. The host owns the remanence
+window; see the note in [configuration.md](../operate/configuration.md).
 
 ## Failure and recovery
 

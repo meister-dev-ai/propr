@@ -4,6 +4,7 @@
 
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
@@ -50,6 +51,18 @@ public sealed partial class RunnerJobExecutor(
 {
     /// <summary>The named client every proxied call, relayed completion, and ingest batch goes out on.</summary>
     public const string ExecutionHttpClientName = "runner-execution";
+
+    /// <summary>
+    ///     Reads the control plane's answers with the enum spelling it writes them in.
+    /// </summary>
+    /// <remarks>
+    ///     The control plane serializes enums as camelCase names. The web defaults on their own accept only
+    ///     numbers, so without this converter a payload carrying a severity or a change type fails to parse.
+    /// </remarks>
+    private static readonly JsonSerializerOptions ControlPlaneJson = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    };
 
     /// <inheritdoc />
     public async Task ExecuteAsync(RunnerJobManifest manifest, CancellationToken ct)
@@ -387,10 +400,14 @@ public sealed partial class RunnerJobExecutor(
                 return;
             }
 
-            prior = await response.Content.ReadFromJsonAsync<PriorResultsEnvelope>(ct);
+            prior = await response.Content.ReadFromJsonAsync<PriorResultsEnvelope>(ControlPlaneJson, ct);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException
+                                   && !ct.IsCancellationRequested)
         {
+            // Prior results let this attempt keep what an earlier one already reviewed. Losing them costs
+            // that reuse and affects nothing else about the review, so an unreadable payload is reported
+            // here and the review continues without it.
             LogPriorResultsUnavailable(logger, manifest.JobId, ex.Message);
             return;
         }
