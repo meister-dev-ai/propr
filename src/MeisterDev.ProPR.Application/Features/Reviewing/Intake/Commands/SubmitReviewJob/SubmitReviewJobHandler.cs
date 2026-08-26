@@ -2,9 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-using MeisterDev.ProPR.Application.Exceptions;
-using MeisterDev.ProPR.Application.Features.Licensing.Models;
-using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -14,13 +11,21 @@ using Microsoft.Extensions.Logging;
 
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 
-/// <summary>Handles creation and deduplication of review intake jobs.</summary>
+/// <summary>
+///     Handles creation and deduplication of review intake jobs.
+///     <para>
+///         The concurrent-review ceiling is not applied here. A submission is queued whatever else is
+///         running, and the ceiling is enforced where a job is claimed for execution, so work above the
+///         ceiling waits in the queue instead of being refused at submission. A refusal here would also
+///         drop the work, because one path into this handler carries a webhook delivery, which is not sent
+///         again.
+///     </para>
+/// </summary>
 public sealed partial class SubmitReviewJobHandler(
     IReviewJobIntakeStore intakeStore,
     IReviewExecutionQueue executionQueue,
     ILogger<SubmitReviewJobHandler> logger,
     IPullRequestFetcher? pullRequestFetcher = null,
-    ILicensingCapabilityService? licensingCapabilityService = null,
     IClientRegistry? clientRegistry = null,
     IBlockedPullRequestStore? blockedPullRequestStore = null)
 {
@@ -55,22 +60,6 @@ public sealed partial class SubmitReviewJobHandler(
 
         var resolvedProfileId = await this.ResolveReviewPipelineProfileIdAsync(command.ClientId, cancellationToken);
         request = request with { ResolvedReviewPipelineProfileId = resolvedProfileId };
-
-        if (licensingCapabilityService is not null)
-        {
-            var parallelExecutionCapability = await licensingCapabilityService.GetCapabilityAsync(
-                PremiumCapabilityKey.ParallelReviewExecution,
-                cancellationToken);
-
-            if (!parallelExecutionCapability.IsAvailable)
-            {
-                var activeJobCount = await intakeStore.CountActiveJobsAsync(cancellationToken);
-                if (activeJobCount > 0)
-                {
-                    throw new PremiumFeatureUnavailableException(parallelExecutionCapability);
-                }
-            }
-        }
 
         var job = await intakeStore.CreatePendingJobAsync(command.ClientId, request, cancellationToken);
         await executionQueue.EnqueueAsync(job.Id, cancellationToken);

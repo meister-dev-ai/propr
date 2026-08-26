@@ -1,6 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Data.Common;
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Features.Licensing.Services;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -8,11 +14,14 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
+using MeisterDev.ProPR.Infrastructure.Features.Licensing.Persistence;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.TestSupport;
 
@@ -33,6 +42,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     {
         if (this._dbContext is not null)
         {
+            await this._dbContext.LicensingAuthorActivity.ExecuteDeleteAsync();
             await this._dbContext.DisposeAsync();
         }
     }
@@ -47,6 +57,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         this._dbContext = new MeisterProPRDbContext(options);
         // Wipe job rows between tests so count-based assertions stay deterministic.
         await this._dbContext.ReviewJobs.ExecuteDeleteAsync();
+        await this._dbContext.LicensingAuthorActivity.ExecuteDeleteAsync();
         var contextFactory = new TestDbContextFactory(options);
         this._repo = new JobRepository(this._dbContext, contextFactory, NullLogger<JobRepository>.Instance);
     }
@@ -120,6 +131,409 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
 
         Assert.True(this._repo.GetById(requested.Id)!.AllowUnchangedResubmission);
         Assert.False(this._repo.GetById(automatic.Id)!.AllowUnchangedResubmission);
+    }
+
+    // The columns exist so the author's host-scoped key can be rebuilt from one persisted row. A
+    // provider-native user id is unique only within the host that issued it, so a key rebuilt without the host
+    // half would merge two accounts that share an id on two hosts.
+    [Fact]
+    public async Task UpdatePullRequestAuthor_PersistsAKeyThatRebuildsFromTheStoredRow()
+    {
+        var job = MakeJob(orgUrl: "https://github.com/octo", projectId: "octo", repoId: "octo/api", prId: 7);
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(
+                    new ProviderHostRef(ScmProvider.GitHub, "https://github.com/octo"),
+                    "octo/api",
+                    "octo",
+                    "octo"),
+                CodeReviewPlatformKind.PullRequest,
+                "7",
+                7));
+        await this._repo.AddAsync(job);
+
+        var fetched = new PullRequestAuthor(
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com/octo"),
+            "4242",
+            "octo-dev",
+            "Octo Dev",
+            false);
+        await this._repo.UpdatePullRequestAuthorAsync(job.Id, fetched);
+        this._dbContext.ChangeTracker.Clear();
+
+        var stored = this._repo.GetById(job.Id);
+        Assert.NotNull(stored);
+        Assert.Equal("4242", stored.PrAuthorExternalUserId);
+        Assert.Equal("octo-dev", stored.PrAuthorLogin);
+        Assert.Equal("Octo Dev", stored.PrAuthorDisplayName);
+        Assert.False(stored.PrAuthorIsBot);
+
+        var rebuilt = stored.PullRequestAuthorReference;
+        Assert.NotNull(rebuilt);
+        Assert.Equal(fetched.AuthorKey, rebuilt.AuthorKey);
+        Assert.Equal(stored.ProviderHost.ScopedKey(stored.PrAuthorExternalUserId!), fetched.AuthorKey);
+    }
+
+    // A re-review fetches the pull request again. The author of record is whoever the latest fetch named, and
+    // the columns carry one author rather than accumulating a history of them.
+    [Fact]
+    public async Task UpdatePullRequestAuthor_TwiceKeepsTheLatestFetchsAuthor()
+    {
+        var job = MakeJob();
+        await this._repo.AddAsync(job);
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, job.OrganizationUrl);
+
+        await this._repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(host, "first-id", "first.login", "First Author", false));
+        await this._repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(host, "second-id", "second.login", "Second Author", true));
+        this._dbContext.ChangeTracker.Clear();
+
+        var stored = this._repo.GetById(job.Id);
+        Assert.NotNull(stored);
+        Assert.Equal("second-id", stored.PrAuthorExternalUserId);
+        Assert.Equal("second.login", stored.PrAuthorLogin);
+        Assert.Equal("Second Author", stored.PrAuthorDisplayName);
+        Assert.True(stored.PrAuthorIsBot);
+    }
+
+    // A job nothing recorded an author for reads back with empty columns and no rebuilt author. An empty column
+    // says the fetch named nobody; it never carries the identity of the connection that performed the fetch.
+    [Fact]
+    public async Task Add_WithoutAnAuthor_LeavesTheAuthorColumnsEmpty()
+    {
+        var job = MakeJob();
+
+        await this._repo.AddAsync(job);
+        this._dbContext.ChangeTracker.Clear();
+
+        var stored = this._repo.GetById(job.Id);
+        Assert.NotNull(stored);
+        Assert.Null(stored.PrAuthorExternalUserId);
+        Assert.Null(stored.PrAuthorLogin);
+        Assert.Null(stored.PrAuthorDisplayName);
+        Assert.Null(stored.PrAuthorIsBot);
+        Assert.Null(stored.PullRequestAuthorReference);
+    }
+
+    // The completion write both execution paths reach: an in-process review and a runner's submission are
+    // published through one publication, and this is where either one becomes a completed job.
+    [Fact]
+    public async Task SetResultAsync_PutsTheReviewedAuthorIntoTheMonthsRollup()
+    {
+        var repo = this.CreateRepositoryWithRollup();
+        var job = MakeJob();
+        await repo.AddAsync(job);
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, job.OrganizationUrl);
+        await repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(host, "vss-guid-77", "octo.dev@acme.example", "Octo Dev"));
+
+        await repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+
+        var recorded = await this._dbContext.LicensingAuthorActivity.AsNoTracking().SingleAsync();
+        Assert.Equal(host.ScopedKey("vss-guid-77"), recorded.AuthorKey);
+        Assert.Equal(AuthorActivitySource.Review, recorded.FirstSeenSource);
+        Assert.Equal(ScmProvider.AzureDevOps, recorded.Provider);
+        Assert.Equal("vss-guid-77", recorded.ExternalUserId);
+        Assert.False(recorded.Excluded);
+    }
+
+    // The signals the job row carries reach the decision. The provider stated this account is a bot, and the
+    // row is written excluded, so the month does not count an automated pull request against the allowance.
+    [Fact]
+    public async Task SetResultAsync_AnAuthorTheProviderStatesIsABot_IsRecordedExcluded()
+    {
+        var repo = this.CreateRepositoryWithRollup();
+        var job = MakeJob();
+        await repo.AddAsync(job);
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, job.OrganizationUrl);
+        await repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(host, "vss-guid-90", "release-runner", "Release Runner", true));
+
+        await repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+
+        var recorded = await this._dbContext.LicensingAuthorActivity.AsNoTracking().SingleAsync();
+        Assert.True(recorded.Excluded);
+    }
+
+    // No flag on this row, which is what three of the four providers send. The login is what identifies the
+    // account as automation.
+    [Fact]
+    public async Task SetResultAsync_AnAuthorWhoseLoginNamesAutomation_IsRecordedExcluded()
+    {
+        var repo = this.CreateRepositoryWithRollup();
+        var job = MakeJob();
+        await repo.AddAsync(job);
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, job.OrganizationUrl);
+        await repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(host, "vss-guid-91", "dependabot[bot]", "Dependabot"));
+
+        await repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+
+        var recorded = await this._dbContext.LicensingAuthorActivity.AsNoTracking().SingleAsync();
+        Assert.True(recorded.Excluded);
+        Assert.Equal(AuthorActivitySource.Review, recorded.FirstSeenSource);
+    }
+
+    [Fact]
+    public async Task SetResultAsync_JobWithoutAnAuthor_PutsNothingIntoTheRollup()
+    {
+        // A job whose fetch named nobody is left out of the count rather than counted as an unknown person.
+        var repo = this.CreateRepositoryWithRollup();
+        var job = MakeJob();
+        await repo.AddAsync(job);
+
+        await repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+
+        Assert.Empty(await this._dbContext.LicensingAuthorActivity.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task SetResultAsync_WhenTheRollupWriteThrows_StillCompletesTheJob()
+    {
+        // The review's comments are already posted by the time the job is completed. Failing the completion
+        // over a reporting row would leave the job to be reclaimed and posted again.
+        var repo = new JobRepository(
+            this._dbContext,
+            new TestDbContextFactory(this.ContextOptions()),
+            NullLogger<JobRepository>.Instance,
+            new AuthorActivityRecorder(
+                new ThrowingAuthorActivityRollupStore(),
+                new ConfiguredReviewerIdentityRepository(this._dbContext)));
+        var job = MakeJob();
+        await repo.AddAsync(job);
+        await repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(
+                new ProviderHostRef(ScmProvider.AzureDevOps, job.OrganizationUrl),
+                "vss-guid-78"));
+
+        await repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+        this._dbContext.ChangeTracker.Clear();
+
+        var stored = this._repo.GetById(job.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(JobStatus.Completed, stored.Status);
+    }
+
+    [Fact]
+    public async Task SetResultAsync_WhenAuthorMeteringIsCancelledAfterCompletion_ClearsTerminalState()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var rollup = Substitute.For<IAuthorActivityRollupStore>();
+        rollup.RecordAuthorAsync(
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<string>(),
+                Arg.Any<AuthorActivitySource>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                cancellation.Cancel();
+                return Task.FromCanceled(cancellation.Token);
+            });
+
+        var repo = new JobRepository(
+            this._dbContext,
+            new TestDbContextFactory(this.ContextOptions()),
+            NullLogger<JobRepository>.Instance,
+            new AuthorActivityRecorder(rollup, new ConfiguredReviewerIdentityRepository(this._dbContext)));
+        var job = MakeJob();
+        job.ApplyLease("replica-a", 1, DateTimeOffset.UtcNow.AddMinutes(5), DateTimeOffset.UtcNow);
+        await repo.AddAsync(job);
+        var protocol = MakeProtocol(job.Id);
+        this._dbContext.ReviewJobProtocols.Add(protocol);
+        await this._dbContext.SaveChangesAsync();
+        await repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(
+                new ProviderHostRef(ScmProvider.AzureDevOps, job.OrganizationUrl),
+                "vss-guid-cancelled"));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => repo.SetResultAsync(job.Id, new ReviewResult("summary", []), cancellation.Token));
+
+        this._dbContext.ChangeTracker.Clear();
+        var stored = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(row => row.Id == job.Id);
+        Assert.Equal(JobStatus.Completed, stored.Status);
+        Assert.Null(stored.LeaseOwner);
+        Assert.Null(stored.LeaseExpiresAt);
+        Assert.Null(stored.LastHeartbeatAt);
+
+        var storedProtocol = await this._dbContext.ReviewJobProtocols
+            .AsNoTracking()
+            .SingleAsync(row => row.Id == protocol.Id);
+        Assert.NotNull(storedProtocol.CompletedAt);
+        Assert.Equal("Abandoned", storedProtocol.Outcome);
+    }
+
+    // The exclusion decision reads the configured identities from the database, so that read is a second way
+    // the hook can fail. It is absorbed like the write is.
+    [Fact]
+    public async Task SetResultAsync_WhenTheIdentityReadThrows_StillCompletesTheJob()
+    {
+        var identities = Substitute.For<IConfiguredReviewerIdentitySource>();
+        identities.ListExternalUserIdsAsync(Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<string>>>(_ => throw new InvalidOperationException("unreachable"));
+        var repo = new JobRepository(
+            this._dbContext,
+            new TestDbContextFactory(this.ContextOptions()),
+            NullLogger<JobRepository>.Instance,
+            new AuthorActivityRecorder(new AuthorActivityRollupRepository(this._dbContext), identities));
+        var job = MakeJob();
+        await repo.AddAsync(job);
+        await repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(
+                new ProviderHostRef(ScmProvider.AzureDevOps, job.OrganizationUrl),
+                "vss-guid-92",
+                "octo.dev",
+                "Octo Dev"));
+
+        await repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+        this._dbContext.ChangeTracker.Clear();
+
+        var stored = this._repo.GetById(job.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(JobStatus.Completed, stored.Status);
+        Assert.Empty(await this._dbContext.LicensingAuthorActivity.AsNoTracking().ToListAsync());
+    }
+
+    // Two completions of one pull request in a month, and a second person, so the rollup is shown to count
+    // people rather than reviews.
+    [Fact]
+    public async Task SetResultAsync_TwiceForOneAuthor_LeavesOneRowInTheMonth()
+    {
+        var repo = this.CreateRepositoryWithRollup();
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org");
+
+        foreach (var externalUserId in new[] { "vss-guid-79", "vss-guid-79", "vss-guid-80" })
+        {
+            var job = MakeJob();
+            await repo.AddAsync(job);
+            await repo.UpdatePullRequestAuthorAsync(job.Id, new PullRequestAuthor(host, externalUserId));
+            await repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+        }
+
+        var recorded = await this._dbContext.LicensingAuthorActivity.AsNoTracking().ToListAsync();
+        Assert.Equal(2, recorded.Count);
+    }
+
+    // The guard has to hold for a failure the database raises, not only for a store that refuses before it
+    // reaches one. The rollup write runs outside a transaction, so a rejected statement leaves the connection
+    // usable and the lease clear that follows the completion still runs on it.
+    [Fact]
+    public async Task SetResultAsync_WhenTheDatabaseRejectsTheRollupInsert_CompletesTheJobAndClearsTheLease()
+    {
+        var interceptor = new RetargetAuthorActivityInsertInterceptor();
+        var interceptedOptions = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .AddInterceptors(interceptor)
+            .Options;
+        await using var intercepted = new MeisterProPRDbContext(interceptedOptions);
+        var repo = new JobRepository(
+            intercepted,
+            new TestDbContextFactory(interceptedOptions),
+            NullLogger<JobRepository>.Instance,
+            new AuthorActivityRecorder(
+                new AuthorActivityRollupRepository(intercepted),
+                new ConfiguredReviewerIdentityRepository(intercepted)));
+
+        var job = MakeJob();
+        job.ApplyLease("replica-a", 1, DateTimeOffset.UtcNow.AddMinutes(5), DateTimeOffset.UtcNow);
+        await repo.AddAsync(job);
+        await repo.UpdatePullRequestAuthorAsync(
+            job.Id,
+            new PullRequestAuthor(
+                new ProviderHostRef(ScmProvider.AzureDevOps, job.OrganizationUrl),
+                "vss-guid-81"));
+
+        await repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+        this._dbContext.ChangeTracker.Clear();
+
+        // Asserted first: without it an empty rollup and a cleared lease would also be what a completion that
+        // never attempted the write looks like.
+        Assert.Equal(1, interceptor.RetargetedStatements);
+
+        var stored = this._repo.GetById(job.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(JobStatus.Completed, stored.Status);
+        Assert.Null(stored.LeaseOwner);
+        Assert.Null(stored.LeaseExpiresAt);
+        Assert.Empty(await this._dbContext.LicensingAuthorActivity.AsNoTracking().ToListAsync());
+    }
+
+    private JobRepository CreateRepositoryWithRollup()
+    {
+        return new JobRepository(
+            this._dbContext,
+            new TestDbContextFactory(this.ContextOptions()),
+            NullLogger<JobRepository>.Instance,
+            new AuthorActivityRecorder(
+                new AuthorActivityRollupRepository(this._dbContext),
+                new ConfiguredReviewerIdentityRepository(this._dbContext)));
+    }
+
+    private DbContextOptions<MeisterProPRDbContext> ContextOptions()
+    {
+        return new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .Options;
+    }
+
+    /// <summary>
+    ///     Points the rollup insert at a table that does not exist, so PostgreSQL is the one that rejects it.
+    /// </summary>
+    /// <remarks>
+    ///     A stub throwing before the statement reaches the database would say nothing about whether the
+    ///     connection survives the rejection, and the writes that follow the completion run on that connection.
+    /// </remarks>
+    private sealed class RetargetAuthorActivityInsertInterceptor : DbCommandInterceptor
+    {
+        private const string RollupTable = "licensing_author_activity";
+
+        private const string AbsentTable = "licensing_author_activity_absent";
+
+        private int _retargetedStatements;
+
+        /// <summary>How many statements were pointed at the absent table.</summary>
+        public int RetargetedStatements => Volatile.Read(ref this._retargetedStatements);
+
+        public override InterceptionResult<int> NonQueryExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result)
+        {
+            this.Retarget(command);
+
+            return base.NonQueryExecuting(command, eventData, result);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            this.Retarget(command);
+
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void Retarget(DbCommand command)
+        {
+            if (!command.CommandText.Contains(RollupTable, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            command.CommandText = command.CommandText.Replace(RollupTable, AbsentTable, StringComparison.Ordinal);
+            Interlocked.Increment(ref this._retargetedStatements);
+        }
     }
 
     [Fact]
@@ -1455,6 +1869,74 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
 
         var fetched = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
         Assert.Equal("after resume", fetched.ResultSummary);
+    }
+
+    // Finalisation writes the status and clears the lease as two separate statements. The status goes first,
+    // so a process that stops in between leaves the job in the executing status with its expiry still
+    // recorded, and the expiry sweep can take it back. Cleared first, the row would hold a concurrency slot
+    // the sweep cannot select, because that sweep requires a recorded expiry.
+    [Fact]
+    public async Task SetResultAsync_WhenTheSaveDoesNotLand_LeavesTheJobRecoverableByTheExpirySweep()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .Options;
+        var job = MakeJob(prId: 950);
+        var waiting = MakeJob(prId: 951);
+        await this._repo.AddAsync(job);
+        await this._repo.AddAsync(waiting);
+
+        var store = new ReviewJobLeaseStore(
+            this._dbContext,
+            this._repo,
+            Microsoft.Extensions.Options.Options.Create(new ReviewLeaseOptions()),
+            NullLogger<ReviewJobLeaseStore>.Instance);
+        // The negative duration stamps an expiry that is already past, which is the row a host that stopped
+        // renewing leaves behind. No test time is spent waiting for one to lapse.
+        Assert.NotNull(await store.TryClaimAsync(job.Id, "host-a", TimeSpan.FromSeconds(-1)));
+
+        // The interceptor stands in for a process that stops mid-finalisation: the save throws, so nothing it
+        // would have written lands.
+        var interceptedOptions = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .AddInterceptors(new ThrowingSaveChangesInterceptor())
+            .Options;
+        await using var interceptedContext = new MeisterProPRDbContext(interceptedOptions);
+        var interceptedRepo = new JobRepository(
+            interceptedContext,
+            new TestDbContextFactory(interceptedOptions),
+            NullLogger<JobRepository>.Instance);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => interceptedRepo.SetResultAsync(job.Id, new ReviewResult("summary", [])));
+
+        await using var readContext = new MeisterProPRDbContext(options);
+        var stored = await readContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+        Assert.Equal(JobStatus.Processing, stored.Status);
+        Assert.NotNull(stored.LeaseExpiresAt);
+
+        var expired = await store.GetExpiredLeasesAsync(10, TimeSpan.Zero, TimeSpan.FromMinutes(30));
+        Assert.Single(expired);
+        Assert.Equal(job.Id, expired[0].JobId);
+        Assert.Equal(ReviewJobReclaimOutcome.Requeued, await store.TryReclaimAsync(expired[0], 3, 12));
+
+        // The slot the interrupted job held is available again at the same ceiling.
+        var claim = await store.TryClaimWithinProcessingCapAsync(waiting.Id, "host-b", TimeSpan.FromMinutes(2), 1);
+        Assert.Equal(ReviewJobCappedClaimOutcome.Granted, claim.Outcome);
+    }
+
+    /// <summary>
+    ///     Fails every save on the context it is attached to. Reads and statement-form updates run normally,
+    ///     so a test can tell which of the two writes in a finalisation had already landed.
+    /// </summary>
+    private sealed class ThrowingSaveChangesInterceptor : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("The save was stopped by the test interceptor.");
+        }
     }
 
     // ---- Progress metric: "X/Y files reviewed" ----

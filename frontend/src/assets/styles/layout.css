@@ -78,6 +78,26 @@
   transform: scale(1.05);
 }
 
+/* Region between the header and the routed page that holds the application-wide notices. The region owns the
+ * spacing so that no notice sets its own: 1.5rem from the header to the first notice, 1rem between two
+ * notices, and below the last one the 2.5rem top padding the routed page already carries.
+ *
+ * Each notice decides for itself whether to render, so the region can end up holding nothing. The gap above
+ * the first notice is a margin on that notice rather than padding on the region, and the region has no other
+ * height of its own, so a region that renders no notice takes up no space. */
+.app-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: var(--layout-page-max-width);
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.app-notices>:first-child {
+  margin-top: 1.5rem;
+}
+
 .app-nav-drawer {
   display: flex;
   flex-direction: column;
@@ -475,6 +495,15 @@
   .page-with-sidebar,
   .page-with-sidebar-layout {
     padding: 1.5rem 1rem;
+  }
+
+  /* Kept level with the narrower page padding above, so a notice stays aligned with the page content. */
+  .app-notices {
+    padding: 0 1rem;
+  }
+
+  .app-notices>:first-child {
+    margin-top: 1rem;
   }
 
   .app-top-bar,

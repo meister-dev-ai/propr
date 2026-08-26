@@ -13,6 +13,7 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Exceptions;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -22,6 +23,7 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -734,6 +736,8 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 services.AddDbContextFactory<ProCursorOperationalDbContext>(options =>
                     options.UseInMemoryDatabase(operationalDbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                // The licensing module is not composed here, so client creation admits through a gate with no ceiling.
+                services.AddScoped<IStockQuotaGate, UnlimitedStockQuotaGate>();
                 services.AddScoped<IClientScmConnectionRepository, ClientScmConnectionRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
                 services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();

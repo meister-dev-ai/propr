@@ -30,7 +30,7 @@ const router = createRouter({
       path: '/',
       name: 'home',
       redirect: () => {
-        const { isAuthenticated, isAdmin, clientRoles, tenantRoles, edition } = useSession()
+        const { isAuthenticated, isAdmin, clientRoles, tenantRoles, isCapabilityAvailable } = useSession()
         if (!isAuthenticated.value) {
           return { name: 'login' }
         }
@@ -43,7 +43,7 @@ const router = createRouter({
         const firstTenantAdminId = Object.entries(tenantRoles.value)
           .find(([, role]) => role >= 1)?.[0]
 
-        return firstTenantAdminId && edition.value !== 'community'
+        return firstTenantAdminId && isCapabilityAvailable('multi-tenancy')
           ? { name: 'tenant-directory' }
           : { name: 'reviews' }
       },
@@ -52,7 +52,7 @@ const router = createRouter({
       path: '/tenants',
       name: 'tenant-directory',
       component: () => import('@/features/tenants/views/TenantDirectoryView.vue'),
-      meta: { requiresAuth: true, requiresTenantDirectoryAccess: true },
+      meta: { requiresAuth: true, requiresTenantDirectoryAccess: true, requiresCapability: 'multi-tenancy' },
     },
     {
       path: '/login',
@@ -73,7 +73,7 @@ const router = createRouter({
       path: '/tenants/:tenantId',
       name: 'tenant-detail',
       component: () => import('@/features/tenants/views/TenantDetailView.vue'),
-      meta: { requiresAuth: true, requiresTenantAdmin: true },
+      meta: { requiresAuth: true, requiresTenantAdmin: true, requiresCapability: 'multi-tenancy' },
     },
     // What used to be four tenant pages are sections of the workspace above. The routes keep their names and
     // their guard so existing links (and anything holding a bookmark) land on the right section instead of 404.
@@ -85,7 +85,7 @@ const router = createRouter({
         params: { tenantId: to.params.tenantId },
         query: TENANT_SECTION_QUERY[section] ? { section: TENANT_SECTION_QUERY[section] } : {},
       }),
-      meta: { requiresAuth: true, requiresTenantAdmin: true },
+      meta: { requiresAuth: true, requiresTenantAdmin: true, requiresCapability: 'multi-tenancy' },
     })),
     {
       path: '/clients',
@@ -336,7 +336,6 @@ router.beforeEach((to) => {
     hasTenantRole,
     clientRoles,
     tenantRoles,
-    edition,
     isCapabilityAvailable,
   } = useSession()
 
@@ -344,9 +343,6 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
   if (to.meta.requiresAdmin && !isAdmin.value) {
-    return ACCESS_DENIED
-  }
-  if ((to.meta.requiresTenantDirectoryAccess || to.meta.requiresTenantAdmin) && edition.value === 'community') {
     return ACCESS_DENIED
   }
 

@@ -398,5 +398,10 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         {
             return Task.CompletedTask;
         }
+
+        public Task UpdatePullRequestAuthorAsync(Guid id, PullRequestAuthor author, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 }

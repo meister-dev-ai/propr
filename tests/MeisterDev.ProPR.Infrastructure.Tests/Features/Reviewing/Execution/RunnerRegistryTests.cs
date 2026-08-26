@@ -85,7 +85,7 @@ public sealed class RunnerRegistryTests(PostgresContainerFixture fixture) : IAsy
 
         this._dbContext.RunnerRegistrationTokens.Add(token);
         await this._dbContext.SaveChangesAsync();
-        await this._registry.AddAsync(runner, token);
+        await this._registry.TryAddAsync(runner, token, DateTimeOffset.UtcNow);
 
         await using var freshContext = new MeisterProPRDbContext(this._options);
         var stored = await new RunnerRegistry(freshContext).FindByIdAsync(runner.Id);
@@ -104,7 +104,7 @@ public sealed class RunnerRegistryTests(PostgresContainerFixture fixture) : IAsy
         var runner = MakeRunner();
         this._dbContext.RunnerRegistrationTokens.Add(token);
         await this._dbContext.SaveChangesAsync();
-        await this._registry.AddAsync(runner, token);
+        await this._registry.TryAddAsync(runner, token, DateTimeOffset.UtcNow);
 
         await using var freshContext = new MeisterProPRDbContext(this._options);
         var stored = await new RunnerRegistry(freshContext).FindByIdAsync(runner.Id);
@@ -122,7 +122,7 @@ public sealed class RunnerRegistryTests(PostgresContainerFixture fixture) : IAsy
         var runner = MakeRunner(ClientA);
         this._dbContext.RunnerRegistrationTokens.Add(token);
         await this._dbContext.SaveChangesAsync();
-        await this._registry.AddAsync(runner, token);
+        await this._registry.TryAddAsync(runner, token, DateTimeOffset.UtcNow);
 
         await using var freshContext = new MeisterProPRDbContext(this._options);
         var found = await new RunnerRegistry(freshContext)
@@ -140,14 +140,37 @@ public sealed class RunnerRegistryTests(PostgresContainerFixture fixture) : IAsy
         this._dbContext.RunnerRegistrationTokens.Add(token);
         await this._dbContext.SaveChangesAsync();
 
-        token.RecordUse();
-        await this._registry.AddAsync(MakeRunner(ClientA), token);
+        Assert.True(await this._registry.TryAddAsync(MakeRunner(ClientA), token, DateTimeOffset.UtcNow));
 
         await using var freshContext = new MeisterProPRDbContext(this._options);
         var storedToken = await new RunnerRegistry(freshContext).FindTokenAsync(token.TokenLookupHash);
 
         Assert.Equal(1, storedToken!.UseCount);
         Assert.Equal([ClientA], storedToken.ClientScope);
+    }
+
+    // The use is spent by the statement that checks one is left, so the count a decision is made on is the
+    // stored one. A token read once, checked, and then incremented lets two enrollments that read the same
+    // count both write the first use, and a single-use token enrolls two hosts.
+    [Fact]
+    public async Task ATokenIsSpentUntilItsUsesRunOut_AndEnrolsNothingAfterThat()
+    {
+        // The token allows two, so the second enrollment shows the limit is not what refuses it.
+        var token = MakeToken(ClientA);
+        this._dbContext.RunnerRegistrationTokens.Add(token);
+        await this._dbContext.SaveChangesAsync();
+
+        Assert.True(await this._registry.TryAddAsync(MakeRunner(ClientA), token, DateTimeOffset.UtcNow));
+        Assert.True(await this._registry.TryAddAsync(MakeRunner(ClientA), token, DateTimeOffset.UtcNow));
+
+        var refused = MakeRunner(ClientA);
+        Assert.False(await this._registry.TryAddAsync(refused, token, DateTimeOffset.UtcNow));
+
+        await using var freshContext = new MeisterProPRDbContext(this._options);
+        var reader = new RunnerRegistry(freshContext);
+
+        Assert.Equal(2, (await reader.FindTokenAsync(token.TokenLookupHash))!.UseCount);
+        Assert.Null(await reader.FindByIdAsync(refused.Id));
     }
 
     [Fact]
@@ -157,7 +180,7 @@ public sealed class RunnerRegistryTests(PostgresContainerFixture fixture) : IAsy
         var runner = MakeRunner(ClientA);
         this._dbContext.RunnerRegistrationTokens.Add(token);
         await this._dbContext.SaveChangesAsync();
-        await this._registry.AddAsync(runner, token);
+        await this._registry.TryAddAsync(runner, token, DateTimeOffset.UtcNow);
 
         runner.Revoke(DateTimeOffset.UtcNow);
         await this._registry.UpdateAsync(runner);
@@ -177,7 +200,7 @@ public sealed class RunnerRegistryTests(PostgresContainerFixture fixture) : IAsy
         var runner = MakeRunner(ClientA);
         this._dbContext.RunnerRegistrationTokens.Add(token);
         await this._dbContext.SaveChangesAsync();
-        await this._registry.AddAsync(runner, token);
+        await this._registry.TryAddAsync(runner, token, DateTimeOffset.UtcNow);
 
         runner.AssignClientScope([ClientB]);
         await this._registry.UpdateAsync(runner);

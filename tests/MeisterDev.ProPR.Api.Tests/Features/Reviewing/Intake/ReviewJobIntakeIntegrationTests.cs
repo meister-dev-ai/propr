@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
@@ -9,6 +10,8 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -49,6 +52,32 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
         Assert.Equal(JobStatus.Pending, persisted!.Status);
         Assert.Equal("feature/add-x", persisted.PrSourceBranch);
         Assert.Equal("main", persisted.PrTargetBranch);
+    }
+
+    // An installation with no license may run one review at a time, and that ceiling is applied where a job
+    // is claimed rather than at submission, so a second submission is accepted and queued while the first
+    // job is still waiting. The removed refusal answered 409 as soon as any job was active.
+    [Fact]
+    public async Task SubmitReview_SecondPullRequestWithoutALicense_IsAcceptedAndQueuedAsWell()
+    {
+        await factory.ClearJobsAsync();
+        var client = factory.CreateClient();
+
+        // This host activates no license, so the installation is held to one concurrent review. The premise
+        // is asserted here, because on a host that reported the capability as available the two submissions
+        // below would prove nothing about the ceiling.
+        Assert.False(await factory.IsParallelReviewExecutionEnabledAsync());
+
+        using var first = factory.CreateSubmitRequest();
+        var firstResponse = await client.SendAsync(first);
+        using var second = factory.CreateSubmitRequest(pullRequestNumber: 43);
+        var secondResponse = await client.SendAsync(second);
+
+        Assert.Equal(HttpStatusCode.Accepted, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, secondResponse.StatusCode);
+
+        var queued = await factory.GetPendingJobsAsync();
+        Assert.Equal([42, 43], queued.Select(job => job.PullRequestId).Order().ToArray());
     }
 
     [Fact]
@@ -106,7 +135,7 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
         public Guid ClientId { get; } = Guid.NewGuid();
         public Guid ClientAdministratorUserId { get; } = Guid.NewGuid();
 
-        public HttpRequestMessage CreateSubmitRequest()
+        public HttpRequestMessage CreateSubmitRequest(int pullRequestNumber = 42)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, $"/clients/{this.ClientId}/reviewing/jobs");
             request.Headers.Authorization = new AuthenticationHeaderValue(
@@ -126,8 +155,8 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
                     codeReview = new
                     {
                         platform = "pullRequest",
-                        externalReviewId = "42",
-                        number = 42,
+                        externalReviewId = pullRequestNumber.ToString(CultureInfo.InvariantCulture),
+                        number = pullRequestNumber,
                     },
                     reviewRevision = new
                     {
@@ -147,6 +176,23 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
             db.ReviewJobs.RemoveRange(db.ReviewJobs);
             await db.SaveChangesAsync();
+        }
+
+        public async Task<bool> IsParallelReviewExecutionEnabledAsync()
+        {
+            using var scope = this.Services.CreateScope();
+            var licensing = scope.ServiceProvider.GetRequiredService<ILicensingCapabilityService>();
+            return await licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution);
+        }
+
+        public async Task<IReadOnlyList<ReviewJob>> GetPendingJobsAsync()
+        {
+            using var scope = this.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            return await db.ReviewJobs
+                .AsNoTracking()
+                .Where(job => job.Status == JobStatus.Pending)
+                .ToListAsync();
         }
 
         public async Task<ReviewJob?> GetJobAsync(Guid jobId)
@@ -260,6 +306,27 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
                 // beside crawl coverage, asks the provider registry for a repository identity no
                 // configuration recorded, and submits through the shared synchronization path, which reaches
                 // the provider through the client's connections.
+                // The licensing module registers nothing without a database connection string, and this host
+                // runs on the in-memory provider, so the capability service is composed here instead.
+                // Parallel review execution answers as unavailable, which is the answer an installation with
+                // no license gets. Every other key answers as available, so the stand-in changes nothing
+                // outside the capability under test.
+                var licensing = Substitute.For<ILicensingCapabilityService>();
+                licensing.IsEnabledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                    .Returns(new ValueTask<bool>(true));
+                licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, Arg.Any<CancellationToken>())
+                    .Returns(new ValueTask<bool>(false));
+                licensing.GetCapabilityAsync(PremiumCapabilityKey.ParallelReviewExecution, Arg.Any<CancellationToken>())
+                    .Returns(
+                        new CapabilitySnapshot(
+                            PremiumCapabilityKey.ParallelReviewExecution,
+                            "Parallel review execution",
+                            true,
+                            PremiumCapabilityOverrideState.Default,
+                            false,
+                            "A commercial license is required to run more than one active PR review at a time, including in self-hosted deployments."));
+                services.AddSingleton(licensing);
+
                 services.AddSingleton(Substitute.For<IWebhookConfigurationRepository>());
                 var providerRegistry = Substitute.For<IScmProviderRegistry>();
                 providerRegistry.IsRegistered(Arg.Any<ScmProvider>()).Returns(false);

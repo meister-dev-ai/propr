@@ -1,29 +1,36 @@
 # MeisterDev.Ai.Providers
 
-Everything needed to reach a model provider, and nothing about what the request is for.
+A .NET library for calling AI model providers through one seam, so an application can add a provider without
+changing the code that makes the calls. Drivers ship for OpenAI, Azure OpenAI, Anthropic, AWS Bedrock, Google
+Vertex, LiteLLM, and any endpoint that speaks an OpenAI-compatible protocol.
 
-The library answers four questions for a host application:
+It handles reaching a provider and nothing else. It has no idea what you are asking a model to do, and it
+holds no concept from the application that uses it.
+
+The library answers four questions for the application that hosts it:
 
 1. **Which provider families can this build actually call?** - the driver registry.
 2. **Can I reach this endpoint, and what models does it have?** - probe, verify, discover.
 3. **Give me an `IChatClient` / `IEmbeddingGenerator` for this endpoint and model.** - the driver seam.
 4. **Was that failure worth retrying, and what did the call cost in tokens?** - retry classification and usage extraction.
 
-It is built on `Microsoft.Extensions.AI`, so what comes back out is `IChatClient` and
-`IEmbeddingGenerator<string, Embedding<float>>` - not a wrapper type of our own.
+It is built on `Microsoft.Extensions.AI`, so it returns `IChatClient` and
+`IEmbeddingGenerator<string, Embedding<float>>` directly, with no wrapper type of its own.
 
 ## Boundary rules
 
-Two rules keep this library separable from the product that hosts it, and both are asserted by
-`LibraryIsolationTests` rather than trusted:
+This library is developed inside the repository of ProPR, an automated code-review product, and is kept
+separable from it by two rules:
 
-- **No `ProjectReference` on any `MeisterDev.ProPR.*` project**, and no host assembly in the reference graph.
-- **No file carries the commercial-only notice.** The library is Elastic-2.0 like the rest of the repository, but
-  it gates nothing.
+- **No `ProjectReference` on any `MeisterDev.ProPR.*` project**, and no application assembly in the reference
+  graph. `LibraryIsolationTests` asserts this, along with the enums living in this assembly and every public
+  type sitting under the root namespace.
+- **No file carries the commercial-only notice.** The library is Elastic-2.0 like the rest of the repository,
+  and it gates nothing.
 
-A third rule follows from them: no review vocabulary on the seam. The library knows about endpoints, models,
-protocols, tokens and failures. It does not know what a finding, a pass, a client or a tenant is. Anything the
-library would need a product concept for is instead *contributed* by the host - see
+A third rule follows: no vocabulary from the hosting application on the seam. The library knows about
+endpoints, models, protocols, tokens and failures. It does not know what that application calls the things it
+works on. Anything needing a concept from the application is supplied by the application - see
 [Extension points](#extension-points-a-host-fills-in).
 
 ## Quick start
@@ -106,14 +113,14 @@ var model = new ProviderModelDescriptor(
 
 `AiProviderKind`, `AiProtocolMode` and `AiAuthMode` are open vocabularies: a family can be named here before its
 driver exists. **The registry, not the enum, is the authority on what this build can call.** Ask
-`RegisteredKinds` before offering a family to an operator, and `SupportedProtocolModes` before offering a protocol
-- otherwise opening the enum lets someone store a profile that only fails once a workload runs.
+`RegisteredKinds` before offering a family to an operator, and `SupportedProtocolModes` before offering a
+protocol. Without those checks an operator can store a profile that fails only when a workload runs.
 
-`AiProtocolModeSupport` is how a driver says no in one voice: `DescribeRefusal` for the configuration path (a
-message), `Require` for the runtime path (a throw), `NarrowToSupported` so `Auto` can never resolve to a shape the
-driver does not speak.
+`AiProtocolModeSupport` gives a driver one place to refuse a protocol: `DescribeRefusal` returns a message for
+the configuration path, `Require` throws on the runtime path, and `NarrowToSupported` keeps `Auto` from
+resolving to a shape the driver does not speak.
 
-### Capabilities are facts, not intentions
+### Capabilities describe the client that was built
 
 `GetChatRuntimeCapabilities` reports what the provider *and the protocol it was bound to* can do -
 provider-managed sessions, background responses, prompt caching, cache routing. A driver claims a capability only
@@ -137,19 +144,19 @@ irrelevant and adding a decorator cannot silently reorder the others:
 Retry (outermost) → Observability → Budget → Normalization → the driver's client → wire
 ```
 
-The order is behaviour, not style. Retry outermost means a metering stage counts each attempt exactly once;
-observability inside retry sees each attempt separately and captures a budget refusal within the attempt that
-provoked it; normalization innermost applies to retried attempts too.
+The order affects behaviour. Retry sits outermost, so a metering stage counts each attempt exactly once.
+Observability sits inside retry, so it sees each attempt separately and captures a budget refusal in the
+attempt that caused it. Normalization sits innermost, so it applies to retried attempts too.
 
 ## Extension points a host fills in
 
 | Seam | Why the host owns it |
 | --- | --- |
-| `IProviderChatClientDecorator` | Cost, entitlement and telemetry are product concepts. A host contributes a decorator at the stage it belongs to; the library ships only the retry decorator. |
-| `ProviderReasoningRequest` + `INativeProtocolChatClient` | `ChatOptions.RawRepresentationFactory` is invoked **per client**, which is what lets one call site serve providers that express reasoning incompatibly. A caller that finds `INativeProtocolChatClient` passes the neutral request; the OpenAI family gets the OpenAI library's options object. |
-| `ProviderSecretEnvelope` | One credential is one opaque blob to whatever stores it; this is the only thing that knows what is inside. SigV4 needs three fields and a Google service account is a JSON document, so a bare string does not fit. Decoding tolerates a bare string, which is what rows written before the envelope contain. |
-| `ProviderUsageExtractor` | Reads library-normalized properties first, then recovers missing counters from `UsageDetails.AdditionalCounts` by provider-specific name. A new provider adds its key set here rather than anywhere in the host's workload code. |
-| `ICatalogSnapshotImporter` | The library carries the embedded snapshot and can parse it; persisting it is the host's. |
+| `IProviderChatClientDecorator` | Cost accounting, entitlement and telemetry belong to the application, not to the transport. The host contributes a decorator at the stage it belongs to. The library ships the retry decorator. |
+| `ProviderReasoningRequest` + `INativeProtocolChatClient` | `ChatOptions.RawRepresentationFactory` is invoked **per client**, so one call site can serve providers that express reasoning differently. A caller that finds `INativeProtocolChatClient` passes the neutral request; the OpenAI family gets the OpenAI library's options object. |
+| `ProviderSecretEnvelope` | Whatever stores a credential sees one opaque blob, and this type knows what is inside it. SigV4 needs three fields and a Google service account is a JSON document, so a bare string does not fit. Decoding still accepts a bare string, because rows written before the envelope contain one. |
+| `ProviderUsageExtractor` | Reads library-normalized properties first, then recovers missing counters from `UsageDetails.AdditionalCounts` by provider-specific name. A new provider adds its key set here, not in the calling application. |
+| `ICatalogSnapshotImporter` | The library carries the embedded snapshot and parses it. The host persists it. |
 
 ## Adding a provider driver
 
@@ -157,20 +164,21 @@ provoked it; normalization innermost applies to retried attempts too.
 2. Implement `IAiProviderDriver`. Declare `SupportedProtocolModes` honestly and call
    `AiProtocolModeSupport.Require` at the top of `CreateChatClient` / `CreateEmbeddingGenerator`.
 3. Validate the probe target through `AiProbeTargetValidation` so the SSRF-egress and auth-shape rules stay
-   shared rather than re-derived.
+   shared.
 4. Build the transport on the host's `"AiProviderRuntime"` `HttpClient` - that is where the egress guard and the
    reasoning round-trip live. An SDK with its own transport needs an `HttpClientFactory` hook to the same client
    (see `BedrockClientFactory`).
 5. Claim capabilities only where the client exercises them. Refuse what the provider does not serve, with a
-   message naming what to do instead (Anthropic has no embeddings; it says so rather than failing on the wire).
+   message naming what to do instead. Anthropic has no embeddings, and the driver says so before the call
+   reaches the wire.
 6. Add a `Usage.ProviderUsageExtractor` key set if the provider names its cache or reasoning counters its own way.
 7. Add a `DriverConformanceFixture` entry. The conformance suite measures the seam behaviour every driver must
-   share; a new driver joining it is how parity stops being a matter of opinion.
+   share, so a new driver is checked against the same expectations as the others.
 8. Register the driver in the host's composition root. The registry indexes what was registered - nothing else
    needs to change.
 
 ## Tests
 
-`tests/MeisterDev.Ai.Providers.Tests` (166 test methods) covers per-driver behaviour, the transports' wire shape
+`tests/MeisterDev.Ai.Providers.Tests` covers per-driver behaviour, the transports' wire shape
 against fake endpoints, retry mechanics on a controlled `TimeProvider`, usage extraction, the secret envelope, the
-egress policies, the runtime pipeline's stage order, the shared conformance suite, and the isolation rules above.
+egress policies, the runtime pipeline's stage order, the conformance suite, and the isolation rules above.

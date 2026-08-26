@@ -33,6 +33,7 @@ public sealed partial class RunnerJobDispatchPreparer(
     IRunnerJobToolsRegistry toolsRegistry,
     IPullRequestFetcher? pullRequests,
     IOptions<ReviewWorkspaceOptions> workspaceOptions,
+    IReviewJobExecutionStore jobs,
     IProCursorGateway? proCursorGateway = null,
     ReviewJobReuse? reuse = null,
     IRepositoryExclusionFetcher? exclusionFetcher = null,
@@ -109,6 +110,16 @@ public sealed partial class RunnerJobDispatchPreparer(
 
         var conversation = await this.ReadConversationAsync(job, ct);
 
+        // Gated on the status the in-process path gates on. The author number a license states is metered
+        // from these columns, so a pull request counts the same whichever execution mode reviewed it. The
+        // condition is the pull request's status because one that had already been completed or abandoned
+        // when the review reached it is not a pull request the installation was asked to review; the
+        // in-process path ends the job at that point rather than reviewing it.
+        if (conversation is { Status: PrStatus.Active })
+        {
+            await this.RecordPullRequestAuthorAsync(job, conversation.Author, ct);
+        }
+
         // The tools the runner reaches back through, built here from the same factory and the same request
         // the in-process path uses. Registered rather than only constructed: the proxy answers a call by
         // finding the job's tools on this replica, so tools that exist but were never registered refuse
@@ -148,6 +159,42 @@ public sealed partial class RunnerJobDispatchPreparer(
                 conversation?.Description,
                 conversation?.ExistingThreads,
                 conversation));
+    }
+
+    /// <summary>
+    ///     Records the author of the pull request this job reviews, taken from the fetch above.
+    /// </summary>
+    /// <remarks>
+    ///     Written at dispatch rather than at completion for two reasons. A runner's completion can be handled
+    ///     by another replica, and the runner protocol does not carry the author, so this fetch is the last point
+    ///     at which the control plane holds it. A review that did not complete is excluded by the reader of
+    ///     these columns, not by withholding this write.
+    ///     <para>
+    ///         Three cases record nothing and leave the columns empty: a conversation that could not be read, a
+    ///         pull request that is no longer open, and a payload the provider named no author on. The
+    ///         authenticated identity that performed the fetch is never substituted for the author.
+    ///     </para>
+    ///     <para>
+    ///         Fail-soft, like the other optional reads here. These columns feed metering and nothing in the
+    ///         dispatch reads them, so a write that fails is logged and the runner still receives its manifest.
+    ///         A throw would instead release the lease and return the job to the queue. Cancellation propagates.
+    ///     </para>
+    /// </remarks>
+    private async Task RecordPullRequestAuthorAsync(ReviewJob job, PullRequestAuthor? author, CancellationToken ct)
+    {
+        if (author is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await jobs.UpdatePullRequestAuthorAsync(job.Id, author, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPullRequestAuthorNotRecorded(logger, job.Id, ex.Message);
+        }
     }
 
     /// <summary>
@@ -303,6 +350,15 @@ public sealed partial class RunnerJobDispatchPreparer(
     {
         logger?.LogWarning(
             "Exclusion rules could not be fetched while preparing job {JobId} for dispatch; using defaults: {Reason}",
+            jobId,
+            reason);
+    }
+
+    private static void LogPullRequestAuthorNotRecorded(ILogger? logger, Guid jobId, string reason)
+    {
+        logger?.LogWarning(
+            "The pull request author could not be recorded while preparing job {JobId} for dispatch; the job "
+            + "carries no author and dispatch continues: {Reason}",
             jobId,
             reason);
     }

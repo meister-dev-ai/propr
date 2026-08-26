@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using System.Linq.Expressions;
+
 namespace MeisterDev.ProPR.Domain.Entities;
 
 /// <summary>
@@ -112,7 +114,27 @@ public sealed class RunnerRegistrationToken
                && (this.MaxUses is null || this.UseCount < this.MaxUses);
     }
 
-    /// <summary>Records one enrollment against the token.</summary>
+    /// <summary>
+    ///     The condition <see cref="IsUsableAt" /> states, in a form a query can be filtered by.
+    ///     <para>
+    ///         A store judges a token where the use count is kept rather than on a copy read beforehand: two
+    ///         enrollments presenting one token read the same count, so a check made on either copy admits
+    ///         both. Both forms are stated here so a change to one is made against the other.
+    ///     </para>
+    /// </summary>
+    /// <param name="now">The moment to judge it at.</param>
+    /// <returns>The predicate.</returns>
+    public static Expression<Func<RunnerRegistrationToken, bool>> UsableAt(DateTimeOffset now)
+    {
+        return token => token.RevokedAt == null
+                        && (token.ExpiresAt == null || now < token.ExpiresAt)
+                        && (token.MaxUses == null || token.UseCount < token.MaxUses);
+    }
+
+    /// <summary>
+    ///     Records one enrollment against the token in memory. A store spends a use in the statement that
+    ///     checks one is left, so incrementing a loaded token is not what consumes it.
+    /// </summary>
     public void RecordUse()
     {
         this.UseCount++;

@@ -50,10 +50,23 @@ public sealed record PrCommentThread(
 ///     exclude them. <c>false</c> when the provider gave no signal either way, which is the safe default: an
 ///     unmarked activity entry is a misread comment, while a human comment marked as activity is a lost one.
 /// </param>
+/// <param name="AuthorNativeId">
+///     The comment author's identifier as the host itself issues it, carried verbatim: the VSS identity GUID on
+///     Azure DevOps, the numeric account id on GitHub, GitLab and Forgejo. <c>null</c> when the payload named
+///     none, and never a value derived from a login or a display name, because a derived value cannot be
+///     matched against the same account's identifier elsewhere.
+///     <para>
+///         Carried beside <see cref="AuthorId" /> rather than replacing it. <see cref="AuthorId" /> is the VSS
+///         GUID only on Azure DevOps; the other adapters synthesize it from the login, so for one person that
+///         value and the identifier a pull-request fetch reports differ. Anything that has to recognize one
+///         account across both reads this instead.
+///     </para>
+/// </param>
 public sealed record PrThreadComment(
     string AuthorName,
     string Content,
     Guid? AuthorId = null,
     long CommentId = 0,
     DateTimeOffset? PublishedAt = null,
-    bool IsSystemGenerated = false);
+    bool IsSystemGenerated = false,
+    string? AuthorNativeId = null);

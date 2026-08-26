@@ -13,6 +13,60 @@ const mockLicensingStateKey = 'mock-licensing-state'
 let mockEdition = 'commercial'
 let mockSsoCapabilityAvailable = true
 
+const mockDayInMilliseconds = 24 * 60 * 60 * 1000
+
+/** Whole days of term left in the mock, chosen to land the installation inside the 30-day warning window. */
+const mockDaysRemaining = 22
+
+/**
+ * The license the mock installation runs under. It stands in for a verified document: the panel reads the
+ * same fields off it that it reads off a real summary, so the mock renders the licensed state without a
+ * signing chain being involved.
+ *
+ * The term is derived from the current time rather than written as fixed dates, so the mock keeps reporting
+ * the warning stage instead of drifting into grace and then reverted as the calendar passes it.
+ */
+const mockLicenseTerm = (() => {
+  const now = Date.now()
+  const expiresAt = now + (mockDaysRemaining * mockDayInMilliseconds)
+
+  return {
+    notBefore: new Date(now - (340 * mockDayInMilliseconds)).toISOString(),
+    warningStartsAt: new Date(expiresAt - (30 * mockDayInMilliseconds)).toISOString(),
+    expiresAt: new Date(expiresAt).toISOString(),
+    graceEndsAt: new Date(expiresAt + (14 * mockDayInMilliseconds)).toISOString(),
+  }
+})()
+
+/**
+ * The busiest month of the trailing year in the mock, four months back so the peak is not the current month. It
+ * is derived from the current time for the same reason the term is: a fixed month would fall out of the trailing
+ * window as the calendar passes it. The wire carries a date rather than an instant, because the unit is the
+ * month.
+ */
+const mockAuthorPeakMonth = (() => {
+  const now = new Date()
+  const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 4, 1))
+
+  return { month: month.toISOString().slice(0, 10), authorCount: 19 }
+})()
+
+const mockLicenseId = 'c9f5c9a2-2f31-4c0e-9f1b-4a1d2e3f4a5b'
+const mockLicensee = 'Contoso Engineering'
+const mockLicenseActorUserId = '2f7c4d3e-93a1-4a55-9a2f-6d9e0b1c2a34'
+
+let mockLicenseActivatedAt: string | null = mockLicenseTerm.notBefore
+let mockDisabledCapabilityKeys: string[] = []
+let mockLicenseHistory = [
+  {
+    action: 'activated',
+    occurredAt: mockLicenseTerm.notBefore,
+    actorUserId: mockLicenseActorUserId,
+    licenseId: mockLicenseId,
+    licensee: mockLicensee,
+  },
+]
+
 hydrateMockLicensingState()
 
 let mockTenants = [
@@ -52,52 +106,82 @@ let mockTenantSsoProviders: Record<string, any[]> = {
   ],
 }
 
-function getMockSsoCapability() {
+/**
+ * Whether the mock installation has a license in force. Every commercial capability is derived from it, so
+ * removing the license in mock mode cannot leave capabilities reporting themselves as entitled.
+ */
+function isMockLicensed(): boolean {
+  return mockEdition === 'commercial' && mockLicenseActivatedAt !== null
+}
+
+/**
+ * One commercial capability, with its availability, message and reason all following from whether a license
+ * is in force. Written once so a capability added here cannot forget the derivation.
+ */
+function mockCommercialCapability(key: string, displayName: string, available = isMockLicensed()) {
   return {
-    key: tenantSsoCapabilityKey,
-    displayName: 'Single sign-on authentication',
+    key,
+    displayName,
     requiresCommercial: true,
-    defaultWhenCommercial: true,
     overrideState: 'default',
-    isAvailable: mockSsoCapabilityAvailable,
-    message: mockSsoCapabilityAvailable ? null : 'A commercial license is required to use single sign-on, including in self-hosted deployments.',
+    isAvailable: available,
+    message: available
+      ? null
+      : `A commercial license is required to use ${displayName.toLowerCase()}, including in self-hosted deployments.`,
+    reason: available ? null : 'noLicense',
   }
+}
+
+function getMockSsoCapability() {
+  // Single sign-on carries its own switch as well, because the mock login screen is driven by it.
+  return {
+    ...mockCommercialCapability(
+      tenantSsoCapabilityKey,
+      'Single sign-on authentication',
+      mockSsoCapabilityAvailable && isMockLicensed(),
+    ),
+    message: mockSsoCapabilityAvailable && isMockLicensed()
+      ? null
+      : 'A commercial license is required to use single sign-on, including in self-hosted deployments.',
+  }
+}
+
+function getEffectiveMockSsoCapability() {
+  return applyMockOverride(getMockSsoCapability())
+}
+
+function isMockSsoCapabilityAvailable(): boolean {
+  return getEffectiveMockSsoCapability().isAvailable
+}
+
+function getMockAvailableSignInMethods(): string[] {
+  return getMockLicensingCapabilities().some(
+    (capability) => capability.key === tenantSsoCapabilityKey && capability.isAvailable,
+  )
+    ? ['password', 'sso']
+    : ['password']
 }
 
 function getMockBudgetingCapability() {
-  return {
-    key: 'budgeting',
-    displayName: 'Budgeting',
-    requiresCommercial: true,
-    defaultWhenCommercial: true,
-    overrideState: 'default',
-    isAvailable: true,
-    message: null,
-  }
+  return mockCommercialCapability('budgeting', 'Budgeting')
 }
 
 function getMockCodeInsightsCapability() {
-  return {
-    key: 'code-insights',
-    displayName: 'Code Insights',
-    requiresCommercial: true,
-    defaultWhenCommercial: true,
-    overrideState: 'default',
-    isAvailable: true,
-    message: null,
-  }
+  return mockCommercialCapability('code-insights', 'Code Insights')
 }
 
 function getMockMentionAnsweringCapability() {
-  return {
-    key: 'mention-answering',
-    displayName: 'Mention answering',
-    requiresCommercial: true,
-    defaultWhenCommercial: true,
-    overrideState: 'default',
-    isAvailable: true,
-    message: null,
-  }
+  return mockCommercialCapability('mention-answering', 'Mention answering')
+}
+
+function getMockMultiTenancyCapability() {
+  return mockCommercialCapability('multi-tenancy', 'Multi-tenancy')
+}
+
+// The licensed concurrent-review ceiling below depends on this capability: without it the backend resolves the
+// community value whatever the license states, and the mock would report a ceiling the product would not.
+function getMockParallelReviewExecutionCapability() {
+  return mockCommercialCapability('parallel-review-execution', 'Parallel review execution')
 }
 
 function getMockTenantBySlug(tenantSlug: string) {
@@ -108,12 +192,123 @@ function getMockTenantById(tenantId: string) {
   return mockTenants.find((tenant) => tenant.id === tenantId) ?? null
 }
 
+function getMockLicensingCapabilities() {
+  return [
+    getMockSsoCapability(),
+    getMockBudgetingCapability(),
+    getMockCodeInsightsCapability(),
+    getMockMentionAnsweringCapability(),
+    getMockMultiTenancyCapability(),
+    getMockParallelReviewExecutionCapability(),
+  ].map(applyMockOverride)
+}
+
+interface MockCapability {
+  key: string
+  displayName: string
+  requiresCommercial: boolean
+  overrideState: string
+  isAvailable: boolean
+  message: string | null
+  reason?: string | null
+}
+
+/**
+ * Applies the installation's disable-overrides. An override only ever takes a capability away, which is the
+ * same rule the backend applies, so the mock cannot show a state the product would refuse.
+ */
+function applyMockOverride(capability: MockCapability): MockCapability {
+  if (!mockDisabledCapabilityKeys.includes(capability.key)) {
+    return { ...capability, overrideState: 'default' }
+  }
+
+  return {
+    ...capability,
+    overrideState: 'disabled',
+    isAvailable: false,
+    message: 'This capability is switched off for this installation.',
+    reason: 'disabledByOverride',
+  }
+}
+
+function getMockLicensingSummary() {
+  const licensed = isMockLicensed()
+
+  return {
+    edition: mockEdition,
+    activatedAt: licensed ? mockLicenseActivatedAt : null,
+    capabilities: getMockLicensingCapabilities(),
+    stage: licensed ? 'warning' : 'none',
+    notBefore: licensed ? mockLicenseTerm.notBefore : null,
+    warningStartsAt: licensed ? mockLicenseTerm.warningStartsAt : null,
+    expiresAt: licensed ? mockLicenseTerm.expiresAt : null,
+    graceEndsAt: licensed ? mockLicenseTerm.graceEndsAt : null,
+    daysRemaining: licensed ? mockDaysRemaining : null,
+    licensee: licensed ? mockLicensee : null,
+    licenseId: licensed ? mockLicenseId : null,
+    // The effective side follows the rules the backend resolver applies: a licensed installation is held to
+    // what its license states, and one without a license is held to the community values, which are no
+    // ceiling on clients, no runners, one review at a time, and no count of distinct authors at all.
+    // The mock pins the stage to warning or none, so the reverted case - a stated number beside the community
+    // ceiling that replaced it - cannot be produced here and is covered by the card's own tests.
+    limits: [
+      {
+        key: 'authorsPerMonth',
+        allowance: licensed ? 'count' : 'absent',
+        licensedCount: licensed ? 120 : null,
+        informationalCount: 11,
+        effectiveCeiling: licensed ? 'count' : 'unmetered',
+        effectiveCount: licensed ? 120 : null,
+        effectiveSource: licensed ? 'license' : 'community',
+        excludedAutomationCount: 2,
+      },
+      {
+        key: 'clients',
+        allowance: licensed ? 'count' : 'absent',
+        licensedCount: licensed ? 10 : null,
+        informationalCount: 4,
+        effectiveCeiling: licensed ? 'count' : 'unlimited',
+        effectiveCount: licensed ? 10 : null,
+        effectiveSource: licensed ? 'license' : 'community',
+      },
+      {
+        key: 'runners',
+        allowance: licensed ? 'unlimited' : 'absent',
+        licensedCount: null,
+        informationalCount: 3,
+        effectiveCeiling: licensed ? 'unlimited' : 'count',
+        effectiveCount: licensed ? null : 0,
+        effectiveSource: licensed ? 'license' : 'community',
+      },
+      {
+        key: 'concurrentReviews',
+        allowance: licensed ? 'count' : 'absent',
+        licensedCount: licensed ? 6 : null,
+        informationalCount: 5,
+        effectiveCeiling: 'count',
+        effectiveCount: licensed ? 6 : 1,
+        effectiveSource: licensed ? 'license' : 'community',
+      },
+    ],
+    licensingIdentity: '5f2c0d1e-3a44-4b90-8c77-0e1a2b3c4d5e',
+    // The month is below the number the license states, so the panel reports the headroom left and no notice is
+    // due. An installation without a license has no number to compare against, which the backend reports by
+    // leaving the comparison out. The peak is counted either way, because the rollup counts authors whether or
+    // not a license states a ceiling for them.
+    authorOverage: licensed ? { licensedCount: 120, observedCount: 11, isInOverage: false } : null,
+    authorPeakMonth: mockAuthorPeakMonth,
+  }
+}
+
 function createPremiumFeatureUnavailableResponse() {
+  const capability = getEffectiveMockSsoCapability()
+
   return HttpResponse.json(
     {
       error: 'premium_feature_unavailable',
       feature: tenantSsoCapabilityKey,
-      message: 'A commercial license is required to use single sign-on, including in self-hosted deployments.',
+      message: capability.message ?? 'Single sign-on is not available on this installation.',
+      reason: capability.reason ?? 'noLicense',
     },
     { status: 409 },
   )
@@ -127,6 +322,11 @@ function persistMockLicensingState() {
   window.localStorage.setItem(mockLicensingStateKey, JSON.stringify({
     edition: mockEdition,
     ssoAvailable: mockSsoCapabilityAvailable,
+    licenseActivatedAt: mockLicenseActivatedAt,
+    disabledCapabilityKeys: mockDisabledCapabilityKeys,
+    // The history is what an operator has done to the license. Leaving it out would let a reload show a
+    // licensed installation whose history says the license was removed.
+    licenseHistory: mockLicenseHistory,
   }))
 }
 
@@ -144,6 +344,9 @@ function hydrateMockLicensingState() {
     const parsed = JSON.parse(rawValue) as {
       edition?: string
       ssoAvailable?: boolean
+      licenseActivatedAt?: string | null
+      disabledCapabilityKeys?: string[]
+      licenseHistory?: typeof mockLicenseHistory
     }
 
     if (parsed.edition === 'community' || parsed.edition === 'commercial') {
@@ -152,6 +355,18 @@ function hydrateMockLicensingState() {
 
     if (typeof parsed.ssoAvailable === 'boolean') {
       mockSsoCapabilityAvailable = parsed.ssoAvailable
+    }
+
+    if (parsed.licenseActivatedAt === null || typeof parsed.licenseActivatedAt === 'string') {
+      mockLicenseActivatedAt = parsed.licenseActivatedAt
+    }
+
+    if (Array.isArray(parsed.disabledCapabilityKeys)) {
+      mockDisabledCapabilityKeys = parsed.disabledCapabilityKeys.filter((key) => typeof key === 'string')
+    }
+
+    if (Array.isArray(parsed.licenseHistory)) {
+      mockLicenseHistory = parsed.licenseHistory
     }
   } catch {
     // Ignore invalid persisted mock state and keep defaults.
@@ -2359,9 +2574,106 @@ export const handlers = [
   http.get(`${base}/auth/options`, async () => {
     return HttpResponse.json({
       edition: mockEdition,
-      availableSignInMethods: mockSsoCapabilityAvailable ? ['password', 'sso'] : ['password'],
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability(), getMockMentionAnsweringCapability()],
+      availableSignInMethods: getMockAvailableSignInMethods(),
+      capabilities: getMockLicensingCapabilities(),
     })
+  }),
+
+  http.get(`${base}/admin/licensing`, async () => {
+    return HttpResponse.json(getMockLicensingSummary())
+  }),
+
+  http.put(`${base}/admin/licensing/license`, async ({ request }) => {
+    const body = await request.json() as { token?: string }
+    const token = body.token?.trim() ?? ''
+
+    // The mock refuses on the shape of the text, so the panel's refusal messages can be exercised without a
+    // signed document. A token naming a reason returns that reason; anything else is accepted.
+    const refusals: Record<string, string> = {
+      'refuse:malformed': 'malformed',
+      'refuse:expired': 'expired',
+      'refuse:notYetValid': 'notYetValid',
+      'refuse:untrustedSigner': 'untrustedSigner',
+      'refuse:unsupportedSchemaVersion': 'unsupportedSchemaVersion',
+      'refuse:noAnchorInThisBuild': 'noAnchorInThisBuild',
+    }
+
+    const reason = refusals[token] ?? (token.length === 0 ? 'malformed' : null)
+    if (reason !== null) {
+      return HttpResponse.json(
+        {
+          error: 'license_not_accepted',
+          reason,
+          message: 'The supplied license document was not accepted.',
+        },
+        { status: 400 },
+      )
+    }
+
+    // Whether this is a replacement follows from the same effective state the summary reports. The edition can
+    // be switched to community without clearing the activation instant, and reading that instant alone would
+    // record a replacement of a license the summary says is not there.
+    const replacing = isMockLicensed()
+    mockEdition = 'commercial'
+    mockSsoCapabilityAvailable = true
+    mockLicenseActivatedAt = new Date().toISOString()
+    mockLicenseHistory = [
+      {
+        action: replacing ? 'replaced' : 'activated',
+        occurredAt: mockLicenseActivatedAt,
+        actorUserId: mockLicenseActorUserId,
+        licenseId: mockLicenseId,
+        licensee: mockLicensee,
+      },
+      ...mockLicenseHistory,
+    ]
+    persistMockLicensingState()
+
+    return HttpResponse.json(getMockLicensingSummary())
+  }),
+
+  http.delete(`${base}/admin/licensing/license`, async () => {
+    // Removal is recorded only when there was a license to remove, judged by the effective state rather than by
+    // the activation instant alone, so an installation the summary reports as unlicensed gains no record.
+    if (isMockLicensed()) {
+      mockLicenseHistory = [
+        {
+          action: 'removed',
+          occurredAt: new Date().toISOString(),
+          actorUserId: mockLicenseActorUserId,
+          licenseId: mockLicenseId,
+          licensee: mockLicensee,
+        },
+        ...mockLicenseHistory,
+      ]
+    }
+
+    mockEdition = 'community'
+    mockSsoCapabilityAvailable = false
+    mockLicenseActivatedAt = null
+    persistMockLicensingState()
+
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${base}/admin/licensing/history`, async () => {
+    return HttpResponse.json(mockLicenseHistory)
+  }),
+
+  http.patch(`${base}/admin/licensing/overrides`, async ({ request }) => {
+    const body = await request.json() as {
+      capabilityOverrides?: { key: string; overrideState: string }[]
+    }
+
+    for (const override of body.capabilityOverrides ?? []) {
+      mockDisabledCapabilityKeys = override.overrideState === 'disabled'
+        ? [...new Set([...mockDisabledCapabilityKeys, override.key])]
+        : mockDisabledCapabilityKeys.filter((key) => key !== override.key)
+    }
+
+    persistMockLicensingState()
+
+    return HttpResponse.json(getMockLicensingSummary())
   }),
 
   http.patch(`${base}/admin/licensing/mock`, async ({ request }) => {
@@ -2382,7 +2694,7 @@ export const handlers = [
 
     return HttpResponse.json({
       edition: mockEdition,
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability(), getMockMentionAnsweringCapability()],
+      capabilities: getMockLicensingCapabilities(),
     })
   }),
 
@@ -2430,7 +2742,7 @@ export const handlers = [
       tenantRoles: isAdmin ? { 'tenant-1': 1 } : { 'tenant-1': 0 },
       hasLocalPassword: isAdmin || !username.includes('sso'),
       edition: mockEdition,
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability(), getMockMentionAnsweringCapability()],
+      capabilities: getMockLicensingCapabilities(),
     })
   }),
 
@@ -2442,7 +2754,7 @@ export const handlers = [
       return HttpResponse.json({ error: 'Tenant sign-in is not available.' }, { status: 404 })
     }
 
-    const providers = mockSsoCapabilityAvailable
+    const providers = isMockSsoCapabilityAvailable()
       ? (mockTenantSsoProviders[tenant.id] ?? [])
         .filter((provider) => provider.isEnabled)
         .map((provider) => ({
@@ -2474,7 +2786,7 @@ export const handlers = [
   http.get(`${base}/auth/external/challenge/:tenantSlug/:providerId`, async ({ params, request }) => {
     await delay(160)
 
-    if (!mockSsoCapabilityAvailable) {
+    if (!isMockSsoCapabilityAvailable()) {
       return createPremiumFeatureUnavailableResponse()
     }
 
@@ -2500,7 +2812,7 @@ export const handlers = [
   http.get(`${base}/auth/external/callback/:tenantSlug`, async ({ params }) => {
     await delay(180)
 
-    if (!mockSsoCapabilityAvailable) {
+    if (!isMockSsoCapabilityAvailable()) {
       return createPremiumFeatureUnavailableResponse()
     }
 
@@ -2583,7 +2895,7 @@ export const handlers = [
       return new HttpResponse(null, { status: 404 })
     }
 
-    if (!mockSsoCapabilityAvailable) {
+    if (!isMockSsoCapabilityAvailable()) {
       return createPremiumFeatureUnavailableResponse()
     }
 
@@ -2598,7 +2910,7 @@ export const handlers = [
       return new HttpResponse(null, { status: 404 })
     }
 
-    if (!mockSsoCapabilityAvailable) {
+    if (!isMockSsoCapabilityAvailable()) {
       return createPremiumFeatureUnavailableResponse()
     }
 
@@ -2633,7 +2945,7 @@ export const handlers = [
       return new HttpResponse(null, { status: 404 })
     }
 
-    if (!mockSsoCapabilityAvailable) {
+    if (!isMockSsoCapabilityAvailable()) {
       return createPremiumFeatureUnavailableResponse()
     }
 
@@ -2674,7 +2986,7 @@ export const handlers = [
       return new HttpResponse(null, { status: 404 })
     }
 
-    if (!mockSsoCapabilityAvailable) {
+    if (!isMockSsoCapabilityAvailable()) {
       return createPremiumFeatureUnavailableResponse()
     }
 
@@ -3488,7 +3800,7 @@ export const handlers = [
 
     if (usageStatisticsSettings.managedByLicense) {
       return HttpResponse.json(
-        { error: 'Anonymous usage statistics are managed by your commercial license.' },
+        { error: 'Usage statistics are managed by your commercial license.' },
         { status: 409 },
       )
     }

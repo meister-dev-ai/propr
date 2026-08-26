@@ -176,4 +176,9 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
     {
         return inner.UpdateAiConfigAsync(id, connectionId, model, ct, reviewTemperature);
     }
+
+    public Task UpdatePullRequestAuthorAsync(Guid id, PullRequestAuthor author, CancellationToken ct = default)
+    {
+        return inner.UpdatePullRequestAuthorAsync(id, author, ct);
+    }
 }

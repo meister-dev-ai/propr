@@ -1,11 +1,11 @@
 # Deploying ProPR
 
-What a real deployment looks like: what routes where, which images to run, and how to size and persist
-the parts that actually do the reviewing.
+This page covers what routes where, which images to run, and how to size and persist the API host, the
+runner fleet and the review workspace.
 
 For what the components are and how they fit together, see
 [what you run](../concepts/how-it-works.md#what-you-run). Every variable named on this page has its
-default and accepted range in [the environment variable reference](configuration.md), and nowhere else.
+default and accepted range in [the environment variable reference](configuration.md).
 
 ## Deployment topology
 
@@ -17,29 +17,27 @@ If you bring your own ingress instead of the bundled proxy, this is what has to 
 | `/api/` | API, prefix stripped | The `/api` prefix exists only at the proxy layer |
 | `/webhooks/` | API, prefix **not** stripped | Webhook ingress is not under `/api` |
 
-The routing is not optional: the published frontend image calls the API at `/api` on its own origin, so
-the frontend and the API have to be served from one hostname.
+The published frontend image calls the API at `/api` on the origin it was served from, so the frontend
+and the API have to be served from one hostname.
 
 The API serves plain HTTP on port 8080 and ProCursor on port 8081, both as a non-root user. The frontend
 image also serves HTTP on 8080, as a non-root user. TLS terminates at your proxy. Nothing routes to
 ProCursor's port from outside - see [ProCursor as a separate service](#procursor-as-a-separate-service).
 
 Set `MEISTER_PUBLIC_BASE_URL` to the externally reachable API base URL, including the `/api` prefix if
-your proxy uses one. It is used to generate the webhook listener URLs shown in the UI, to build SSO
-redirect URLs, and to allow the browser origin it belongs to. Without it, callback URLs fall back to the
-request host.
+your proxy uses one. ProPR uses it for the webhook listener URLs shown in the UI, for SSO redirect URLs,
+and for the browser origin it allows. Without it, callback URLs fall back to the request host.
 
 `X-Forwarded-For` and `X-Forwarded-Proto` are honoured from a single hop, and only when the connecting
 proxy is on loopback or in a private range (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). There is no
-setting that widens that list. If your ingress sits outside it, both headers are ignored and ProPR sees
-the direct connection instead: every request appears to come from the proxy's own address, so the per-IP
+setting that widens that list. Where your ingress sits outside it, both headers are ignored and ProPR
+reads the direct connection. Every request then appears to come from the proxy's address, so the per-IP
 rate limit on the sign-in endpoints buckets all sign-in attempts together (see
-[sign-in and sessions](../reference/security.md#sign-in-and-sessions)), and the request scheme is
-whatever the proxy used to reach the API rather than the scheme the browser used. Setting
-`MEISTER_PUBLIC_BASE_URL` keeps generated URLs correct regardless, since it is used ahead of the
-request's own scheme and host.
+[sign-in and sessions](../reference/security.md#sign-in-and-sessions)). The request scheme becomes the
+one the proxy used to reach the API, not the one the browser used. `MEISTER_PUBLIC_BASE_URL` keeps
+generated URLs correct in that case, because ProPR uses it ahead of the request's own scheme and host.
 
-Additional browser origins can be allowed with `CORS_ORIGINS` (comma-separated).
+Allow additional browser origins with `CORS_ORIGINS` (comma-separated).
 
 Do not route `/metrics`, or `/api/metrics`, from a public edge - see
 [what to block at your edge](../reference/security.md#what-to-block-at-your-edge).
@@ -78,28 +76,28 @@ Two settings multiply into peak load. `WORKER_MAX_CONCURRENT_REVIEW_JOBS` bounds
 instance runs at once, and `AI_MAX_FILE_REVIEW_CONCURRENCY` bounds how many files one review works on in
 parallel. Raise either and the host needs the memory, CPU and provider rate limit to match.
 
-Of those two, only `WORKER_MAX_CONCURRENT_REVIEW_JOBS` is licensed: without parallel review execution it
-has no effect at all - see [editions](../reference/editions.md).
+Both settings need a commercial license that allows parallel review execution. Without one, ProPR runs one
+review at a time and works on one file at a time. A license stating a lower concurrent-review ceiling
+applies instead of the configured number, and a license that leaves the concurrent-review limit absent
+applies one review at a time - see [editions](../reference/editions.md).
 
-More API instances is not the lever, and is not safe: those in-process workers are not coordinated
-between processes, so a second instance means the crawler, the mention scan and the retention purge all
-run twice. Run one API instance and raise its concurrency instead.
+Do not add API instances. The in-process workers are not coordinated between processes, so a second
+instance runs the crawler, the mention scan and the retention purge twice. Run one API instance and raise
+its concurrency.
 
 ## Scaling runners
 
-Runners are the one part of ProPR you can add more of. The in-process workers above are not coordinated
-between API instances, so a second API is unsafe; a second runner is the supported way to review more at
-once. See [the runner architecture](../reference/runner-architecture.md) for what a runner is.
+Adding runners is the supported way to review more at once. See
+[the runner architecture](../reference/runner-architecture.md) for what a runner is.
 
-Two shapes work, and they differ in how a host gets its enrollment.
+The two deployment shapes differ in how a host gets its enrollment.
 
-**Hosts you start yourself.** Issue a token per host and start it. Straightforward, and what a small
-installation should do.
+**Hosts you start yourself.** Issue a token per host and start it. Use this for a small installation.
 
 **A group the platform scales for you**, such as Azure Container Apps, a Kubernetes Deployment or an ECS
-service. Replicas appear without an operator present, so they cannot each be handed their own token. Issue one
-token whose enrollment count covers the replicas the group may run, put it in the platform's secret
-store, and give every replica the same environment. Each spends one use as it starts.
+service. Replicas appear without an operator present, so they cannot each be handed their own token.
+Issue one token whose enrollment count covers the replicas the group may run, put it in the platform's
+secret store, and give every replica the same environment. Each spends one use as it starts.
 
 ### Scaling on the queue, not on traffic
 
@@ -127,23 +125,23 @@ scale:
 `RUNNER_CAPACITY`, which is how many each replica runs at once. A capacity of two and a target of two
 means a replica is asked for only once the existing ones are full.
 
-**On `minReplicas: 0`.** Scale-to-zero is cheapest and costs the first review of an idle period a cold
-start, including the runner's tree-sitter probe. For a tool somebody is waiting on, one warm replica is
-usually worth more than the saving.
+**On `minReplicas: 0`.** Scale-to-zero is the cheapest setting. It costs the first review of an idle
+period a cold start, including the runner's tree-sitter probe. Keep one warm replica where that delay
+matters.
 
 ### What a rolling update depends on
 
-Three behaviours make a redeploy safe.
+A redeploy depends on three behaviours.
 
 **Draining.** The platform signals the replica and waits. The runner releases the leases it holds on
 shutdown, so a job in flight returns to Pending and another replica picks it up. Give the group a
-termination grace period long enough for that release. It takes a handful of requests, not the length of
-a review.
+termination grace period long enough for that release. It takes a handful of requests, so it does not
+need to cover the length of a review.
 
-**Version skew.** During the rollout, replicas on both the old and new contract version poll at once. The
-compatibility window covers this: a runner outside it is refused in a way that reads as a lost lease
-rather than a crash. Skipping enough versions in one jump to leave that window is what breaks it, so
-update runners with the control plane rather than long after it.
+**Version skew.** During the rollout, replicas on the old and the new contract version poll at once. The
+compatibility window covers that. A runner outside the window is refused, and the refusal reads as a lost
+lease, not a crash. Update runners together with the control plane, because skipping enough versions in
+one jump leaves the window.
 
 **Identity.** A replaced replica does not keep its registry row. The credential is held in memory only,
 so the new one enrolls afresh. Rows from replicas that are gone are removed by the prune sweep; see
@@ -164,37 +162,33 @@ Sizing it means budgeting for two things that are bounded separately:
 - **The mirrors**, one per repository you review. `REVIEW_WORKSPACE_MAX_CACHE_SIZE_MEGABYTES` is the target
   the eviction sweep works towards, and `REVIEW_WORKSPACE_FETCH_DEPTH_POLICY` decides how much of each
   repository a mirror holds. A mirror is kept after the review that fetched it, and is evicted once the
-  mirrors together exceed the target. It is a target rather than a limit: the sweep skips any mirror a
-  running review still holds, so with several large repositories under review at once the total can sit
-  above it until those reviews end. Leave headroom for the mirrors of the reviews you expect to run
-  together.
+  mirrors together exceed the target. The target is not a limit: the sweep skips any mirror a running
+  review still holds, so with several large repositories under review at once the total can sit above it
+  until those reviews end. Leave headroom for the mirrors of the reviews you expect to run together.
 - **The checkouts**, one per review, holding the head revision. These are not counted against the cache
   bound. Each is deleted as its review ends, so they occupy the disk only while reviews are running, and
   `REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS` bounds how many are being written at once.
-  `REVIEW_WORKSPACE_RETENTION_MINUTES` does not hold a checkout whose review ended; it governs how long any
-  checkout directory that is not held by a running review waits before the sweep removes it. That is every
-  checkout no review deleted itself: one whose preparation failed before the review that would release it
-  began, one belonging to a review the process did not finish, one left by a delete that failed, and after a
-  restart every checkout on the disk, because which reviews were running is not carried across it. Budget for
-  that as well where restarts or failures are frequent: those directories occupy the disk for the retention
-  window rather than for the length of a review.
+  `REVIEW_WORKSPACE_RETENTION_MINUTES` governs how long a checkout directory that no running review holds
+  waits before the sweep removes it. That covers a checkout whose preparation failed before the review
+  that would release it began, one belonging to a review the process did not finish, one left by a delete
+  that failed, and after a restart every checkout on the disk, because which reviews were running is not
+  carried across a restart. Budget for those where restarts or failures are frequent: they occupy the
+  disk for the retention window.
 
-So the disk has to hold the actual size of the mirrors of the repositories under review at once, which the
-target does not cap, plus what the sweep has trimmed the unreferenced mirrors down to, plus one checkout per
-running review, plus the checkouts awaiting the retention window. The target governs only the part the
-sweep can act on, so size the volume from the repositories you review rather than from the target, and keep
-the target below the space actually available: eviction waits until the mirrors together pass the target, so
-a target larger than the volume delays it until after the disk is full, and reviews fail during checkout with
-"No space left on device" instead of slowing down. The target is not a disk-space limit under any setting — it
-decides when unreferenced mirrors are trimmed, and a mirror a review is holding is not trimmed at all.
+The disk therefore has to hold the mirrors of the repositories under review at once, at their real size,
+plus what the sweep has trimmed the unreferenced mirrors down to, plus one checkout per running review,
+plus the checkouts awaiting the retention window. Size the volume from the repositories you review, not
+from the target, and keep the target below the space available. Eviction starts only once the mirrors
+together pass the target, so a target larger than the volume starts it after the disk is already full,
+and reviews fail during checkout with "No space left on device".
 See [review workspace](configuration.md#review-workspace).
 
 ## ProCursor as a separate service
 
-ProCursor runs as a separate internal service and is never exposed publicly: the API is the only public
-control plane, and the two authenticate to each other with `PROCURSOR_SHARED_KEY`. It keeps its own
-operational data - indexes, snapshots, token usage - in its own database, and reports health on its own
-endpoint, which the API surfaces as the `procursor-remote` check - see
+ProCursor runs as a separate internal service and is never exposed publicly. The API is the public
+control plane, and the two services authenticate to each other with `PROCURSOR_SHARED_KEY`. ProCursor
+keeps its operational data - indexes, snapshots, token usage - in its own database, and reports health on
+a separate endpoint, which the API surfaces as the `procursor-remote` check - see
 [what the health checks mean](observability.md#what-the-health-checks-mean).
 
 Point both services at the same encryption key ring - see
@@ -206,13 +200,13 @@ For what ProCursor does and what indexing costs, see [ProCursor](../concepts/how
 
 To deploy ProPR without the code-knowledge service, set `PROCURSOR_REMOTE_MODE=disabled` and leave
 `PROCURSOR_SERVICE_BASE_URL` and `PROCURSOR_SHARED_KEY` unset. ProPR then omits the ProCursor review
-tools instead of reporting a broken dependency, and the `procursor-remote` check drops out of `/healthz`.
-Reviews still run - for what they lose, see [ProCursor](../concepts/how-it-works.md#procursor).
+tools, and the `procursor-remote` check drops out of `/healthz`. Reviews still run - for what they lose,
+see [ProCursor](../concepts/how-it-works.md#procursor).
 
 **This applies to a deployment you assemble yourself, not to the bundled compose stack.** That stack
 always defines the ProCursor service and will not start without it: the API waits for ProCursor to
 report healthy, and ProCursor itself will not start without the shared key it
 [requires](configuration.md#required-values). Leaving the key unset there gets you a crash-looping
-ProCursor and an API that never comes up. To evaluate without ProCursor on the example
-stack, delete the `procursor` service and the `procursor` entry under the API service's `depends_on`
-before setting the mode to `disabled`.
+ProCursor and an API that never comes up. To evaluate without ProCursor on the example stack, delete the
+`procursor` service and the `procursor` entry under the API service's `depends_on` before setting the
+mode to `disabled`.

@@ -11,6 +11,7 @@ using MeisterDev.ProPR.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using FactAttribute = Xunit.SkippableFactAttribute;
+using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 

@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 const routerPushMock = vi.fn()
 const notifyMock = vi.fn()
 const isAdmin = ref(true)
-const edition = ref('commercial')
+const availableCapabilities = ref<string[]>(['multi-tenancy'])
 const hasTenantRoleMock = vi.fn((_tenantId: string, _role: number) => false)
 
 vi.mock('vue-router', () => ({
@@ -18,7 +18,7 @@ vi.mock('@/composables/useNotification', () => ({
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     isAdmin: computed(() => isAdmin.value),
-    edition: computed(() => edition.value),
+    isCapabilityAvailable: (key: string) => availableCapabilities.value.includes(key),
     hasTenantRole: hasTenantRoleMock,
   }),
 }))
@@ -60,7 +60,7 @@ describe('useTenantDirectoryViewModel (FR-007, FR-008, FR-012)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     isAdmin.value = true
-    edition.value = 'commercial'
+    availableCapabilities.value = ['multi-tenancy']
     hasTenantRoleMock.mockReturnValue(false)
   })
 
@@ -70,7 +70,17 @@ describe('useTenantDirectoryViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.isLoading.value).toBe(true)
     expect(vm.canCreateTenants.value).toBe(true)
 
-    edition.value = 'community'
+    // The API refuses creation without the capability, so the control follows the capability rather than the
+    // edition: a commercial licence that leaves multi-tenancy out closes it too.
+    availableCapabilities.value = []
+    expect(vm.canCreateTenants.value).toBe(false)
+  })
+
+  it('withholds tenant creation from a platform administrator without the multi-tenancy capability', () => {
+    availableCapabilities.value = []
+
+    const vm = useTenantDirectoryViewModel({ autoLoad: false })
+
     expect(vm.canCreateTenants.value).toBe(false)
   })
 

@@ -1,12 +1,10 @@
 # API reference - ProPR backend
 
-This page contains technical API examples for automating administrative tasks that are also
-available from the frontend. Use the frontend for interactive configuration; use the endpoints
-below for automation and scripting.
+The endpoints below automate administrative tasks the frontend also offers. Use the frontend for
+interactive configuration and these endpoints for scripting.
 
-Every example below is written against the evaluation stack's origin, `https://localhost:5443`, whose
-certificate is self-signed - that is what `curl -k` is for. Behind your own ingress, substitute your API
-base URL.
+Every example targets the evaluation stack's origin, `https://localhost:5443`. Its certificate is
+self-signed, so the examples pass `curl -k`. Behind your own ingress, substitute your API base URL.
 
 ## Admin authentication
 
@@ -18,18 +16,17 @@ curl -k -X POST https://localhost:5443/api/auth/login \
   -d '{"username": "admin", "password": "<strong-password-here>"}'
 ```
 
-The response body contains `accessToken`, `expiresIn` (seconds) and `tokenType`. The refresh token is
-not in the body - it is issued as an httpOnly cookie. Use `Authorization: Bearer <accessToken>` on
-subsequent requests. `POST /api/auth/refresh` reads that cookie and returns a new access token; a
-`refreshToken` field in the request body is accepted only as a fallback for callers that cannot hold
-cookies.
+The response body carries `accessToken`, `expiresIn` (seconds) and `tokenType`. The refresh token is
+issued as an httpOnly cookie, not in the body. Send `Authorization: Bearer <accessToken>` on subsequent
+requests. `POST /api/auth/refresh` reads that cookie and returns a new access token. It accepts a
+`refreshToken` field in the request body as a fallback for callers that cannot hold cookies.
 
 `GET /api/auth/me` returns the caller's global role, per-client and per-tenant roles, the installation
 edition, and the state of every licensed capability.
 
 ### Personal access tokens
 
-For scripts and CI, use a personal access token rather than an admin password. Create one under
+For scripts and CI, use a personal access token, not an admin password. Create one under
 **Settings → Personal Access Tokens** in the frontend, or:
 
 ```bash
@@ -107,7 +104,7 @@ curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connecti
   }'
 ```
 
-Create a GitHub App provider connection instead, where ProPR should act as an installed App:
+Create a GitHub App provider connection, where ProPR acts as an installed App:
 
 ```bash
 curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections \
@@ -218,20 +215,20 @@ rejected with `400`.
 
 ### Purpose bindings
 
-A binding names a `purpose` and the model on this profile that serves it - by `remoteModelId`, matched against
-`configuredModels` in the same request, or by `configuredModelId` once the model has an id. `protocolMode`
-defaults to `auto` and `isEnabled` to `true`. A purpose may appear once.
+A binding names a `purpose` and the model on this profile that serves it. Name the model by `remoteModelId`,
+matched against `configuredModels` in the same request, or by `configuredModelId` once the model has an id.
+`protocolMode` defaults to `auto` and `isEnabled` to `true`. A purpose may appear once.
 
 `purpose` takes the API value of any purpose listed under [AI purposes](../ai/purposes.md#ai-purposes).
 `embeddingDefault` needs an embedding-capable model and a `protocolMode` of `auto` or `embeddings`; every other
 purpose needs a chat-capable model.
 
-These bindings are the second resolution layer, not the primary selection surface. The calls that drive the first
-are under [Logical models and purposes](#logical-models-and-purposes) below.
+Logical models select a model first, and these bindings resolve after them. See
+[Logical models and purposes](#logical-models-and-purposes) below.
 
 ### Per-model inputs
 
-`remoteModelId` is the only field a model must carry.
+Each entry in `configuredModels` takes these fields.
 
 | Field | Notes |
 |---|---|
@@ -245,11 +242,11 @@ are under [Logical models and purposes](#logical-models-and-purposes) below.
 | `inputCostPer1MUsd`, `outputCostPer1MUsd`, `cachedInputCostPer1MUsd` | Prices used for spend reporting |
 | `id`, `source`, `lastSeenAt` | Round-tripped from discovery; omit on a hand-written model |
 
-Omitting `operationKinds` does not make a model unbindable - the server infers one. It infers `embedding` when the
-model id contains `embedding` or when `tokenizerName` or `embeddingDimensions` is supplied, and `chat` otherwise.
-`supportedProtocolModes` is inferred the same way: `auto` and `embeddings` for an embedding-only model, `auto`,
-`responses` and `chatCompletions` otherwise. Declaring a protocol the model's capabilities do not support - the
-embeddings protocol without embedding capability, or a chat protocol without chat capability - is rejected.
+The server infers `operationKinds` when you omit it: `embedding` when the model id contains `embedding` or when
+`tokenizerName` or `embeddingDimensions` is supplied, `chat` otherwise. It infers `supportedProtocolModes` the
+same way: `auto` and `embeddings` for an embedding-only model, `auto`, `responses` and `chatCompletions`
+otherwise. A declared protocol the model's capabilities do not support is rejected: the embeddings protocol on a
+model without embedding capability, or a chat protocol on a model without chat capability.
 
 An embedding model must carry `tokenizerName`, a `maxInputTokens` above zero, and an `embeddingDimensions` between
 64 and 4096. `source` is `discovered`, `manual` or `knownCatalog`.
@@ -295,7 +292,7 @@ The model catalog and its tenant pricing overrides live under `/api/tenants/<ten
 
 ### Scripted setup
 
-Create, verify, activate, bind. The order matters: activation is refused while the profile has not been verified
+Create, verify, activate, bind, in that order. Activation is refused while the profile has not been verified
 since its last change.
 
 ```bash
@@ -350,10 +347,10 @@ Repeat the last call for every purpose you use; an unmapped purpose fails the wo
 `capability` is `chat` or `embedding`; `reasoningEffort` takes the values listed under
 [reasoning effort](../ai/purposes.md#reasoning-effort).
 
-`defaultQueryParams` carries what a provider reads from the profile rather than from the URL - `region` for AWS
+`defaultQueryParams` carries the values a provider reads from the profile instead of the URL: `region` for AWS
 Bedrock, `project` for Vertex AI. When to set each, and which wins if the host names one too, is in
 [provider-specific setup notes](../ai/credentials.md#provider-specific-setup-notes). `defaultHeaders` sends extra
-headers a gateway in front of a provider expects; probe after setting one, because the families differ in where
+headers a gateway in front of a provider expects. Probe after setting one, because the families differ in where
 headers are applied.
 
 The credential is stored only when `auth.mode` is `apiKey`; Azure OpenAI also accepts `azureIdentity`, which uses
@@ -363,7 +360,7 @@ the host's managed identity and needs no key. What to send as the key for each f
 ## Guided discovery endpoints
 
 Resolve the Azure DevOps projects, sources and branches reachable through a connection's organization
-scope, without leaving the API. All three need at least `ClientUser` for the client.
+scope. All three need at least `ClientUser` for the client.
 
 Add `&purpose=crawl` to the project and crawl-filter queries when you are building a crawl
 configuration; that form is refused with HTTP 409 unless the `crawl-configs` capability is licensed.
@@ -455,8 +452,8 @@ queued review jobs. `reviewTemperature` is optional; what it does and what it ac
 ## Webhook configurations
 
 Webhook configurations are managed per client and can coexist with crawl configurations for the same
-repositories. What one is, what to do with the secret it returns, and how to read its deliveries are in
-[webhooks](../platforms/webhooks.md).
+repositories. [Webhooks](../platforms/webhooks.md) explains what one is, what to do with the secret it
+returns, and how to read its deliveries.
 
 ```bash
 # List webhook configurations visible to the caller
@@ -492,10 +489,10 @@ curl -k -X POST https://localhost:5443/api/admin/webhook-configurations \
   }'
 ```
 
-`clientId` is required, `provider` is one of `azureDevOps`, `github`, `gitLab` or `forgejo`, and the
-three names above are the whole of `enabledEvents`. `reviewTemperature` is optional here too.
+`clientId` is required, `provider` is one of `azureDevOps`, `github`, `gitLab` or `forgejo`, and
+`enabledEvents` accepts only the three names above. `reviewTemperature` is optional here too.
 
-Expected create response highlights:
+The create response carries:
 
 - `listenerUrl`: the public HTTPS path your provider posts to
 - `generatedSecret`: returned once at creation time
@@ -532,8 +529,8 @@ curl -k -X DELETE https://localhost:5443/api/admin/webhook-configurations/<confi
 
 ## Public webhook receiver
 
-Azure DevOps webhooks should target the one-time `listenerUrl` returned by webhook configuration
-creation and use Basic auth with the generated secret as the password.
+Point Azure DevOps webhooks at the one-time `listenerUrl` returned when the webhook configuration is
+created, and use Basic auth with the generated secret as the password.
 
 ```bash
 curl -k -X POST https://localhost:5443/webhooks/v1/providers/ado/<path-key> \
@@ -551,8 +548,7 @@ curl -k -X POST https://localhost:5443/webhooks/v1/providers/ado/<path-key> \
   }'
 ```
 
-The webhook receiver returns a compact acknowledgement payload when delivery validation succeeds,
-even if the event is intentionally ignored:
+The receiver acknowledges every delivery that passes validation, including events it ignores:
 
 ```json
 { "status": "accepted" }
@@ -562,7 +558,7 @@ even if the event is intentionally ignored:
 { "status": "ignored" }
 ```
 
-The trigger only decides when a review starts, not what it produces - see
+The trigger decides when a review starts, not what it produces - see
 [how a review gets triggered](../concepts/how-it-works.md#how-a-review-gets-triggered).
 
 ## Trigger a review
@@ -598,19 +594,19 @@ curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/jobs \
 `platform` is `pullRequest` or `mergeRequest`. `reviewRevision` is optional, but if you send it,
 `headSha` and `baseSha` are required within it.
 
-Send `reviewRevision`. It is what lets ProPR tell one revision of a pull request from the next: a
-submission is treated as a duplicate of an in-flight job only when the whole revision matches. Omit it
-and every submission for the same pull request collapses onto one revision, so a second push cannot be
-reviewed while the first review is still running.
+Send `reviewRevision`. ProPR treats a submission as a duplicate of an in-flight job only when the whole
+revision matches. Omit it and every submission for the same pull request collapses onto one revision, so
+a second push cannot be reviewed while the first review is still running.
 
-A successful submission returns `202 Accepted` with `jobId` and `status`. A `409 Conflict` means
-either an active job already exists for that revision, the pull request is blocked, or another review
-is still running on an installation that runs them one at a time - see [editions](editions.md).
+A successful submission returns `202 Accepted` with `jobId` and `status`. A `409 Conflict` means an
+active job already exists for that revision, or the pull request is blocked. A review running on another
+pull request, or on this one at an earlier revision, is not a conflict. The submission is queued and
+starts once the installation's concurrency ceiling allows it - see [editions](editions.md).
 
 ### Trigger a review from coordinates alone
 
-When you know which pull request you mean but not which commits it is at, post the coordinates and let
-ProPR read the revision from your SCM host:
+Post the coordinates when you know which pull request you mean but not which commits it is at. ProPR
+reads the revision from your SCM host.
 
 ```bash
 curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/jobs/by-coordinates \
@@ -625,24 +621,21 @@ curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/jobs/by
 ```
 
 All four fields are required, and `providerScopePath` and `providerProjectKey` must match a crawl or
-webhook configuration of that client exactly. That match is how ProPR knows which provider family the
-coordinates belong to, and it is a boundary as much as a lookup: it is what keeps the client's
-source-control credential pointed at repositories the client actually configured. When that
-configuration lists specific repositories and recorded their provider ids, `repositoryId` has to be one
-of them; a configuration that lists none covers its whole scope. Deactivating a configuration stops it
-starting reviews by itself but still lets you ask for one, so a manual-only setup is a configuration
-you switch off. The review runs under that configuration's code-knowledge source scope and review
-temperature, so it is the same review the same pull request would get automatically.
+webhook configuration of that client exactly. The match tells ProPR which provider family the
+coordinates belong to, and it limits the client's source-control credential to the repositories that
+client configured. Where the configuration lists specific repositories and recorded their provider ids,
+`repositoryId` must be one of them; a configuration that lists none covers its whole scope. Deactivating
+a configuration stops it starting reviews by itself and still lets you ask for one, which gives you a
+manual-only setup. The review runs under that configuration's code-knowledge source scope and review
+temperature.
 
-This one request serves both the first review and every re-review after new commits, because the
-revision is read fresh each time. An earlier job at an older revision is retired as superseded. Unlike
-the automatic triggers, an explicit request reviews a revision that has already been reviewed, or that
-a previous review failed at: those guards exist to stop an automatic loop repeating itself, and asking
-is the deliberate action they defer to. A review already running at this exact revision is still not
-started twice.
+The same request serves the first review and every re-review after new commits, because the revision is
+read fresh each time. An earlier job at an older revision is retired as superseded. Unlike the automatic
+triggers, this request reviews a revision that has already been reviewed, or that a previous review
+failed at. A review already running at this exact revision is not started twice.
 
-`ClientUser` is enough, matching restart. Every answer to a complete request carries a named `outcome`,
-because the reason matters more than the code:
+`ClientUser` is enough here, as it is for restart. Every answer to a complete request carries a named
+`outcome`:
 
 | `outcome` | Status | Means |
 |---|---|---|
@@ -654,9 +647,8 @@ because the reason matters more than the code:
 | `submissionFailed` | 500 | The pull request resolved, but queueing the review failed inside ProPR. The server logs carry the detail |
 | `revisionUnresolvable` | 502 | The provider could not be asked, or answered without commits. Check the connection and retry |
 
-A request missing one of the four fields is the exception: it is refused with `400` and a plain
-`{"error": "..."}`, the same shape the other endpoints on this page use, because there was nothing
-well-formed enough to have an outcome.
+A request missing one of the four fields carries no `outcome`. It is refused with `400` and a plain
+`{"error": "..."}`, the shape the other endpoints on this page use.
 
 Poll the job, and restart or stop it:
 
@@ -671,9 +663,9 @@ curl -k -X POST https://localhost:5443/api/reviewing/jobs/<job-id>/stop \
   -H "X-User-Pat: <token>"
 ```
 
-Reading status and restarting need only `ClientUser`; stopping needs `ClientAdministrator`. Failed
-reviews are never continued automatically - restart is always explicit. Stopping is terminal and does
-not requeue the job.
+Reading status and restarting need only `ClientUser`; stopping needs `ClientAdministrator`. A failed
+review is never continued automatically; restart it explicitly. Stopping is terminal and does not
+requeue the job.
 
 ## Blocking and dismissing
 
@@ -722,42 +714,42 @@ rows and metadata but omits their bodies, which is much cheaper on large reviews
 Diagnostics are scoped to a single review; there is no cross-review trace query.
 
 Reading a protocol to answer a specific symptom starts at
-[troubleshooting](../operate/troubleshooting.md), which names the page that fixes each one.
+[troubleshooting](../operate/troubleshooting.md).
 
-## Anonymous usage statistics
+## Usage statistics
 
-Six platform-administrator endpoints cover the daily anonymous snapshot. Each field of that snapshot, and the
-reason it is collected, is described in [usage statistics](usage-statistics.md).
+Six platform-administrator endpoints cover the daily snapshot. [Usage statistics](usage-statistics.md) describes
+each field of that snapshot and why it is collected.
 
 `GET /api/admin/usage-statistics` returns the current state: whether sending is on, whether a commercial
 license governs the control, the last send attempt and its outcome, and the newest version and advisories the
 receiver last reported.
 
 `PATCH /api/admin/usage-statistics` with `{"enabled": false}` switches sending off. It answers `409` while a
-commercial license is installed, because the license governs the setting there.
+commercial license is installed.
 
-`GET /api/admin/usage-statistics/preview` returns the request body the next snapshot would carry, built by the
-same code that sends it. Requesting it sends nothing, in any state.
+`GET /api/admin/usage-statistics/preview` returns the request body the next snapshot would carry. Requesting it
+sends nothing, in any state.
 
 ```bash
 curl -s -H "Authorization: Bearer $TOKEN" \
   https://localhost:5443/api/admin/usage-statistics/preview
 ```
 
-`POST /api/admin/usage-statistics/send` runs a send cycle now instead of waiting for the daily one. Every
-rule the daily loop applies still applies, so an installation that is switched off or has not shown the notice
-sends nothing, and one that already sent today is told it is not due. The response carries a `decision` of
-`sent`, `disabled`, `awaitingConsent` or `notDue`, and the state after the attempt.
+`POST /api/admin/usage-statistics/send` runs a send cycle now instead of waiting for the daily one. The daily
+rules still apply, so an installation that is switched off or has not shown the notice sends nothing. The
+response carries a `decision` of `sent`, `disabled`, `awaitingConsent` or `notDue`, and the state after the
+attempt.
 
 ```bash
 curl -s -X POST -H "Authorization: Bearer $TOKEN" \
   https://localhost:5443/api/admin/usage-statistics/send
 ```
 
-`POST /api/admin/usage-statistics/notice/shown` records that the consent notice reached an administrator,
-which opens the send gate on a community installation. The administration UI calls it when the notice renders;
-it is idempotent. `POST /api/admin/usage-statistics/notice/dismiss` hides the notice and changes nothing about
-what is sent.
+`POST /api/admin/usage-statistics/notice/shown` records that the consent notice reached an administrator, which
+lets a community installation start sending. The administration UI calls it when the notice renders, and it is
+idempotent. `POST /api/admin/usage-statistics/notice/dismiss` hides the notice and changes nothing about what is
+sent.
 
 ## Health endpoints behind the proxy
 
@@ -768,9 +760,9 @@ the request arrives, so the API's own `/healthz` is `/api/healthz` from outside:
 curl -k https://localhost:5443/api/healthz
 ```
 
-Note that `https://localhost:5443/healthz` without the prefix is answered by the frontend container's
-own static health string and tells you nothing about the API. What each check reports, and which
-endpoint to point a probe at, is in [observability](../operate/observability.md).
+`https://localhost:5443/healthz` without the prefix is answered by the frontend container's own static
+health string and reports nothing about the API. What each check reports, and which endpoint to point a
+probe at, is in [observability](../operate/observability.md).
 
 The same prefix rule applies to `/metrics`, which becomes `/api/metrics` - a path to
 [block at your edge](security.md#what-to-block-at-your-edge).
@@ -780,16 +772,14 @@ The same prefix rule applies to `/metrics`, which becomes `/api/metrics` - a pat
 For every other endpoint - prompt overrides, dismissal search, token reporting, ProCursor token usage,
 tenant administration - read the OpenAPI specification.
 
-In Development the API serves it on its own address: Swagger UI at `/swagger`, the document at
+In Development the API serves it at its own address: Swagger UI at `/swagger`, the document at
 `/swagger/v1/swagger.json`. Behind a reverse proxy that strips a leading `/api`, as the bundled one does, those
-become `/api/swagger` and `/api/swagger/v1/swagger.json`. Neither is served in other environments, and the
-bundled stack runs in Production - so on a stock deployment there is no Swagger UI and no served document, at any
-path. `https://localhost:5443/swagger` without the prefix is answered by the frontend container, the same trap as
-`/healthz` above.
+become `/api/swagger` and `/api/swagger/v1/swagger.json`. Other environments serve neither, and the bundled stack
+runs in Production, so a stock deployment has no Swagger UI and no served document at any path.
+`https://localhost:5443/swagger` without the prefix is answered by the frontend container.
 
 Script against `openapi.json` at the repository root instead. It is committed, and it covers every endpoint on
 this page except `/healthz`, `/livez` and `/metrics`, which [observability](../operate/observability.md)
-describes. Its paths carry no `/api` prefix -
-`/clients/{clientId}/ai-connections`, not `/api/clients/{clientId}/ai-connections` - because that prefix belongs
-to the proxy, not to the API. Through the bundled proxy, prepend `https://localhost:5443/api` as every example
-above does; the public webhook receiver is the exception, forwarded at its own path.
+describes. Its paths carry no `/api` prefix: `/clients/{clientId}/ai-connections`, not
+`/api/clients/{clientId}/ai-connections`. Through the bundled proxy, prepend `https://localhost:5443/api` as
+every example above does. The public webhook receiver is forwarded at its own path.

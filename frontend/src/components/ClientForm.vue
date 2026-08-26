@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { createAdminClient } from '@/services/api'
+import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { TenantDto } from '@/services/tenantAdminService'
 
 const props = withDefaults(defineProps<{
@@ -86,14 +86,17 @@ async function handleSubmit() {
 
   loading.value = true
   try {
-    const { data, response } = await createAdminClient().POST('/clients', {
+    const { data, error: apiError, response } = await createAdminClient().POST('/clients', {
       body: {
         displayName: displayName.value.trim(),
         tenantId: tenantId.value,
       },
     })
     if (!response.ok) {
-      formError.value = 'Failed to create client.'
+      // The response body carries the reason a creation was refused, including the licensed client ceiling
+      // and the number of clients that exist. The generic wording stands in when the response carries no
+      // message.
+      formError.value = getApiErrorMessage(apiError, 'Failed to create client.')
       return
     }
     emit('client-created', data)

@@ -268,6 +268,50 @@ public sealed class MentionScanServiceTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    ///     The asker's identifier as the host issues it goes onto the job, because that is the value a reviewed
+    ///     pull request names the same person by. The derived identifier beside it names them differently on
+    ///     every provider but Azure DevOps.
+    /// </summary>
+    [Fact]
+    public async Task ScanAsync_MentionCarryingTheHostsOwnIdentifier_PutsItOnTheJob()
+    {
+        var asked = new PrThreadComment(
+            "developer",
+            $"@<{ReviewerId}> What is this supposed to do?",
+            Guid.NewGuid(),
+            9006,
+            DateTimeOffset.UtcNow,
+            AuthorNativeId: "4242");
+
+        await this.ScanConversationCommentAsync(asked);
+
+        await this._jobRepository.Received(1).TryAddAsync(
+            Arg.Is<MentionReplyJob>(job => job.CommentAuthorNativeId == "4242"),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    ///     A payload that named no identifier leaves the column empty. Copying the derived identifier into it
+    ///     would make one person two authors between their pull requests and their questions.
+    /// </summary>
+    [Fact]
+    public async Task ScanAsync_MentionWithoutTheHostsOwnIdentifier_LeavesTheJobCarryingNone()
+    {
+        var asked = new PrThreadComment(
+            "developer",
+            $"@<{ReviewerId}> What is this supposed to do?",
+            Guid.NewGuid(),
+            9007,
+            DateTimeOffset.UtcNow);
+
+        await this.ScanConversationCommentAsync(asked);
+
+        await this._jobRepository.Received(1).TryAddAsync(
+            Arg.Is<MentionReplyJob>(job => job.CommentAuthorNativeId == null),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Runs one scan over a single comment in the pull request's conversation.</summary>
     private async Task ScanConversationCommentAsync(PrThreadComment comment)
     {

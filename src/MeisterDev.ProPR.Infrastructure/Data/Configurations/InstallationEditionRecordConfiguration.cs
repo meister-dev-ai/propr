@@ -22,9 +22,6 @@ internal sealed class InstallationEditionRecordConfiguration : IEntityTypeConfig
             .HasColumnName("edition")
             .HasConversion<int>();
 
-        builder.Property(record => record.EntitledRunnerSlots)
-            .HasColumnName("entitled_runner_slots");
-
         builder.Property(record => record.ActivatedAt)
             .HasColumnName("activated_at")
             .IsRequired(false);

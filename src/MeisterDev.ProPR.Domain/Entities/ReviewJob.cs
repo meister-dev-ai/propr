@@ -389,6 +389,46 @@ public sealed class ReviewJob
     public string? PrRepositoryName { get; private set; }
 
     /// <summary>
+    ///     Provider-native user identifier of the account that opened the reviewed pull request. Null on a job
+    ///     whose fetch named no author, and on every job written before the column existed.
+    /// </summary>
+    public string? PrAuthorExternalUserId { get; private set; }
+
+    /// <summary>Provider login of the account that opened the reviewed pull request. Null when unavailable.</summary>
+    public string? PrAuthorLogin { get; private set; }
+
+    /// <summary>Display name of the account that opened the reviewed pull request. Null when unavailable.</summary>
+    public string? PrAuthorDisplayName { get; private set; }
+
+    /// <summary>
+    ///     Whether the provider states the account that opened the reviewed pull request is a bot. Null where
+    ///     the provider states nothing about it, which is a different answer from stating that it is not.
+    /// </summary>
+    /// <remarks>
+    ///     The equivalent column on the mention reply job, <c>comment_author_is_bot</c>, is non-nullable and
+    ///     defaults to false, so a mention row cannot express that the provider said nothing.
+    /// </remarks>
+    public bool? PrAuthorIsBot { get; private set; }
+
+    /// <summary>
+    ///     The pull request's author rebuilt from this row, or null when no author was recorded.
+    /// </summary>
+    /// <remarks>
+    ///     The host half of the identity comes from <see cref="ProviderHost" />, which the job already carries,
+    ///     so only the identifier and the labels are stored beside it. The fetch derives its host from the same
+    ///     organization URL, and its provider from the same connection that stamped the provider on this row, so
+    ///     the key rebuilt here matches the key of the author the fetch reported.
+    /// </remarks>
+    public PullRequestAuthor? PullRequestAuthorReference => string.IsNullOrWhiteSpace(this.PrAuthorExternalUserId)
+        ? null
+        : new PullRequestAuthor(
+            this.ProviderHost,
+            this.PrAuthorExternalUserId,
+            this.PrAuthorLogin,
+            this.PrAuthorDisplayName,
+            this.PrAuthorIsBot);
+
+    /// <summary>
     ///     Finalizes the review result onto the job and denormalizes its summary into
     ///     <see cref="ResultSummary" />. The single seam both repository implementations use, so the stored
     ///     summary stays consistent across first runs, restarts, and resumes (all re-finalize through here).
@@ -674,6 +714,28 @@ public sealed class ReviewJob
         this.PrRepositoryName = repositoryName;
         this.PrSourceBranch = StripRefsHeads(sourceBranch);
         this.PrTargetBranch = StripRefsHeads(targetBranch);
+    }
+
+    /// <summary>Records the author the provider reported for the reviewed pull request.</summary>
+    /// <remarks>
+    ///     A later fetch of the same pull request overwrites what an earlier one recorded. The author of record
+    ///     is the account that opened the pull request at review time, and a pull request does not change
+    ///     author, so the two fetches agree in practice.
+    /// </remarks>
+    /// <param name="author">The author the fetch reported.</param>
+    public void SetPullRequestAuthor(PullRequestAuthor author)
+    {
+        ArgumentNullException.ThrowIfNull(author);
+
+        if (!Equals(author.Host, this.ProviderHost))
+        {
+            throw new InvalidOperationException("The pull request author must belong to the job's provider host.");
+        }
+
+        this.PrAuthorExternalUserId = author.ExternalUserId;
+        this.PrAuthorLogin = author.Login;
+        this.PrAuthorDisplayName = author.DisplayName;
+        this.PrAuthorIsBot = author.IsBot;
     }
 
     /// <summary>Stores the normalized review target for this job while preserving legacy ADO compatibility fields.</summary>

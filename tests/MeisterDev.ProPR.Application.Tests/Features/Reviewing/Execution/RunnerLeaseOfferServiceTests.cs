@@ -91,31 +91,149 @@ public sealed class RunnerLeaseOfferServiceTests
         Assert.Equal(RunnerLeaseRefusal.NoMatchingWork, offer.Refusal);
     }
 
-    // One review at a time has to mean across every host sharing the database, and in a runner fleet that is
-    // not the same as "on this host". The same rule the in-process worker applies, and at the same point:
-    // before anything is claimed.
-    [Fact]
-    public async Task AnUnlicensedInstallation_WithAReviewAlreadyRunning_OffersNothing()
+    // The ceiling has to mean across every host sharing the database, and in a runner fleet that is not the
+    // same as "on this host". The same rule the in-process worker applies, and at the same point: before
+    // anything is claimed.
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(3, 3)]
+    [InlineData(3, 4)]
+    public async Task AnInstallationAlreadyAtItsCeiling_OffersNothing(int cap, int processing)
     {
         var runner = this.EnrolledRunner();
-        var licensing = Substitute.For<ILicensingCapabilityService>();
-        licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, Arg.Any<CancellationToken>()).Returns(false);
         var executionStore = Substitute.For<IReviewJobExecutionStore>();
-        executionStore.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(1);
+        executionStore.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(processing);
 
-        var offer = await this.CreateService(licensing: licensing, executionStore: executionStore)
+        var offer = await this.CreateService(limits: LicensedCeilingOf(cap), executionStore: executionStore)
             .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
 
-        Assert.Equal(RunnerLeaseRefusal.NoMatchingWork, offer.Refusal);
+        Assert.Equal(RunnerLeaseRefusal.ConcurrencyCeilingReached, offer.Refusal);
+        Assert.Equal(cap, offer.Ceiling);
         await this._offers.DidNotReceiveWithAnyArgs().GetOfferCandidatesAsync(default, default!, default!, default);
     }
 
+    // The queue behind a full ceiling is not empty, and an operator looking at an idle fleet has to be able
+    // to tell the two apart. Both are answered 204, so the refusal is the only thing carrying the
+    // difference, and the controller counts it against the ceiling on that basis.
     [Fact]
-    public async Task AnUnlicensedInstallation_WithNothingRunning_StillLeases()
+    public async Task AFullCeiling_IsADifferentAnswerFromAnEmptyQueue()
     {
         var runner = this.EnrolledRunner();
-        var licensing = Substitute.For<ILicensingCapabilityService>();
-        licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, Arg.Any<CancellationToken>()).Returns(false);
+        var executionStore = Substitute.For<IReviewJobExecutionStore>();
+        executionStore.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(2);
+        this._offers.GetOfferCandidatesAsync(
+                TenantId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        var atCeiling = await this.CreateService(limits: LicensedCeilingOf(2), executionStore: executionStore)
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+        var emptyQueue = await this.CreateService()
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.NotEqual(emptyQueue.Refusal, atCeiling.Refusal);
+        Assert.Equal(RunnerLeaseRefusal.NoMatchingWork, emptyQueue.Refusal);
+        Assert.Null(emptyQueue.Ceiling);
+        Assert.Equal(RunnerLeaseRefusal.ConcurrencyCeilingReached, atCeiling.Refusal);
+        Assert.Equal(2, atCeiling.Ceiling);
+    }
+
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(3, 2)]
+    public async Task AnInstallationBelowItsCeiling_StillLeases(int cap, int processing)
+    {
+        var runner = this.EnrolledRunner();
+        var executionStore = Substitute.For<IReviewJobExecutionStore>();
+        executionStore.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(processing);
+        var job = MakeJob();
+        this.WithCandidates(runner, job);
+        this.GrantClaimFor(job, runner);
+        this.PreparationSucceedsFor(job);
+        this.ManifestResolves();
+
+        var offer = await this.CreateService(limits: LicensedCeilingOf(cap), executionStore: executionStore)
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.True(offer.Granted);
+    }
+
+    // The count is read before the claim, so a replica that claims in between makes it stale. The claim
+    // itself carries the ceiling, and its refusal ends the offer rather than moving down the candidate list.
+    [Fact]
+    public async Task AnInstallationWhoseClaimReportsTheCeilingFull_OffersNothing()
+    {
+        var runner = this.EnrolledRunner();
+        var executionStore = Substitute.For<IReviewJobExecutionStore>();
+        executionStore.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(0);
+        var first = MakeJob();
+        var second = MakeJob();
+        this.WithCandidates(runner, first, second);
+        this._leases.TryClaimWithinProcessingCapAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(ReviewJobCappedClaim.AtCapacity(3, 3));
+
+        var offer = await this.CreateService(limits: LicensedCeilingOf(3), executionStore: executionStore)
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.Equal(RunnerLeaseRefusal.ConcurrencyCeilingReached, offer.Refusal);
+        Assert.Equal(3, offer.Ceiling);
+
+        // The numbers the claim measured, not the stale ones read before it.
+        Assert.Equal("This installation is running 3 of 3 concurrent reviews. The limit comes from the license in force.", offer.Detail);
+        await this._leases.DidNotReceive().TryClaimWithinProcessingCapAsync(
+            second.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    // A refusal under a licensed ceiling must not state that no license is in force, and one under the
+    // community value must not attribute the number to a license. The resolution's source decides which is
+    // stated.
+    //
+    // The community source has three causes, and the two stages here stand for the ones that differ most: no
+    // license at all, and a license in force that leaves the limit out. The copy is the same for both,
+    // because a licensed installation must not be described as having no license.
+    [Theory]
+    [InlineData(LicenseStage.None)]
+    [InlineData(LicenseStage.Active)]
+    public async Task ARefusalUnderTheCommunityCeiling_NamesTheCeilingWithoutCreditingALicense(LicenseStage stage)
+    {
+        var runner = this.EnrolledRunner();
+        var executionStore = Substitute.For<IReviewJobExecutionStore>();
+        executionStore.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(1);
+
+        var offer = await this.CreateService(limits: CommunityCeilingOfOne(stage), executionStore: executionStore)
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.Equal(
+            "This installation is running 1 of 1 concurrent reviews. This installation is not entitled to a higher limit.",
+            offer.Detail);
+    }
+
+    // A refusal made before the admission was reached has no observed count to quote, and still names the
+    // ceiling rather than reporting an empty queue.
+    [Fact]
+    public async Task ARefusalWithNoObservedCount_NamesTheCeilingAlone()
+    {
+        var runner = this.EnrolledRunner();
+        var job = MakeJob();
+        this.WithCandidates(runner, job);
+        this._leases.TryClaimWithinProcessingCapAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(ReviewJobCappedClaim.AtCapacity(2));
+
+        var offer = await this.CreateService(limits: LicensedCeilingOf(2))
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.Equal(
+            "This installation is at its limit of 2 concurrent reviews. The limit comes from the license in force.",
+            offer.Detail);
+    }
+
+    // The uncapped claim cannot carry a ceiling, so a capped installation must not reach for it, and the cap
+    // it passes is the resolved number rather than a constant.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    public async Task AnInstallationWithACeiling_ClaimsThroughTheCappedClaim(int cap)
+    {
+        var runner = this.EnrolledRunner();
         var executionStore = Substitute.For<IReviewJobExecutionStore>();
         executionStore.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(0);
         var job = MakeJob();
@@ -124,19 +242,20 @@ public sealed class RunnerLeaseOfferServiceTests
         this.PreparationSucceedsFor(job);
         this.ManifestResolves();
 
-        var offer = await this.CreateService(licensing: licensing, executionStore: executionStore)
+        var offer = await this.CreateService(limits: LicensedCeilingOf(cap), executionStore: executionStore)
             .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
 
         Assert.True(offer.Granted);
+        await this._leases.Received().TryClaimWithinProcessingCapAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), cap, Arg.Any<CancellationToken>());
+        await this._leases.DidNotReceiveWithAnyArgs().TryClaimAsync(default, default!, default, default);
     }
 
-    // A licensed installation never pays the count query: the clamp exists for the unlicensed case only.
+    // Under an unlimited ceiling nothing is counted and the claim goes through the uncapped path. Taking the
+    // admission would serialize every claim installation-wide while nothing is being counted.
     [Fact]
-    public async Task ALicensedInstallation_NeverCountsProcessingJobs()
+    public async Task AnInstallationWithAnUnlimitedCeiling_ClaimsUncappedAndCountsNothing()
     {
         var runner = this.EnrolledRunner();
-        var licensing = Substitute.For<ILicensingCapabilityService>();
-        licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, Arg.Any<CancellationToken>()).Returns(true);
         var executionStore = Substitute.For<IReviewJobExecutionStore>();
         var job = MakeJob();
         this.WithCandidates(runner, job);
@@ -144,11 +263,53 @@ public sealed class RunnerLeaseOfferServiceTests
         this.PreparationSucceedsFor(job);
         this.ManifestResolves();
 
-        var offer = await this.CreateService(licensing: licensing, executionStore: executionStore)
+        var offer = await this.CreateService(limits: UnlimitedCeiling(), executionStore: executionStore)
             .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
 
         Assert.True(offer.Granted);
         await executionStore.DidNotReceive().CountProcessingJobsAsync(Arg.Any<CancellationToken>());
+        await this._leases.Received().TryClaimAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await this._leases.DidNotReceiveWithAnyArgs().TryClaimWithinProcessingCapAsync(default, default!, default, default, default);
+    }
+
+    // A host composed without the licensing surface claims uncapped, as the offline and test hosts do. An
+    // absent resolver must not produce a ceiling.
+    [Fact]
+    public async Task AnInstallationWithNoLimitResolver_ClaimsUncapped()
+    {
+        var runner = this.EnrolledRunner();
+        var executionStore = Substitute.For<IReviewJobExecutionStore>();
+        var job = MakeJob();
+        this.WithCandidates(runner, job);
+        this.GrantClaimFor(job, runner);
+        this.PreparationSucceedsFor(job);
+        this.ManifestResolves();
+
+        var offer = await this.CreateService(executionStore: executionStore)
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.True(offer.Granted);
+        await executionStore.DidNotReceive().CountProcessingJobsAsync(Arg.Any<CancellationToken>());
+        await this._leases.DidNotReceiveWithAnyArgs().TryClaimWithinProcessingCapAsync(default, default!, default, default, default);
+    }
+
+    // A ceiling of zero admits no review, and the capped claim refuses a cap below one, so the refusal is
+    // made without a claim.
+    [Fact]
+    public async Task AnInstallationWithACeilingOfZero_OffersNothingAndClaimsNothing()
+    {
+        var runner = this.EnrolledRunner();
+        var job = MakeJob();
+        this.WithCandidates(runner, job);
+
+        var offer = await this.CreateService(limits: LicensedCeilingOf(0))
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.Equal(RunnerLeaseRefusal.ConcurrencyCeilingReached, offer.Refusal);
+        Assert.Equal(0, offer.Ceiling);
+        Assert.Contains("0 concurrent reviews", offer.Detail!, StringComparison.Ordinal);
+        await this._leases.DidNotReceiveWithAnyArgs().TryClaimWithinProcessingCapAsync(default, default!, default, default, default);
+        await this._leases.DidNotReceiveWithAnyArgs().TryClaimAsync(default, default!, default, default);
     }
 
     // Losing the claim is the normal outcome when several runners ask at once. It must cost the losing runner
@@ -211,21 +372,85 @@ public sealed class RunnerLeaseOfferServiceTests
         await this._leases.Received(1).TryReleaseAsync(lease, Arg.Any<CancellationToken>());
     }
 
-    // The entitlement is consulted before any queue work, so an installation that is out of slots does not
-    // pay for a candidate scan on every poll of every runner.
+    // The capability is checked on every offer, because a license can lapse while a fleet is enrolled and
+    // running. Refused before any queue work, so an installation that lost the capability does not pay for a
+    // candidate scan on every poll of every runner.
     [Fact]
-    public async Task WhenTheEntitlementRefuses_NoQueueWorkHappensAtAll()
+    public async Task WithoutTheDistributedExecutionCapability_NoLeaseIsOfferedAndNoQueueWorkHappens()
     {
         var runner = this.EnrolledRunner();
-        var slots = Substitute.For<IRunnerSlotEntitlement>();
-        slots.AdmitAsync(runner.Id, Arg.Any<CancellationToken>())
-            .Returns(new RunnerSlotAdmission(RunnerLeaseRefusal.SlotLimitReached, "3 of 3 slots are held."));
 
-        var offer = await this.CreateService(slots).OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+        var offer = await this.CreateService(licensing: CapabilityThatIs(false))
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
 
-        Assert.Equal(RunnerLeaseRefusal.SlotLimitReached, offer.Refusal);
-        Assert.Equal("3 of 3 slots are held.", offer.Detail);
+        // The one refusal the controller maps to 429, with the slot_limit_reached code and this detail as
+        // its message.
+        Assert.Equal(RunnerLeaseRefusal.NotLicensed, offer.Refusal);
+        Assert.Equal("Distributed review execution is not licensed for this installation.", offer.Detail);
         await this._offers.DidNotReceiveWithAnyArgs().GetOfferCandidatesAsync(default, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task WithTheDistributedExecutionCapability_TheLeaseIsGranted()
+    {
+        var runner = this.EnrolledRunner();
+        var job = MakeJob();
+        this.WithCandidates(runner, job);
+        this.GrantClaimFor(job, runner);
+        this.PreparationSucceedsFor(job);
+        this.ManifestResolves();
+
+        var offer = await this.CreateService(licensing: CapabilityThatIs(true))
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.True(offer.Granted);
+    }
+
+    // A host composed without the licensing surface has no service to ask, which reads as available. Reading
+    // it as unavailable would refuse every lease on an installation that has no licensing module at all.
+    [Fact]
+    public async Task WithNoLicensingServiceAtAll_TheLeaseIsGranted()
+    {
+        var runner = this.EnrolledRunner();
+        var job = MakeJob();
+        this.WithCandidates(runner, job);
+        this.GrantClaimFor(job, runner);
+        this.PreparationSucceedsFor(job);
+        this.ManifestResolves();
+
+        var offer = await this.CreateService().OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.True(offer.Granted);
+    }
+
+    private static ILicensingCapabilityService CapabilityThatIs(bool enabled)
+    {
+        var licensing = Substitute.For<ILicensingCapabilityService>();
+        licensing.IsEnabledAsync(PremiumCapabilityKey.DistributedExecution, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<bool>(enabled));
+        return licensing;
+    }
+
+    private static ILicenseLimitResolver CreateLimits(LicenseLimitResolution resolution)
+    {
+        var limits = Substitute.For<ILicenseLimitResolver>();
+        limits.ResolveAsync(LicenseLimitKey.ConcurrentReviews, Arg.Any<CancellationToken>()).Returns(resolution);
+        return limits;
+    }
+
+    private static ILicenseLimitResolver LicensedCeilingOf(long cap)
+    {
+        return CreateLimits(LicenseLimitResolution.Of(LicenseLimitKey.ConcurrentReviews, cap, LicenseLimitSource.License, LicenseStage.Active));
+    }
+
+    private static ILicenseLimitResolver CommunityCeilingOfOne(LicenseStage stage = LicenseStage.None)
+    {
+        return CreateLimits(LicenseLimitResolution.Of(LicenseLimitKey.ConcurrentReviews, 1, LicenseLimitSource.Community, stage));
+    }
+
+    private static ILicenseLimitResolver UnlimitedCeiling()
+    {
+        return CreateLimits(LicenseLimitResolution.Unlimited(LicenseLimitKey.ConcurrentReviews, LicenseLimitSource.License, LicenseStage.Active));
     }
 
     private static ReviewRunner MakeRunner()
@@ -266,6 +491,8 @@ public sealed class RunnerLeaseOfferServiceTests
         var lease = new ReviewJobLease(job.Id, runner.Id.ToString("D"), 1, DateTimeOffset.UtcNow.AddMinutes(2));
         this._leases.TryClaimAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(lease);
+        this._leases.TryClaimWithinProcessingCapAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(ReviewJobCappedClaim.Granted(lease));
         return lease;
     }
 
@@ -411,12 +638,12 @@ public sealed class RunnerLeaseOfferServiceTests
     private readonly RunnerWorkspaceRegistry _workspaces = new();
 
     private RunnerLeaseOfferService CreateService(
-        IRunnerSlotEntitlement? slots = null,
         IBudgetCapsProvider? budgetCaps = null,
         IReviewSpendAccumulator? spend = null,
-        ILicensingCapabilityService? licensing = null,
+        ILicenseLimitResolver? limits = null,
         IReviewJobExecutionStore? executionStore = null,
-        MeisterDev.ProPR.Application.Interfaces.IClientRegistry? clients = null)
+        MeisterDev.ProPR.Application.Interfaces.IClientRegistry? clients = null,
+        ILicensingCapabilityService? licensing = null)
     {
         return new RunnerLeaseOfferService(
             this._runners,
@@ -429,11 +656,11 @@ public sealed class RunnerLeaseOfferServiceTests
             this._tools,
             this._workspaces,
             NullLogger<RunnerLeaseOfferService>.Instance,
-            slots,
             budgetCaps,
             spend,
-            licensing,
+            limits,
             executionStore,
-            clients);
+            clients,
+            licensing);
     }
 }

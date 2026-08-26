@@ -600,7 +600,6 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                             PremiumCapabilityKey.CrawlConfigs,
                             PremiumCapabilityKey.CrawlConfigs,
                             true,
-                            true,
                             PremiumCapabilityOverrideState.Default,
                             isAvailable,
                             message)));

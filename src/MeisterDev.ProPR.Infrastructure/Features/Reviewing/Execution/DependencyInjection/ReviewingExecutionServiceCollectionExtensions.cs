@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
@@ -48,7 +49,11 @@ public static class ReviewingExecutionServiceCollectionExtensions
             sp.GetRequiredService<MeisterProPRDbContext>(),
             sp.GetRequiredService<IJobRepository>(),
             sp.GetRequiredService<IOptions<ReviewLeaseOptions>>(),
-            sp.GetRequiredService<ILogger<ReviewJobLeaseStore>>()));
+            sp.GetRequiredService<ILogger<ReviewJobLeaseStore>>(),
+            // Resolved rather than required: a host composed without the licensing module has no peak store,
+            // and the claim records nothing there. Without this the day's peak is never written and the
+            // licensing report carries no previous-day figure.
+            sp.GetService<IConcurrentReviewPeakStore>()));
         // Singleton so the background worker and the control-plane stop endpoint share the same
         // per-job cancellation sources for prompt in-flight interruption on this instance.
         services.AddSingleton<IReviewJobCancellationRegistry, ReviewJobCancellationRegistry>();
@@ -86,7 +91,6 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // that decide who may see which job can be exercised without a git remote.
         services.AddScoped<IRunnerLeaseOfferStore, RunnerLeaseOfferStore>();
         services.AddScoped<IRunnerJobDispatchPreparer, RunnerJobDispatchPreparer>();
-        services.AddScoped<IRunnerSlotEntitlement, RunnerSlotEntitlement>();
         // One predicate for "is this installation running reviews on runners", asked by the worker before
         // it claims and by the stall check that explains an idle queue. TryAdd so the offline harness,
         // which has no database for this to read, keeps the empty-fleet monitor it registered first.

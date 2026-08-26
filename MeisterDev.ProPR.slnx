@@ -7,6 +7,7 @@
         <Project Path="src/MeisterDev.ProPR.CodeInsights.Contracts/MeisterDev.ProPR.CodeInsights.Contracts.csproj" />
         <Project Path="src/MeisterDev.ProPR.CodeInsights/MeisterDev.ProPR.CodeInsights.csproj" />
         <Project Path="src/MeisterDev.ProPR.Infrastructure/MeisterDev.ProPR.Infrastructure.csproj" />
+        <Project Path="src/MeisterDev.ProPR.Licensing/MeisterDev.ProPR.Licensing.csproj" />
         <Project Path="src/MeisterDev.ProPR.Observability/MeisterDev.ProPR.Observability.csproj" />
         <Project Path="src/MeisterDev.ProPR.Web/MeisterDev.ProPR.Web.csproj" />
         <Project Path="src/MeisterDev.ProPR.ProCursor.Contracts/MeisterDev.ProPR.ProCursor.Contracts.csproj" />
@@ -28,6 +29,7 @@
         <Project Path="tests/MeisterDev.ProPR.TestSupport/MeisterDev.ProPR.TestSupport.csproj" />
         <Project Path="tests/MeisterDev.ProPR.CodeInsights.Tests/MeisterDev.ProPR.CodeInsights.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Infrastructure.Tests/MeisterDev.ProPR.Infrastructure.Tests.csproj" />
+        <Project Path="tests/MeisterDev.ProPR.Licensing.Tests/MeisterDev.ProPR.Licensing.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Observability.Tests/MeisterDev.ProPR.Observability.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.ProCursor.Service.Tests/MeisterDev.ProPR.ProCursor.Service.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Runner.Contracts.Tests/MeisterDev.ProPR.Runner.Contracts.Tests.csproj" />

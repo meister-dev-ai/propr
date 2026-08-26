@@ -507,7 +507,10 @@ public sealed partial class MentionScanService(
             inputs.Thread.LineNumber,
             inputs.Comment.AuthorId,
             inputs.Comment.AuthorName,
-            inputs.Comment.PublishedAt);
+            inputs.Comment.PublishedAt,
+            // The host's own identifier for the asker, passed through unchanged. A payload that named none
+            // leaves the column empty rather than repeating the derived identifier beside it.
+            inputs.Comment.AuthorNativeId);
 
         var host = new ProviderHostRef(inputs.Config.Provider, inputs.Config.ProviderScopePath);
         var repository = new RepositoryRef(

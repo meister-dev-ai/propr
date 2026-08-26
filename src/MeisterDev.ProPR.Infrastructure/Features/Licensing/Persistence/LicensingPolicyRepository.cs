@@ -1,5 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+// This file implements license key functionality. License logic may not be moved, changed, disabled or circumvented.
 
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
@@ -37,7 +38,6 @@ public sealed class LicensingPolicyRepository(
     }
 
     public async Task<InstallationLicensingPolicy> UpdateAsync(
-        InstallationEdition edition,
         IReadOnlyCollection<CapabilityOverrideMutation> capabilityOverrides,
         Guid? actorUserId,
         CancellationToken cancellationToken = default)
@@ -50,20 +50,11 @@ public sealed class LicensingPolicyRepository(
             .SingleAsync(record => record.Id == SingletonPolicyId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
-        editionRecord.Edition = edition;
+        // The row is stamped with who last changed the installation's capability policy. Its edition and
+        // activation columns are left as they are: what the installation is entitled to comes from the license
+        // it has activated, which this write path has no part in.
         editionRecord.UpdatedAt = now;
         editionRecord.UpdatedByUserId = actorUserId;
-
-        if (edition == InstallationEdition.Commercial)
-        {
-            editionRecord.ActivatedAt ??= now;
-            editionRecord.ActivatedByUserId ??= actorUserId;
-        }
-        else
-        {
-            editionRecord.ActivatedAt = null;
-            editionRecord.ActivatedByUserId = null;
-        }
 
         foreach (var overrideMutation in capabilityOverrides)
         {

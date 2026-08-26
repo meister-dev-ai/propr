@@ -7,6 +7,7 @@ var repoRoot = FindRepoRoot(Path.GetDirectoryName(appFilePath)!);
 var outputFile = Path.Combine(repoRoot, "docs", "reference", "source-license-map.md");
 
 const string commercialNotice = "This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.";
+const string licenseKeyNotice = "This file implements license key functionality. License logic may not be moved, changed, disabled or circumvented.";
 
 var scanRoots = new[]
 {
@@ -21,13 +22,23 @@ var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     ".vue",
 };
 
-var commercialFiles = scanRoots
+var markedFiles = scanRoots
     .Where(Directory.Exists)
     .SelectMany(root => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
     .Where(path => allowedExtensions.Contains(Path.GetExtension(path)))
-    .Where(path => File.ReadAllText(path).Contains(commercialNotice, StringComparison.Ordinal))
-    .Select(path => Path.GetRelativePath(repoRoot, path).Replace(Path.DirectorySeparatorChar, '/'))
-    .OrderBy(path => path, StringComparer.Ordinal)
+    .Select(path => new
+    {
+        Path = Path.GetRelativePath(repoRoot, path).Replace(Path.DirectorySeparatorChar, '/'),
+        Text = File.ReadAllText(path),
+    })
+    .Select(file => new
+    {
+        file.Path,
+        IsCommercial = file.Text.Contains(commercialNotice, StringComparison.Ordinal),
+        IsLicenseKey = file.Text.Contains(licenseKeyNotice, StringComparison.Ordinal),
+    })
+    .Where(file => file.IsCommercial || file.IsLicenseKey)
+    .OrderBy(file => file.Path, StringComparer.Ordinal)
     .ToArray();
 
 Directory.CreateDirectory(Path.GetDirectoryName(outputFile)!);
@@ -42,12 +53,25 @@ builder.AppendLine("| Path or file | Source license | Capability classification 
 builder.AppendLine("|---|---|---|---|");
 builder.AppendLine("| `docs/` | Elastic License 2.0 unless otherwise noted | Documentation | This row is maintained by the generator as a repository convention. |");
 
-foreach (var file in commercialFiles)
+foreach (var file in markedFiles)
 {
-    var classification = "Commercial capability implementation";
-    var notes = "Marked in-source with the commercial-only functionality notice.";
+    var classification = file switch
+    {
+        { IsCommercial: true, IsLicenseKey: true } => "Commercial capability implementation and license key functionality",
+        { IsLicenseKey: true } => "License key functionality",
+        _ => "Commercial capability implementation",
+    };
 
-    if (file is "src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantAuthController.cs"
+    var notes = file switch
+    {
+        { IsCommercial: true, IsLicenseKey: true } =>
+            "Marked in-source with both notices. The Elastic License 2.0 restriction on circumventing license key functionality applies to it.",
+        { IsLicenseKey: true } =>
+            "Marked in-source with the license key functionality notice. It runs in every edition; the Elastic License 2.0 restriction on circumventing license key functionality applies to it.",
+        _ => "Marked in-source with the commercial-only functionality notice.",
+    };
+
+    if (file.Path is "src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantAuthController.cs"
         or "src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/Persistence/TenantAuthService.cs")
     {
         classification = "Mixed file with commercial capability implementation";
@@ -55,7 +79,7 @@ foreach (var file in commercialFiles)
     }
 
     builder.Append("| `")
-        .Append(file)
+        .Append(file.Path)
         .Append("` | Elastic License 2.0 | ")
         .Append(classification)
         .Append(" | ")
@@ -63,7 +87,7 @@ foreach (var file in commercialFiles)
         .AppendLine(" |");
 }
 
-builder.AppendLine("| All other repository files unless otherwise noted | Elastic License 2.0 | Community or shared | No commercial-only functionality notice detected in the scanned source files. |");
+builder.AppendLine("| All other repository files unless otherwise noted | Elastic License 2.0 | Community or shared | Neither the commercial-only functionality notice nor the license key functionality notice was detected in the scanned source files. |");
 
 File.WriteAllText(outputFile, builder.ToString(), new UTF8Encoding(false));
 Console.WriteLine($"Updated {outputFile}");

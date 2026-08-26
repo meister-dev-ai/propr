@@ -383,4 +383,10 @@ public interface IJobRepository : IReviewFileResultStore
         string? prSourceBranch,
         string? prTargetBranch,
         CancellationToken ct = default);
+
+    /// <summary>
+    ///     Persists the author the provider reported for the reviewed pull request, overwriting whatever an
+    ///     earlier fetch of the same job recorded. No-op when the job no longer exists.
+    /// </summary>
+    Task UpdatePullRequestAuthorAsync(Guid id, PullRequestAuthor author, CancellationToken ct = default);
 }

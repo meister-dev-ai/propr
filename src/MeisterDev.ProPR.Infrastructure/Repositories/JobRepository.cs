@@ -4,6 +4,8 @@
 
 using System.Linq.Expressions;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
@@ -20,7 +22,8 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 public sealed partial class JobRepository(
     MeisterProPRDbContext dbContext,
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
-    ILogger<JobRepository> logger) : IJobRepository
+    ILogger<JobRepository> logger,
+    IAuthorActivityRecorder? authorActivityRecorder = null) : IJobRepository
 {
     /// <summary>How much of a review summary the history list carries per row.</summary>
     private const int ResultSummaryExcerptLength = 200;
@@ -700,7 +703,6 @@ public sealed partial class JobRepository(
         job.ApplyResult(result);
         job.Status = JobStatus.Completed;
         job.CompletedAt = DateTimeOffset.UtcNow;
-        await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
 
         // A per-increment soft cap stops a running job from scanning further files but lets it finish with a
         // synthesis, so the job completes normally. Record the breach on the completed job so the UI can mark the
@@ -713,7 +715,77 @@ public sealed partial class JobRepository(
         }
 
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
-        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+
+        try
+        {
+            // An in-process review and a runner's submission both reach this method through the same publication
+            // step, so one hook covers either.
+            await this.RecordAuthorActivityAsync(job, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            // The completion is durable at this point. Metering is optional, so cancellation while it is being
+            // recorded must not leave a terminal job holding an execution lease or an open protocol.
+            try
+            {
+                await this.ClearLeaseAsync(job, CancellationToken.None).ConfigureAwait(false);
+            }
+            finally
+            {
+                await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Puts the reviewed pull request's author into the current month's rollup.
+    /// </summary>
+    /// <remarks>
+    ///     A job whose columns name no author contributes nothing. The author is only known from a fetch, so a
+    ///     job that never had one recorded is left out of the count rather than counted as an unknown person.
+    ///     <para>
+    ///         Fail-soft. Nothing in the review reads the rollup, so a write that fails is logged and the job
+    ///         still completes. What a lost write costs is one author missing from one month, which undercounts
+    ///         that month unless the same author has other work complete within it; it never blocks the review
+    ///         or leaves the job in a state that has to be repaired.
+    ///     </para>
+    ///     <para>
+    ///         Rebuilding the author reference happens inside the guarded block, because it parses the stored
+    ///         host URL and a row carrying one this repository cannot parse would otherwise throw past the
+    ///         guard and fail the completion.
+    ///     </para>
+    ///     <para>
+    ///         The signals the row carries about the account travel with it, because whether the author counts
+    ///         is decided where they are recorded. The bot flag is the provider's own, and it is stated by
+    ///         GitHub alone; the login and the display name are what the name-based rules read.
+    ///     </para>
+    /// </remarks>
+    private async Task RecordAuthorActivityAsync(ReviewJob job, CancellationToken ct)
+    {
+        if (authorActivityRecorder is null || string.IsNullOrWhiteSpace(job.PrAuthorExternalUserId))
+        {
+            return;
+        }
+
+        try
+        {
+            var author = job.PullRequestAuthorReference!;
+            await authorActivityRecorder
+                .RecordAsync(
+                    new AuthorActivityObservation(
+                        author.Host,
+                        author.ExternalUserId,
+                        AuthorActivitySource.Review,
+                        author.Login,
+                        author.DisplayName,
+                        author.IsBot),
+                    ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            this.LogAuthorActivityNotRecorded(exception, job.Id);
+        }
     }
 
     /// <inheritdoc />
@@ -1245,6 +1317,24 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
+    public async Task UpdatePullRequestAuthorAsync(
+        Guid id,
+        PullRequestAuthor author,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(author);
+
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct).ConfigureAwait(false);
+        if (job is null)
+        {
+            return;
+        }
+
+        job.SetPullRequestAuthor(author);
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<string?> FindRecordedRepositoryIdAsync(
         Guid clientId,
         string organizationUrl,
@@ -1561,4 +1651,10 @@ public sealed partial class JobRepository(
         Level = LogLevel.Warning,
         Message = "Failed to close orphaned protocols for job {JobId}; the next terminal or reset pass will retry.")]
     private partial void LogCloseOrphanedProtocolsFailed(Exception exception, Guid jobId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to record the author of job {JobId} in the monthly rollup; the job completed and the "
+                  + "month may undercount this author.")]
+    private partial void LogAuthorActivityNotRecorded(Exception exception, Guid jobId);
 }

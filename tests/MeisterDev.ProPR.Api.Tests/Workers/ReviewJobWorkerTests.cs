@@ -52,7 +52,9 @@ public class ReviewJobWorkerTests
 
     /// <summary>
     ///     A lease store that offers the supplied jobs as claim candidates and grants each exactly once,
-    ///     which is what the database does: a second claim of the same job finds it no longer pending.
+    ///     which is what the database does: a second claim of the same job finds it no longer pending. The
+    ///     capped claim counts the grants it has made against the cap it is given, as the database counts
+    ///     executing jobs across every host.
     /// </summary>
     private static IReviewJobLeaseStore CreateLeaseStore(params ReviewJob[] candidates)
     {
@@ -63,24 +65,41 @@ public class ReviewJobWorkerTests
             .Returns(call => Task.FromResult<IReadOnlyList<ReviewJob>>(call.ArgAt<DateTimeOffset?>(1) is null ? candidates : []));
 
         store.TryClaimAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(Claim(call.ArgAt<Guid>(0), call.ArgAt<string>(1))));
+
+        store.TryClaimWithinProcessingCapAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                var jobId = call.ArgAt<Guid>(0);
                 lock (granted)
                 {
-                    if (!granted.Add(jobId))
+                    var cap = call.ArgAt<int>(3);
+                    if (granted.Count >= cap)
                     {
-                        return Task.FromResult<ReviewJobLease?>(null);
+                        return Task.FromResult(ReviewJobCappedClaim.AtCapacity(cap, granted.Count));
                     }
                 }
 
-                return Task.FromResult<ReviewJobLease?>(new ReviewJobLease(jobId, call.ArgAt<string>(1), 1, DateTimeOffset.UtcNow.AddMinutes(2)));
+                var lease = Claim(call.ArgAt<Guid>(0), call.ArgAt<string>(1));
+                return Task.FromResult(lease is null ? ReviewJobCappedClaim.NotClaimable : ReviewJobCappedClaim.Granted(lease));
             });
 
         store.TryRenewAsync(Arg.Any<ReviewJobLease>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewJobLeaseRenewal(true, DateTimeOffset.UtcNow.AddMinutes(2)));
 
         return store;
+
+        ReviewJobLease? Claim(Guid jobId, string owner)
+        {
+            lock (granted)
+            {
+                if (!granted.Add(jobId))
+                {
+                    return null;
+                }
+            }
+
+            return new ReviewJobLease(jobId, owner, 1, DateTimeOffset.UtcNow.AddMinutes(2));
+        }
     }
 
     private static ReviewJobMetrics CreateMetrics()
@@ -172,8 +191,13 @@ public class ReviewJobWorkerTests
         Assert.False(worker.IsRunning);
     }
 
-    [Fact]
-    public async Task Worker_HoldsPendingJob_WhenABudgetCapIsAlreadyReached()
+    // Run once with the Budgeting capability available and once without it: a cap configured while the
+    // installation was licensed goes on protecting it from spend after the license lapsed, so admission holds
+    // the job either way.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Worker_HoldsPendingJob_WhenABudgetCapIsAlreadyReached(bool budgetingAvailable)
     {
         var repo = Substitute.For<IReviewJobExecutionStore>();
         var job = CreateJob(202);
@@ -208,6 +232,12 @@ public class ReviewJobWorkerTests
                 return Task.CompletedTask;
             });
 
+        // Only the Budgeting capability varies. No concurrency ceiling is resolved in either case, so the two
+        // cases differ on the admission decision alone.
+        var licensing = Substitute.For<ILicensingCapabilityService>();
+        licensing.IsEnabledAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<bool>(budgetingAvailable));
+
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
@@ -216,6 +246,7 @@ public class ReviewJobWorkerTests
         scope.ServiceProvider.Returns(sp);
         sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
         sp.GetService(typeof(IReviewJobLeaseStore)).Returns(leaseStore);
+        sp.GetService(typeof(ILicensingCapabilityService)).Returns(licensing);
         sp.GetService(typeof(IBudgetCapsProvider)).Returns(capsProvider);
         sp.GetService(typeof(IReviewSpendAccumulator)).Returns(accumulator);
         sp.GetService(typeof(IBudgetEventPublisher)).Returns(eventPublisher);
@@ -639,8 +670,8 @@ public class ReviewJobWorkerTests
         sp.GetService(typeof(IReviewJobLeaseStore)).Returns(leaseStore);
         sp.GetService(typeof(IReviewJobProcessor)).Returns(processor);
 
-        // No ILicensingCapabilityService registered -> parallel review execution is treated as enabled,
-        // so only the concurrency cap (2) should bound how many of the 5 pending jobs run at once.
+        // No ILicenseLimitResolver registered -> no concurrency ceiling applies, so only the configured cap
+        // (2) bounds how many of the 5 pending jobs run at once.
         var worker = new ReviewJobWorker(
             scopeFactory,
             CreateWorkerOptions(maxConcurrentReviewJobs: 2),
@@ -803,10 +834,17 @@ public class ReviewJobWorkerTests
         }
     }
 
-    // Without the capability the configured cap is not merely ignored, it is replaced by one. A deployment
-    // that raises the setting to get parallelism back gets a single review either way.
-    [Fact]
-    public async Task Worker_RunsOneJobAtATime_WhenParallelExecutionIsNotLicensed()
+    // The number a replica runs at once is the lower of the configured cap and the resolved ceiling. Raising
+    // the setting above the ceiling does not raise how many reviews run. The ceiling of 10 covers the other
+    // direction: the mock store caps at whatever cap it is passed, so a ceiling above the configured 4
+    // isolates the clamp from the store's own capping.
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(10, 4)]
+    public async Task Worker_RunsTheLowerOfTheConfiguredCapAndTheResolvedCeiling(
+        int ceiling,
+        int expectedStarted)
     {
         var repo = Substitute.For<IReviewJobExecutionStore>();
         var jobs = Enumerable.Range(1, 5).Select(i => CreateJob(3000 + i)).ToArray();
@@ -822,22 +860,8 @@ public class ReviewJobWorkerTests
                 await release.Task;
             });
 
-        var licensing = Substitute.For<ILicensingCapabilityService>();
-        licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, Arg.Any<CancellationToken>())
-            .Returns(new ValueTask<bool>(false));
-
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        var scope = Substitute.For<IServiceScope>();
-        var sp = Substitute.For<IServiceProvider>();
-        scopeFactory.CreateScope().Returns(scope);
-        scope.ServiceProvider.Returns(sp);
-        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
-        sp.GetService(typeof(IReviewJobLeaseStore)).Returns(leaseStore);
-        sp.GetService(typeof(IReviewJobProcessor)).Returns(processor);
-        sp.GetService(typeof(ILicensingCapabilityService)).Returns(licensing);
-
         var worker = new ReviewJobWorker(
-            scopeFactory,
+            CreateScopeFactoryFor(repo, leaseStore, processor, CountCeilingOf(ceiling)),
             CreateWorkerOptions(maxConcurrentReviewJobs: 4),
             CreateLeaseOptions(),
             CreateMetrics(),
@@ -851,15 +875,15 @@ public class ReviewJobWorkerTests
         try
         {
             await WaitUntilAsync(
-                () => Volatile.Read(ref startedCount) >= 1,
+                () => Volatile.Read(ref startedCount) >= expectedStarted,
                 TimeSpan.FromSeconds(2),
-                "Worker never started a job.");
+                "Worker never started the expected number of jobs.");
 
-            // Several more poll cycles: the count must stay pinned at one while that review is blocked,
-            // even though four were configured and five are pending.
+            // Several more poll cycles: the started count must stay where it is while those reviews are
+            // blocked, with four configured and five pending.
             await Task.Delay(200, CancellationToken.None);
 
-            Assert.Equal(1, Volatile.Read(ref startedCount));
+            Assert.Equal(expectedStarted, Volatile.Read(ref startedCount));
         }
         finally
         {
@@ -867,6 +891,224 @@ public class ReviewJobWorkerTests
             cts.Cancel();
             await worker.StopAsync(CancellationToken.None);
         }
+    }
+
+    // The uncapped claim carries no ceiling, so a capped installation must not reach for it: the ceiling has
+    // to be part of the same statement that takes the job, and the cap it carries is the resolved number.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task Worker_ClaimsThroughTheCappedClaim_CarryingTheResolvedCeiling(int ceiling)
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(3100);
+        var leaseStore = CreateLeaseStore(job);
+
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processor = Substitute.For<IReviewJobProcessor>();
+        processor.ProcessAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                started.TrySetResult();
+                await release.Task;
+            });
+
+        var worker = new ReviewJobWorker(
+            CreateScopeFactoryFor(repo, leaseStore, processor, CountCeilingOf(ceiling)),
+            CreateWorkerOptions(maxConcurrentReviewJobs: 4),
+            CreateLeaseOptions(),
+            CreateMetrics(),
+            CreateCancellationRegistry(),
+            TimeProvider.System,
+            Substitute.For<ILogger<ReviewJobWorker>>());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = worker.StartAsync(cts.Token);
+
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        finally
+        {
+            release.TrySetResult();
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        await leaseStore.Received().TryClaimWithinProcessingCapAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), ceiling, Arg.Any<CancellationToken>());
+        await leaseStore.DidNotReceiveWithAnyArgs().TryClaimAsync(default, default!, default, default);
+    }
+
+    // Under an unlimited ceiling nothing is counted and the claim goes through the uncapped path. Taking the
+    // admission would serialize every claim installation-wide while nothing is being counted.
+    [Fact]
+    public async Task Worker_ClaimsUncappedAndCountsNothing_UnderAnUnlimitedCeiling()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(3300);
+        var leaseStore = CreateLeaseStore(job);
+
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processor = Substitute.For<IReviewJobProcessor>();
+        processor.ProcessAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                started.TrySetResult();
+                await release.Task;
+            });
+
+        var limits = Substitute.For<ILicenseLimitResolver>();
+        limits.ResolveAsync(LicenseLimitKey.ConcurrentReviews, Arg.Any<CancellationToken>())
+            .Returns(LicenseLimitResolution.Unlimited(LicenseLimitKey.ConcurrentReviews, LicenseLimitSource.License, LicenseStage.Active));
+
+        var worker = new ReviewJobWorker(
+            CreateScopeFactoryFor(repo, leaseStore, processor, limits),
+            CreateWorkerOptions(maxConcurrentReviewJobs: 4),
+            CreateLeaseOptions(),
+            CreateMetrics(),
+            CreateCancellationRegistry(),
+            TimeProvider.System,
+            Substitute.For<ILogger<ReviewJobWorker>>());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = worker.StartAsync(cts.Token);
+
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        finally
+        {
+            release.TrySetResult();
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        await leaseStore.Received().TryClaimAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await leaseStore.DidNotReceiveWithAnyArgs().TryClaimWithinProcessingCapAsync(default, default!, default, default, default);
+        await repo.DidNotReceive().CountProcessingJobsAsync(Arg.Any<CancellationToken>());
+    }
+
+    // The count decides whether the scan ends early, so it has to be compared against the resolved ceiling
+    // rather than against zero: an installation allowed three reviews may claim while two are running.
+    [Fact]
+    public async Task Worker_LeavesTheScan_WhenTheProcessingCountAlreadyMeetsTheCeiling()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        repo.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(3);
+        var jobs = Enumerable.Range(1, 3).Select(i => CreateJob(3400 + i)).ToArray();
+        var leaseStore = CreateLeaseStore(jobs);
+        var processor = Substitute.For<IReviewJobProcessor>();
+
+        var worker = new ReviewJobWorker(
+            CreateScopeFactoryFor(repo, leaseStore, processor, CountCeilingOf(3)),
+            CreateWorkerOptions(maxConcurrentReviewJobs: 4),
+            CreateLeaseOptions(),
+            CreateMetrics(),
+            CreateCancellationRegistry(),
+            TimeProvider.System,
+            Substitute.For<ILogger<ReviewJobWorker>>());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = worker.StartAsync(cts.Token);
+
+        try
+        {
+            await Task.Delay(200, CancellationToken.None);
+
+            await processor.DidNotReceiveWithAnyArgs().ProcessAsync(default!, default);
+            await leaseStore.DidNotReceiveWithAnyArgs().TryClaimWithinProcessingCapAsync(default, default!, default, default, default);
+
+            // The count is read before the candidate query, so a tick that ends here costs one count and no
+            // candidate scan. Reading it per candidate would have queried the window first.
+            await leaseStore.DidNotReceiveWithAnyArgs().GetClaimCandidatesAsync(default, default, default);
+        }
+        finally
+        {
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    // The race the capped claim closes: this replica's count reports room, because the replica that claimed
+    // did so after that count was read. The refusal from the claim itself has to hold, and it has to end the
+    // scan rather than move on to the next candidate.
+    [Fact]
+    public async Task Worker_StartsNothing_WhenTheCappedClaimReportsTheInstallationAtCapacity()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var jobs = Enumerable.Range(1, 3).Select(i => CreateJob(3200 + i)).ToArray();
+
+        var leaseStore = CreateLeaseStore(jobs);
+        leaseStore.TryClaimWithinProcessingCapAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(ReviewJobCappedClaim.AtCapacity(1, 1));
+
+        var startedCount = 0;
+        var processor = Substitute.For<IReviewJobProcessor>();
+        processor.ProcessAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Interlocked.Increment(ref startedCount);
+                return Task.CompletedTask;
+            });
+
+        var worker = new ReviewJobWorker(
+            CreateScopeFactoryFor(repo, leaseStore, processor, CountCeilingOf(1)),
+            CreateWorkerOptions(maxConcurrentReviewJobs: 4),
+            CreateLeaseOptions(),
+            CreateMetrics(),
+            CreateCancellationRegistry(),
+            TimeProvider.System,
+            Substitute.For<ILogger<ReviewJobWorker>>());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = worker.StartAsync(cts.Token);
+
+        try
+        {
+            // Several poll cycles: nothing may start, and the scan must stop at the first refusal rather
+            // than work through the rest of the window.
+            await Task.Delay(200, CancellationToken.None);
+
+            Assert.Equal(0, Volatile.Read(ref startedCount));
+            await leaseStore.Received().TryClaimWithinProcessingCapAsync(jobs[0].Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), 1, Arg.Any<CancellationToken>());
+            await leaseStore.DidNotReceive().TryClaimWithinProcessingCapAsync(
+                jobs[1].Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static ILicenseLimitResolver CountCeilingOf(long cap)
+    {
+        var limits = Substitute.For<ILicenseLimitResolver>();
+        limits.ResolveAsync(LicenseLimitKey.ConcurrentReviews, Arg.Any<CancellationToken>())
+            .Returns(LicenseLimitResolution.Of(LicenseLimitKey.ConcurrentReviews, cap, LicenseLimitSource.License, LicenseStage.Active));
+        return limits;
+    }
+
+    private static IServiceScopeFactory CreateScopeFactoryFor(
+        IReviewJobExecutionStore repo,
+        IReviewJobLeaseStore leaseStore,
+        IReviewJobProcessor processor,
+        ILicenseLimitResolver limits)
+    {
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobLeaseStore)).Returns(leaseStore);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(processor);
+        sp.GetService(typeof(ILicenseLimitResolver)).Returns(limits);
+        return scopeFactory;
     }
 
     // The behaviour that replaces failing jobs by age: a running job is protected by its live lease, so a

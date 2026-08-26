@@ -44,7 +44,6 @@ function setCapabilities(capabilities: Array<{ key: string; isAvailable: boolean
     key: capability.key,
     displayName: capability.key,
     requiresCommercial: true,
-    defaultWhenCommercial: true,
     overrideState: 'default',
     isAvailable: capability.isAvailable,
     message: capability.message ?? null,

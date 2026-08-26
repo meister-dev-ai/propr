@@ -31,14 +31,13 @@ public sealed class LicensingPolicyRepositoryTests
     }
 
     [Fact]
-    public async Task UpdateAsync_CommercialEdition_PersistsActivationAndOverrideAuditFields()
+    public async Task UpdateAsync_PersistsTheOverrideAndItsAuditFields()
     {
         await using var db = CreateContext();
         var actorUserId = Guid.NewGuid();
         var sut = new LicensingPolicyRepository(db, new StaticPremiumCapabilityCatalog());
 
         var policy = await sut.UpdateAsync(
-            InstallationEdition.Commercial,
             [
                 new CapabilityOverrideMutation(
                     PremiumCapabilityKey.MultipleScmProviders,
@@ -47,9 +46,6 @@ public sealed class LicensingPolicyRepositoryTests
             actorUserId,
             CancellationToken.None);
 
-        Assert.Equal(InstallationEdition.Commercial, policy.Edition);
-        Assert.NotNull(policy.ActivatedAt);
-        Assert.Equal(actorUserId, policy.ActivatedByUserId);
         Assert.Equal(actorUserId, policy.UpdatedByUserId);
         Assert.Equal(PremiumCapabilityOverrideState.Disabled, policy.GetOverrideState(PremiumCapabilityKey.MultipleScmProviders));
 
@@ -58,14 +54,22 @@ public sealed class LicensingPolicyRepositoryTests
         Assert.Equal(PremiumCapabilityOverrideState.Disabled, overrideRecord.OverrideState);
     }
 
+    // An override request carries no edition, so writing one must leave the stored edition and its activation
+    // metadata where the license activation put them.
     [Fact]
-    public async Task UpdateAsync_DowngradeToCommunity_ClearsActivationMetadataAndDefaultOverrideRows()
+    public async Task UpdateAsync_LeavesTheStoredEditionUntouched()
     {
         await using var db = CreateContext();
         var sut = new LicensingPolicyRepository(db, new StaticPremiumCapabilityCatalog());
+        await sut.GetAsync(CancellationToken.None);
 
-        await sut.UpdateAsync(
-            InstallationEdition.Commercial,
+        var activatedAt = DateTimeOffset.UtcNow.AddDays(-3);
+        var editionRecord = await db.InstallationEditions.SingleAsync();
+        editionRecord.Edition = InstallationEdition.Commercial;
+        editionRecord.ActivatedAt = activatedAt;
+        await db.SaveChangesAsync();
+
+        var policy = await sut.UpdateAsync(
             [
                 new CapabilityOverrideMutation(
                     PremiumCapabilityKey.SsoAuthentication,
@@ -74,8 +78,26 @@ public sealed class LicensingPolicyRepositoryTests
             Guid.NewGuid(),
             CancellationToken.None);
 
-        var downgradedPolicy = await sut.UpdateAsync(
-            InstallationEdition.Community,
+        Assert.Equal(InstallationEdition.Commercial, policy.Edition);
+        Assert.Equal(activatedAt, policy.ActivatedAt);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_DefaultOverride_RemovesTheOverrideRow()
+    {
+        await using var db = CreateContext();
+        var sut = new LicensingPolicyRepository(db, new StaticPremiumCapabilityCatalog());
+
+        await sut.UpdateAsync(
+            [
+                new CapabilityOverrideMutation(
+                    PremiumCapabilityKey.SsoAuthentication,
+                    PremiumCapabilityOverrideState.Disabled),
+            ],
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        var clearedPolicy = await sut.UpdateAsync(
             [
                 new CapabilityOverrideMutation(
                     PremiumCapabilityKey.SsoAuthentication,
@@ -84,10 +106,7 @@ public sealed class LicensingPolicyRepositoryTests
             Guid.NewGuid(),
             CancellationToken.None);
 
-        Assert.Equal(InstallationEdition.Community, downgradedPolicy.Edition);
-        Assert.Null(downgradedPolicy.ActivatedAt);
-        Assert.Null(downgradedPolicy.ActivatedByUserId);
-        Assert.Empty(downgradedPolicy.CapabilityOverrides);
+        Assert.Empty(clearedPolicy.CapabilityOverrides);
         Assert.Empty(await db.PremiumCapabilityOverrides.ToListAsync());
     }
 

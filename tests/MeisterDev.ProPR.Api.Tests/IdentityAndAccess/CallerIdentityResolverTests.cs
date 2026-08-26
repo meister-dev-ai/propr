@@ -4,7 +4,6 @@
 using System.Security.Claims;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
-using MeisterDev.ProPR.Application.Features.Licensing.Dtos;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -163,7 +162,7 @@ public sealed class CallerIdentityResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_WithCommunityEditionAndHiddenTenant_DoesNotDeriveClientRoles()
+    public async Task ResolveAsync_WithoutMultiTenancyAndHiddenTenant_DoesNotDeriveClientRoles()
     {
         var userId = Guid.NewGuid();
         var hiddenTenantId = Guid.NewGuid();
@@ -203,8 +202,9 @@ public sealed class CallerIdentityResolverTests
             .Returns(user);
 
         var licensingCapabilityService = Substitute.For<ILicensingCapabilityService>();
-        licensingCapabilityService.GetSummaryAsync(Arg.Any<CancellationToken>())
-            .Returns(new LicensingSummaryDto(InstallationEdition.Community, DateTimeOffset.UtcNow, []));
+        licensingCapabilityService
+            .IsEnabledAsync(PremiumCapabilityKey.MultiTenancy, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<bool>(false));
 
         var services = new ServiceCollection();
         services.AddSingleton(jwtTokenService);
@@ -314,6 +314,18 @@ public sealed class CallerIdentityResolverTests
         Assert.Equal(ClientRole.ClientUser, clientRoles[clientId]);
     }
 
+    [Fact]
+    public async Task ResolveAsync_DatabaseHostWithoutLicensingService_HidesRealTenantClients()
+    {
+        var tenantId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var user = CreateUserWithTenantMembership(tenantId, TenantRole.TenantAdministrator);
+
+        var clientRoles = await ResolveEffectiveClientRolesAsync(user, tenantId, clientId, registerLicensingService: false);
+
+        Assert.Empty(clientRoles);
+    }
+
     private static AppUser CreateUserWithTenantMembership(Guid tenantId, TenantRole role)
     {
         var userId = Guid.NewGuid();
@@ -341,7 +353,8 @@ public sealed class CallerIdentityResolverTests
     private static async Task<Dictionary<Guid, ClientRole>> ResolveEffectiveClientRolesAsync(
         AppUser user,
         Guid clientTenantId,
-        Guid clientId)
+        Guid clientId,
+        bool registerLicensingService = true)
     {
         var jwtTokenService = Substitute.For<IJwtTokenService>();
         jwtTokenService.ValidateAccessToken("valid-token")
@@ -358,11 +371,17 @@ public sealed class CallerIdentityResolverTests
         var userRepository = Substitute.For<IUserRepository>();
         userRepository.GetByIdWithAssignmentsAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
 
-        // No licensing service registered => the resolver treats the installation as Commercial, so the
-        // Community client-visibility filter does not run.
         var services = new ServiceCollection();
         services.AddSingleton(jwtTokenService);
         services.AddSingleton(userRepository);
+        if (registerLicensingService)
+        {
+            var licensing = Substitute.For<ILicensingCapabilityService>();
+            licensing.IsEnabledAsync(PremiumCapabilityKey.MultiTenancy, Arg.Any<CancellationToken>())
+                .Returns(new ValueTask<bool>(true));
+            services.AddSingleton(licensing);
+        }
+
         services.AddDbContext<MeisterProPRDbContext>(options =>
             options.UseInMemoryDatabase($"CallerIdentityResolverTests_{Guid.NewGuid()}"));
 

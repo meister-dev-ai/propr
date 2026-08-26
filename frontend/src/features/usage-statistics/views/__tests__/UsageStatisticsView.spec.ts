@@ -102,6 +102,35 @@ describe('UsageStatisticsView', () => {
     expect(setEnabledMock).toHaveBeenCalledWith(false)
   })
 
+  // A community snapshot is anonymous, so the page says so and names nothing that would identify the
+  // installation.
+  it('describes a community snapshot as anonymous', async () => {
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="usage-statistics-summary-commercial"]').exists()).toBe(false)
+    const summary = wrapper.get('[data-testid="usage-statistics-summary-community"]').text()
+    expect(summary).toContain('anonymous snapshot')
+    expect(summary).not.toContain('license identifier')
+  })
+
+  // A commercial snapshot carries the license identifier, so the page has to say it is not anonymous and name
+  // what is added rather than leaving an administrator to read the payload for it.
+  it('names what a commercial snapshot adds and says it is not anonymous', async () => {
+    settings.value = buildSettings({ edition: 'commercial', managedByLicense: true, communityOptIn: false })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="usage-statistics-summary-community"]').exists()).toBe(false)
+    const summary = wrapper.get('[data-testid="usage-statistics-summary-commercial"]').text()
+    expect(summary).toContain('not anonymous')
+    expect(summary).toContain('license identifier')
+    expect(summary).toContain('licensing identity')
+    expect(summary).toContain('hash of the system')
+    expect(summary).toContain('clients, enrolled runners and concurrent reviews')
+  })
+
   // The control stays visible under a license rather than disappearing, so administrators can see the
   // current state.
   it('renders the control visible but locked under a commercial license', async () => {

@@ -21,6 +21,7 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 /// <summary>EF Implementation of <see cref="IClientAdminService" />.</summary>
 public sealed class ClientAdminService(
     MeisterProPRDbContext dbContext,
+    IStockQuotaGate stockQuotaGate,
     IReviewPipelineProfileProvider? reviewPipelineProfileProvider = null,
     IProviderActivationService? providerActivationService = null,
     ILicensingCapabilityService? licensingCapabilityService = null) : IClientAdminService
@@ -28,7 +29,7 @@ public sealed class ClientAdminService(
     /// <inheritdoc />
     public async Task<IReadOnlyList<ClientDto>> GetAllAsync(CancellationToken ct = default)
     {
-        var clients = await this.ClientsWithTenantQuery(await this.IsCommunityEditionAsync(ct))
+        var clients = await this.ClientsWithTenantQuery(await this.IsMultiTenancyAvailableAsync(ct))
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync(ct);
         return clients.Select(ToDto).ToList().AsReadOnly();
@@ -37,7 +38,7 @@ public sealed class ClientAdminService(
     /// <inheritdoc />
     public async Task<ClientDto?> GetByIdAsync(Guid clientId, CancellationToken ct = default)
     {
-        var client = await this.ClientsWithTenantQuery(await this.IsCommunityEditionAsync(ct))
+        var client = await this.ClientsWithTenantQuery(await this.IsMultiTenancyAvailableAsync(ct))
             .SingleOrDefaultAsync(record => record.Id == clientId, ct);
         return client is null ? null : ToDto(client);
     }
@@ -45,6 +46,15 @@ public sealed class ClientAdminService(
     /// <inheritdoc />
     public async Task<ClientDto> CreateAsync(Guid tenantId, string displayName, CancellationToken ct = default)
     {
+        // The admission is asked for before anything is written, so the count it was decided against and the
+        // insert are serialized together. It holds the transaction the insert and the read below run in.
+        await using var admission = await stockQuotaGate.AdmitOneAsync(LicenseLimitKey.Clients, ct)
+            .ConfigureAwait(false);
+        if (!admission.IsAdmitted)
+        {
+            throw new InvalidOperationException(DescribeClientCeilingRefusal(admission));
+        }
+
         var client = new ClientRecord
         {
             Id = Guid.NewGuid(),
@@ -54,10 +64,40 @@ public sealed class ClientAdminService(
             CreatedAt = DateTimeOffset.UtcNow,
         };
         dbContext.Clients.Add(client);
-        await dbContext.SaveChangesAsync(ct);
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
 
-        return await this.GetByIdAsync(client.Id, ct)
-               ?? throw new InvalidOperationException($"Client {client.Id} was created but could not be reloaded.");
+        // The read runs inside the admission's transaction, where the inserted row is visible. The commit
+        // comes after it, because committing ends the transaction the read needs.
+        var created = await this.GetByIdAsync(client.Id, ct).ConfigureAwait(false)
+                      ?? throw new InvalidOperationException($"Client {client.Id} could not be read back after it was inserted; the creation was rolled back.");
+
+        await admission.CommitAsync(ct).ConfigureAwait(false);
+        return created;
+    }
+
+    /// <summary>
+    ///     The refusal an operator reads, naming the licensed ceiling and the number of clients the installation
+    ///     holds. Both nouns agree with the number in front of them, because either can be one.
+    /// </summary>
+    /// <param name="admission">The refused admission, which carries both numbers.</param>
+    /// <returns>The refusal.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The refusal carries no counted ceiling, which is a fault in the decision rather than a number to
+    ///     report: a creation is only refused against a ceiling a count was compared with.
+    /// </exception>
+    private static string DescribeClientCeilingRefusal(StockQuotaAdmission admission)
+    {
+        if (admission.Limit.Count is not { } ceiling)
+        {
+            throw new InvalidOperationException(
+                $"A client creation was refused against a {admission.Limit.Ceiling} ceiling, which carries no number to report.");
+        }
+
+        var held = admission.CurrentCount;
+
+        return $"The license in force allows {ceiling} {(ceiling == 1 ? "client" : "clients")} "
+               + $"and {held} {(held == 1 ? "exists" : "exist")}. "
+               + "Creating another requires removing a client, or a license that allows more.";
     }
 
     /// <inheritdoc />
@@ -84,7 +124,7 @@ public sealed class ClientAdminService(
         bool? withholdOutOfScopeFindings = null,
         CancellationToken ct = default)
     {
-        var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
+        var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
         var client = await dbContext.Clients
             .Include(record => record.ReviewPasses)
             .FirstOrDefaultAsync(record => record.Id == clientId, ct);
@@ -93,7 +133,7 @@ public sealed class ClientAdminService(
             return null;
         }
 
-        if (!TenantCatalog.IsClientVisible(client.TenantId, isCommunityEdition))
+        if (!TenantCatalog.IsClientVisible(client.TenantId, multiTenancyAvailable))
         {
             return null;
         }
@@ -258,14 +298,14 @@ public sealed class ClientAdminService(
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(Guid clientId, CancellationToken ct = default)
     {
-        var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
+        var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
         var client = await dbContext.Clients.FindAsync([clientId], ct);
         if (client is null)
         {
             return false;
         }
 
-        if (!TenantCatalog.IsClientVisible(client.TenantId, isCommunityEdition))
+        if (!TenantCatalog.IsClientVisible(client.TenantId, multiTenancyAvailable))
         {
             return false;
         }
@@ -290,7 +330,7 @@ public sealed class ClientAdminService(
             return [];
         }
 
-        var clients = await this.ClientsWithTenantQuery(await this.IsCommunityEditionAsync(ct))
+        var clients = await this.ClientsWithTenantQuery(await this.IsMultiTenancyAvailableAsync(ct))
             .Where(c => idList.Contains(c.Id))
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync(ct);
@@ -373,24 +413,19 @@ public sealed class ClientAdminService(
             : DateTimeOffset.UtcNow;
     }
 
-    private IQueryable<ClientRecord> ClientsWithTenantQuery(bool isCommunityEdition)
+    private IQueryable<ClientRecord> ClientsWithTenantQuery(bool multiTenancyAvailable)
     {
         IQueryable<ClientRecord> query = dbContext.Clients
             .AsNoTracking()
             .Include(client => client.Tenant)
             .Include(client => client.ReviewPasses);
 
-        if (isCommunityEdition)
-        {
-            query = query.Where(client => client.TenantId == Guid.Empty || client.TenantId == TenantCatalog.SystemTenantId);
-        }
-
-        return query;
+        return TenantCatalog.VisibleClients(query, multiTenancyAvailable);
     }
 
     private async Task<bool> ExistsVisibleAsync(Guid clientId, CancellationToken ct)
     {
-        return await this.ClientsWithTenantQuery(await this.IsCommunityEditionAsync(ct))
+        return await this.ClientsWithTenantQuery(await this.IsMultiTenancyAvailableAsync(ct))
             .AnyAsync(c => c.Id == clientId, ct);
     }
 
@@ -471,20 +506,15 @@ public sealed class ClientAdminService(
             client.WithholdOutOfScopeFindings);
     }
 
-    private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)
+    // Without the licensing module there is no installation state to read, which is what a deployment with no
+    // database configured looks like. Tenancy is left unrestricted there.
+    private async ValueTask<bool> IsMultiTenancyAvailableAsync(CancellationToken ct)
     {
         if (licensingCapabilityService is null)
         {
-            return false;
+            return true;
         }
 
-        var summaryTask = licensingCapabilityService.GetSummaryAsync(ct);
-        if (summaryTask is null)
-        {
-            return false;
-        }
-
-        var summary = await summaryTask;
-        return summary?.Edition == InstallationEdition.Community;
+        return await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.MultiTenancy, ct);
     }
 }

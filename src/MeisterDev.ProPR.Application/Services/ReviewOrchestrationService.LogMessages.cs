@@ -105,4 +105,10 @@ public sealed partial class ReviewOrchestrationService
         Message =
             "Review job {JobId} was cancelled externally after file review — discarding result; no comment posted")]
     private static partial void LogJobCancelledAfterFileReview(ILogger logger, Guid jobId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Recording the pull request author for job {JobId} failed — the review is unaffected and the "
+                  + "job carries no author")]
+    private static partial void LogPullRequestAuthorNotRecorded(ILogger logger, Guid jobId, Exception ex);
 }

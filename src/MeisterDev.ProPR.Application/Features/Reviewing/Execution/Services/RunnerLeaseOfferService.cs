@@ -12,6 +12,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -43,12 +44,12 @@ public sealed partial class RunnerLeaseOfferService(
     IRunnerJobToolsRegistry tools,
     IRunnerWorkspaceRegistry workspaces,
     ILogger<RunnerLeaseOfferService> logger,
-    IRunnerSlotEntitlement? slots = null,
     IBudgetCapsProvider? budgetCaps = null,
     IReviewSpendAccumulator? spend = null,
-    ILicensingCapabilityService? licensing = null,
+    ILicenseLimitResolver? limits = null,
     IReviewJobExecutionStore? executionStore = null,
-    IClientRegistry? clients = null) : IRunnerLeaseOfferService
+    IClientRegistry? clients = null,
+    ILicensingCapabilityService? licensing = null) : IRunnerLeaseOfferService
 {
     /// <inheritdoc />
     public async Task<RunnerLeaseOffer> OfferAsync(RunnerLeaseRequest request, CancellationToken ct = default)
@@ -75,34 +76,52 @@ public sealed partial class RunnerLeaseOfferService(
             return RunnerLeaseOffer.Refuse(RunnerLeaseRefusal.NoFreeCapacity);
         }
 
-        var runner = await runners.FindByIdAsync(request.RunnerId, ct);
+        var runner = await runners.FindByIdAsync(request.RunnerId, ct).ConfigureAwait(false);
         if (runner is null || runner.State != RunnerState.Enrolled)
         {
             return RunnerLeaseOffer.Refuse(RunnerLeaseRefusal.RegistrationNotUsable);
         }
 
-        if (slots is not null)
+        // Checked on every offer rather than only at enrollment, because a license can lapse while a fleet is
+        // enrolled and running. Without this an installation that lost the capability would keep serving work
+        // to the runners it already has. A host composed without the licensing surface has no service here and
+        // leases as before.
+        if (licensing is not null
+            && !await licensing.IsEnabledAsync(PremiumCapabilityKey.DistributedExecution, ct).ConfigureAwait(false))
         {
-            var admission = await slots.AdmitAsync(runner.Id, ct);
-            if (admission.Refusal != RunnerLeaseRefusal.None)
-            {
-                LogSlotRefusal(logger, runner.Id, admission.Refusal.ToString());
-                return RunnerLeaseOffer.Refuse(admission.Refusal, admission.Detail);
-            }
+            LogNotLicensed(logger, runner.Id);
+            return RunnerLeaseOffer.Refuse(
+                RunnerLeaseRefusal.NotLicensed,
+                "Distributed review execution is not licensed for this installation.");
         }
 
-        // The same one-review-at-a-time rule the in-process worker applies, and at the same point: before
-        // anything is claimed. Without the parallel-execution capability, one review runs across the whole
-        // installation. In a runner fleet, "across every host sharing the database" and "on this host" are
-        // not the same set, so the database's count decides rather than any local view.
-        if (licensing is not null
-            && executionStore is not null
-            && !await licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, ct)
-            && await executionStore.CountProcessingJobsAsync(ct) > 0)
+        // The same concurrency ceiling the in-process worker applies, resolved once per request so every
+        // candidate below is judged against the same number. The ceiling holds across every host sharing the
+        // database, which in a runner fleet is a different set from "on this host". The capped claim below
+        // enforces it; the count here only avoids the candidate query when the answer is already visible. A
+        // host composed without the licensing surface has no resolver and claims uncapped.
+        var ceiling = limits is null
+            ? null
+            : ConcurrentReviewCeiling.From(await limits.ResolveAsync(LicenseLimitKey.ConcurrentReviews, ct).ConfigureAwait(false));
+        if (ceiling is not null)
         {
-            return RunnerLeaseOffer.Refuse(
-                RunnerLeaseRefusal.NoMatchingWork,
-                "A review is already running and parallel review execution is not licensed.");
+            // A ceiling of zero admits no review at all, and the capped claim refuses a cap below one, so
+            // the refusal is made here.
+            if (ceiling.Cap == 0)
+            {
+                LogAtConcurrencyCeiling(logger, runner.Id, ceiling.Cap, null);
+                return RunnerLeaseOffer.RefuseAtConcurrencyCeiling(ceiling.Cap, ceiling.Describe(null));
+            }
+
+            if (executionStore is not null)
+            {
+                var processing = await executionStore.CountProcessingJobsAsync(ct).ConfigureAwait(false);
+                if (processing >= ceiling.Cap)
+                {
+                    LogAtConcurrencyCeiling(logger, runner.Id, ceiling.Cap, processing);
+                    return RunnerLeaseOffer.RefuseAtConcurrencyCeiling(ceiling.Cap, ceiling.Describe(processing));
+                }
+            }
         }
 
         var candidates = await offers.GetOfferCandidatesAsync(
@@ -110,7 +129,7 @@ public sealed partial class RunnerLeaseOfferService(
             runner.ClientScope,
             runner.Tags,
             leaseOptions.Value.ClaimCandidateLimit,
-            ct);
+            ct).ConfigureAwait(false);
 
         var owner = runner.Id.ToString("D");
         var prWideByClient = new Dictionary<Guid, bool>();
@@ -120,13 +139,44 @@ public sealed partial class RunnerLeaseOfferService(
             // the claim and the mirror preparation. Skipping before the claim keeps that refusal from
             // repeating on every poll, each repetition costing a generation bump, a full repository
             // preparation and a release. The job stays claimable by the in-process worker, which runs it.
-            if (await this.HasPublishingPrWidePassAsync(job.ClientId, prWideByClient, ct))
+            if (await this.HasPublishingPrWidePassAsync(job.ClientId, prWideByClient, ct).ConfigureAwait(false))
             {
                 LogSkippedPublishingPrWide(logger, job.Id, job.ClientId);
                 continue;
             }
 
-            var lease = await leases.TryClaimAsync(job.Id, owner, leaseOptions.Value.LeaseDuration, ct);
+            ReviewJobLease? lease;
+            if (ceiling is null)
+            {
+                lease = await leases
+                    .TryClaimAsync(job.Id, owner, leaseOptions.Value.LeaseDuration, ct)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                // The ceiling is carried by the claim itself. Counting first and claiming afterwards lets two
+                // replicas claim two different jobs against the same count, and row locking does not
+                // arbitrate that, because the rows differ.
+                var capped = await leases.TryClaimWithinProcessingCapAsync(
+                    job.Id,
+                    owner,
+                    leaseOptions.Value.LeaseDuration,
+                    ceiling.Cap,
+                    ct).ConfigureAwait(false);
+                if (capped.Outcome == ReviewJobCappedClaimOutcome.AtCapacity)
+                {
+                    // No other candidate can be claimed either while the ceiling is full. The refusal quotes
+                    // the numbers the claim measured rather than the ones read before it.
+                    var measuredCap = capped.Cap ?? ceiling.Cap;
+                    LogAtConcurrencyCeiling(logger, runner.Id, measuredCap, capped.ProcessingCount);
+                    return RunnerLeaseOffer.RefuseAtConcurrencyCeiling(
+                        measuredCap,
+                        ceiling.Describe(capped.ProcessingCount));
+                }
+
+                lease = capped.Lease;
+            }
+
             if (lease is null)
             {
                 // Another owner claimed the job between the read and the claim. That is the normal outcome
@@ -140,7 +190,7 @@ public sealed partial class RunnerLeaseOfferService(
             var granted = false;
             try
             {
-                var preparation = await preparer.PrepareAsync(job, lease, ct);
+                var preparation = await preparer.PrepareAsync(job, lease, ct).ConfigureAwait(false);
                 if (!preparation.Succeeded)
                 {
                     // The job cannot be dispatched, for reasons unrelated to this runner. Releasing the
@@ -149,7 +199,7 @@ public sealed partial class RunnerLeaseOfferService(
                     continue;
                 }
 
-                var resolution = await manifests.ResolveAsync(preparation.Request!, ct);
+                var resolution = await manifests.ResolveAsync(preparation.Request!, ct).ConfigureAwait(false);
                 if (!resolution.Succeeded)
                 {
                     LogManifestResolutionFailed(logger, job.Id, resolution.Refusal ?? "unknown");
@@ -159,7 +209,7 @@ public sealed partial class RunnerLeaseOfferService(
                 // Registered before the manifest is handed over, never after. The relay charges every
                 // completion against this scope and refuses when it cannot find one, so a runner that
                 // received its manifest first could make a call the control plane would have to turn away.
-                budgets.Register(job.Id, await this.ResolveBudgetScopeAsync(job, ct));
+                budgets.Register(job.Id, await this.ResolveBudgetScopeAsync(job, ct).ConfigureAwait(false));
 
                 LogLeaseGranted(logger, job.Id, runner.Id, lease.Generation);
                 granted = true;
@@ -175,8 +225,8 @@ public sealed partial class RunnerLeaseOfferService(
                     // on disk per refusal, and no later path releases them.
                     budgets.Release(job.Id);
                     tools.Release(job.Id);
-                    await workspaces.ReleaseAsync(job.Id);
-                    await leases.TryReleaseAsync(lease, CancellationToken.None);
+                    await workspaces.ReleaseAsync(job.Id).ConfigureAwait(false);
+                    await leases.TryReleaseAsync(lease, CancellationToken.None).ConfigureAwait(false);
                 }
             }
         }
@@ -261,12 +311,30 @@ public sealed partial class RunnerLeaseOfferService(
         EventId = 5403, Level = LogLevel.Warning, Message = "Review job {JobId} could not have a manifest resolved and was returned to the queue: {Reason}")]
     private static partial void LogManifestResolutionFailed(ILogger logger, Guid jobId, string reason);
 
-    [LoggerMessage(EventId = 5404, Level = LogLevel.Information, Message = "Runner {RunnerId} was refused a lease: {Refusal}")]
-    private static partial void LogSlotRefusal(ILogger logger, Guid runnerId, string refusal);
+    [LoggerMessage(
+        EventId = 5404,
+        Level = LogLevel.Information,
+        Message = "Runner {RunnerId} was refused a lease: distributed review execution is not licensed")]
+    private static partial void LogNotLicensed(ILogger logger, Guid runnerId);
 
     [LoggerMessage(
         EventId = 5405,
         Level = LogLevel.Debug,
         Message = "Review job {JobId} was not offered: client {ClientId} has a publishing pr_wide pass, which runs in process")]
     private static partial void LogSkippedPublishingPrWide(ILogger logger, Guid jobId, Guid clientId);
+
+    // The refusal reaches the runner as an empty answer, because the controller answers it 204 and sends no
+    // body. Kept at Debug because every runner in the fleet reaches this on every poll for as long as the
+    // ceiling is full; the counter the controller records is what reports the condition to an operator
+    // without a line per poll. ProcessingCount is absent when the refusal was made without a count.
+    [LoggerMessage(
+        EventId = 5406,
+        Level = LogLevel.Debug,
+        Message = "Runner {RunnerId} was offered no work: the installation is at its ceiling of {Cap} "
+                  + "concurrent reviews, with {ProcessingCount} observed as executing")]
+    private static partial void LogAtConcurrencyCeiling(
+        ILogger logger,
+        Guid runnerId,
+        int cap,
+        int? processingCount);
 }

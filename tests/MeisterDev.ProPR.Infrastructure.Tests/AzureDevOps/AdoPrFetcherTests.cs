@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
+using Microsoft.VisualStudio.Services.WebApi;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -15,6 +16,9 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 /// </summary>
 public class AdoPrFetcherTests
 {
+    private static readonly ProviderHostRef AdoHost =
+        new(ScmProvider.AzureDevOps, "https://dev.azure.com/acme");
+
     [Fact]
     public void ChangedFile_MapFromAdd_HasCorrectChangeType()
     {
@@ -70,6 +74,113 @@ public class AdoPrFetcherTests
 
         Assert.NotNull(summary);
         Assert.Equal(expected, summary!.Path);
+    }
+
+    [Fact]
+    public void ToPullRequestAuthor_MapsCreatedByToHostScopedIdentity()
+    {
+        var createdBy = new IdentityRef
+        {
+            Id = "6f0c1a2b-3d4e-5f60-7182-93a4b5c6d7e8",
+            DisplayName = "Octo Dev",
+            UniqueName = "octo.dev@acme.example",
+        };
+
+        var author = AdoPrFetcher.ToPullRequestAuthor(AdoHost, createdBy);
+
+        Assert.NotNull(author);
+        Assert.Equal(ScmProvider.AzureDevOps, author!.Host.Provider);
+        Assert.Equal("https://dev.azure.com", author.Host.HostBaseUrl);
+        Assert.Equal("6f0c1a2b-3d4e-5f60-7182-93a4b5c6d7e8", author.ExternalUserId);
+        Assert.Equal("octo.dev@acme.example", author.Login);
+        Assert.Equal("Octo Dev", author.DisplayName);
+
+        // Azure DevOps states nothing about a bot on the pull-request payload.
+        Assert.Null(author.IsBot);
+    }
+
+    [Fact]
+    public void ToPullRequestAuthor_WithoutUniqueName_UsesDisplayNameAsLogin()
+    {
+        var createdBy = new IdentityRef
+        {
+            Id = "6f0c1a2b-3d4e-5f60-7182-93a4b5c6d7e8",
+            DisplayName = "Octo Dev",
+        };
+
+        var author = AdoPrFetcher.ToPullRequestAuthor(AdoHost, createdBy);
+
+        Assert.Equal("Octo Dev", author!.Login);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToPullRequestAuthor_WithoutIdentityId_ReturnsNoAuthor(string? identityId)
+    {
+        var createdBy = identityId is null
+            ? null
+            : new IdentityRef { Id = identityId, DisplayName = "Octo Dev" };
+
+        Assert.Null(AdoPrFetcher.ToPullRequestAuthor(AdoHost, createdBy));
+    }
+
+    // The identity GUID the comments API returns is the same one the pull-request payload carries for the
+    // account, so an answered mention and a reviewed pull request name one person the same way.
+    [Fact]
+    public void ToThreadComment_CarriesTheIdentityGuidTheCommentsApiReturned()
+    {
+        var comment = new Comment
+        {
+            Id = 501,
+            Content = "Please handle null.",
+            Author = new IdentityRef
+            {
+                Id = "6f0c1a2b-3d4e-5f60-7182-93a4b5c6d7e8",
+                DisplayName = "Octo Dev",
+            },
+        };
+
+        var mapped = AdoPrFetcher.ToThreadComment(comment);
+
+        Assert.Equal("6f0c1a2b-3d4e-5f60-7182-93a4b5c6d7e8", mapped.AuthorNativeId);
+        Assert.Equal(Guid.Parse("6f0c1a2b-3d4e-5f60-7182-93a4b5c6d7e8"), mapped.AuthorId);
+        Assert.Equal("Octo Dev", mapped.AuthorName);
+    }
+
+    // An identifier this adapter cannot parse as a GUID still names the account, so it is carried as text
+    // rather than dropped along with the parse.
+    [Fact]
+    public void ToThreadComment_UnparsableIdentityId_StillCarriesIt()
+    {
+        var comment = new Comment
+        {
+            Id = 502,
+            Content = "Please handle null.",
+            Author = new IdentityRef { Id = "aad-object-id", DisplayName = "Octo Dev" },
+        };
+
+        var mapped = AdoPrFetcher.ToThreadComment(comment);
+
+        Assert.Equal("aad-object-id", mapped.AuthorNativeId);
+        Assert.Null(mapped.AuthorId);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ToThreadComment_WithoutIdentityId_CarriesNoNativeId(string? identityId)
+    {
+        var comment = new Comment
+        {
+            Id = 503,
+            Content = "Please handle null.",
+            Author = identityId is null ? null : new IdentityRef { Id = identityId, DisplayName = "Octo Dev" },
+        };
+
+        Assert.Null(AdoPrFetcher.ToThreadComment(comment).AuthorNativeId);
     }
 
     [Fact]

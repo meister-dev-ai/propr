@@ -47,6 +47,13 @@ public sealed partial class ReviewJobWorker(
 
     private readonly ConcurrentDictionary<Guid, Task> _inflight = new();
     private DateTimeOffset _lastReclaimSweepAt = DateTimeOffset.MinValue;
+
+    /// <summary>
+    ///     Whether the last cycle to run found the installation at its concurrent-review ceiling. Read and
+    ///     written only from the single worker loop.
+    /// </summary>
+    private bool _atConcurrencyCeiling;
+
     private TaskCompletionSource _startedSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>True while the worker loop is active.</summary>
@@ -118,18 +125,29 @@ public sealed partial class ReviewJobWorker(
             await this.ReclaimExpiredLeasesAsync(stoppingToken);
         }
 
+        // A saturated installation reaches its ceiling on every cycle, and the cycle runs at the poll
+        // interval. Reporting is therefore gated on the transition into saturation: the flag is cleared
+        // here and set again below by whichever check finds the ceiling full, so the report is one line per
+        // saturation rather than one per poll, and a later saturation is reported again.
+        var wasAtConcurrencyCeiling = this._atConcurrencyCeiling;
+        this._atConcurrencyCeiling = false;
+
         using var tickScope = scopeFactory.CreateScope();
         var jobRepository = tickScope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
         var leaseStore = tickScope.ServiceProvider.GetRequiredService<IReviewJobLeaseStore>();
-        var licensingCapabilityService = tickScope.ServiceProvider.GetService<ILicensingCapabilityService>();
-        var parallelReviewExecutionEnabled = licensingCapabilityService is null
-                                             || await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, stoppingToken);
-        // Without the parallel-execution capability a replica runs one job at a time whatever the configured
-        // cap says. The fleet-wide check below is what keeps that true across replicas; this clamp is what
-        // keeps it true within one.
-        var maxConcurrentReviewJobs = ReviewConcurrencyPolicy.Effective(
-            workerOptions.Value.MaxConcurrentReviewJobs,
-            parallelReviewExecutionEnabled);
+        // Resolved once per tick, so every candidate in this cycle is judged against the same ceiling. A host
+        // composed without the licensing surface, as the offline harness is, has no resolver and claims
+        // uncapped.
+        var limitResolver = tickScope.ServiceProvider.GetService<ILicenseLimitResolver>();
+        var ceiling = limitResolver is null
+            ? null
+            : ConcurrentReviewCeiling.From(await limitResolver.ResolveAsync(LicenseLimitKey.ConcurrentReviews, stoppingToken));
+        // The per-replica clamp comes from the same resolution: one replica never runs more at once than the
+        // installation-wide ceiling allows. The capped claim below enforces the ceiling across every replica.
+        // This clamp bounds what this replica starts.
+        var maxConcurrentReviewJobs = ceiling is null
+            ? workerOptions.Value.MaxConcurrentReviewJobs
+            : Math.Min(workerOptions.Value.MaxConcurrentReviewJobs, ceiling.Cap);
         // Where a review may run is decided per candidate below rather than here, because runners are
         // scoped to clients and the installation is not. One tenant running runners must not stop every
         // other tenant's reviews: those jobs can never be offered to a runner outside their tenant, so
@@ -145,6 +163,25 @@ public sealed partial class ReviewJobWorker(
                 fleet.Stall.PendingJobCount,
                 fleet.Stall.OldestPendingSince,
                 fleet.Stall.Detail ?? string.Empty);
+        }
+
+        if (ceiling is not null)
+        {
+            // Ends the candidate scan when the installation already meets its ceiling. Read once per tick
+            // rather than once per candidate, so every candidate in this cycle is judged against the same
+            // count. The count decides nothing on its own: the capped claim below enforces the ceiling, and a
+            // replica that claims after this read makes it stale.
+            var processingJobCount = await jobRepository.CountProcessingJobsAsync(stoppingToken);
+            if (processingJobCount >= ceiling.Cap)
+            {
+                this._atConcurrencyCeiling = true;
+                if (!wasAtConcurrencyCeiling)
+                {
+                    LogConcurrencyCeilingReached(logger, processingJobCount, ceiling.Cap);
+                }
+
+                return;
+            }
         }
 
         var budgetCapsProvider = tickScope.ServiceProvider.GetService<IBudgetCapsProvider>();
@@ -198,23 +235,12 @@ public sealed partial class ReviewJobWorker(
                 {
                     // Bounded parallelism: cap how many reviews run at once so a burst of pending jobs
                     // cannot fan out into an unbounded memory/CPU multiplier. The overflow stays Pending
-                    // and is claimed on later cycles as in-flight work drains below the cap. Without the
-                    // parallel-execution capability the cap is one, so this is also what holds an
-                    // unlicensed replica to a single review.
+                    // and is claimed on later cycles as in-flight work drains below the cap. This number is
+                    // the lower of the configured cap and the resolved ceiling, so it also holds a replica
+                    // below the installation-wide ceiling. A ceiling of zero makes this number zero, so the
+                    // claim below is never reached with a cap the store refuses.
                     stopScanning = true;
                     break;
-                }
-
-                if (!parallelReviewExecutionEnabled)
-                {
-                    // One review at a time has to mean across every host sharing the database, not just
-                    // this one, so what decides it is the database's count rather than this replica's.
-                    var processingJobCount = await jobRepository.CountProcessingJobsAsync(stoppingToken);
-                    if (processingJobCount > 0)
-                    {
-                        stopScanning = true;
-                        break;
-                    }
                 }
 
                 if (budgetCapsProvider is not null && spendAccumulator is not null)
@@ -237,13 +263,51 @@ public sealed partial class ReviewJobWorker(
                     }
                 }
 
-                // The claim stamps the lease in the same statement that moves the status, so a loser here simply
-                // gets no lease back and moves on to the next candidate.
-                var lease = await leaseStore.TryClaimAsync(
-                    job.Id,
-                    LeaseOwnerIdentity,
-                    leaseOptions.Value.LeaseDuration,
-                    stoppingToken);
+                // The claim stamps the lease in the same statement that moves the status, so a loser here gets
+                // no lease back and moves on to the next candidate. Under a ceiling the claim also carries
+                // that ceiling, which only the store can enforce: it has to admit one claimant at a time and
+                // count inside that admission. An unlimited ceiling takes the uncapped claim, because the
+                // admission would serialize every claim installation-wide and enforce nothing.
+                ReviewJobLease? lease;
+                if (ceiling is null)
+                {
+                    lease = await leaseStore.TryClaimAsync(
+                        job.Id,
+                        LeaseOwnerIdentity,
+                        leaseOptions.Value.LeaseDuration,
+                        stoppingToken);
+                }
+                else
+                {
+                    var capped = await leaseStore.TryClaimWithinProcessingCapAsync(
+                        job.Id,
+                        LeaseOwnerIdentity,
+                        leaseOptions.Value.LeaseDuration,
+                        ceiling.Cap,
+                        stoppingToken);
+                    if (capped.Outcome == ReviewJobCappedClaimOutcome.AtCapacity)
+                    {
+                        // The ceiling is full, so no other candidate can be claimed either this tick.
+                        this._atConcurrencyCeiling = true;
+                        if (!wasAtConcurrencyCeiling)
+                        {
+                            if (capped.ProcessingCount is { } observed)
+                            {
+                                LogConcurrencyCeilingReached(logger, observed, capped.Cap ?? ceiling.Cap);
+                            }
+                            else
+                            {
+                                LogConcurrencyCeilingReachedWithoutCount(logger, capped.Cap ?? ceiling.Cap);
+                            }
+                        }
+
+                        stopScanning = true;
+                        break;
+                    }
+
+                    lease = capped.Lease;
+                }
+
                 if (lease is null)
                 {
                     continue;
@@ -644,4 +708,20 @@ public sealed partial class ReviewJobWorker(
         Level = LogLevel.Warning,
         Message = "Could not read the review pass list for client {ClientId}; its jobs stay reserved for runners this cycle")]
     private static partial void LogPassListUnreadable(ILogger logger, Guid clientId, Exception ex);
+
+    // Reported at Information because an installation that has stopped starting reviews is something an
+    // operator has to be able to see without turning on debug logging. It is the in-process counterpart of
+    // the ceiling refusal a runner lease is counted for. Raised once per saturation rather than once per
+    // cycle: the cycle runs at the poll interval, and the condition lasts as long as the saturation does.
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The installation has reached its ceiling of {Cap} concurrent reviews, with {ProcessingCount} "
+                  + "executing. Further reviews stay pending until a running one finishes")]
+    private static partial void LogConcurrencyCeilingReached(ILogger logger, int processingCount, int cap);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The installation has reached its ceiling of {Cap} concurrent reviews and the store reported "
+                  + "no executing count. Further reviews stay pending until a running one finishes")]
+    private static partial void LogConcurrencyCeilingReachedWithoutCount(ILogger logger, int cap);
 }

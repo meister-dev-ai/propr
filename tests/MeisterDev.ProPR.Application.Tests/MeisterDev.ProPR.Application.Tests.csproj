@@ -36,6 +36,7 @@
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.Application\MeisterDev.ProPR.Application.csproj"/>
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.Infrastructure\MeisterDev.ProPR.Infrastructure.csproj"/>
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.ProCursor\MeisterDev.ProPR.ProCursor.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.TestSupport\MeisterDev.ProPR.TestSupport.csproj"/>
     </ItemGroup>
 
 </Project>

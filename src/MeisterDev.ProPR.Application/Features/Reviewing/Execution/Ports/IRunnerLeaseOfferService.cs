@@ -14,28 +14,3 @@ public interface IRunnerLeaseOfferService
     /// <param name="ct">The cancellation token.</param>
     Task<RunnerLeaseOffer> OfferAsync(RunnerLeaseRequest request, CancellationToken ct = default);
 }
-
-/// <summary>
-///     Decides whether another runner may hold a lease at all.
-///     <para>
-///         Optional by design: an installation with no entitlement enforcement registers nothing here and
-///         leasing is bounded only by the work available. Enforcement lives on the control plane rather than
-///         in the runner, because a check inside the artifact a customer hosts is the easiest one to remove.
-///     </para>
-/// </summary>
-public interface IRunnerSlotEntitlement
-{
-    /// <summary>Whether this runner may take a lease right now.</summary>
-    /// <param name="runnerId">The runner asking. A runner already holding leases consumes one slot however many jobs it runs.</param>
-    /// <param name="ct">The cancellation token.</param>
-    Task<RunnerSlotAdmission> AdmitAsync(Guid runnerId, CancellationToken ct = default);
-}
-
-/// <summary>The entitlement's answer: admitted, or a typed refusal an operator can act on.</summary>
-/// <param name="Refusal">The reason, or <see cref="RunnerLeaseRefusal.None" /> when admitted.</param>
-/// <param name="Detail">Operator-readable detail when there is more to say than the reason's name.</param>
-public sealed record RunnerSlotAdmission(RunnerLeaseRefusal Refusal, string? Detail = null)
-{
-    /// <summary>Admitted.</summary>
-    public static RunnerSlotAdmission Admitted { get; } = new(RunnerLeaseRefusal.None);
-}

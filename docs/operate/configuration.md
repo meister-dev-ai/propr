@@ -1,14 +1,13 @@
 # Environment variable reference
 
-Everything ProPR and ProCursor read at startup comes from the process environment. There is no
-configuration file to edit; everything else is configured in the management UI.
+ProPR and ProCursor read their startup settings from the process environment. There is no configuration
+file to edit; everything else is configured in the management UI.
 
-This page is the only place in these docs that states a default or an accepted range. Other pages name a
-variable and link here.
+Defaults and accepted ranges are stated here. Other pages name a variable and link to this one.
 
 ## How a value can fail to take effect
 
-Three different things happen depending on how a value is wrong, and only one of them is loud:
+A wrong value behaves in one of three ways:
 
 | What you did | What happens |
 |---|---|
@@ -16,27 +15,25 @@ Three different things happen depending on how a value is wrong, and only one of
 | Set it to something unparsable - a word where a number belongs, or a blank value | Silently ignored; the default is used. |
 | Set it to a parsable value outside the accepted range | **Startup fails** for most settings, with a message naming the setting and its bounds. |
 
-Three groups behave differently, and it is worth knowing which:
+Three groups depart from that:
 
-- The session limits are stricter. `MEISTER_SESSION_IDLE_MINUTES` and `MEISTER_SESSION_ABSOLUTE_HOURS`
-  fail startup on anything that is not a positive integer, rather than falling back to their default.
-- The intervals marked "clamped" are looser. A value under the minimum is silently raised to it.
+- `MEISTER_SESSION_IDLE_MINUTES` and `MEISTER_SESSION_ABSOLUTE_HOURS` fail startup on anything that is
+  not a positive integer. They do not fall back to their default.
+- A value under the minimum of an interval marked "clamped" is silently raised to that minimum.
 - **The `AI_*` review-tuning settings are not range-checked at all.** An out-of-range value is used as
-  given. The ranges listed for them are the values the review loop is built for, not a guard, and a
-  nonsensical one degrades reviews silently rather than refusing to start.
+  given. The ranges listed for them are the values the review loop is built for, not a guard. A
+  nonsensical value degrades reviews silently and startup still succeeds.
 
 Other symptoms, and the page that fixes each: [troubleshooting](troubleshooting.md).
 
 ## Does the example stack forward it?
 
-Read this before you put anything in `.env` and expect it to take effect.
+Compose passes a variable to a container only when the service's `environment:` block names it. The
+bundled `example/docker-compose/docker-compose.yml` names a fixed set. **Anything else you put in `.env`
+is silently ignored.**
 
-Compose only passes a variable to a container if the service's `environment:` block names it. The bundled
-`example/docker-compose/docker-compose.yml` names a fixed set. **Anything else you put in `.env` is
-silently ignored.**
-
-One syntax note that applies to every value on this page: in an env file, do not put spaces around the
-equals sign. `KEY=value`, never `KEY = value` - the spaces become part of the name and the value.
+In an env file, do not put spaces around the equals sign. Write `KEY=value`, not `KEY = value` - the
+spaces become part of the name and the value.
 
 The last column of every table below says which:
 
@@ -65,26 +62,22 @@ To use one that is not forwarded, add it to the `meisterpropr` service's `enviro
 | `PROCURSOR_DB_CONNECTION_STRING` | PostgreSQL connection string for the ProCursor database | none | - | yes |
 | `PROCURSOR_PROPR_BASE_URL` | Internal base URL ProCursor calls the API on | none | absolute URL | yes |
 
-What "required" means differs per variable, and the failure modes are not alike:
+What happens when one of them is absent:
 
 - The bootstrap admin values are read only when no active admin user exists. When one does, they are
   ignored. When none does and they are absent, startup fails.
 - ProPR registers its database-backed features only when `DB_CONNECTION_STRING` is set.
 - The ProCursor service refuses to start without its own connection string, its shared key, and the API
-  base URL. On the API side, an absent shared key or service base URL simply turns ProCursor off - see
+  base URL. On the API side, an absent shared key or service base URL turns ProCursor off - see
   [running without ProCursor](deploy.md#running-without-procursor).
-- `MEISTER_JWT_SECRET` is different in kind: it is read when the first token is signed, not at startup.
-  A missing or too-short secret therefore lets the stack come up healthy and fails the first sign-in
-  instead.
-- On the bundled compose stack, an absent `PROCURSOR_SHARED_KEY` does not turn ProCursor off - that
-  stack always defines the service and gates the API on it, so ProCursor crash-loops and the API never
-  starts. See [running without ProCursor](deploy.md#running-without-procursor).
+- `MEISTER_JWT_SECRET` is read when the first token is signed, not at startup. A missing or too-short
+  secret lets the stack come up healthy and fails the first sign-in.
+- On the bundled compose stack, an absent `PROCURSOR_SHARED_KEY` does not turn ProCursor off. That stack
+  always defines the service and gates the API on it, so ProCursor crash-loops and the API never starts.
+  See [running without ProCursor](deploy.md#running-without-procursor).
 
-So of the four the example stack asks for up front, three stop the stack from starting and the JWT
-secret only stops sign-in.
-
-Both secrets should be long random strings. What rotating the JWT secret costs:
-[sign-in and sessions](../reference/security.md#sign-in-and-sessions).
+Use a long random string for `MEISTER_JWT_SECRET` and `PROCURSOR_SHARED_KEY`. What rotating the JWT
+secret costs: [sign-in and sessions](../reference/security.md#sign-in-and-sessions).
 
 ## Public URL and browser origins
 
@@ -99,13 +92,13 @@ See [deployment topology](deploy.md#deployment-topology) for why both matter beh
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
-| `MEISTER_DATA_PROTECTION_KEYS_PATH` | Directory holding the key ring that encrypts stored provider and AI credentials | unset - keys live on the container's own filesystem and are lost when it is replaced | writable directory path, created if absent | pinned |
+| `MEISTER_DATA_PROTECTION_KEYS_PATH` | Directory holding the key ring that encrypts stored provider and AI credentials and the activated license | unset - keys live on the container's own filesystem and are lost when it is replaced | writable directory path, created if absent | pinned |
 
-The example stack pins this to a fixed in-container path rather than reading it from `.env`, and mounts a
-named volume there shared by both services. Putting it somewhere durable of your own means editing that
-line and mounting your volume in its place.
+The example stack pins this to a fixed in-container path and mounts a named volume there, shared by both
+services. To put the key ring on durable storage of your own, edit that line and mount your volume in
+its place.
 
-Why this is not optional, why both services take the same path, and what to back up with it:
+Both services must be given the same path. What the key ring protects and what to back up with it:
 [the encryption key ring](../reference/security.md#the-encryption-key-ring).
 
 ## Sessions and sign-in protection
@@ -121,8 +114,7 @@ Why this is not optional, why both services take the same path, and what to back
 | `MEISTER_AUTH_RATELIMIT_PERMITS` | Auth requests permitted per window per client IP | `20` | 1–10000 | no |
 | `MEISTER_AUTH_RATELIMIT_WINDOW_SECONDS` | Length of that window | `60` | 1–3600 | no |
 
-What these controls are for, and why the per-IP limit is deliberately looser than the account lockout:
-[sign-in and sessions](../reference/security.md#sign-in-and-sessions).
+What these controls are for: [sign-in and sessions](../reference/security.md#sign-in-and-sessions).
 
 ## Review workers
 
@@ -132,8 +124,10 @@ What these controls are for, and why the per-IP limit is deliberately looser tha
 | `WORKER_POLL_INTERVAL_MILLISECONDS` | How often the worker looks for pending jobs | `2000` | 10–60000 | no |
 | `WORKER_STUCK_JOB_TIMEOUT_MINUTES` | Retired. Accepted and ignored; the worker warns at startup when it is set | - | - | no |
 
-`WORKER_MAX_CONCURRENT_REVIEW_JOBS` needs a commercial license for parallel review execution to have any
-effect - see [editions](../reference/editions.md) - and it is one of the two multipliers described under
+`WORKER_MAX_CONCURRENT_REVIEW_JOBS` takes effect only with a commercial license that allows parallel
+review execution. Without one, ProPR runs one review at a time. Where the license allows fewer concurrent
+reviews than this setting, the license limit applies - see [editions](../reference/editions.md). How this
+setting and `AI_MAX_FILE_REVIEW_CONCURRENCY` combine into peak load:
 [review workers](deploy.md#review-workers).
 
 ## The runner host
@@ -154,17 +148,21 @@ nothing else.
 | `RUNNER_WORK_ROOT` | Where leased jobs are worked | a temp directory | writable path | no |
 | `RUNNER_LOG_LEVEL` | Minimum log level | `Information` | a Serilog level name | no |
 
-These are read by the control plane rather than the runner, and govern the registry the fleet is listed
-from:
+The control plane reads these two, not the runner. They govern the registry the fleet is listed from:
 
 | Variable | Meaning | Default | Range | Secret |
 |---|---|---|---|---|
 | `RUNNER_PRUNE_UNSEEN_DAYS` | How long a runner may be silent before its row is removed. `0` keeps every row until an operator deletes it | `30` | 0-3650 | no |
 | `RUNNER_PRUNE_INTERVAL_SECONDS` | How often the prune sweep runs | `3600` | 60+ | no |
 
-A runner that restarts enrolls again as a new runner, because its credential is held in memory only. The
-row it used before stays in the registry. The sweep deletes rows that have not been heard from within the
-window. A runner still holding a lease is skipped and removed by a later sweep.
+A runner holds its registration token and its credential in memory only, so a host that restarts enrolls
+again as a new runner and leaves its earlier row in the registry. The sweep deletes rows that have not
+been heard from within `RUNNER_PRUNE_UNSEEN_DAYS`. It skips a runner still holding a lease and removes it
+on a later sweep.
+
+An enrolled runner counts towards the licensed number of runners as long as its credential is valid, whether
+or not the host is still running. A runner left behind by a restart therefore holds its place until the
+credential expires or the sweep deletes it. Deleting it on the Runners page frees the place immediately.
 
 The runner reads `OTLP_ENDPOINT` like every other service. With none set it installs no exporter.
 
@@ -172,54 +170,48 @@ The runner reads `OTLP_ENDPOINT` like every other service. With none set it inst
 every call.
 
 **Set `RUNNER_REGISTRATION_TOKEN`, not `RUNNER_CREDENTIAL`.** Issue the token in the admin UI and give
-it to the host. The runner exchanges it for a credential on its first cycle, renews that credential
-before it expires, and holds both in memory only. A host with neither reports it on `/healthz` and keeps
-running rather than exiting.
+it to the host. The runner exchanges it for a credential on its first cycle and renews that credential
+before it expires. A host given neither reports that on `/healthz` and keeps running.
 
-**A registration token is single-use by default, and every enrollment spends one use.** That includes a
-restart: the credential lives in memory only, so a host that comes back enrolls again as a new runner.
-A host you start by hand therefore needs a fresh token each time it restarts, unless you issue the
+**A registration token is single-use by default, and every enrollment spends one use.** A restart is an
+enrollment, so a host you start by hand needs a fresh token each time it restarts, unless you issue the
 token for more than one use.
 
 **Issue a token for as many hosts as the deployment will start.** A scaling group's replicas come up
-without an operator present to issue each of them a token, so give the group one token whose enrollment
-count covers the replicas it may run, and put it in the platform's secret store rather than in a
-manifest. The Runners page shows each token's remaining uses, and a token can be revoked at any point,
-so rotation is issuing the replacement before withdrawing the old one.
+without an operator present to issue each of them a token. Give the group one token whose enrollment
+count covers the replicas it may run, and keep it in the platform's secret store. The Runners page shows
+each token's remaining uses, and a token can be revoked at any point. To rotate one, issue the
+replacement before revoking the old token.
 
-**Both bounds are optional.** Leave the lifetime empty for a token that does not expire, and the
-enrollment count empty for one with no limit. A group that scales on its own for months needs both. A token with neither is usable until somebody revokes it, and revocation is then the only
-thing that stops it.
+**Both bounds are optional.** Leave the lifetime empty for a token that does not expire, and the enrollment
+count empty for one with no limit. Set both to cover the scaling window you expect, and leave them empty only
+where you have decided a standing credential is acceptable.
 
-Weigh that against what losing it costs. A token that enrolls twenty hosts is a credential that enrolls
-twenty hosts for whoever holds it; one with no limit enrolls as many as they like, for as long as they
-like. An unbounded token belongs in a secret store with an owner, not in a manifest or a wiki page, and
-is worth revoking and reissuing on the cadence you would rotate any other standing credential.
+A token is a credential. Whoever holds it can enroll as many hosts as its remaining uses allow, for as
+long as its lifetime runs. Keep an unbounded token in a secret store with a named owner, and rotate it on
+the cadence you would rotate any other standing credential.
 
-**To remove an enrolled host, revoke the runner, not its token.** A token's use is spent at enrollment
-and revoking the token afterwards reaches nothing already enrolled. It only stops uses that remain.
-Revoking the runner makes every call it makes fail authentication; a lease it holds expires on its own,
-up to one lease duration later.
+**To remove an enrolled host, revoke the runner, not its token.** A token's use is spent at enrollment,
+so revoking the token afterwards stops only the uses that remain. Revoking the runner makes every call it
+makes fail authentication. A lease it holds expires by itself, up to one lease duration later.
 
-**What touches the runner's disk.** Everything a review produces (trace, results, spend) is held in
-memory and batched to the control plane. None of it touches the runner's disk. The repository content under review does: it sits in plaintext under `RUNNER_WORK_ROOT` while a
-job runs, and is purged when the job ends and again at startup. What purge cannot cover is a host
-imaged or destroyed mid-job, so where disk remanence matters, put `RUNNER_WORK_ROOT` on an encrypted
-or ephemeral volume.
+**What touches the runner's disk.** The repository content under review sits in plaintext under
+`RUNNER_WORK_ROOT` while a job runs, and is purged when the job ends and again at startup. Everything
+else a review produces - trace, results, spend - is held in memory, batched to the control plane, and
+never written to disk. Purging cannot cover a host imaged or destroyed mid-job, so where disk remanence
+matters, put `RUNNER_WORK_ROOT` on an encrypted or ephemeral volume.
 
 `RUNNER_CREDENTIAL` is for a host that already has one, such as a redeploy that must keep its registry
 identity. Leave it unset otherwise.
 
 The runner requests a lease only when it has a free slot. An unreachable control plane, a full slot
 pool, an unsupported contract version and a drain are each reported on `/healthz` and retried with
-backoff; none exits the process. On shutdown it releases the leases it holds.
+backoff. None of them exits the process. On shutdown the runner releases the leases it holds.
 
 **The runner also reads the `AI_*` review options**, because it runs the review pipeline. Set them to
 the same values as the control plane. A runner with different values reviews differently, and nothing
-reports the difference.
-
-The runner reads no other `AI_*` value: connections, keys, and model bindings stay on the control
-plane, and the runner names a model rather than holding one.
+reports the difference. It reads no other `AI_*` value: connections, keys and model bindings stay on the
+control plane.
 
 ## Runner fleet and queue stalls
 
@@ -230,8 +222,6 @@ The control plane does not execute a job itself when an active runner is eligibl
 client. Jobs for clients no active runner can serve continue to run in the control plane. There is no
 setting that re-enables in-process execution for a job a runner could take.
 
-An installation with no runners registered behaves as it always has.
-
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
 | `RUNNER_ACTIVE_HEARTBEAT_WINDOW_SECONDS` | How recently a runner must have been heard from to count as capacity | `120` | 15-3600 | no |
@@ -241,31 +231,28 @@ An installation with no runners registered behaves as it always has.
 
 `RUNNER_ACTIVE_HEARTBEAT_WINDOW_SECONDS` must not exceed `REVIEW_LEASE_DURATION_SECONDS`, and startup
 fails when it does. A runner counted as available for longer than its leases survive leaves work with
-nobody to run it: its own leases keep being reclaimed, and the control plane keeps waiting for a fleet
-it believes is healthy.
+nobody to run it.
 
-`RUNNER_FLEET_EMPTY_SETTLE_SECONDS` delays only the return to in-process execution; a runner becoming
-active takes effect at once. This stops a runner flapping around the heartbeat window from toggling the
-execution mode on every poll.
+`RUNNER_FLEET_EMPTY_SETTLE_SECONDS` delays only the return to in-process execution. A runner becoming
+active takes effect at once.
 
 A stalled queue reports one of `NoActiveRunner`, `NoFreeSlot` or `NoRunnerMatchesRequiredTags`.
 
 **Running more than one control-plane replica with runners requires `RUNNER_ADVERTISED_URL` on every
-replica.** The replica that grants a lease serves that job: its workspace mirror is local disk, and the
-job's budget scope, tools, and workspace registration live in its process. A runner configured with only
-a load-balanced URL reaches whichever replica is next, which refuses the job's calls as though the lease
-were lost. Set each replica's own reachable address here; the lease carries it to the runner, which uses
-it for everything job-scoped and keeps the load-balanced URL for enrollment and asking for work. Unset,
-the lease carries no address and runners use `RUNNER_CONTROL_PLANE_URL` for everything. That is correct
-for a single replica and wrong for a fleet.
+replica.** The replica that grants a lease serves that job: its workspace mirror is on local disk, and
+the job's budget scope, tools and workspace registration live in its process. A runner configured with
+only a load-balanced URL reaches whichever replica the balancer picks, and that replica refuses the job's
+calls as though the lease were lost. Set each replica's own reachable address here. The lease carries it
+to the runner, which uses it for everything job-scoped and keeps the load-balanced URL for enrollment and
+for asking for work. Unset, the lease carries no address and runners use `RUNNER_CONTROL_PLANE_URL` for
+everything, which works for a single replica.
 
 ## Review job leases
 
 A review job is claimed under a lease. The claim is a single conditional database write, so exactly one
-host wins a given job however many are polling, and the holder keeps the lease alive by renewing it on a
-timer that runs independently of review progress. That renewal, not elapsed processing time, is the
-evidence an execution is alive, which is how a legitimately long review and an abandoned one are told
-apart.
+host wins a given job however many are polling. The holder keeps the lease alive by renewing it on a
+timer that runs independently of review progress. A job whose lease stops being renewed counts as
+abandoned, however long it had been processing.
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
@@ -276,23 +263,20 @@ apart.
 | `REVIEW_LEASE_CLAIM_CANDIDATE_LIMIT` | How many pending jobs one poll cycle considers | `50` | 1–500 | no |
 
 `REVIEW_LEASE_DURATION_SECONDS` must be at least three times `REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS`,
-and startup fails when it is not. A lease only one or two renewals long is lost to a single slow database
-call, which would hand a healthy job to another host while the first is still reviewing it.
+and startup fails when it is not. A lease that survives only one or two renewals is lost to a single slow
+database call, and the job is handed to another host while the first is still reviewing it.
 
-Raise the duration when reviews run on hosts with slow or intermittent database access. The cost of a
-longer lease is that a genuinely dead host's jobs wait longer before another host can take them over.
+Raise the duration where reviews run on hosts with slow or intermittent database access. A longer lease
+also means a dead host's jobs wait longer before another host can take them over.
 
 ### Reclaim
 
-A job whose lease expires is taken back and offered again rather than failed. Jobs were once failed for
-having been in the processing state too long, which could not tell a long review from an abandoned one and,
-with more than one host, let one host fail another host's healthy review. `WORKER_STUCK_JOB_TIMEOUT_MINUTES`
-is retired: it is still accepted so an existing deployment starts unchanged, and the worker warns at startup
-when it is set.
+A job whose lease expires is taken back and offered again, not failed. Reclaim replaced the retired
+`WORKER_STUCK_JOB_TIMEOUT_MINUTES`.
 
-Because reclaim is automatic where recovery used to be a deliberate operator restart, it carries its own
-spend discipline. Completing further files clears the consecutive count, so only a job that keeps cycling
-without progress exhausts its budget, and a graceful release during a deploy or scale-in counts for nothing.
+Reclaims are budgeted, which bounds what a job that keeps being reclaimed can spend. Completing further
+files clears the consecutive count, so only a job that keeps cycling without progress exhausts its
+budget. A graceful release during a deploy or scale-in does not count against either budget.
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
@@ -305,27 +289,27 @@ without progress exhausts its budget, and a graceful release during a deploy or 
 | `REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES` | How long one execution of a review may run before it is failed | `180` | 5–1440 | no |
 
 A job that exhausts its reclaim budget is failed with a reason naming the lease loss, so it reads
-differently from a review that failed on its own merits.
+differently from a review that failed for its own reasons.
 
-While a review is publishing its comments it is not reclaimable at all, however long its lease has been
-gone: taking it back mid-publication is how the same review gets posted twice. Publication has its own,
-longer timeout, and a publication that outlives it fails the job distinctly rather than retrying it,
-because some comments may already be out.
+A review that is publishing its comments is not reclaimable, however long its lease has been gone,
+because reclaiming it mid-publication posts the same comments twice. Publication has its own longer
+timeout. A publication that outlives it fails the job instead of retrying it, because some comments may
+already be posted.
 
-The reclaim rules above all deal with a holder that stopped renewing. A holder that keeps renewing is
-never taken off its job, however long it takes, so `REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES` is the
-ceiling on one execution: past it the next renewal is refused and the job is failed with that reason. It
-counts from when this attempt started processing, so a reclaimed job gets the full allowance again, which
-is what the reclaim budgets above bound.
+The reclaim rules above deal with a holder that stopped renewing. A holder that keeps renewing is never
+taken off its job, however long it takes, so `REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES` caps one
+execution: past it the next renewal is refused and the job is failed with that reason. The cap counts
+from when the attempt started processing, so a reclaimed job gets the full allowance again. The reclaim
+budgets above bound how often that can repeat.
 
-The check happens when a renewal is attempted, so an execution can overrun the ceiling by up to one
-`REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS` before it stops, and a review that finishes inside that window
-publishes normally. Once the stop is decided it is not deferred: the refused renewal cancels the token the
-review runs under, so it interrupts the review wherever it had got to, and that can be part-way through
-posting comments. A job stopped that way ends as failed, and comments it had already posted stay on the pull
-request. `REVIEW_LEASE_PUBLICATION_TIMEOUT_MINUTES` does not prevent this; it governs how long a job may sit
-in publication before a sweep treats it as stuck. Set the ceiling well above how long a review of your
-largest pull requests takes, so it is reached only by executions that are not progressing.
+The check happens when a renewal is attempted, so an execution can overrun the cap by up to one
+`REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS` before it stops. A review that finishes inside that window
+publishes normally. The refused renewal cancels the token the review runs under, so the review is
+interrupted wherever it had got to, which can be part-way through posting comments. The job ends as
+failed, and comments it had already posted stay on the pull request.
+`REVIEW_LEASE_PUBLICATION_TIMEOUT_MINUTES` does not prevent this; it governs how long a job may sit in
+publication before a sweep treats it as stuck. Set the cap well above how long a review of your largest
+pull requests takes.
 
 ## Review workspace
 
@@ -339,33 +323,31 @@ largest pull requests takes, so it is reached only by executions that are not pr
 | `REVIEW_WORKSPACE_FETCH_DEPTH` | Commits fetched under the `shallow` policy. Ignored by the others, which also do not check the range | `200` | 1–100000 | no |
 
 One preparation fetches into a mirror and writes a checkout of the repository, so
-`REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS` is what bounds how much of the workspace disk is being
-written at any moment. Lower it on a small disk: running out of space during a checkout fails the review
-outright rather than slowing it down.
+`REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS` bounds how much of the workspace disk is written at any
+moment. Lower it on a small disk: running out of space during a checkout fails the review.
 
 The fetch depth policy trades local disk against fetching over the network:
 
 - `full` fetches commits, trees and file contents. Nothing is fetched again during a review.
-- `blobless` fetches commits and trees and leaves file contents on the server, to be downloaded when
-  something reads them. It needs a server that offers filtered fetches, which Azure DevOps and GitHub both
-  do. What it saves is the file contents of the revisions nothing reads, which in a repository with long
-  history is most of them. What it does not save is what a review actually reads: the head revision, which
-  every review checks out and a partial clone downloads as it does so, and the target-side files a review
-  compares against, which are downloaded from the base revision as they are read. So the saving grows with
-  the history behind a repository, not with its size at one commit, and the first review after the policy
-  changes pays for what it reads.
+- `blobless` fetches commits and trees and leaves file contents on the server, downloading them when
+  something reads them. It needs a server that offers filtered fetches; Azure DevOps and GitHub both do.
+  It saves the file contents of the revisions nothing reads, which in a repository with long history is
+  most of them. A review still downloads the head revision it checks out, and the base-revision files it
+  compares the target side against, as it reads them. The saving therefore grows with the history behind
+  a repository, not with its size at one commit, and the first review after the policy changes pays for
+  what it reads.
 - `shallow` fetches `REVIEW_WORKSPACE_FETCH_DEPTH` commits. The depth has to exceed the divergence of the
   pull requests being reviewed: a merge base outside the fetched history cannot be resolved and the review
   fails to prepare. Prefer `blobless` for that reason.
 
-Widening the policy applies on the next fetch of each existing mirror, not only to mirrors created
-afterwards: a mirror fetched under `shallow` has its boundary removed by the next fetch under `full` or
-`blobless`, and one fetched under `blobless` stops filtering under `full` or `shallow`.
+A policy change applies to every existing mirror on its next fetch. A mirror fetched under `shallow` has
+its boundary removed by the next fetch under `full` or `blobless`, and one fetched under `blobless` stops
+filtering under `full` or `shallow`.
 
-Leaving `blobless` costs one large fetch. The contents the filtered period omitted are not deferred to the
-first read: the widening fetch asks for them, so the first preparation after the change transfers and writes
-the file contents of every fetched revision, and reviews after it read locally. Expect that fetch to take as
-long as a fresh clone of the repository, and the mirror to grow to its unfiltered size.
+Leaving `blobless` costs one large fetch. The widening fetch asks for the contents the filter omitted, so
+the first preparation after the change transfers and writes the file contents of every fetched revision,
+and reviews after it read locally. Expect that fetch to take as long as a fresh clone of the repository,
+and the mirror to grow to its unfiltered size.
 
 Why this wants a mounted volume: [review workspace](deploy.md#review-workspace).
 
@@ -377,27 +359,33 @@ Why this wants a mounted volume: [review workspace](deploy.md#review-workspace).
 | `MENTION_CRAWL_INTERVAL_SECONDS` | How often the mention scan runs. Each mention configuration may also ask to be visited less often than this | `60` | clamped to at least 10 | no |
 | `THREAD_PASS_SCAN_INTERVAL_SECONDS` | How often queued thread passes are picked up and run | `30` | clamped to at least 5 | no |
 | `REVIEW_ARCHIVE_PURGE_INTERVAL_SECONDS` | How often the retention purge sweeps archived pull-request content | `3600` | clamped to at least 60 | no |
+| `LICENSE_STAGE_INTERVAL_SECONDS` | How often the licensing sweep runs: it reads the license stage and logs transitions, re-observes the system profile, and evaluates the metered author allowance. `0` or a negative value disables all three | `900` | values at or below `0` disable; positive values are clamped to at least 60 | no |
 | `WEBHOOK_DELIVERY_IDLE_POLL_SECONDS` | How often an idle installation asks for a queued webhook delivery | `2` | 1–300 | no |
 | `WEBHOOK_DELIVERY_MAX_CONCURRENCY` | Deliveries one replica turns into reviews at once | `4` | 1–32 | no |
 | `WEBHOOK_DELIVERY_CLAIM_SECONDS` | How long one replica's claim on a delivery is good for | `300` | 30–3600 | no |
-| `WEBHOOK_DELIVERY_MAX_ATTEMPTS` | Tries before a delivery is kept as failed rather than retried | `5` | 1–20 | no |
+| `WEBHOOK_DELIVERY_MAX_ATTEMPTS` | Attempts a delivery gets before it is kept as failed and no longer retried | `5` | 1–20 | no |
 | `WEBHOOK_DELIVERY_RETRY_BACKOFF_SECONDS` | Wait before a failed delivery is eligible again | `30` | 1–3600 | no |
 
-A webhook delivery is answered as soon as it is verified and stored, and turned into a review afterwards
-by a worker on its own schedule, so no provider's delivery timeout decides whether a review happens.
-A backlog is drained without waiting; the idle interval is only how often an empty queue is asked. Raise
-`WEBHOOK_DELIVERY_CLAIM_SECONDS` above the slowest intake a large pull request can take on your
-providers, since it is the point at which a delivery is assumed abandoned and given to another replica.
+A webhook delivery is answered as soon as it is verified and stored. A worker turns it into a review
+afterwards, so no provider's delivery timeout decides whether a review happens. A backlog is drained
+without waiting; `WEBHOOK_DELIVERY_IDLE_POLL_SECONDS` governs only how often an empty queue is asked.
+Raise `WEBHOOK_DELIVERY_CLAIM_SECONDS` above the slowest intake a large pull request can take on your
+providers, because a delivery held longer than that is assumed abandoned and given to another replica.
 
-`WEBHOOK_DELIVERY_MAX_CONCURRENCY` is what to raise when reviews are waiting while runners sit idle:
-turning a delivery into a review takes seconds, so a replica working one at a time creates roughly one
-job every few seconds however much execution capacity is available. Measured against a three-runner
-fleet with six slots, serial intake held the fleet to four slots at peak. The ceiling worth respecting
-is the provider's rate limit, because each delivery reads a pull request from the provider that sent it.
+Raise `WEBHOOK_DELIVERY_MAX_CONCURRENCY` when reviews are waiting while runners sit idle. Turning a
+delivery into a review takes seconds, so a replica working one at a time creates roughly one job every
+few seconds however much execution capacity is available. Measured against a three-runner fleet with six
+slots, serial intake held the fleet to four slots at peak. The provider's rate limit is the ceiling,
+because each delivery reads a pull request from the provider that sent it.
 
 Crawling and @-mention scanning need a commercial license ([editions](../reference/editions.md)); the
-purge sweep does not. What the purge deletes and what it never touches:
+purge sweep does not. What the purge deletes:
 [what ProPR stores](../reference/security.md#what-propr-stores).
+
+`LICENSE_STAGE_INTERVAL_SECONDS` sets how often the licensing sweep runs. Each run logs license stage
+changes, re-reads the system profile, and checks the monthly author count. Switching it off changes nothing
+about what the license allows, because every capability check reads the license directly. It stops the
+profile and author checks from running.
 
 ## The link to ProCursor
 
@@ -431,8 +419,8 @@ Read by the ProCursor service.
 
 ## Review loop budgets
 
-These bound the work one review may do. They are the settings that most directly move token spend that
-the management UI does not expose - see [control cost](../guides/control-cost.md).
+These bound the work one review may do, and the management UI does not expose them. Of everything on this
+page they move token spend the most - see [control cost](../guides/control-cost.md).
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
@@ -449,8 +437,8 @@ the management UI does not expose - see [control cost](../guides/control-cost.md
 
 `AI_MAX_FILE_REVIEW_CONCURRENCY` needs a commercial license for parallel review execution to have any
 effect - see [editions](../reference/editions.md). Without it a review works on one file at a time, the
-same rule the worker applies to whole jobs. It is the second of the two multipliers described under
-[review workers](deploy.md#review-workers).
+same rule the worker applies to whole jobs. Sizing it alongside
+`WORKER_MAX_CONCURRENT_REVIEW_JOBS`: [review workers](deploy.md#review-workers).
 
 When a provider rate-limits a call, ProPR waits for the delay that provider asked for. The delay is read
 from the `Retry-After` header, or from the error message when the provider states it there instead.
@@ -470,7 +458,7 @@ Which files land in which complexity tier is decided per review - see
 | `AI_CONFIDENCE_FLOOR_WARNING` | Minimum confidence to post at warning severity; below it the finding is downgraded to suggestion | `60` | 0–100 | yes |
 | `AI_QUALITY_FILTER_THRESHOLD` | Total comment count across all files below which the cross-file quality pass is skipped | `20` | 1–500 | yes |
 
-These sit under the publication gate, not in place of it - see
+A finding that clears these thresholds still goes through the publication gate - see
 [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted).
 
 ## Thread memory
@@ -487,8 +475,8 @@ The embedding model itself is configured per client, not here - see
 
 ## Code-structure tools
 
-The kill switches exist so a deployment can fall back to simpler behaviour; the budgets bound how much
-work one lookup may do before it returns what it has, marked truncated.
+The `AI_ENABLE_*` switches turn these tools off and fall back to simpler behaviour. The budgets bound how
+much work one lookup may do before it returns what it has, marked truncated.
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
@@ -536,36 +524,36 @@ reasoning contains, and when to turn it off:
 | `AZURE_CLIENT_ID` | Application ID of the service principal | none | - | no |
 | `AZURE_CLIENT_SECRET` | Its client secret | none | - | no |
 
-All three together supply one Azure service principal to the backend process. That one credential serves
-two unrelated purposes: Azure DevOps operations for a client that has no connection of its own - see
+All three together supply one Azure service principal to the backend process. That credential serves two
+unrelated purposes: Azure DevOps operations for a client that has no connection of its own - see
 [global Azure fallback](../platforms/azure-devops.md#global-azure-fallback) - and Azure-hosted AI
 endpoints configured with Azure Identity instead of a key.
 
-Set fewer than three and none of them are used. When they are all absent, ProPR uses the ambient Azure
-credential instead: a managed identity, an Azure CLI login, or whatever else the host offers.
+Set fewer than three and none of them are used. With all three absent, ProPR uses the ambient Azure
+credential: a managed identity, an Azure CLI login, or whatever else the host offers.
 
 ## Observability
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
 | `OTLP_ENDPOINT` | OTLP collector to export traces to | none - no trace pipeline is built at all, so spans are never assembled | absolute URL | no |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | The same collector, under the name the OpenTelemetry specification gives it. Read when `OTLP_ENDPOINT` is unset or empty, which is what a managed OpenTelemetry agent injects | none | absolute URL | no |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | The same collector, under the name the OpenTelemetry specification gives it. Read when `OTLP_ENDPOINT` is unset or empty. A managed OpenTelemetry agent injects this name | none | absolute URL | no |
 | `TELEMETRY_HTTP_CLIENT_TRACES` | Which outbound requests become spans. `foreground` skips unattended work: crawl cycles, mention scans and health probes | `foreground` | `foreground`, `all`, `off` | no |
 | `TELEMETRY_TRACE_SAMPLE_RATIO` | Head-sampling ratio applied to the traces that survive the filters | `1.0` - no sampler is installed, which leaves the standard `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` in charge | `0.0` to `1.0`, clamped into range | no |
 | `TELEMETRY_TRACE_IGNORED_PATHS` | Request path prefixes that are never traced, inbound or outbound | `/healthz,/livez,/metrics` | comma-separated path prefixes, leading `/` optional | no |
 | `LOKI_URL` | Grafana Loki instance to ship logs to | none - logs go to stdout only | absolute URL | pinned |
 | `ASPNETCORE_ENVIRONMENT` | The runtime environment name | `Production` when unset | `Production`, `Development`, or your own name | pinned |
 
-The three `TELEMETRY_` variables only do anything while an OTLP endpoint is configured, under either name, and none of them affect
-`/metrics`, which keeps counting every request either way. An unrecognised value is not an error: the
-trace mode falls back to `foreground` and an unparseable ratio to `1.0`, so a typo silently gets you the
-default rather than a failed start. Why you would change them:
+The three `TELEMETRY_` variables do something only while an OTLP endpoint is configured, under either
+name. None of them affect `/metrics`, which keeps counting every request. An unrecognised value is not an
+error: the trace mode falls back to `foreground` and an unparseable ratio to `1.0`, so a typo silently
+gets you the default and the service still starts. Why you would change them:
 [trace volume](observability.md#trace-volume).
 
-`Development` is not a production setting: it serves the API documentation UI - see
-[the API reference](../reference/api.md#more) - and relaxes the outbound AI egress checks - see
-[outbound request protection](../reference/security.md#outbound-request-protection). Run `Production`
-anywhere real. Where traces and logs end up:
+`Development` serves the API documentation UI - see [the API reference](../reference/api.md#more) - and
+relaxes the outbound AI egress checks - see
+[outbound request protection](../reference/security.md#outbound-request-protection). Use `Production`
+outside development. Where traces and logs end up:
 [observability](observability.md#traces-metrics-and-logs).
 
 ## An optional Azure OpenAI instruction evaluator
@@ -577,6 +565,6 @@ anywhere real. Where traces and logs end up:
 | `AI_API_KEY` | Key for that endpoint; omit to authenticate with the host's ambient Azure credential instead | none | - | no |
 
 This evaluator judges which of a repository's instruction files apply to a diff. It is registered only
-when the endpoint and the deployment are both set, and it is Azure OpenAI only - it does not go through
-the per-client AI connections, so it is the one model call in the product that a client's provider
-configuration does not control. Leave all three unset unless you specifically want it.
+when the endpoint and the deployment are both set, and it calls Azure OpenAI directly. It does not go
+through the per-client AI connections, so a client's provider configuration does not control it. Leave
+all three unset unless you want it.

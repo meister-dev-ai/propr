@@ -9,6 +9,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -16,6 +17,7 @@ using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -126,6 +128,8 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                 services.AddDbContextFactory<MeisterProPRDbContext>(options =>
                     options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                // The licensing module is not composed here, so client creation admits through a gate with no ceiling.
+                services.AddScoped<IStockQuotaGate, UnlimitedStockQuotaGate>();
                 services
                     .AddScoped<MeisterDev.ProPR.Application.Interfaces.IClientTokenUsageRepository,
                         MeisterDev.ProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();

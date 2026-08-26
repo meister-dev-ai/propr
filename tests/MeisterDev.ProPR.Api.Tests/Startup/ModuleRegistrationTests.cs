@@ -6,8 +6,10 @@ using Azure.Core;
 using MeisterDev.ProPR.Api.Features.ProCursor;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.UsageStatistics.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.Interfaces;
@@ -15,12 +17,15 @@ using MeisterDev.ProPR.Infrastructure.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Clients;
 using MeisterDev.ProPR.Infrastructure.Features.Crawling;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
+using MeisterDev.ProPR.Infrastructure.Features.Licensing;
+using MeisterDev.ProPR.Infrastructure.Features.Licensing.Services;
 using MeisterDev.ProPR.Infrastructure.Features.Mentions;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterDev.ProPR.Infrastructure.Features.PromptCustomization;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterDev.ProPR.Infrastructure.Features.UsageReporting;
+using MeisterDev.ProPR.Infrastructure.Features.UsageStatistics;
 using MeisterDev.ProPR.ProCursor.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -512,6 +517,101 @@ public sealed class ModuleRegistrationTests
         var gateway = scope.ServiceProvider.GetRequiredService<IProCursorGateway>();
 
         Assert.IsType<DisabledProCursorGateway>(gateway);
+    }
+
+    // The license state provider and the licensing clock are singletons over scoped stores, which they have to
+    // reach through a scope of their own. Taking a store as a constructor dependency instead would capture one
+    // request's database context for the life of the process, so the composition is built with scope validation
+    // on.
+    [Fact]
+    public void LicensingModule_ResolvesTheLicenseStateProviderWithoutCapturingAScope()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddSingleton(configuration);
+        services.AddOptions();
+        services.AddLogging();
+        services.AddDataProtection();
+        services.AddInfrastructureSupport(configuration);
+        services.AddLicensingModule(configuration);
+
+        // Shared support registers services whose own dependencies come from the modules this test leaves out,
+        // and build-time validation covers every descriptor in the collection, so those are substituted.
+        services.AddSingleton(Substitute.For<IAiConnectionRepository>());
+
+        using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions
+            {
+                ValidateOnBuild = true,
+                ValidateScopes = true,
+            });
+
+        var stateProvider = provider.GetRequiredService<ILicenseStateProvider>();
+
+        Assert.IsType<CachedLicenseStateProvider>(stateProvider);
+        Assert.IsType<RatchetedLicensingClock>(provider.GetRequiredService<ILicensingClock>());
+
+        using var scope = provider.CreateScope();
+
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IActivatedLicenseStore>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ILicensingPolicyStore>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IHighestObservedTimeStore>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ILicenseLimitResolver>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IStockQuotaGate>());
+
+        // The two completion hooks take the recorder as an optional constructor parameter, so a registration
+        // that goes missing is filled with null and every month silently counts nobody. Nothing fails at
+        // startup, which is why the composition is resolved here. The store and the identity read it depends
+        // on are resolved beside it, because the recorder cannot be built without them.
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAuthorActivityRollupStore>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IConfiguredReviewerIdentitySource>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAuthorActivityRecorder>());
+
+        // The administration read takes the allowance evaluation as an optional constructor parameter, so a
+        // registration that goes missing is filled with null and an installation above its licensed author
+        // number silently reports no overage and writes no record. Nothing fails at startup, which is why the
+        // evaluation and the store it writes through are resolved here.
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAuthorOverageStore>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAuthorOverageEvaluator>());
+    }
+
+    // The consumption resolver takes its licensing dependencies as optional constructor parameters, so a
+    // registration that goes missing is filled with null and a commercial installation quietly sends the
+    // community payload shape. Nothing fails at startup, so the composition the host builds is resolved here
+    // and every port the resolver reads is asserted to resolve alongside it.
+    [Fact]
+    public void UsageStatisticsModule_ResolvesTheSnapshotBuilderWithTheLicensingPortsItReads()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddSingleton(configuration);
+        services.AddOptions();
+        services.AddLogging();
+        services.AddDataProtection();
+        services.AddInfrastructureSupport(configuration);
+        services.AddLicensingModule(configuration);
+        services.AddUsageStatisticsModule(configuration);
+
+        // Shared support registers services whose own dependencies come from the modules this test leaves out,
+        // and build-time validation covers every descriptor in the collection, so those are substituted.
+        services.AddSingleton(Substitute.For<IAiConnectionRepository>());
+
+        using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions
+            {
+                ValidateOnBuild = true,
+                ValidateScopes = true,
+            });
+        using var scope = provider.CreateScope();
+
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<UsageStatisticsSnapshotBuilder>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<UsageStatisticsLicensedConsumptionResolver>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ILicenseStateProvider>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ILicensingIdentityStore>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISystemProfileStore>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ILicensedResourceCountSource>());
     }
 
     [Fact]

@@ -91,6 +91,13 @@ internal sealed class MentionReplyJobConfiguration : IEntityTypeConfiguration<Me
             .HasDefaultValue(false)
             .IsRequired();
 
+        // Named for what it holds rather than after the review side's pr_author_external_user_id, because the
+        // mirror of that name is already taken on this table by the value the scan derives from the login.
+        builder.Property(j => j.CommentAuthorNativeId)
+            .HasColumnName("comment_author_native_id")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
         builder.Property(j => j.CommentPublishedAt)
             .HasColumnName("comment_published_at")
             .IsRequired(false);

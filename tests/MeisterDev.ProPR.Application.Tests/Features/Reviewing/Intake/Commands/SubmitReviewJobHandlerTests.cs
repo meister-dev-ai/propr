@@ -1,9 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Application.Exceptions;
-using MeisterDev.ProPR.Application.Features.Licensing.Models;
-using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Dtos;
@@ -284,45 +281,6 @@ public sealed class SubmitReviewJobHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_CommunityParallelLimitReached_ThrowsPremiumFeatureUnavailableException()
-    {
-        var request = CreateRequest();
-        var store = Substitute.For<IReviewJobIntakeStore>();
-        var queue = Substitute.For<IReviewExecutionQueue>();
-        var licensingService = Substitute.For<ILicensingCapabilityService>();
-
-        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
-            .Returns((ReviewJob?)null);
-        store.CountActiveJobsAsync(Arg.Any<CancellationToken>())
-            .Returns(1);
-        licensingService.GetCapabilityAsync(PremiumCapabilityKey.ParallelReviewExecution, Arg.Any<CancellationToken>())
-            .Returns(
-                new CapabilitySnapshot(
-                    PremiumCapabilityKey.ParallelReviewExecution,
-                    "Parallel review execution",
-                    true,
-                    true,
-                    PremiumCapabilityOverrideState.Default,
-                    false,
-                    "A commercial license is required to run more than one active PR review at a time, including in self-hosted deployments."));
-
-        var sut = new SubmitReviewJobHandler(
-            store,
-            queue,
-            NullLogger<SubmitReviewJobHandler>.Instance,
-            null,
-            licensingService);
-
-        var ex = await Assert.ThrowsAsync<PremiumFeatureUnavailableException>(() =>
-            sut.HandleAsync(new SubmitReviewJobCommand(ClientId, request)));
-
-        Assert.Equal(PremiumCapabilityKey.ParallelReviewExecution, ex.Capability.Key);
-        await store.DidNotReceive()
-            .CreatePendingJobAsync(Arg.Any<Guid>(), Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>());
-        await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task HandleAsync_ClientDefaultFileByFileProfile_SnapshotsConfiguredProfileId()
     {
         var request = CreateRequest();
@@ -353,7 +311,6 @@ public sealed class SubmitReviewJobHandlerTests
             store,
             queue,
             NullLogger<SubmitReviewJobHandler>.Instance,
-            null,
             null,
             clientRegistry);
 

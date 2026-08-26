@@ -156,7 +156,6 @@ public sealed class ClientProviderDiscoveryControllerTests
                         PremiumCapabilityKey.MentionAnswering,
                         "Mention answering",
                         true,
-                        true,
                         PremiumCapabilityOverrideState.Disabled,
                         false,
                         "Mention answering is currently disabled for this installation.")));

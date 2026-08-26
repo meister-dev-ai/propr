@@ -103,7 +103,8 @@ internal sealed class GitHubPullRequestFetcher(
             MapStatus(pullRequest),
             existingThreads,
             isDeltaReview ? allChangedFileSummaries : null,
-            AuthorizedIdentityName: context.AuthenticatedActorLogin);
+            AuthorizedIdentityName: context.AuthenticatedActorLogin,
+            Author: ToPullRequestAuthor(host, pullRequest));
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(
@@ -234,7 +235,8 @@ internal sealed class GitHubPullRequestFetcher(
             MapStatus(pullRequest),
             existingThreads,
             changedFileManifest,
-            AuthorizedIdentityName: context.AuthenticatedActorLogin);
+            AuthorizedIdentityName: context.AuthenticatedActorLogin,
+            Author: ToPullRequestAuthor(host, pullRequest));
     }
 
     public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
@@ -361,7 +363,14 @@ internal sealed class GitHubPullRequestFetcher(
                         null,
                         comment.Id,
                         comment.CreatedAt,
-                        false),
+                        false,
+
+                        // Mention scanning reads this listing as well as the review threads, so a question
+                        // asked on the pull request itself names its author the same way one asked on a line
+                        // of code does.
+                        comment.User?.Id is > 0 and { } userId
+                            ? userId.ToString(CultureInfo.InvariantCulture)
+                            : null),
                 ],
                 "Active"))
             .ToList()
@@ -776,7 +785,11 @@ internal sealed class GitHubPullRequestFetcher(
             comment.Body ?? string.Empty,
             stableAuthorId,
             comment.DatabaseId ?? 0,
-            comment.CreatedAt);
+            comment.CreatedAt,
+            // The account's numeric id, which is what the pull-request payload's "user.id" carries as well, so
+            // one person is the same identifier whether they opened the pull request or commented on it. The
+            // query asks for it on both the User and the Bot shape; an actor of neither shape leaves it absent.
+            AuthorNativeId: comment.Author?.DatabaseId?.ToString(CultureInfo.InvariantCulture));
     }
 
     private static ChangeType MapChangeType(string? status)
@@ -788,6 +801,28 @@ internal sealed class GitHubPullRequestFetcher(
             "renamed" => ChangeType.Rename,
             _ => ChangeType.Edit,
         };
+    }
+
+    // "user" carries the author: "id" is the identifier, "login" the login. GitHub does not usually populate
+    // "name" on this response, so the display name is often absent. GitHub names the account kind in "type",
+    // and the bot signal is read from there. A payload without that field leaves the signal unset.
+    private static PullRequestAuthor? ToPullRequestAuthor(ProviderHostRef host, GitHubPullRequestResponse pullRequest)
+    {
+        if (pullRequest.User?.Id is not { } userId)
+        {
+            return null;
+        }
+
+        var isBot = string.IsNullOrWhiteSpace(pullRequest.User.Type)
+            ? (bool?)null
+            : string.Equals(pullRequest.User.Type, "Bot", StringComparison.OrdinalIgnoreCase);
+
+        return new PullRequestAuthor(
+            host,
+            userId.ToString(CultureInfo.InvariantCulture),
+            pullRequest.User.Login,
+            pullRequest.User.Name,
+            isBot);
     }
 
     private static PrStatus MapStatus(GitHubPullRequestResponse pullRequest)
@@ -848,7 +883,9 @@ internal sealed class GitHubPullRequestFetcher(
         DateTimeOffset? CreatedAt,
         [property: JsonPropertyName("user")] GitHubCommentUserResponse? User);
 
-    private sealed record GitHubCommentUserResponse([property: JsonPropertyName("login")] string? Login);
+    private sealed record GitHubCommentUserResponse(
+        [property: JsonPropertyName("login")] string? Login,
+        [property: JsonPropertyName("id")] long? Id);
 
     private sealed record GitHubPullRequestResponse(
         [property: JsonPropertyName("title")] string? Title,
@@ -857,7 +894,14 @@ internal sealed class GitHubPullRequestFetcher(
         [property: JsonPropertyName("merged_at")]
         DateTimeOffset? MergedAt,
         [property: JsonPropertyName("head")] GitHubRefResponse? Head,
-        [property: JsonPropertyName("base")] GitHubRefResponse? Base);
+        [property: JsonPropertyName("base")] GitHubRefResponse? Base,
+        [property: JsonPropertyName("user")] GitHubPullRequestUserResponse? User);
+
+    private sealed record GitHubPullRequestUserResponse(
+        [property: JsonPropertyName("id")] long? Id,
+        [property: JsonPropertyName("login")] string? Login,
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("type")] string? Type);
 
     private sealed record GitHubRefResponse(
         [property: JsonPropertyName("ref")] string? Ref,

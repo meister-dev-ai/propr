@@ -31,7 +31,6 @@ export async function installLiveRuntimeApiStubs(page: Page, testInfo: TestInfo)
             key: 'sso-authentication',
             displayName: 'Single sign-on authentication',
             requiresCommercial: true,
-            defaultWhenCommercial: true,
             overrideState: 'default',
             isAvailable: licensingState.ssoAvailable,
             message: licensingState.ssoAvailable

@@ -14,11 +14,17 @@ namespace MeisterDev.ProPR.Application.Features.UsageStatistics.Services;
 ///         There is no event stream and no accumulator. Every counter is a query against data the product
 ///         already stores for its own purposes, so turning usage statistics off leaves nothing to clean up.
 ///     </para>
+///     <para>
+///         The licensing values are read only for an installation the caller resolved as commercial, so a
+///         community installation makes no consumption read for a ping. A licensing read that fails leaves
+///         those values absent, which keeps the snapshot in the shape a community installation sends.
+///     </para>
 /// </summary>
 public sealed class UsageStatisticsSnapshotBuilder(
     IUsageStatisticsCountSource countSource,
     IProductVersionProvider productVersionProvider,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    UsageStatisticsLicensedConsumptionResolver? licensedConsumptionResolver = null)
 {
     /// <summary>The window used before a snapshot has ever been delivered.</summary>
     internal static readonly TimeSpan DefaultWindow = TimeSpan.FromDays(7);
@@ -54,6 +60,10 @@ public sealed class UsageStatisticsSnapshotBuilder(
         var counts = await countSource.CountAsync(now - window, now, cancellationToken);
         var weeks = window.TotalDays / 7d;
 
+        var licensed = edition == UsageStatisticsEdition.Commercial && licensedConsumptionResolver is not null
+            ? await licensedConsumptionResolver.ResolveAsync(cancellationToken).ConfigureAwait(false)
+            : null;
+
         return new UsageStatisticsSnapshot
         {
             SchemaVersion = UsageStatisticsContract.SchemaVersion,
@@ -69,6 +79,13 @@ public sealed class UsageStatisticsSnapshotBuilder(
             FindingsDismissedPerWeek = counts.FindingsDismissed is { } dismissed
                 ? UsageStatisticsBuckets.ForWeeklyFindings(dismissed / weeks)
                 : null,
+            LicenseId = licensed?.LicenseId,
+            LicensingIdentity = licensed?.LicensingIdentity,
+            SystemProfileHash = licensed?.SystemProfileHash,
+            ConsumedClients = licensed?.Clients,
+            ConsumedRunners = licensed?.EnrolledRunners,
+            PeakConcurrentReviews = licensed?.PeakConcurrentReviewsPreviousDay,
+            ConsumedAuthorsPerMonth = licensed?.AuthorsCurrentMonth,
         };
     }
 

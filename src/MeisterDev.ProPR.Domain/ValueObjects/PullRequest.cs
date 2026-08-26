@@ -50,6 +50,11 @@ namespace MeisterDev.ProPR.Domain.ValueObjects;
 ///     discovered and bounded before the review runs so the model can judge the change against its
 ///     intended direction. Defaults to <c>null</c> (treated as empty — no linked-item context).
 /// </param>
+/// <param name="Author">
+///     The account that opened the pull request, as the provider reports it on the fetch. Distinct from
+///     <paramref name="AuthorizedIdentityId" />, which names the connection the fetch ran as. Defaults to
+///     <c>null</c>; a payload without a usable author yields <c>null</c> as well.
+/// </param>
 public sealed record PullRequest(
     string OrganizationUrl,
     string ProjectId,
@@ -67,7 +72,8 @@ public sealed record PullRequest(
     IReadOnlyList<ChangedFileSummary>? AllChangedFileSummaries = null,
     Guid? AuthorizedIdentityId = null,
     string? AuthorizedIdentityName = null,
-    IReadOnlyList<LinkedItem>? LinkedItems = null)
+    IReadOnlyList<LinkedItem>? LinkedItems = null,
+    PullRequestAuthor? Author = null)
 {
     /// <summary>
     ///     Full manifest of all files changed in the PR since the target branch (path + change type only).

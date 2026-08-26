@@ -6,16 +6,17 @@ namespace MeisterDev.ProPR.Application.Features.UsageStatistics.Models;
 /// <summary>
 ///     The edition an installation reports in its anonymous usage statistics.
 ///     <para>
-///         This is a separate wire type rather than a reuse of the licensing enum. A licensing state added
-///         later for a trial, an expiry or a grace period must not be reported, and a separate enum forces such
-///         a state to be mapped onto one of these two values before it can be sent.
+///         This is a separate wire type rather than a reuse of the licensing enum. The licensing layer
+///         distinguishes states this wire does not carry, such as a term approaching its end and the grace window
+///         after one has ended, and a state added later for a trial would be another. A separate enum forces
+///         every one of them to be mapped onto these two values before it can be sent.
 ///     </para>
 /// </summary>
 public enum UsageStatisticsEdition
 {
-    /// <summary>No commercial license is installed.</summary>
+    /// <summary>The installation is not entitled to the commercial capabilities.</summary>
     Community = 0,
 
-    /// <summary>A commercial license is installed.</summary>
+    /// <summary>The installation is entitled to what its license names, which includes the grace window.</summary>
     Commercial = 1,
 }

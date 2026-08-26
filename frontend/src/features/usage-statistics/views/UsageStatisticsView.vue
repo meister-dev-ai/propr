@@ -3,9 +3,10 @@
 
 <script setup lang="ts">
 /**
- * Administration page for anonymous usage statistics.
+ * Administration page for usage statistics.
  *
  * Shows the control, the payload, the endpoint, the last send attempt and the privacy contact on one screen.
+ * What the snapshot carries depends on the edition, so the summary is rendered per edition rather than once.
  */
 import { computed, onMounted, ref } from 'vue'
 import UsageStatisticsPayloadPreview from '@/features/usage-statistics/components/UsageStatisticsPayloadPreview.vue'
@@ -59,7 +60,7 @@ async function toggle(): Promise<void> {
 
   try {
     await setEnabled(!enabled.value)
-    notify(enabled.value ? 'Anonymous usage statistics enabled.' : 'Anonymous usage statistics disabled.')
+    notify(enabled.value ? 'Usage statistics enabled.' : 'Usage statistics disabled.')
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'The setting could not be changed.'
 
@@ -100,7 +101,7 @@ function describeSendDecision(decision: string): string {
     case 'sent':
       return 'Snapshot sent.'
     case 'disabled':
-      return 'Nothing was sent: anonymous usage statistics are switched off.'
+      return 'Nothing was sent: usage statistics are switched off.'
     case 'awaitingConsent':
       return 'Nothing was sent: the notice has not been shown to an administrator yet.'
     default:
@@ -138,8 +139,19 @@ function isSafeLink(link: string | null | undefined): boolean {
     <section class="section-card" data-testid="usage-statistics-control">
       <div class="section-card-header">
         <div>
-          <h2>Anonymous usage statistics</h2>
-          <p class="section-subtitle">
+          <h2>Usage statistics</h2>
+          <p
+            v-if="managedByLicense"
+            class="section-subtitle"
+            data-testid="usage-statistics-summary-commercial"
+          >
+            Once a day this installation sends a snapshot of itself and receives the latest version and any
+            security advisories in return. While a commercial license is in force the snapshot also carries the
+            license identifier, this installation's licensing identity, a hash of the system it runs on, and its
+            current counts of clients, enrolled runners and concurrent reviews, so it is not anonymous. It
+            carries no code, no repository or organization names and no personal data.
+          </p>
+          <p v-else class="section-subtitle" data-testid="usage-statistics-summary-community">
             Once a day this installation sends an anonymous snapshot of itself and receives the latest version
             and any security advisories in return. The snapshot contains no code, no repository or
             organization names, no personal data and no raw counts.
@@ -155,7 +167,7 @@ function isSafeLink(link: string | null | undefined): boolean {
           <input
             ref="toggleInput"
             type="checkbox"
-            aria-label="Send anonymous usage statistics"
+            aria-label="Send usage statistics"
             :checked="enabled"
             :disabled="managedByLicense || saving || loading"
             @change="toggle"

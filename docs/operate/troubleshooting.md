@@ -1,7 +1,6 @@
 # Troubleshooting
 
-Find your symptom, go to the page that fixes it. This page holds no diagnosis of its own - every entry
-below is owned somewhere else, and that page has the detail.
+Find your symptom, go to the page that fixes it. Every entry below links to the page that has the detail.
 
 ## The stack itself
 
@@ -22,6 +21,7 @@ below is owned somewhere else, and that page has the detail.
 | Sessions end sooner than expected | The idle timeout or the absolute lifetime was reached | [sign-in and sessions](../reference/security.md#sign-in-and-sessions) |
 | Browser calls from your own origin are blocked | The origin is neither the public base URL's nor in the allowed list | [deployment topology](deploy.md#deployment-topology) |
 | A feature is refused with a license message | The capability needs a commercial license | [editions](../reference/editions.md) |
+| A licensed feature stays refused after the term was corrected | The host clock ran far ahead and that instant was recorded | [licensing time](#licensing-time-and-the-installation-identifier) |
 
 ## Connecting to an SCM host
 
@@ -36,21 +36,21 @@ below is owned somewhere else, and that page has the detail.
 
 | Symptom | Likely cause | Where it is fixed |
 |---|---|---|
-| The provider fires but no review row appears | The delivery never arrived, or was rejected or deliberately ignored | [webhook troubleshooting](../platforms/webhooks.md#troubleshooting) |
+| The provider fires but no review appears | The delivery never arrived, or was rejected or ignored on purpose | [webhook troubleshooting](../platforms/webhooks.md#troubleshooting) |
 | A delivery is rejected with 401, 400 or 404 | Secret mismatch, an event that family does not classify, or a pull request outside the configured filters | [webhook troubleshooting](../platforms/webhooks.md#troubleshooting) |
 | A delivery is accepted but no review is queued | The pull request's reviewer is not the configured trigger identity | [webhook troubleshooting](../platforms/webhooks.md#troubleshooting) |
 | The listener URL names an internal host | The public base URL is unset, so the URL was built from the request host | [deployment topology](deploy.md#deployment-topology) |
 
 ## Reviews
 
-Confirming one review end to end, if you have not had a successful one yet, is
+If you have not had a successful review yet, start from
 [first review](../quickstart.md#first-review).
 
 | Symptom | Likely cause | Where it is fixed |
 |---|---|---|
-| The row stays pending while another review runs | Only one review at a time without a license | [editions](../reference/editions.md) |
-| The row stays pending with nothing else running | The review worker is not running | [what the health checks mean](observability.md#what-the-health-checks-mean) |
-| The row fails immediately | A purpose the review needs resolves to no model | [purposes](../ai/purposes.md) |
+| The review stays pending while another review runs | Only one review at a time without a license | [editions](../reference/editions.md) |
+| The review stays pending with nothing else running | The review worker is not running | [what the health checks mean](observability.md#what-the-health-checks-mean) |
+| The review fails immediately | A purpose the review needs resolves to no model | [purposes](../ai/purposes.md) |
 | An AI connection will not verify | Credentials, endpoint reachability, or the wrong family for that endpoint | [verification failures](../ai/credentials.md#verification-failures) |
 | No comments on the pull request, or fewer than the summary suggests | Comment posting is off for the client, or the gate and the minimum severity to post filtered them | [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted) |
 | A finding you expected never appeared | Exclusion patterns, the context budget, or the gate - all of which the protocol records | [what happens during a review](../concepts/reviews.md#what-happens-during-a-review) |
@@ -62,6 +62,29 @@ Confirming one review end to end, if you have not had a successful one yet, is
 | Reviews cost more than expected | No prompt caching on the route you chose, list prices instead of yours, or effort and pass settings | [control cost](../guides/control-cost.md) |
 | A model shows no context window or no price | Its id matched no catalog entry | [a model is missing its context window or price](../ai/models-and-catalog.md#a-model-is-missing-its-context-window-or-price) |
 | A job is held before it starts | A budget cap was already reached; a held job needs an operator to restart it | [what you can tune](../concepts/reviews.md#what-you-can-tune) |
+
+## Licensing time and the installation identifier
+
+ProPR records the latest time it has seen. It compares a license term against the host clock or that
+recorded time, whichever is later, so setting the host clock back does not revive an expired license. The
+recorded time never decreases.
+
+If the host clock ran far ahead and ProPR recorded that time, correct it: set the `observed_at` column of the
+`installation_observed_time` row to the right time and restart the installation. The restart is needed
+because a running process keeps the recorded time in memory.
+
+A host clock reading more than five minutes behind the recorded value is reported in the log once per replica,
+naming both instants. Correct the clock or its time synchronisation; nothing about the license needs to
+change.
+
+The installation identifier is on the **Administration → Licensing** page. When the UI is not reachable,
+read it from a shell with `dotnet MeisterDev.ProPR.Api.dll --print-licensing-identity`. The command writes
+the identifier to stdout; on failure it writes one line to stderr and exits non-zero. It applies no
+migrations and runs no startup seeding, so the API must have started against the database at least once. If the
+licensing tables are missing, the command says so. If the installation has no identifier yet, the command
+creates one and writes nothing else. ProPR also logs the identifier once per replica at startup. To report
+as a different installation, delete the `licensing_identity` row. The next read creates a new identifier,
+and the license on file is unaffected.
 
 ## When you need to ask for help
 

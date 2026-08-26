@@ -21,7 +21,6 @@
         <PackageReference Include="Azure.Identity" Version="1.19.0"/>
         <PackageReference Include="Azure.ResourceManager.CognitiveServices" Version="1.5.2"/>
         <PackageReference Include="BCrypt.Net-Next" Version="4.1.0"/>
-        <PackageReference Include="Microsoft.FeatureManagement" Version="4.3.0"/>
         <PackageReference Include="Microsoft.Agents.AI" Version="1.6.2"/>
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.5.1"/>
         <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0"/>

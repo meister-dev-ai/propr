@@ -209,4 +209,13 @@ public interface IReviewJobExecutionStore
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default, float? reviewTemperature = null);
+
+    /// <summary>
+    ///     Records the author the provider reported for the reviewed pull request, overwriting whatever an
+    ///     earlier fetch of the same job recorded. No-op when the job no longer exists.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="author">The author the fetch reported.</param>
+    /// <param name="ct">The cancellation token.</param>
+    Task UpdatePullRequestAuthorAsync(Guid id, PullRequestAuthor author, CancellationToken ct = default);
 }

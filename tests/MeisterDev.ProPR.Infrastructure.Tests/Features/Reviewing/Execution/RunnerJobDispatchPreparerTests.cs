@@ -159,6 +159,106 @@ public sealed class RunnerJobDispatchPreparerTests
         await executionStore.DidNotReceiveWithAnyArgs().AddFileResultAsync(default!, default);
     }
 
+    // Dispatch is the last point at which the control plane holds the author: the completion can be handled by
+    // another replica, and the manifest the runner receives does not carry it.
+    [Fact]
+    public async Task PreparingAJob_RecordsTheAuthorTheConversationFetchNamed()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace();
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+        var author = new PullRequestAuthor(
+            new ProviderHostRef(ScmProvider.AzureDevOps, "https://forge.invalid/org"),
+            "4242",
+            "octo-dev",
+            "Octo Dev",
+            false);
+        this.GivenAConversation(author);
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+
+        var preparation = await this.CreatePreparer(jobs: jobs).PrepareAsync(job, MakeLease());
+
+        Assert.True(preparation.Succeeded);
+        await jobs.Received(1).UpdatePullRequestAuthorAsync(
+            job.Id,
+            Arg.Is<PullRequestAuthor>(recorded => recorded.AuthorKey == author.AuthorKey),
+            Arg.Any<CancellationToken>());
+    }
+
+    // A conversation the provider named no author on records nothing, and so does one that could not be read
+    // at all. Both leave the columns empty rather than recording the connection that performed the fetch.
+    [Fact]
+    public async Task PreparingAJob_WithNoAuthorOnTheConversation_RecordsNothing()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace();
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+        this.GivenAConversation(null);
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+
+        await this.CreatePreparer(jobs: jobs).PrepareAsync(job, MakeLease());
+
+        await jobs.DidNotReceiveWithAnyArgs().UpdatePullRequestAuthorAsync(default, default!, default);
+    }
+
+    // The author column feeds metering. A write that fails must not cost the runner its offer: the lease is
+    // released when preparation does not succeed, so a throw here would return the job to the queue and the
+    // request would come back empty.
+    [Fact]
+    public async Task PreparingAJob_WhenTheAuthorWriteFails_StillPreparesTheDispatch()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace();
+        var tools = Substitute.For<IReviewContextTools>();
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(tools);
+        this.GivenAConversation(
+            new PullRequestAuthor(
+                new ProviderHostRef(ScmProvider.AzureDevOps, "https://forge.invalid/org"),
+                "4242"));
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        jobs.UpdatePullRequestAuthorAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<PullRequestAuthor>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("the author column is unavailable")));
+
+        var preparation = await this.CreatePreparer(jobs: jobs).PrepareAsync(job, MakeLease());
+
+        Assert.True(preparation.Succeeded);
+        Assert.Null(preparation.Failure);
+        Assert.NotNull(preparation.Request);
+        Assert.NotNull(this._workspaceRegistry.Find(JobId));
+        Assert.Same(tools, this._toolsRegistry.Find(JobId)!.Tools);
+    }
+
+    private void GivenAConversation(PullRequestAuthor? author)
+    {
+        this._pullRequests
+            .FetchThreadContextAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new PullRequest(
+                        "https://forge.invalid/org",
+                        "project",
+                        "repo",
+                        "repo",
+                        42,
+                        1,
+                        "Test PR",
+                        null,
+                        "feature",
+                        "main",
+                        new List<ChangedFile>().AsReadOnly(),
+                        Author: author)));
+    }
+
     private static ReviewJob MakeJob()
     {
         var job = new ReviewJob(JobId, Guid.NewGuid(), "https://forge.invalid/org", "project", "repo", 42, 1);
@@ -230,7 +330,8 @@ public sealed class RunnerJobDispatchPreparerTests
 
     private RunnerJobDispatchPreparer CreatePreparer(
         ReviewJobReuse? reuse = null,
-        IReviewFileResultStore? priorRows = null)
+        IReviewFileResultStore? priorRows = null,
+        IReviewJobExecutionStore? jobs = null)
     {
         return new RunnerJobDispatchPreparer(
             this._workspaces,
@@ -239,6 +340,7 @@ public sealed class RunnerJobDispatchPreparerTests
             this._toolsRegistry,
             this._pullRequests,
             Microsoft.Extensions.Options.Options.Create(new ReviewWorkspaceOptions()),
+            jobs ?? Substitute.For<IReviewJobExecutionStore>(),
             reuse: reuse,
             priorRows: priorRows);
     }

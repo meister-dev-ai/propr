@@ -1,5 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+// This file implements license key functionality. License logic may not be moved, changed, disabled or circumvented.
 
 namespace MeisterDev.ProPR.Application.Features.Licensing.Models;
 
@@ -25,7 +26,11 @@ public static class PremiumCapabilityKey
     /// </summary>
     public const string MentionAnswering = "mention-answering";
 
-    /// <summary>Capability key for configuring and enforcing USD spend budgets.</summary>
+    /// <summary>
+    ///     Capability key for configuring USD spend budgets and for the views reporting spend against them.
+    ///     Enforcement of a cap already configured is not gated on it: a cap protects the installation from
+    ///     spend and keeps doing so in every edition.
+    /// </summary>
     public const string Budgeting = "budgeting";
 
     /// <summary>
@@ -41,6 +46,13 @@ public static class PremiumCapabilityKey
     /// </summary>
     public const string DistributedExecution = "distributed-execution";
 
+    /// <summary>
+    ///     Capability key for running more than the built-in System tenant. Everything configured per tenant -
+    ///     identity providers, login policy, the AI compliance restrictions and the tenant model catalog - is
+    ///     reachable only while this capability is available.
+    /// </summary>
+    public const string MultiTenancy = "multi-tenancy";
+
     /// <summary>All known premium capability keys in their canonical order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -52,5 +64,6 @@ public static class PremiumCapabilityKey
         MentionAnswering,
         Budgeting,
         CodeInsights,
+        MultiTenancy,
     ];
 }

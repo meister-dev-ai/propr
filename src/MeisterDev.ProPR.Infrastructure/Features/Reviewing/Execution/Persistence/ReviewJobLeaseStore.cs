@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -13,6 +14,7 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 
@@ -26,7 +28,8 @@ public sealed class ReviewJobLeaseStore(
     MeisterProPRDbContext dbContext,
     IJobRepository jobs,
     IOptions<ReviewLeaseOptions> leaseOptions,
-    ILogger<ReviewJobLeaseStore> logger) : IReviewJobLeaseStore
+    ILogger<ReviewJobLeaseStore> logger,
+    IConcurrentReviewPeakStore? concurrentReviewPeaks = null) : IReviewJobLeaseStore
 {
     /// <summary>
     ///     How long the protocol cleanup after a duration-ceiling failure may take before it is abandoned.
@@ -92,9 +95,147 @@ public sealed class ReviewJobLeaseStore(
             .Select(j => new { j.LeaseGeneration, j.LeaseExpiresAt })
             .SingleOrDefaultAsync(ct);
 
-        return granted?.LeaseExpiresAt is null
-            ? null
-            : new ReviewJobLease(jobId, owner, granted.LeaseGeneration, granted.LeaseExpiresAt.Value);
+        if (granted?.LeaseExpiresAt is null)
+        {
+            return null;
+        }
+
+        await this.ObserveConcurrentReviewPeakAsync().ConfigureAwait(false);
+
+        return new ReviewJobLease(jobId, owner, granted.LeaseGeneration, granted.LeaseExpiresAt.Value);
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewJobCappedClaim> TryClaimWithinProcessingCapAsync(
+        Guid jobId,
+        string owner,
+        TimeSpan leaseDuration,
+        int cap,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        ArgumentOutOfRangeException.ThrowIfLessThan(cap, 1);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        int claimed;
+        try
+        {
+            // Bounds how long this claimant waits for the lock below. A claimant that stalls while holding it
+            // would otherwise block every other one indefinitely, and each of those waits occupies a pooled
+            // connection for as long as it lasts. SET LOCAL applies to this transaction only.
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "SET LOCAL lock_timeout = '5s'",
+                ct).ConfigureAwait(false);
+
+            // The advisory lock is what makes the capacity condition below mean anything. The subquery reads
+            // the transaction's snapshot, so two claimants of two different rows both count the state from
+            // before either of them wrote, and both pass a cap they jointly exceed. Row locking does not
+            // help: it arbitrates claims of the same row, and these are different rows. The lock is held for
+            // the transaction, so it is released when the transaction ends, by commit or by rollback.
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "SELECT pg_advisory_xact_lock(hashtextextended('propr:quota:concurrent-reviews', 0))",
+                ct).ConfigureAwait(false);
+
+            // The claim itself is the unbounded one, with the capacity condition added. Everything it stamps
+            // is stamped identically, so a job claimed under a cap is indistinguishable afterwards from one
+            // claimed without.
+            claimed = await dbContext.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE review_jobs
+                SET status = 'Processing',
+                    lease_owner = {1},
+                    lease_generation = lease_generation + 1,
+                    lease_expires_at = now() + make_interval(secs => {2}),
+                    last_heartbeat_at = now(),
+                    processing_started_at = now(),
+                    publishing_started_at = NULL
+                WHERE id = (
+                    SELECT id FROM review_jobs
+                    WHERE id = {0} AND status = 'Pending'
+                    FOR UPDATE SKIP LOCKED
+                )
+                  AND (SELECT count(*) FROM review_jobs WHERE status = 'Processing') < {3}
+                """,
+                [jobId, owner, leaseDuration.TotalSeconds, cap],
+                ct).ConfigureAwait(false);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+        {
+            // Reported as capacity rather than as an unclaimable job, because the caller must stop scanning
+            // this tick: the next candidate would contend for the same lock straight away and wait again. No
+            // executing count is carried, because this claimant never entered the admission that counts them.
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            return ReviewJobCappedClaim.AtCapacity(cap);
+        }
+
+        if (claimed == 0)
+        {
+            // Which of the two refusals this is decides whether the caller's queue scan has anything left to
+            // try, so it is read here, inside the same transaction, rather than left to a later query that
+            // would see a different state. The count is carried on the refusal so the caller can report the
+            // number it was measured against.
+            var processing = await dbContext.ReviewJobs
+                .CountAsync(j => j.Status == JobStatus.Processing, ct)
+                .ConfigureAwait(false);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+
+            return processing >= cap
+                ? ReviewJobCappedClaim.AtCapacity(cap, processing)
+                : ReviewJobCappedClaim.NotClaimable;
+        }
+
+        var granted = await dbContext.ReviewJobs
+            .AsNoTracking()
+            .Where(j => j.Id == jobId)
+            .Select(j => new { j.LeaseGeneration, j.LeaseExpiresAt })
+            .SingleOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+
+        if (granted?.LeaseExpiresAt is null)
+        {
+            return ReviewJobCappedClaim.NotClaimable;
+        }
+
+        await this.ObserveConcurrentReviewPeakAsync().ConfigureAwait(false);
+
+        return ReviewJobCappedClaim.Granted(new ReviewJobLease(jobId, owner, granted.LeaseGeneration, granted.LeaseExpiresAt.Value));
+    }
+
+    /// <summary>
+    ///     Records how many reviews are executing now against the current UTC day, after the claim that raised
+    ///     the number has committed.
+    /// </summary>
+    /// <remarks>
+    ///     Taken outside the claim's transaction because the record is descriptive: nothing decides what may
+    ///     run from it, and a claim that succeeded must not be rolled back by a write that only feeds a report.
+    ///     A concurrent claimant reading the same count is harmless, because the row keeps whichever count is
+    ///     higher. The store is absent on a host that runs without the licensing module, where nothing reads
+    ///     the record.
+    ///     <para>
+    ///         The caller's token is not passed on. The claim has committed by this point, so a cancellation
+    ///         arriving now would leave the job executing while the caller was told it had claimed nothing.
+    ///         A failure is logged and the next claim records again.
+    ///     </para>
+    /// </remarks>
+    private async Task ObserveConcurrentReviewPeakAsync()
+    {
+        if (concurrentReviewPeaks is not { } peaks)
+        {
+            return;
+        }
+
+        try
+        {
+            await peaks.ObserveAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "The concurrent-review peak for the current day could not be recorded. The claim stands and the next one records again.");
+        }
     }
 
     /// <inheritdoc />
@@ -297,19 +438,6 @@ public sealed class ReviewJobLeaseStore(
             ct);
 
         return released > 0;
-    }
-
-    /// <inheritdoc />
-    public async Task ClearLeaseAsync(Guid jobId, CancellationToken ct = default)
-    {
-        await dbContext.ReviewJobs
-            .Where(j => j.Id == jobId)
-            .ExecuteUpdateAsync(
-                s => s
-                    .SetProperty(j => j.LeaseOwner, (string?)null)
-                    .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
-                    .SetProperty(j => j.LastHeartbeatAt, (DateTimeOffset?)null),
-                ct);
     }
 
     /// <inheritdoc />

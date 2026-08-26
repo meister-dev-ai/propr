@@ -97,8 +97,10 @@ const canViewCodeQuality = computed(
   () => canViewClients.value && isCapabilityAvailable('code-insights'),
 )
 
+// A tenant-administration role plus the licence. The API gates tenant administration on the capability, so an
+// entry shown without it would lead to a refusal rather than a page.
 const canAccessTenantAdministration = computed(
-  () => edition.value !== 'community' && (isAdmin.value || Object.values(tenantRoles.value).some((role) => role >= 1)),
+  () => isCapabilityAvailable('multi-tenancy') && (isAdmin.value || Object.values(tenantRoles.value).some((role) => role >= 1)),
 )
 
 const hasAnyTenantAdminRole = computed(
@@ -111,10 +113,6 @@ const hasAnyTenantAdminRole = computed(
  */
 const canViewReviewerPerformance = computed(
   () => hasAnyTenantAdminRole.value && isCapabilityAvailable('code-insights'),
-)
-
-const hasAnyAdministrationAccess = computed(
-  () => isAdmin.value || canAccessTenantAdministration.value,
 )
 
 /**
@@ -165,6 +163,18 @@ const defaultRunnersRoute = computed(() => {
   const tenantId = Object.entries(tenantRoles.value).find(([, role]) => role >= 1)?.[0]
   return tenantId ? { name: 'runners', params: { tenantId } } : null
 })
+
+/**
+ * The dropdown is shown when it would hold at least one entry. Tenant administration is one licensed entry
+ * among several, so a tenant administrator of an installation without multi-tenancy still reaches the entries
+ * their other capabilities give them.
+ */
+const hasAnyAdministrationAccess = computed(
+  () => isAdmin.value
+    || canAccessTenantAdministration.value
+    || canViewReviewerPerformance.value
+    || defaultRunnersRoute.value !== null,
+)
 
 const adminDropdownOpen = ref(false)
 

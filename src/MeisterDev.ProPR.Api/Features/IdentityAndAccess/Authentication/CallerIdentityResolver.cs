@@ -218,12 +218,12 @@ public static class CallerIdentityResolver
 
         var explicitClientIds = explicitClientRoles.Keys.ToArray();
         var tenantIds = tenantRoles.Keys.ToArray();
-        var isCommunityEdition = await IsCommunityEditionAsync(context, ct);
+        var multiTenancyAvailable = await IsMultiTenancyAvailableAsync(context, ct);
         var visibleClientsQuery = dbContext.Clients
             .AsNoTracking()
             .Where(client => explicitClientIds.Contains(client.Id) || tenantIds.Contains(client.TenantId));
 
-        if (isCommunityEdition)
+        if (!multiTenancyAvailable)
         {
             visibleClientsQuery = visibleClientsQuery.Where(client => client.TenantId == Guid.Empty || client.TenantId == TenantCatalog.SystemTenantId);
         }
@@ -284,22 +284,22 @@ public static class CallerIdentityResolver
         }
     }
 
-    private static async Task<bool> IsCommunityEditionAsync(HttpContext context, CancellationToken ct)
+    // Multi-tenancy is available only when the licensing capability service answers that it is. The same
+    // check in ClientAdminService and TenantAdminService leaves tenancy unrestricted when that service is
+    // absent, because those run in deployments with no database and therefore no installation state. This one
+    // is reached only after the caller has established that a database is registered, so an absent service is
+    // a misconfigured host rather than a database-less deployment, and the answer is restrictive.
+    private static async ValueTask<bool> IsMultiTenancyAvailableAsync(HttpContext context, CancellationToken ct)
     {
         var licensingCapabilityService = context.RequestServices.GetService<ILicensingCapabilityService>();
         if (licensingCapabilityService is null)
         {
+            // The caller returns before this method when no database is registered. Reaching this branch means
+            // the database-backed host is missing its licensing service, so premium tenancy must fail closed.
             return false;
         }
 
-        var summaryTask = licensingCapabilityService.GetSummaryAsync(ct);
-        if (summaryTask is null)
-        {
-            return false;
-        }
-
-        var summary = await summaryTask;
-        return summary?.Edition == InstallationEdition.Community;
+        return await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.MultiTenancy, ct);
     }
 }
 

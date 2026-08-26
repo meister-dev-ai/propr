@@ -2,9 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Api.Extensions;
-using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Api.Features.Reviewing.Contracts;
-using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.StopReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewByCoordinates;
@@ -105,10 +103,6 @@ public sealed partial class ReviewJobsController(
         catch (InvalidOperationException ex)
         {
             return this.BadRequest(new { error = ex.Message });
-        }
-        catch (PremiumFeatureUnavailableException ex)
-        {
-            return new PremiumFeatureUnavailableResult(ex.Capability);
         }
 
         if (result.IsBlocked)

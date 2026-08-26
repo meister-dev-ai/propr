@@ -48,6 +48,11 @@ public static class UsageStatisticsModuleServiceCollectionExtensions
         services.AddScoped<IUsageStatisticsStateStore, UsageStatisticsStateRepository>();
         services.AddScoped<IUsageStatisticsCountSource, UsageStatisticsCountRepository>();
         services.AddScoped<UsageStatisticsEditionResolver>();
+
+        // Scoped because it reads the licensed resource counts and the observed profile, both of which are
+        // served from the scoped database context. It resolves on an installation without the licensing module
+        // as well, where it reports nothing.
+        services.AddScoped<UsageStatisticsLicensedConsumptionResolver>();
         services.AddScoped<UsageStatisticsSnapshotBuilder>();
         services.AddScoped<UsageStatisticsService>();
         services.AddScoped<UsageStatisticsSender>();

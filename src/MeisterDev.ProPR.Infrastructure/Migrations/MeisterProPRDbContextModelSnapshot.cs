@@ -1162,6 +1162,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("comment_author_login");
 
+                    b.Property<string>("CommentAuthorNativeId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("comment_author_native_id");
+
                     b.Property<long>("CommentId")
                         .HasColumnType("bigint")
                         .HasColumnName("comment_id");
@@ -2191,6 +2196,25 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("organization_url");
+
+                    b.Property<string>("PrAuthorDisplayName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("pr_author_display_name");
+
+                    b.Property<string>("PrAuthorExternalUserId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("pr_author_external_user_id");
+
+                    b.Property<bool?>("PrAuthorIsBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("pr_author_is_bot");
+
+                    b.Property<string>("PrAuthorLogin")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("pr_author_login");
 
                     b.Property<string>("PrRepositoryName")
                         .HasMaxLength(200)
@@ -4493,10 +4517,6 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("edition");
 
-                    b.Property<int?>("EntitledRunnerSlots")
-                        .HasColumnType("integer")
-                        .HasColumnName("entitled_runner_slots");
-
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -4508,6 +4528,284 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("installation_edition", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.InstallationLicenseRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActivatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("activated_at");
+
+                    b.Property<Guid?>("ActivatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("activated_by_user_id");
+
+                    b.Property<string>("ProtectedToken")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_token");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("installation_license", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.InstallationObservedTimeRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_at");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("installation_observed_time", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LicenseActivationEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("LicenseId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("license_id");
+
+                    b.Property<string>("Licensee")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("licensee");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_license_activation_events_occurred_at");
+
+                    b.ToTable("license_activation_events", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LicensingAuthorActivityRecord", b =>
+                {
+                    b.Property<DateOnly>("ActivityMonth")
+                        .HasColumnType("date")
+                        .HasColumnName("activity_month");
+
+                    b.Property<string>("AuthorKey")
+                        .HasMaxLength(768)
+                        .HasColumnType("character varying(768)")
+                        .HasColumnName("author_key");
+
+                    b.Property<bool>("Excluded")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("excluded");
+
+                    b.Property<string>("ExternalUserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("external_user_id");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<int>("FirstSeenSource")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_seen_source");
+
+                    b.Property<string>("HostBaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("host_base_url");
+
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer")
+                        .HasColumnName("provider");
+
+                    b.HasKey("ActivityMonth", "AuthorKey");
+
+                    b.ToTable("licensing_author_activity", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LicensingAuthorOverageRecord", b =>
+                {
+                    b.Property<DateOnly>("OverageMonth")
+                        .HasColumnType("date")
+                        .HasColumnName("overage_month");
+
+                    b.Property<DateTimeOffset>("FirstObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_observed_at");
+
+                    b.Property<long>("HighestObservedCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("highest_observed_count");
+
+                    b.Property<DateTimeOffset>("LastObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_observed_at");
+
+                    b.Property<long>("LicensedCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("licensed_count");
+
+                    b.HasKey("OverageMonth");
+
+                    b.ToTable("licensing_author_overage", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LicensingConcurrentReviewPeakRecord", b =>
+                {
+                    b.Property<DateOnly>("PeakDate")
+                        .HasColumnType("date")
+                        .HasColumnName("peak_date");
+
+                    b.Property<DateTimeOffset>("ObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_at");
+
+                    b.Property<long>("PeakCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("peak_count");
+
+                    b.HasKey("PeakDate");
+
+                    b.ToTable("licensing_concurrent_review_peak", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LicensingIdentityRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("Identifier")
+                        .HasColumnType("uuid")
+                        .HasColumnName("identifier");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("licensing_identity", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LicensingReplicaHostnameRecord", b =>
+                {
+                    b.Property<string>("Hostname")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("hostname");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.HasKey("Hostname");
+
+                    b.ToTable("licensing_replica_hostnames", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LicensingSystemProfileDriftRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ChangedComponents")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("changed_components");
+
+                    b.Property<string>("NewHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("new_hash");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("PreviousHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("previous_hash");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_licensing_system_profile_drift_occurred_at");
+
+                    b.ToTable("licensing_system_profile_drift", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LicensingSystemProfileRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CapturedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("captured_at");
+
+                    b.Property<string>("ProfileHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("profile_hash");
+
+                    b.Property<string>("StableComponents")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("stable_components");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VolatileComponents")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("volatile_components");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("licensing_system_profile", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LogicalModelOverrideRecord", b =>

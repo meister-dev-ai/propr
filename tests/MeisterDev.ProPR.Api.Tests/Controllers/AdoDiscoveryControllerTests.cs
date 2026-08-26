@@ -18,6 +18,7 @@ using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -331,7 +332,6 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
                             capabilityKey,
                             capabilityKey,
                             true,
-                            true,
                             PremiumCapabilityOverrideState.Default,
                             isAvailable,
                             message)));
@@ -369,6 +369,8 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
                 services.AddDbContextFactory<MeisterProPRDbContext>(options =>
                     options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                // The licensing module is not composed here, so client creation admits through a gate with no ceiling.
+                services.AddScoped<IStockQuotaGate, UnlimitedStockQuotaGate>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
 
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());

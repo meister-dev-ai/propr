@@ -32,8 +32,13 @@ public sealed class UsageStatisticsEditionResolver(ILicensingCapabilityService? 
     /// <summary>
     ///     Maps an installation edition onto the two values the wire carries.
     ///     <para>
-    ///         The switch is exhaustive. A licensing state added later for a trial, an expiry or a grace period
-    ///         is reported as community until the mapping is updated, so no new state is reported by default.
+    ///         The mapping is over the edition rather than the license lifecycle stage, so the stages that keep
+    ///         an installation entitled — including the grace window after a term ends — arrive here as the
+    ///         commercial edition and need nothing added.
+    ///     </para>
+    ///     <para>
+    ///         The switch is exhaustive. An edition added later is reported as community until the mapping is
+    ///         updated, so no new value is reported by default.
     ///     </para>
     /// </summary>
     internal static UsageStatisticsEdition Map(InstallationEdition edition)

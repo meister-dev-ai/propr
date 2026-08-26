@@ -189,6 +189,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
                     merged_at = (string?)null,
                     head = new { @ref = "feature/providers", sha = "head-sha" },
                     @base = new { @ref = "main", sha = "base-sha" },
+                    user = new { id = 4242, login = "octo-dev", name = "Octo Dev", type = "User" },
                 }),
             "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(
                 new object[]
@@ -274,6 +275,176 @@ public sealed class GitHubCodeReviewQueryServiceTests
         var thread = Assert.Single(result.ExistingThreads!);
         Assert.Equal("PRRT_501", thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
+
+        // The comment author's numeric account id, in the same form the pull-request payload states it, so one
+        // person is one identifier across both reads. The derived identifier beside it is a different value.
+        var comment = Assert.Single(thread.Comments);
+        Assert.Equal("99", comment.AuthorNativeId);
+        Assert.NotEqual("99", comment.AuthorId?.ToString());
+        Assert.NotNull(result.Author);
+        Assert.Equal(ScmProvider.GitHub, result.Author!.Host.Provider);
+        Assert.Equal("https://github.com", result.Author.Host.HostBaseUrl);
+        Assert.Equal("4242", result.Author.ExternalUserId);
+        Assert.Equal("octo-dev", result.Author.Login);
+        Assert.Equal("Octo Dev", result.Author.DisplayName);
+        Assert.False(result.Author.IsBot);
+    }
+
+    [Fact]
+    public async Task PullRequestFetcher_AuthorTypedAsBot_ReportsTheBotSignal()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                new
+                {
+                    title = "Bump dependencies",
+                    body = "Automated dependency update.",
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "dependabot/nuget", sha = "head-sha" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                    user = new { id = 49699333, login = "dependabot[bot]", type = "Bot" },
+                }),
+            "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(Array.Empty<object>()),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new { reviewThreads = new { nodes = Array.Empty<object>() } },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "acme/propr",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal("49699333", result.Author!.ExternalUserId);
+        Assert.True(result.Author.IsBot);
+
+        // GitHub does not usually populate "name" on this response, so the display name is often absent.
+        Assert.Null(result.Author.DisplayName);
+    }
+
+    [Fact]
+    public async Task PullRequestFetcher_PayloadWithoutUser_YieldsNoAuthor()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                new
+                {
+                    title = "Add provider-neutral fetchers",
+                    body = "Fetch GitHub pull requests without Azure-only code.",
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "feature/providers", sha = "head-sha" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                }),
+            "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(Array.Empty<object>()),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new { reviewThreads = new { nodes = Array.Empty<object>() } },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "acme/propr",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Null(result.Author);
+    }
+
+    [Fact]
+    public async Task ThreadContextFetch_ReportsTheSameAuthorAsTheReviewFetch()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                new
+                {
+                    title = "Add provider-neutral fetchers",
+                    body = "Fetch GitHub pull requests without Azure-only code.",
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "feature/providers", sha = "head-sha" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                    user = new { id = 4242, login = "octo-dev", name = "Octo Dev", type = "User" },
+                }),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new { reviewThreads = new { nodes = Array.Empty<object>() } },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchThreadContextAsync(
+            "https://github.com",
+            "acme",
+            "acme/propr",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal("4242", result.Author!.ExternalUserId);
+        Assert.Equal("octo-dev", result.Author.Login);
+        Assert.Equal("Octo Dev", result.Author.DisplayName);
     }
 
     [Fact]

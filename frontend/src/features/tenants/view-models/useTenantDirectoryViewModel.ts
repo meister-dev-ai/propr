@@ -67,7 +67,7 @@ function buildClientBootstrapRoute(tenantId: string) {
 export function useTenantDirectoryViewModel(options: UseTenantDirectoryViewModelOptions = {}): TenantDirectoryViewModel {
   const router = useRouter()
   const { notify } = useNotification()
-  const { isAdmin, hasTenantRole, edition } = useSession()
+  const { isAdmin, hasTenantRole, isCapabilityAvailable } = useSession()
   const listTenantsFn = options.tenantDirectoryService?.listTenants ?? listTenants
   const createTenantFn = options.tenantDirectoryService?.createTenant ?? createTenant
   const autoLoad = options.autoLoad ?? true
@@ -77,7 +77,8 @@ export function useTenantDirectoryViewModel(options: UseTenantDirectoryViewModel
   const creating = ref(false)
   const createError = ref('')
 
-  const canCreateTenants = computed(() => isAdmin.value && edition.value !== 'community')
+  // The API refuses tenant creation without the capability, so the control follows the same rule.
+  const canCreateTenants = computed(() => isAdmin.value && isCapabilityAvailable('multi-tenancy'))
   const isLoading = computed(() => state.value.status === 'loading')
   const loadError = computed(() => state.value.status === 'error' ? state.value.message ?? '' : '')
 

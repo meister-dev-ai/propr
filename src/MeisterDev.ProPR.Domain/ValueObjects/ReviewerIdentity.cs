@@ -50,6 +50,5 @@ public sealed record ReviewerIdentity
     ///     can be renamed, and a key that moved when somebody renamed an account would stop recognizing the
     ///     mentions it had already answered.
     /// </remarks>
-    public string AddressedKey =>
-        $"{this.Host.Provider}|{this.Host.HostBaseUrl}|{this.ExternalUserId}".ToLowerInvariant();
+    public string AddressedKey => this.Host.ScopedKey(this.ExternalUserId);
 }

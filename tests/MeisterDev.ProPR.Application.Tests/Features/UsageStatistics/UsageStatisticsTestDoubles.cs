@@ -55,4 +55,54 @@ internal static class UsageStatisticsTestDoubles
             .Returns(Task.FromResult(counts));
         return source;
     }
+
+    public static ILicenseStateProvider LicenseStateProvider(LicenseState state)
+    {
+        var provider = Substitute.For<ILicenseStateProvider>();
+        provider.GetStateAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(state));
+        return provider;
+    }
+
+    public static ILicensingIdentityStore LicensingIdentityStore(Guid identity)
+    {
+        var store = Substitute.For<ILicensingIdentityStore>();
+        store.GetOrCreateAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(identity));
+        return store;
+    }
+
+    public static ISystemProfileStore SystemProfileStore(string? profileHash)
+    {
+        var store = Substitute.For<ISystemProfileStore>();
+        store.GetCurrentAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<SystemProfileSnapshot?>(profileHash is null ? null : Profile(profileHash)));
+        return store;
+    }
+
+    public static ILicensedResourceCountSource LicensedResourceCountSource(LicensedResourceCounts counts)
+    {
+        var source = Substitute.For<ILicensedResourceCountSource>();
+        source.GetCountsAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(counts));
+        return source;
+    }
+
+    private static SystemProfileSnapshot Profile(string profileHash)
+    {
+        var capturedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        return new SystemProfileSnapshot
+        {
+            Stable = new SystemProfileStableComponents
+            {
+                PostgresSystemIdentifier = "7100000000000000001",
+                DatabaseName = "propr",
+                DatabaseOid = 16384,
+                IdentityCreatedAtUnixSeconds = capturedAt.ToUnixTimeSeconds(),
+                ScmHostHashes = null,
+            },
+            Volatile = new SystemProfileVolatileComponents(),
+            ProfileHash = profileHash,
+            CapturedAt = capturedAt,
+            UpdatedAt = capturedAt,
+        };
+    }
 }

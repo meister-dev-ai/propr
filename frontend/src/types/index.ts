@@ -302,7 +302,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the current installation edition and premium capability state. */
+        /**
+         * Returns the current installation edition, premium capability state, and every quantitative limit
+         *     with the ceiling the installation is held to beside what the license states and what the
+         *     installation currently holds. The effective ceiling is the number an enforcement refusal quotes.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -312,7 +316,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
+                /** @description The current licensing summary. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -323,7 +327,7 @@ export interface paths {
                         "text/json": components["schemas"]["LicensingSummaryDto"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description No valid credentials were supplied. */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -334,7 +338,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Forbidden */
+                /** @description The caller is not an administrator. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -345,7 +349,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Service Unavailable */
+                /** @description Licensing is not available on this deployment. */
                 503: {
                     headers: {
                         [name: string]: unknown;
@@ -359,23 +363,38 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Updates the installation edition and optional per-capability overrides. */
-        patch: {
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/licensing/license": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Activates a license document, replacing the one on file. The document is verified before it is
+         *     stored, so a refused request leaves the previous license in place.
+         */
+        put: {
             parameters: {
                 query?: never;
                 header?: never;
                 path?: never;
                 cookie?: never;
             };
+            /** @description The license document. */
             requestBody?: {
                 content: {
-                    "application/json": components["schemas"]["PatchAdminLicensingRequest"];
-                    "text/json": components["schemas"]["PatchAdminLicensingRequest"];
-                    "application/*+json": components["schemas"]["PatchAdminLicensingRequest"];
+                    "application/json": components["schemas"]["ActivateLicenseRequest"];
+                    "text/json": components["schemas"]["ActivateLicenseRequest"];
+                    "application/*+json": components["schemas"]["ActivateLicenseRequest"];
                 };
             };
             responses: {
-                /** @description OK */
+                /** @description The licensing summary the installation now reports. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -386,18 +405,25 @@ export interface paths {
                         "text/json": components["schemas"]["LicensingSummaryDto"];
                     };
                 };
-                /** @description Bad Request */
+                /** @description The license was stored and the summary could not be read back. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The document was refused; the body names the reason. */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
+                        "text/plain": components["schemas"]["LicenseActivationRefusedPayload"];
+                        "application/json": components["schemas"]["LicenseActivationRefusedPayload"];
+                        "text/json": components["schemas"]["LicenseActivationRefusedPayload"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description No valid credentials were supplied. */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -408,7 +434,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Forbidden */
+                /** @description The caller is not an administrator. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -419,8 +445,35 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Conflict */
-                409: {
+                /** @description Licensing is not available on this deployment. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Removes the license on file. Removing when none is on file is not an error and records nothing. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No license is on file. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description No valid credentials were supplied. */
+                401: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -430,7 +483,253 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Service Unavailable */
+                /** @description The caller is not an administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Licensing is not available on this deployment. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/licensing/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the recorded license activations, replacements and removals, newest first, at most the 200
+         *     most recent records. The records survive the removal of the license they describe.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The recorded license changes. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LicenseActivationEventDto"][];
+                        "application/json": components["schemas"]["LicenseActivationEventDto"][];
+                        "text/json": components["schemas"]["LicenseActivationEventDto"][];
+                    };
+                };
+                /** @description No valid credentials were supplied. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not an administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Licensing is not available on this deployment. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/licensing/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns what the installation has observed about the system it runs on: the profile it currently
+         *     reports, the recorded changes to that profile newest first, and the host names it has been seen
+         *     running on. The profile is descriptive; no license check reads it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The observed system profile. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SystemProfileDto"];
+                        "application/json": components["schemas"]["SystemProfileDto"];
+                        "text/json": components["schemas"]["SystemProfileDto"];
+                    };
+                };
+                /** @description No valid credentials were supplied. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not an administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Licensing is not available on this deployment. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/licensing/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Updates the per-capability overrides the installation applies on top of its license. An override can
+         *     only take a capability away, so `overrideState` carries either `default` or `disabled`.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The override mutations to apply. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchLicensingOverridesRequest"];
+                    "text/json": components["schemas"]["PatchLicensingOverridesRequest"];
+                    "application/*+json": components["schemas"]["PatchLicensingOverridesRequest"];
+                };
+            };
+            responses: {
+                /** @description The licensing summary the installation now reports. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LicensingSummaryDto"];
+                        "application/json": components["schemas"]["LicensingSummaryDto"];
+                        "text/json": components["schemas"]["LicensingSummaryDto"];
+                    };
+                };
+                /**
+                 * @description An override carries no capability key, names a capability that does not exist, or carries a state the
+                 *     endpoint does not accept.
+                 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description No valid credentials were supplied. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not an administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Licensing is not available on this deployment. */
                 503: {
                     headers: {
                         [name: string]: unknown;
@@ -1829,9 +2128,9 @@ export interface paths {
         /**
          * Runs a send cycle now instead of waiting for the daily one.
          *
-         *     Every rule the background loop applies still applies here, so an installation that is switched
-         *         off or has not shown the notice sends nothing, and one that already sent today is told it is
-         *         not due. The response says which of those happened.
+         *     The rules the background loop applies also apply here: an installation that is switched off or
+         *         has not shown the notice sends nothing, and one that already sent today is reported as not due.
+         *         The response carries which decision was taken.
          */
         post: {
             parameters: {
@@ -1900,7 +2199,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Records that the consent notice reached an administrator, which is what opens the send gate in a
+         * Records that the consent notice was shown to an administrator, which opens the send gate in a
          *     community installation. Idempotent.
          */
         post: {
@@ -1969,7 +2268,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Hides the consent notice for this installation. Dismissal changes nothing about what is sent. */
+        /** Hides the consent notice for this installation. Dismissal does not change what is sent. */
         post: {
             parameters: {
                 query?: never;
@@ -7103,6 +7402,17 @@ export interface paths {
                 };
                 /** @description Caller is not a global admin. */
                 403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The creation was refused, such as by the licensed client ceiling. */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -17076,6 +17386,14 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** @description Payload carrying the license document to activate. */
+        ActivateLicenseRequest: {
+            /**
+             * @description The compact license document. Text pasted by an operator and the contents of a file the browser read are
+             *     the same value here.
+             */
+            token: string | null;
+        };
         /** @description A branch option discovered for one source. */
         AdoBranchOptionDto: {
             branchName?: string | null;
@@ -17518,6 +17836,44 @@ export interface components {
             hasLocalPassword?: boolean;
             edition?: components["schemas"]["InstallationEdition"];
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+        };
+        /**
+         * @description Where the current calendar month's counted authors stand against the number the license states for them.
+         *
+         *     Reported for information. The author allowance is recorded and reported rather than enforced, so an
+         *         installation above the number keeps every capability its license grants and no review, answer or
+         *         other work is withheld, delayed or degraded because of it.
+         */
+        AuthorOverageDto: {
+            /**
+             * Format: int64
+             * @description The number the license document states for authors within one calendar month.
+             */
+            licensedCount?: number;
+            /**
+             * Format: int64
+             * @description The distinct authors the current UTC month holds, automation identities left out.
+             */
+            observedCount?: number;
+            /**
+             * @description Whether the observed count is above the licensed number. Taken from the current month's comparison, so
+             *     it reads false again once the count is at or below the number.
+             */
+            isInOverage?: boolean;
+        };
+        /** @description The busiest of the twelve calendar months ending with the current one, and how many authors it held. */
+        AuthorPeakMonthDto: {
+            /**
+             * Format: date
+             * @description The first day of the month, in UTC. A date rather than an instant, because the unit is the month and no
+             *     part of the day within it carries meaning.
+             */
+            month?: string;
+            /**
+             * Format: int64
+             * @description Distinct authors the month held, automation identities left out.
+             */
+            authorCount?: number;
         };
         /** @description Identifies a pull request to block and, optionally, why. */
         BlockPullRequestRequest: {
@@ -19291,12 +19647,200 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "superseded" | "stopped" | "budgetHeld" | "budgetExceeded";
+        /**
+         * @description What an operator did to the installation's license. An installation holds one license, so replacing it
+         *     is recorded as a single action rather than as a removal followed by an activation: that keeps the record
+         *     of what the installation ran on continuous, with no instant in the history where it appears to have held
+         *     no license.
+         * @enum {string}
+         */
+        LicenseActivationAction: "activated" | "replaced" | "removed";
+        /** @description One entry of the installation's license activation history. */
+        LicenseActivationEventDto: {
+            action?: components["schemas"]["LicenseActivationAction"];
+            /**
+             * Format: date-time
+             * @description When it was done, in UTC.
+             */
+            occurredAt?: string;
+            /**
+             * Format: uuid
+             * @description Who did it, when a signed-in user did.
+             */
+            actorUserId?: string | null;
+            /** @description The `jti` claim of the license concerned, when it could be established. */
+            licenseId?: string | null;
+            /** @description The organization the license was issued to, when it could be established. */
+            licensee?: string | null;
+        };
+        /** @description Body naming why an activation was refused. */
+        LicenseActivationRefusedPayload: {
+            /** @description The stable code for an activation refusal. */
+            error?: string | null;
+            reason?: components["schemas"]["LicenseFailureReason"];
+            /** @description What an operator has to change about the document. */
+            message?: string | null;
+        };
+        /**
+         * @description Why a license was not accepted. The reasons are separate because they point at different things to
+         *     check: a malformed file at the file itself, a schema version this build does not read at the build,
+         *     an expired license at the term.
+         *
+         *     None of them says the document is genuine. A reason is reported as soon as the check that produced
+         *         it fails, and the checks that establish who issued the document do not all run first, so a reason
+         *         states what stopped verification rather than what the document is.
+         * @enum {string}
+         */
+        LicenseFailureReason: "malformed" | "unsupportedSchemaVersion" | "untrustedSigner" | "expired" | "notYetValid" | "noAnchorInThisBuild";
+        /**
+         * @description What a license states for one limit.
+         *
+         *     The three cases lead to different readings and are kept apart. An absent limit is not constrained by
+         *         the license at all; an unlimited limit was stated and set to no ceiling; a stated count carries the
+         *         ceiling, which may be zero.
+         * @enum {string}
+         */
+        LicenseLimitAllowance: "absent" | "unlimited" | "count";
+        /**
+         * @description What kind of ceiling a quota is held to once the license and the community values have been read
+         *     together.
+         *
+         *     This is the enforcement side of a limit, and it is not the same set of cases as
+         *         `LicenseLimitAllowance`, which reports what a license document states. A resolved
+         *         ceiling is never absent, because a limit the license leaves out falls back to the community value,
+         *         and it adds the unmetered case, which is a dimension nothing counts rather than one counted against
+         *         no ceiling.
+         * @enum {string}
+         */
+        LicenseLimitCeiling: "unlimited" | "count" | "unmetered";
+        /**
+         * @description API-facing representation of one quantitative limit: what the license states for it, what the
+         *     installation is held to, and what it currently holds.
+         *
+         *     The stated allowance and the effective ceiling are separate fields because they disagree in cases
+         *         an operator has to be able to read: a limit the license leaves out is enforced at the community
+         *         value, and a license past its grace window states a number that no longer applies. The effective
+         *         ceiling is the one a refusal quotes.
+         */
+        LicenseLimitDto: {
+            key?: components["schemas"]["LicenseLimitKey"];
+            allowance?: components["schemas"]["LicenseLimitAllowance"];
+            /**
+             * Format: int64
+             * @description The stated ceiling. Set exactly when the allowance is a count.
+             */
+            licensedCount?: number | null;
+            /**
+             * Format: int64
+             * @description What the installation currently holds for this dimension. It is reported for information: no license
+             *     check, activation or capability resolution reads it, and it is not the value an enforcement decision
+             *     would use. Null when the dimension is not measured, and null on a read that does not gather counts.
+             */
+            informationalCount?: number | null;
+            effectiveCeiling?: components["schemas"]["LicenseLimitCeiling"] | null;
+            /**
+             * Format: int64
+             * @description The ceiling the installation is held to. Set exactly when the effective ceiling is a count.
+             */
+            effectiveCount?: number | null;
+            effectiveSource?: components["schemas"]["LicenseLimitSource"] | null;
+            /**
+             * Format: int64
+             * @description How many automation identities the exclusion rules kept out of this dimension's current number. Set for
+             *     authors per month, where automated pull requests and questions are left out of the count. Null for a
+             *     dimension no exclusion applies to, and null on a read that does not gather counts.
+             */
+            excludedAutomationCount?: number | null;
+        };
+        /**
+         * @description Which dimension a stated license limit constrains.
+         *
+         *     Known values are `authorsPerMonth`, `clients`, `runners`, and
+         *         `concurrentReviews`.
+         *     Further keys are added rather than replacing these, so code written against the current set keeps
+         *         working. A client has to tolerate a value it does not know, because a newer installation can send one.
+         */
+        LicenseLimitKey: string;
+        /**
+         * @description Where a resolved ceiling came from. A refusal quotes it, so an operator is told whether the number
+         *     comes from the license on file or from what every installation gets without one.
+         * @enum {string}
+         */
+        LicenseLimitSource: "license" | "community";
+        /**
+         * @description Where an installation stands in its license's lifecycle, from the term the license carries and the
+         *     instant it was judged at.
+         *
+         *     This is the licensing layer's view, and it is coarser than the term alone: it adds a window before
+         *         the term ends in which the installation is still entitled but the expiry is close enough to act on,
+         *         and a window after it in which entitlement continues so an expiry does not stop work in progress.
+         *         MeisterDev.ProPR.Licensing.LicenseTermStatus stays the plain reading of
+         *         `nbf` and `exp` that the verifier reports.
+         *     Known values are `none`, `notYetValid`, `active`, `warning`, `grace`, and
+         *         `reverted`.
+         *     Further cases are added rather than replacing these, so code written against the current set keeps
+         *         working. A client has to tolerate a value it does not know, because a newer installation can send one.
+         */
+        LicenseStage: string;
         /** @description Installation-wide licensing summary for administration and session hydration. */
         LicensingSummaryDto: {
             edition?: components["schemas"]["InstallationEdition"];
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the license in force was activated, when one is in force.
+             */
             activatedAt?: string | null;
+            /** @description The effective state of every premium capability. */
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+            stage?: components["schemas"]["LicenseStage"];
+            /**
+             * Format: date-time
+             * @description When the license term begins.
+             */
+            notBefore?: string | null;
+            /**
+             * Format: date-time
+             * @description When the installation starts being reported as approaching expiry. Never earlier than the start of the
+             *     term, so a term shorter than the warning window reports its own start.
+             */
+            warningStartsAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the license term ends.
+             */
+            expiresAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the grace window after the term ends, after which the installation is Community.
+             */
+            graceEndsAt?: string | null;
+            /**
+             * Format: int32
+             * @description Whole days of entitlement left: until the term ends while it is running, until the grace window ends once
+             *     the term has, and zero once both have. Null before the term begins, when no entitlement has started, and
+             *     null when there is no license to read a term from.
+             */
+            daysRemaining?: number | null;
+            /**
+             * Format: uuid
+             * @description The identifier this installation reports itself under, for telling usage reports from different
+             *     installations apart and for quoting in a support conversation. It binds nothing: no license is issued
+             *     against it and no license check reads it. Null on a host that has no licensing store to read it from.
+             */
+            licensingIdentity?: string | null;
+            /** @description The organization the license in force was issued to. Null when no license is verified. */
+            licensee?: string | null;
+            /** @description The identifier of the license in force, for quoting in a renewal or support request. */
+            licenseId?: string | null;
+            /**
+             * @description Every quantitative limit, each with what the license states for it, the ceiling the installation is
+             *     held to, and what it currently holds. The effective ceiling and the count are filled in by the
+             *     administration read alone; the responses to activating a license and to patching the capability
+             *     overrides carry the stated allowance only. Null on a host that reports no license state at all.
+             */
+            limits?: components["schemas"]["LicenseLimitDto"][] | null;
+            authorOverage?: components["schemas"]["AuthorOverageDto"] | null;
+            authorPeakMonth?: components["schemas"]["AuthorPeakMonthDto"] | null;
         };
         /** @description One logical model as returned to the client, tagged by the scope it came from (client override or tenant). */
         LogicalModelResponse: {
@@ -19494,11 +20038,6 @@ export interface components {
              */
             reviewTemperature?: number | null;
         };
-        /** @description Patch payload for installation licensing updates. */
-        PatchAdminLicensingRequest: {
-            edition: components["schemas"]["InstallationEdition"];
-            capabilityOverrides?: components["schemas"]["PatchPremiumCapabilityOverrideRequest"][] | null;
-        };
         /** @description Request body for updating one provider family's activation state. */
         PatchAdminProviderRequest: {
             /** @description Whether the provider family should be enabled installation-wide. */
@@ -19577,6 +20116,11 @@ export interface components {
             reviewEveryIncrementEnabled?: boolean | null;
             withholdOutOfScopeFindings?: boolean | null;
         };
+        /** @description Patch payload for the installation's premium capability overrides. */
+        PatchLicensingOverridesRequest: {
+            /** @description The overrides to apply. Omitting it changes nothing. */
+            capabilityOverrides?: components["schemas"]["PatchPremiumCapabilityOverrideRequest"][] | null;
+        };
         /** @description Request to change a mention configuration. Omitted fields are left as they are. */
         PatchMentionConfigRequest: {
             /**
@@ -19591,6 +20135,7 @@ export interface components {
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
+            /** @description The capability key. */
             key?: string | null;
             overrideState?: components["schemas"]["PremiumCapabilityOverrideState"];
         };
@@ -19742,26 +20287,48 @@ export interface components {
          * @enum {string}
          */
         PrefixEligibilityStatus: "notApplicable" | "eligible" | "ineligibleTooShort" | "ineligiblePrefixUnstable";
-        /** @description API-facing representation of one premium capability's effective state. */
+        /**
+         * @description API-facing representation of one premium capability's effective state. `reason` is set exactly when
+         *     `isAvailable` is false.
+         */
         PremiumCapabilityDto: {
             key?: string | null;
             displayName?: string | null;
             requiresCommercial?: boolean;
-            defaultWhenCommercial?: boolean;
             overrideState?: components["schemas"]["PremiumCapabilityOverrideState"];
             isAvailable?: boolean;
             message?: string | null;
+            reason?: components["schemas"]["PremiumCapabilityUnavailableReason"] | null;
         };
         /**
-         * @description Optional installation override for one premium capability.
+         * @description Optional installation override for one premium capability. An override can only take a capability away:
+         *     what an installation is entitled to comes from the license it has activated, so there is no state that
+         *     turns a capability on.
          * @enum {string}
          */
-        PremiumCapabilityOverrideState: "default" | "enabled" | "disabled";
-        /** @description JSON payload used for premium-unavailable responses. */
+        PremiumCapabilityOverrideState: "default" | "disabled";
+        /**
+         * @description Why a premium capability is not available, in a form a caller can branch on.
+         *
+         *     The cases are separate because the operator response differs: an installation with no license activates
+         *         one, an installation whose license does not name the capability needs a license that covers it, an
+         *         installation whose license ran out renews it, an installation whose license has not started yet waits,
+         *         and a capability an administrator turned off is turned back on through the override endpoint.
+         *     Known values are `noLicense`, `notInLicense`, `disabledByOverride`,
+         *         `reverted`, and `notYetValid`.
+         *     Further cases are added rather than replacing these, so code written against the current set keeps
+         *         working. A client has to tolerate a value it does not know, because a newer installation can send one.
+         */
+        PremiumCapabilityUnavailableReason: string;
+        /**
+         * @description JSON payload used for premium-unavailable responses. `reason` carries which of the ways a capability
+         *     can be unavailable applies, so a caller can act on it without reading `message`.
+         */
         PremiumFeatureUnavailablePayload: {
             error?: string | null;
             feature?: string | null;
             message?: string | null;
+            reason?: components["schemas"]["PremiumCapabilityUnavailableReason"];
         };
         /** @description Request used to generate one embedding vector per input string. */
         ProCursorEmbeddingBatchRequest: {
@@ -20192,7 +20759,7 @@ export interface components {
             title?: string | null;
             /** @description The versions the advisory applies to. */
             affectedVersions?: string | null;
-            /** @description Where to read the details. */
+            /** @description A link to the advisory details. */
             link?: string | null;
         };
         /** @description Data transfer object for a per-client or per-crawl-config AI prompt override. */
@@ -20681,6 +21248,21 @@ export interface components {
         /** @description Rename payload. */
         RenameLogicalModelRequest: {
             newName?: string | null;
+        };
+        /** @description A host name the installation has been observed running on. */
+        ReplicaHostnameDto: {
+            /** @description The host name the replica reported. */
+            hostname?: string | null;
+            /**
+             * Format: date-time
+             * @description When it was first observed.
+             */
+            firstSeenAt?: string;
+            /**
+             * Format: date-time
+             * @description When it was last observed.
+             */
+            lastSeenAt?: string;
         };
         /**
          * @description How clearly a resolved PR review thread expresses an actual resolution, used to decide
@@ -22261,6 +22843,103 @@ export interface components {
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
             requestedReviewerIdentity?: components["schemas"]["ReviewReviewerIdentityDto"];
         };
+        /** @description One recorded change to the installation's stable components. */
+        SystemProfileDriftDto: {
+            /**
+             * Format: date-time
+             * @description When the change was observed.
+             */
+            occurredAt?: string;
+            /** @description Which components changed, named as the profile document names them. */
+            changedComponents?: string[] | null;
+            /** @description The profile hash that held before the change. */
+            previousHash?: string | null;
+            /** @description The profile hash the installation reports after it. */
+            newHash?: string | null;
+        };
+        /**
+         * @description What the installation has observed about the system it runs on.
+         *
+         *     The profile is descriptive: nothing in verification, resolution, activation or quota enforcement
+         *         reads it.
+         */
+        SystemProfileDto: {
+            current?: components["schemas"]["SystemProfileSnapshotDto"] | null;
+            /** @description The recorded changes to the stable components, newest first. */
+            drift?: components["schemas"]["SystemProfileDriftDto"][] | null;
+            /** @description The host names the installation has been observed running on, most recently seen first. */
+            hostnames?: components["schemas"]["ReplicaHostnameDto"][] | null;
+        };
+        /** @description The installation's current profile. */
+        SystemProfileSnapshotDto: {
+            /** @description SHA-256 over the canonical rendering of the stable components, in lower-case hexadecimal. */
+            profileHash?: string | null;
+            /**
+             * Format: date-time
+             * @description When the profile was first recorded.
+             */
+            capturedAt?: string;
+            /**
+             * Format: date-time
+             * @description When it was last observed, whether or not the observation changed anything.
+             */
+            updatedAt?: string;
+            stable?: components["schemas"]["SystemProfileStableComponentsDto"];
+            volatile?: components["schemas"]["SystemProfileVolatileComponentsDto"];
+        };
+        /**
+         * @description The components that stay the same while the installation stays the same installation. A null member is a
+         *     component the installation could not observe, which is part of the profile rather than a gap in it.
+         */
+        SystemProfileStableComponentsDto: {
+            /**
+             * @description The PostgreSQL cluster's system identifier. Null when the database role may not execute the function
+             *     that reports it.
+             */
+            postgresSystemIdentifier?: string | null;
+            /** @description The name of the database the installation keeps its state in. */
+            databaseName?: string | null;
+            /**
+             * Format: int64
+             * @description The object identifier PostgreSQL holds that database under.
+             */
+            databaseOid?: number | null;
+            /**
+             * Format: date-time
+             * @description When the installation's licensing identity was created, to whole seconds.
+             */
+            identityCreatedAt?: string | null;
+            /**
+             * @description The salted hashes of the configured SCM hosts, sorted. Null when no verified license is on file, because
+             *     the salt is derived from the license identifier. An empty list means a license is on file and no SCM
+             *     connection is configured. The plain host is not recorded anywhere.
+             */
+            scmHostHashes?: string[] | null;
+        };
+        /**
+         * @description The components describing the host a replica runs on. None of them is part of the profile hash, and a
+         *     change to any of them records nothing.
+         */
+        SystemProfileVolatileComponentsDto: {
+            /** @description The operating system, as the runtime describes it. */
+            operatingSystem?: string | null;
+            /** @description The .NET runtime, as it describes itself. */
+            runtime?: string | null;
+            /**
+             * Format: int32
+             * @description How many processors the replica sees.
+             */
+            processorCount?: number | null;
+            /**
+             * Format: int64
+             * @description How much memory is available to the replica, in bytes.
+             */
+            totalAvailableMemoryBytes?: number | null;
+            /** @description The identifier of the replica's local time zone. */
+            timeZoneId?: string | null;
+            /** @description The host name of the replica that made the last observation. */
+            machineName?: string | null;
+        };
         /** @description Tenant-authenticated session payload returned by tenant login endpoints. */
         TenantAuthSessionDto: {
             accessToken?: string | null;
@@ -22758,27 +23437,28 @@ export interface components {
         /**
          * @description The edition an installation reports in its anonymous usage statistics.
          *
-         *     Two values, always. This is a wire type rather than a reuse of the licensing enum on purpose: a
-         *         licensing state added later for a trial, an expiry or a grace period must not reach the vendor, and a
-         *         separate enum with an exhaustive mapping makes that a compile-time obligation rather than a promise.
+         *     This is a separate wire type rather than a reuse of the licensing enum. The licensing layer
+         *         distinguishes states this wire does not carry, such as a term approaching its end and the grace window
+         *         after one has ended, and a state added later for a trial would be another. A separate enum forces
+         *         every one of them to be mapped onto these two values before it can be sent.
          * @enum {string}
          */
         UsageStatisticsEdition: "community" | "commercial";
         /**
-         * @description The exact payload the next ping would carry.
+         * @description The payload the next ping would carry.
          *
-         *     The payload is handed over as the serialized text rather than as an object, because an object would
-         *         be written a second time by the API's own serializer and the preview would then be a re-rendering of
-         *         the snapshot instead of the thing that goes on the wire.
+         *     The payload is carried as serialized text rather than as an object. An object would be serialized a
+         *         second time by the API's own serializer, so the preview would show that re-serialization rather than
+         *         the bytes the sender produces.
          */
         UsageStatisticsPreviewDto: {
-            /** @description Where this payload would be posted. */
+            /** @description The address this payload would be posted to. */
             endpoint?: string | null;
             /** @description The media type it would be posted as. */
             contentType?: string | null;
-            /** @description The literal request body, byte for byte. */
+            /** @description The request body as it would be sent. */
             payload?: string | null;
-            /** @description Where each field is documented. */
+            /** @description Where the payload fields are documented. */
             payloadDocumentationUrl?: string | null;
         };
         /**
@@ -22787,11 +23467,11 @@ export interface components {
          */
         UsageStatisticsSendDecision: "disabled" | "awaitingConsent" | "notDue" | "sent";
         /**
-         * @description What an administrator's request to send now actually did.
+         * @description The result of an administrator's request to send now.
          *
-         *     The decision travels back because the interesting answers are the ones where nothing was sent: an
-         *         installation that is switched off, one that has not shown the notice yet, and one that already sent
-         *         today all look identical from the settings page otherwise.
+         *     The decision is returned because the settings page cannot otherwise tell the cases apart where
+         *         nothing was sent: switched off, awaiting the consent notice, and already sent today all leave the
+         *         same visible state.
          */
         UsageStatisticsSendResultDto: {
             decision?: components["schemas"]["UsageStatisticsSendDecision"];
@@ -22802,11 +23482,11 @@ export interface components {
             edition?: components["schemas"]["UsageStatisticsEdition"];
             /** @description Whether a snapshot would currently be sent. */
             enabled?: boolean;
-            /** @description The stored toggle, which is what applies when no license is installed. */
+            /** @description The stored toggle. It applies when no license is installed. */
             communityOptIn?: boolean;
             /** @description Whether the control is locked because a commercial license is installed. */
             managedByLicense?: boolean;
-            /** @description Whether an administrator has seen what sending means. */
+            /** @description Whether an administrator has been shown what is sent. */
             consentGateSatisfied?: boolean;
             /** @description Whether the consent notice still has to be shown. */
             noticeRequired?: boolean;
@@ -22824,19 +23504,19 @@ export interface components {
              * @description When a snapshot last reached the receiver.
              */
             lastSuccessAt?: string | null;
-            /** @description The exact address a snapshot is posted to. */
+            /** @description The address a snapshot is posted to. */
             pingEndpoint?: string | null;
-            /** @description Where the payload is documented field by field. */
+            /** @description Where the payload fields are documented. */
             payloadDocumentationUrl?: string | null;
-            /** @description Where privacy questions about the payload go. */
+            /** @description The contact address for privacy questions about the payload. */
             privacyContact?: string | null;
             update?: components["schemas"]["UsageStatisticsUpdateStatusDto"];
         };
         /**
-         * @description What the last successful ping said about newer releases and security advisories.
+         * @description What the last successful ping reported about newer releases and security advisories.
          *
-         *     Absent information renders nothing. An installation that has never pinged, or has usage statistics
-         *         off, sees no badge and no error.
+         *     Absent information renders nothing. An installation that has never pinged, or that has usage
+         *         statistics off, shows no badge and no error.
          */
         UsageStatisticsUpdateStatusDto: {
             /** @description The running release version. */

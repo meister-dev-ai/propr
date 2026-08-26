@@ -6,12 +6,14 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -120,6 +122,8 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                // The licensing module is not composed here, so client creation admits through a gate with no ceiling.
+                services.AddScoped<IStockQuotaGate, UnlimitedStockQuotaGate>();
                 services
                     .AddScoped<MeisterDev.ProPR.Application.Interfaces.IClientTokenUsageRepository,
                         MeisterDev.ProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();

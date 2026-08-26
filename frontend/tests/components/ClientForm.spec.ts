@@ -8,6 +8,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 const mockPost = vi.fn()
 vi.mock('@/services/api', () => ({
   createAdminClient: vi.fn(() => ({ POST: mockPost })),
+  getApiErrorMessage: (error: unknown, fallback: string) =>
+    (error as { error?: string } | null)?.error ?? fallback,
   UnauthorizedError: class UnauthorizedError extends Error {
     constructor() { super('Unauthorized'); this.name = 'UnauthorizedError' }
   },
@@ -97,5 +99,24 @@ describe('ClientForm', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Failed to create client.')
+  })
+
+  it('shows the message a refused creation carries', async () => {
+    const refusal = 'The license in force allows 1 client and 1 exists. '
+      + 'Creating another requires removing a client, or a license that allows more.'
+    mockPost.mockResolvedValue({
+      data: null,
+      error: { error: refusal },
+      response: { ok: false, status: 409 },
+    })
+
+    const wrapper = await mountClientForm({ initialTenantId: 'tenant-1' })
+
+    await wrapper.find('input[name="displayName"]').setValue('Over The Ceiling')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(wrapper.get('.error').text()).toBe(refusal)
+    expect(wrapper.emitted('client-created')).toBeUndefined()
   })
 })

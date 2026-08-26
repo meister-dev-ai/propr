@@ -56,7 +56,6 @@ internal sealed class ManifestLicensing(RunnerJobManifest manifest) : ILicensing
 
     /// <inheritdoc />
     public Task<LicensingSummaryDto> UpdateAsync(
-        InstallationEdition edition,
         IReadOnlyCollection<CapabilityOverrideMutation> capabilityOverrides,
         Guid? actorUserId,
         CancellationToken cancellationToken = default)

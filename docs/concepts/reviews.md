@@ -1,9 +1,8 @@
 # Reviews
 
-What happens between a pull request arriving and comments appearing on it, why a finding you expected
-sometimes does not get posted, and every setting that changes what a review publishes. What a
-deployment is made of and how a review gets started is on [how ProPR works](how-it-works.md); the two
-settings that live in the repository instead of in ProPR are on
+This page covers what happens inside one review, and every setting that changes what it publishes. What a
+deployment is made of and how a review gets started is on [how ProPR works](how-it-works.md). The two settings that
+live in the repository, not in ProPR, are on
 [configuring ProPR from your repository](repository-configuration.md).
 
 ## What happens during a review
@@ -20,60 +19,55 @@ flowchart TD
     H --> I["Post comments and the summary"]
 ```
 
-**Per file.** Files are reviewed one at a time, in parallel, each in its own conversation with the
-model. Files matched by the repository's [exclusion patterns](repository-configuration.md) are skipped,
-as are files whose estimated input would not fit the model's context budget - both are recorded in the
+**Per file.** ProPR reviews each changed file separately, in parallel, each in its own conversation with
+the model. It skips files matched by the repository's [exclusion patterns](repository-configuration.md),
+and files whose estimated input would not fit the model's context budget. Both skips are recorded in the
 job protocol.
 
-**Relevance filtering.** Comments the model produced are screened before they reach your pull request.
-Deterministic checks run first; anything genuinely ambiguous is adjudicated by a second model call. If
-that call fails, the filter keeps the comment rather than silently dropping it, and records that it ran
-degraded.
+**Relevance filtering.** ProPR screens the model's comments before they reach your pull request.
+Deterministic checks run first, and a second model call decides the ambiguous ones. If that call fails,
+the filter keeps the comment and records that it ran degraded.
 
-**Thread memory.** ProPR remembers how a comment thread on this pull request was resolved previously,
-so a point you already rejected does not come back on a later review. A memory of a thread you resolved
-records which kind of resolution it was: you rejected the concern and accepted the code as it stands, or
-you marked it fixed. Memories from before that was recorded, and ones an administrator created by
-dismissing a pattern, carry no such outcome and claim none.
-The two mean opposite things for a recurrence, so a rejection you made is shown to the model ahead of a
-fix, and a rejection the discussion never stated plainly is marked as the weaker signal it is.
+**Thread memory.** ProPR remembers how a comment thread on this pull request was resolved, so a point you
+already rejected does not come back on a later review. Each memory records the resolution: you rejected
+the concern and kept the code, or you marked it fixed. A rejection carries more weight than a fix when the
+same point comes up again, and a rejection the discussion never stated plainly carries less. Memories
+recorded before ProPR tracked resolutions, and memories an administrator created by dismissing a pattern,
+carry no resolution at all.
 
-**Verification.** Findings are checked against the actual code before publication - locally per file,
-and then across the whole pull request for anything that spans files.
+**Verification.** ProPR checks findings against the code before publication, once per file and again
+across the whole pull request for anything that spans files.
 
 **Incremental reviews.** On a re-review, files with no new changes carry their previous results forward
 instead of being re-reviewed and re-billed.
 
 ## Why a finding did not get posted
 
-The last step before publication is a deterministic gate. Every finding ends as **published**,
-**summary-only** (mentioned in the summary but not posted inline), or **dropped**. The rules:
+A deterministic gate runs last, before publication. Every finding ends as **published**, **summary-only**
+(mentioned in the summary but not posted inline), or **dropped**.
 
 | Outcome | Applies to |
 |---|---|
-| Dropped | Findings the verification step actively contradicted |
+| Dropped | Findings the verification step contradicted |
 | Dropped | Non-actionable findings, and "consider …"-style suggestions |
 | Dropped | Repeated-pass findings where the passes disagreed and nothing supported the claim |
 | Summary-only | Cross-file findings without verified supporting evidence |
 | Summary-only | Broad categories: architecture, documentation, test, UI, configuration, robustness |
-| Summary-only | Anything whose verification was degraded or inconclusive - the gate prefers caution |
+| Summary-only | Anything whose verification was degraded or inconclusive |
 | Published | Everything else |
 
-Three further per-client filters sit after the gate: a **minimum severity to post**, whether findings
-outside the changed lines are posted, and whether outbound SCM commenting is enabled at all - all three in
-[what you can tune](#what-you-can-tune). A finding one of the first two holds back stays in the ProPR
-review, and the published summary reports how many were held back and why. It links to the review as well
-once `MEISTER_PUBLIC_BASE_URL` tells the installation its own address - see
+Three per-client filters run after the gate, all of them in [what you can tune](#what-you-can-tune): the
+**minimum severity to post**, whether findings outside the changed lines are posted, and whether outbound
+SCM commenting is enabled at all. A finding the first two hold back stays in the ProPR review, and the
+published summary reports how many were held back and why. The summary links to the review once
+`MEISTER_PUBLIC_BASE_URL` gives the installation its address - see
 [public URL and browser origins](../operate/configuration.md#public-url-and-browser-origins).
 
-A dropped finding also has to leave the summary. The summary is written before the gate runs, so it can
-describe a finding the gate then rules out. To catch that, the summary pass names the findings its
-narrative is about, and a narrative that names a dropped finding is replaced with a short note saying how
-many candidates were dropped. Naming findings rather than comparing wording is what makes this work when
-the summary paraphrases a finding instead of quoting it.
+A dropped finding also has to leave the summary. ProPR writes the summary before the gate runs, so the
+summary can describe a finding the gate then rules out. Where that happens, ProPR replaces the narrative
+with a short note saying how many candidates were dropped.
 
-Every one of these decisions is recorded in the review's own protocol, which is where a "why did it say
-that" question is answered - see
+The review's protocol records every one of these decisions - see
 [what to look at when a review misbehaves](../operate/observability.md#what-to-look-at-when-a-review-misbehaves).
 
 If your symptom is not in this section, start from [troubleshooting](../operate/troubleshooting.md).
@@ -99,30 +93,30 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Minimum severity to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review, and the published summary reports how many were held back. Order, high to low: error, warning, suggestion, info |
 | Auto-resolve severities | Per client | Comments of the chosen severities are posted and then immediately resolved with a note. Azure DevOps, GitHub and GitLab; on Forgejo the setting is a no-op |
 | Do not post findings outside the changed lines | Per client | Keeps findings in pre-existing code away from the diff out of the pull request. They stay visible in the ProPR review. Off by default - see [findings outside your changes](#findings-outside-your-changes) |
-| Resolving comment threads | Per client | What ProPR does with its own threads once a finding is acted on: resolve quietly (default), resolve with an explanation, or leave them alone. A question you ask is answered either way - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
+| Resolving comment threads | Per client | What ProPR does with its own threads once a finding is acted on: resolve quietly (default), resolve with an explanation, or leave them alone. On the first two a question you ask is answered; leaving them alone switches the pass off, so nothing is answered - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
 | SCM comment posting | Per client | Run reviews without publishing anything |
 | Review every pushed update | Per client | Whether pushes after the first one start another automatic review. Off by default - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
 | Budget caps | Per client | Monthly, per-pull-request and per-increment soft and hard USD caps |
 
-**Budget caps in detail.** A job is held at admission when a hard cap has already been reached, or when
-the monthly or per-pull-request soft cap has. A held job does not resume by itself - an operator
-restarts it once budget is free. The per-increment soft cap is not an admission gate: it stops a
+**Budget caps in detail.** ProPR holds a job at admission when a hard cap has already been reached, or
+when the monthly or per-pull-request soft cap has. A held job does not resume by itself: an operator
+restarts it once budget is free. The per-increment soft cap does not hold a job at admission. It stops a
 running job from scanning further files and concludes it with a summary. A hard cap cuts further model
-calls in all three scopes. The tenant Budget and Spend views are read-only roll-ups over the tenant's
-clients - they report and forecast, they never enforce. Budgeting requires a commercial license; see
+calls in all three scopes. The tenant Budget and Spend views roll up the tenant's clients for reporting
+and forecasting, and enforce no cap. Setting caps and the Budget and Spend views require a commercial
+license. Caps already set are enforced in every edition - see
 [editions and licensed features](../reference/editions.md).
 
 Every scope totals all three units of work over a pull request: the file review, the thread pass that
 answers the conversation, and the answer to an `@propr` mention. A thread pass is held, cut and restarted
-on the same terms a review is, and what it spent per thread is visible in its own trace, reachable from
-the pull request's review view.
+on the same terms as a review. What it spent per thread is in its own trace, reachable from the pull
+request's review view.
 
-A mention answer is metered the same way, and only a hard cap stops it. Someone is waiting on the answer, so
-a soft cap lets it through and records that it was written past the threshold, while a hard cap makes ProPR
-post a short reply saying the budget for the period is used up without calling the model. A stopped answer
-is not held for a restart: the job ends there, and asking again once an administrator raises the cap is how
-you get an answer. An answer whose increment cannot be determined still counts toward the client and
-pull-request totals, and takes no part in per-increment capping.
+A mention answer is metered the same way, and only a hard cap stops it. A soft cap lets the answer through
+and records that it was written past the threshold. A hard cap makes ProPR post a short reply saying the
+budget for the period is used up, without calling the model. A stopped answer is not held for a restart.
+The job ends there; ask again once an administrator raises the cap. An answer whose increment cannot be
+determined counts toward the client and pull-request totals, and toward no per-increment cap.
 
 ### Output language
 
@@ -131,50 +125,46 @@ in. It is a language tag such as `en`, `de` or `pt-BR`, and it defaults to `en`.
 
 The setting reaches every place the model writes for a reader: the finding messages posted as threads,
 the pull-request summary, the replies ProPR leaves when it closes or continues a thread, the answers to
-`@propr` mentions, and the thread-memory summaries a later review reads back. All of them state the same
-language, so one review does not arrive part German and part English.
+`@propr` mentions, and the thread-memory summaries a later review reads back. All of them use the
+configured language, so one review does not arrive part German and part English.
 
-ProPR never guesses the language from the pull request. That is deliberate: a change whose title,
-comments and code are in different languages would otherwise produce a different result on every call,
-and the summary would not match the findings it summarises.
+ProPR never guesses the language from the pull request. A change whose title, comments and code are in
+different languages would otherwise produce a different result on every call.
 
-The fixed text ProPR adds around the model's prose stays English whatever you configure. That is the
-severity label on each comment (`ERROR:`, `WARNING:`, `SUGGESTION:`, `INFO:`), the `**AI Review Summary**`
-heading, and the notes about verification, carried-forward files and budget caps. Two of those labels are
-matched as data on pull requests ProPR already commented on: the severity prefix is how a re-review
-recognises its own comment and avoids posting it twice, and the summary heading is how ProPR keeps its own
-summary out of its recall measurements. Translating either would break those checks on every pull request
-that already exists.
+The fixed text ProPR adds around the model's prose stays English whatever you configure: the severity
+label on each comment (`ERROR:`, `WARNING:`, `SUGGESTION:`, `INFO:`), the `**AI Review Summary**` heading,
+and the notes about verification, carried-forward files and budget caps. ProPR matches the severity prefix
+and the summary heading as data on pull requests it has already commented on. A re-review uses the prefix
+to recognise its own comment and avoid posting it twice, and the heading to keep ProPR's own summary out
+of its recall measurements. Translating either would break those checks on every pull request that already
+exists.
 
 ### Findings outside your changes
 
-A review reads whole files rather than the diff alone, so it can find something real in code the pull
-request never touched. Those findings are classified by comparing the line against the pull request's
-changed ranges, deterministically rather than by asking the model, and a finding far from every changed
-range is labelled as pre-existing code. Context lines within a few lines of an edit count as part of the
-change.
+A review reads whole files, not the diff alone, so it can find something real in code the pull request
+never touched. ProPR classifies those findings by comparing the line against the pull request's changed
+ranges, without asking the model, and labels a finding far from every changed range as pre-existing code.
+Context lines within a few lines of an edit count as part of the change.
 
-By default such a finding is posted carrying that label, because it is still a defect somebody has to
-know about. A client that would rather keep its pull requests to the change itself can turn on **do not
-post findings outside the changed lines**. The findings then stay in the ProPR review, where the job
-protocol lists them with the same label, and the pull request summary reports the count.
+By default ProPR posts such a finding with that label. To keep your pull requests to the change itself,
+turn on **do not post findings outside the changed lines**. The findings then stay in the ProPR review,
+where the job protocol lists them with the same label, and the pull request summary reports the count.
 
-Classification happens where the finding is produced and needs the file's changed ranges to compare
-against, so a finding ProPR cannot place there - one with no line number, or one in a file this pull
-request does not change at all - carries no label and is posted. A finding is only ever held back on
-evidence that it lies outside the change, never on the absence of evidence that it lies inside it.
+A finding ProPR cannot place against a changed range carries no label and is posted. That covers a finding
+with no line number, and a finding in a file this pull request does not change at all.
 
-A label already earned survives later reshaping. One concern found in several files is consolidated into a
-single pull-request-level comment, and a provider that only anchors comments on inserted lines has ProPR
-rewrite the rest the same way. Neither carries a line number afterwards, and both keep the label, so they
-are held back on it like any other. The consolidated comment keeps a label only when every finding in it
-agrees; a mixed group claims none and is posted.
+A label survives later reshaping. ProPR consolidates one concern found in several files into a single
+pull-request-level comment, and on a provider that only anchors comments on inserted lines it rewrites the
+rest the same way. Neither carries a line number afterwards, and both keep their label, so the setting
+holds them back like any other finding. A consolidated comment keeps a label only when every finding in it
+agrees; a mixed group carries none and is posted.
 
 ### Review passes
 
 Pass 1 is the review each changed file already gets, on the model for its complexity tier. The review
-pass list adds independent passes on top of it, and it is the most cost-sensitive setting on this page:
-each pass is another set of model calls on every file it runs on. Up to four entries; more are refused.
+pass list adds independent passes on top of it. Each pass is another set of model calls on every file it
+runs on, so the list is the most cost-sensitive setting on this page. Up to four entries; more are
+refused.
 
 Per entry you choose:
 
@@ -191,26 +181,25 @@ The lens decides both the prompt and the files:
   Medium or High complexity tier.
 - **Security** - a security-specialist prompt, on files a security screen flagged by path, by content
   marker, or because triage escalated them. Complexity tier does not matter.
-- **ProRV** - the knowledge lens. It screens the file against a catalog embedded in the product -
-  per-language checks derived from CodeQL, plus GitHub Actions attack classes - and hands the reviewer
-  the checks that actually apply as focused guidance. A file the catalog matches nothing for is skipped
-  for that pass. Any complexity tier.
+- **ProRV** - the knowledge lens. It screens the file against a catalog embedded in the product,
+  per-language checks derived from CodeQL plus GitHub Actions attack classes, and hands the reviewer the
+  checks that apply as focused guidance. A file the catalog matches nothing for is skipped for that pass.
+  Any complexity tier.
 
 Scope decides where the pass runs. A per-file pass runs alongside the baseline on each file it is in
 scope for, and its findings are unioned with the baseline before deduplication; per-file passes only
 fan out when **Multi-pass union** is on for the client. A PR-wide pass instead runs once over the whole
 change set before the cross-file summary, and runs whether or not multi-pass union is on.
 
-A shadow pass runs in full and its findings are recorded in the job protocol, but they are dropped
-before deduplication and the publication gate, so nothing it produces reaches your pull request and it
-can never suppress a finding a real pass made. It is how you try a model or a lens on live pull
-requests without changing what your team sees - at full token cost.
+A shadow pass runs in full and records its findings in the job protocol. ProPR drops them before
+deduplication and the publication gate, so nothing a shadow pass produces reaches your pull request, and
+it can never suppress a finding a real pass made. Use one to try a model or a lens on live pull requests
+without changing what your team sees. It costs full tokens.
 
 ## Customising the review prompt
 
-The prompts ProPR sends are replaceable per client, under the client's **Prompt Overrides** tab. An
-override is a full replacement for one named segment, not an addition to it - whatever you enter is
-what the model sees in place of the built-in text.
+You can replace the prompts ProPR sends per client, under the client's **Prompt Overrides** tab. An
+override replaces one named segment in full. The model sees what you enter in place of the built-in text.
 
 | Prompt key | Replaces the instructions for |
 |---|---|
@@ -224,16 +213,16 @@ what the model sees in place of the built-in text.
 One override per client per key. Saving a second for the same key is refused. Delete an override to
 return that segment to the built-in text.
 
-Two consequences worth knowing before you use these:
+An override has two consequences:
 
 - Overriding `SystemPrompt` replaces the whole assembled brief, so the repository instruction files, the
   dismissed-finding patterns and the client's own system message are no longer injected into it. If you
   rely on any of those, restate them in the override.
-- Every key except `SynthesisSystemPrompt` and `MemoryReconsiderationSystemPrompt` is a stage where the
-  client's review-aggressiveness posture is expressed. An override is fixed text, so aggressiveness stops
-  affecting the stage you overrode.
+- Every key except `SynthesisSystemPrompt` and `MemoryReconsiderationSystemPrompt` carries the client's
+  review-aggressiveness setting. An override is fixed text, so aggressiveness stops affecting the stage
+  you overrode.
 
-This is the heavy instrument, and a poor override degrades every review the client runs. For team
-conventions - "we do not use exceptions for control flow", "be strict about migrations" - prefer
-[repository instruction files](repository-configuration.md): they live with the code, are versioned with
-it, and only apply where they are relevant.
+A poor override degrades every review the client runs. For team conventions - "we do not use exceptions
+for control flow", "be strict about migrations" - use
+[repository instruction files](repository-configuration.md) instead. They live with the code and apply
+only where they are relevant.

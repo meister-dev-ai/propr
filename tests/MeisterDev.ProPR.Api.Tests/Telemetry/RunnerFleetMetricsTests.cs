@@ -86,11 +86,39 @@ public sealed class RunnerFleetMetricsTests : IDisposable
     {
         using var metrics = new RunnerFleetMetrics(EmptyScopeFactory(), this._meterName);
 
-        metrics.RecordSlotRefusal(RunnerLeaseRefusal.SlotLimitReached);
+        metrics.RecordSlotRefusal(RunnerLeaseRefusal.NotLicensed);
 
         var refusal = this.Single("review_runner_slot_refusals_total");
         Assert.Equal(1, refusal.Value);
-        Assert.Equal("SlotLimitReached", refusal.Tags["refusal"]);
+        Assert.Equal("NotLicensed", refusal.Tags["refusal"]);
+    }
+
+    // The ceiling refusal is answered 204, the same as a quiet queue, so this counter is the only thing
+    // that tells an operator the fleet is idle because the installation is at its limit. The ceiling is
+    // carried as a label because the decision it supports is whether to raise that number.
+    [Fact]
+    public void AConcurrencyCeilingRefusal_IsCountedAgainstTheCeilingThatWasReached()
+    {
+        using var metrics = new RunnerFleetMetrics(EmptyScopeFactory(), this._meterName);
+
+        metrics.RecordConcurrencyCeilingRefusal(4);
+
+        var refusal = this.Single("review_runner_ceiling_refusals_total");
+        Assert.Equal(1, refusal.Value);
+        Assert.Equal(4, Assert.IsType<int>(refusal.Tags["ceiling"]));
+    }
+
+    // A refusal for want of a license and a refusal at the concurrency ceiling call for different actions,
+    // and the second happens routinely on a busy installation. Kept on separate counters so an alert on
+    // one is not woken by the other.
+    [Fact]
+    public void ACeilingRefusal_IsNotCountedAsASlotRefusal()
+    {
+        using var metrics = new RunnerFleetMetrics(EmptyScopeFactory(), this._meterName);
+
+        metrics.RecordConcurrencyCeilingRefusal(2);
+
+        Assert.DoesNotContain(this.All(), m => m.Instrument == "review_runner_slot_refusals_total");
     }
 
     // The label values are mapped rather than emitted as enum names, so renaming a C# member cannot break a
@@ -111,12 +139,13 @@ public sealed class RunnerFleetMetricsTests : IDisposable
         using var metrics = new RunnerFleetMetrics(EmptyScopeFactory(), this._meterName);
 
         metrics.RecordReclaim(ReviewJobReclaimOutcome.Requeued);
-        metrics.RecordSlotRefusal(RunnerLeaseRefusal.SlotLimitReached);
+        metrics.RecordSlotRefusal(RunnerLeaseRefusal.NotLicensed);
+        metrics.RecordConcurrencyCeilingRefusal(3);
 
         // Values as well as keys. Checking only the keys would pass an implementation that put a
         // repository path or a token into a tag value under a name like "detail".
         string[] forbidden = ["repository", "path", "client_name", "display_name", "credential", "token", "url"];
-        string[] allowedKeys = ["reclaim_outcome", "refusal", "stall_cause"];
+        string[] allowedKeys = ["reclaim_outcome", "refusal", "stall_cause", "ceiling"];
 
         foreach (var measurement in this.All())
         {

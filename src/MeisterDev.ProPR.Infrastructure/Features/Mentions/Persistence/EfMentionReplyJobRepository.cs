@@ -1,12 +1,15 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Mentions.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
@@ -15,7 +18,10 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 ///     EF Core implementation of <see cref="IMentionReplyJobRepository" />.
 ///     Provides persistent storage for mention reply jobs backed by PostgreSQL.
 /// </summary>
-public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext) : IMentionReplyJobRepository
+public sealed partial class EfMentionReplyJobRepository(
+    MeisterProPRDbContext dbContext,
+    IAuthorActivityRecorder? authorActivityRecorder = null,
+    ILogger<EfMentionReplyJobRepository>? logger = null) : IMentionReplyJobRepository
 {
     /// <inheritdoc />
     public async Task AddAsync(MentionReplyJob job, CancellationToken ct = default)
@@ -219,7 +225,64 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
         job.CompletedAt = DateTimeOffset.UtcNow;
         job.PostedReplyCommentId = NormalizeCommentId(postedReplyCommentId);
         await dbContext.SaveChangesAsync(ct);
+
+        await this.RecordAuthorActivityAsync(job, ct);
     }
+
+    /// <summary>
+    ///     Puts the author of the answered comment into the current month's rollup.
+    /// </summary>
+    /// <remarks>
+    ///     Only a job carrying the host's own identifier for the asker contributes. A row written before that
+    ///     column existed, and a comment whose payload named no identifier, contribute nothing: the derived
+    ///     identifier beside it would not match the same person's identifier on a reviewed pull request, so
+    ///     keying on it would count one person twice.
+    ///     <para>
+    ///         Fail-soft. Nothing in the answer reads the rollup, so a write that fails is logged and the job
+    ///         stays completed. What a lost write costs is one author missing from one month, which undercounts
+    ///         that month unless the same author has other work complete within it; it never blocks the answer,
+    ///         which is already on the pull request by this point.
+    ///     </para>
+    ///     <para>
+    ///         The names and the bot flag travel with the identifier, because whether the asker counts is
+    ///         decided where they are recorded. The flag's column is not nullable, so a false value cannot be
+    ///         told apart from a payload that stated nothing, and the name-based rules still apply to it. A
+    ///         comment payload carries one name, which is stored as the login and the display name alike.
+    ///     </para>
+    /// </remarks>
+    private async Task RecordAuthorActivityAsync(MentionReplyJob job, CancellationToken ct)
+    {
+        if (authorActivityRecorder is null || string.IsNullOrWhiteSpace(job.CommentAuthorNativeId))
+        {
+            return;
+        }
+
+        try
+        {
+            await authorActivityRecorder.RecordAsync(
+                new AuthorActivityObservation(
+                    job.ProviderHost,
+                    job.CommentAuthorNativeId,
+                    AuthorActivitySource.MentionAnswer,
+                    job.CommentAuthorLogin,
+                    job.CommentAuthorDisplayName,
+                    job.CommentAuthorIsBot),
+                ct);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            if (logger is not null)
+            {
+                LogAuthorActivityNotRecorded(logger, exception, job.Id);
+            }
+        }
+    }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to record the author of mention reply job {JobId} in the monthly rollup; the answer "
+                  + "stands and the month may undercount this author.")]
+    private static partial void LogAuthorActivityNotRecorded(ILogger logger, Exception exception, Guid jobId);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<PostedMentionReply>> GetPostedRepliesAsync(

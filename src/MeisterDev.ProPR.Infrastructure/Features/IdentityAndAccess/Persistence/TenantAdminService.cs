@@ -22,9 +22,9 @@ public sealed class TenantAdminService(
 {
     public async Task<IReadOnlyList<TenantDto>> GetAllAsync(CancellationToken ct = default)
     {
-        var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
+        var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
 
-        var tenants = await ApplyEditionFilter(dbContext.Tenants.AsNoTracking(), isCommunityEdition)
+        var tenants = await ApplyTenancyFilter(dbContext.Tenants.AsNoTracking(), multiTenancyAvailable)
             .OrderByDescending(tenant => tenant.CreatedAt)
             .ToListAsync(ct);
 
@@ -33,8 +33,8 @@ public sealed class TenantAdminService(
 
     public async Task<TenantDto?> GetByIdAsync(Guid tenantId, CancellationToken ct = default)
     {
-        var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
-        if (!TenantCatalog.IsTenantVisible(tenantId, isCommunityEdition))
+        var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
+        if (!TenantCatalog.IsTenantVisible(tenantId, multiTenancyAvailable))
         {
             return null;
         }
@@ -45,9 +45,12 @@ public sealed class TenantAdminService(
         return tenant is null ? null : ToDto(tenant);
     }
 
+    // Filtered on the same terms as the lookup by id: a slug and an id name the same tenant, so one must not
+    // reach a tenant the other refuses.
     public async Task<TenantDto?> GetBySlugAsync(string tenantSlug, CancellationToken ct = default)
     {
-        var tenant = await dbContext.Tenants
+        var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
+        var tenant = await ApplyTenancyFilter(dbContext.Tenants, multiTenancyAvailable)
             .FirstOrDefaultAsync(record => record.Slug == tenantSlug, ct);
 
         return tenant is null ? null : ToDto(tenant);
@@ -60,9 +63,11 @@ public sealed class TenantAdminService(
         bool localLoginEnabled = true,
         CancellationToken ct = default)
     {
-        if (await this.IsCommunityEditionAsync(ct))
+        // The refusal names why the capability is unavailable rather than assuming a missing license: it can also
+        // be a license that does not cover multi-tenancy, or an override that turned it off.
+        if (await this.UnavailableMultiTenancyMessageAsync(ct) is { } refusal)
         {
-            throw new InvalidOperationException("Community edition only supports the internal System tenant.");
+            throw new InvalidOperationException(refusal);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -98,8 +103,8 @@ public sealed class TenantAdminService(
         IReadOnlyList<string>? allowedAiEndpointHosts = null,
         CancellationToken ct = default)
     {
-        var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
-        if (!TenantCatalog.IsTenantVisible(tenantId, isCommunityEdition))
+        var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
+        if (!TenantCatalog.IsTenantVisible(tenantId, multiTenancyAvailable))
         {
             return null;
         }
@@ -172,8 +177,8 @@ public sealed class TenantAdminService(
 
     private async Task<bool> ExistsVisibleAsync(Guid tenantId, CancellationToken ct)
     {
-        var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
-        return await ApplyEditionFilter(dbContext.Tenants.AsNoTracking(), isCommunityEdition)
+        var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
+        return await ApplyTenancyFilter(dbContext.Tenants.AsNoTracking(), multiTenancyAvailable)
             .AnyAsync(tenant => tenant.Id == tenantId, ct);
     }
 
@@ -230,27 +235,40 @@ public sealed class TenantAdminService(
             .ToList();
     }
 
-    private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)
+    // Without the licensing module there is no installation state to read, which is what a deployment with no
+    // database configured looks like. Tenancy is left unrestricted there.
+    private async ValueTask<bool> IsMultiTenancyAvailableAsync(CancellationToken ct)
     {
         if (licensingCapabilityService is null)
         {
-            return false;
+            return true;
         }
 
-        var summaryTask = licensingCapabilityService.GetSummaryAsync(ct);
-        if (summaryTask is null)
-        {
-            return false;
-        }
-
-        var summary = await summaryTask;
-        return summary?.Edition == InstallationEdition.Community;
+        return await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.MultiTenancy, ct);
     }
 
-    private static IQueryable<TenantRecord> ApplyEditionFilter(IQueryable<TenantRecord> query, bool isCommunityEdition)
+    /// <summary>
+    ///     The message for a refusal, or <see langword="null" /> when multi-tenancy is available. Read from the
+    ///     capability so the three ways it can be unavailable are told apart.
+    /// </summary>
+    private async ValueTask<string?> UnavailableMultiTenancyMessageAsync(CancellationToken ct)
     {
-        return isCommunityEdition
-            ? query.Where(tenant => tenant.Id == TenantCatalog.SystemTenantId)
-            : query;
+        if (licensingCapabilityService is null)
+        {
+            return null;
+        }
+
+        var capability = await licensingCapabilityService.GetCapabilityAsync(PremiumCapabilityKey.MultiTenancy, ct);
+
+        return capability.IsAvailable
+            ? null
+            : capability.Message ?? "Multi-tenancy is not available for this installation.";
+    }
+
+    private static IQueryable<TenantRecord> ApplyTenancyFilter(IQueryable<TenantRecord> query, bool multiTenancyAvailable)
+    {
+        return multiTenancyAvailable
+            ? query
+            : query.Where(tenant => tenant.Id == TenantCatalog.SystemTenantId);
     }
 }

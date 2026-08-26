@@ -5,6 +5,7 @@
         <ProjectReference Include="..\MeisterDev.Ai.Providers\MeisterDev.Ai.Providers.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.Domain\MeisterDev.ProPR.Domain.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.CodeAnalysis\MeisterDev.ProPR.CodeAnalysis.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.Licensing\MeisterDev.ProPR.Licensing.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.ProCursor.Contracts\MeisterDev.ProPR.ProCursor.Contracts.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.Runner.Contracts\MeisterDev.ProPR.Runner.Contracts.csproj"/>
     </ItemGroup>
@@ -28,6 +29,12 @@
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>MeisterDev.ProPR.Application.Tests</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>MeisterDev.ProPR.Infrastructure.Tests</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>MeisterDev.ProPR.Api.Tests</_Parameter1>
         </AssemblyAttribute>
     </ItemGroup>
 

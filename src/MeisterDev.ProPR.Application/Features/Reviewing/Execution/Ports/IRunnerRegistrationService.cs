@@ -13,7 +13,11 @@ public interface IRunnerRegistrationService
     /// <summary>Enrolls a host presenting an operator-issued registration token.</summary>
     Task<RunnerRegistrationResult> RegisterAsync(RunnerRegistrationRequest request, CancellationToken ct = default);
 
-    /// <summary>Issues a fresh credential to an already-enrolled runner, keeping its identity and scope.</summary>
+    /// <summary>
+    ///     Issues a fresh credential to an already-enrolled runner, keeping its identity and scope. Refused
+    ///     when the installation holds more runners than the license allows, which is how a lowered ceiling
+    ///     reaches a fleet that is already enrolled.
+    /// </summary>
     Task<RunnerRegistrationResult> RenewCredentialAsync(
         Guid runnerId,
         string currentCredential,
@@ -107,8 +111,27 @@ public interface IRunnerRegistry
     /// <summary>Finds a runner by identity.</summary>
     Task<ReviewRunner?> FindByIdAsync(Guid runnerId, CancellationToken ct = default);
 
-    /// <summary>Persists a newly enrolled runner and the token use that enrolled it, together.</summary>
-    Task AddAsync(ReviewRunner runner, RunnerRegistrationToken token, CancellationToken ct = default);
+    /// <summary>
+    ///     Spends one use of the token and persists the runner it enrolled, together.
+    ///     <para>
+    ///         The use is spent only while the token is still usable at <paramref name="now" />, judged where
+    ///         the use count is stored. A caller that checked a token it had loaded cannot rely on that check
+    ///         still holding: two enrollments presenting one token load the same count and both pass it.
+    ///     </para>
+    /// </summary>
+    /// <param name="runner">The runner to enroll.</param>
+    /// <param name="token">The token it enrolls with.</param>
+    /// <param name="now">The moment the token's expiry is judged against.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>
+    ///     True when the use was spent and the runner enrolled. False when the token was no longer usable, in
+    ///     which case nothing was written.
+    /// </returns>
+    Task<bool> TryAddAsync(
+        ReviewRunner runner,
+        RunnerRegistrationToken token,
+        DateTimeOffset now,
+        CancellationToken ct = default);
 
     /// <summary>Persists changes to a runner.</summary>
     Task UpdateAsync(ReviewRunner runner, CancellationToken ct = default);

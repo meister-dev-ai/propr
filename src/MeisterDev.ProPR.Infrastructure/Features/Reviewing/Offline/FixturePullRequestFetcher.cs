@@ -87,7 +87,8 @@ public sealed class FixturePullRequestFetcher(IReviewEvaluationFixtureAccessor f
                 .ToList()
                 .AsReadOnly(),
             snapshot.AllChangedFileSummaries,
-            snapshot.AuthorizedIdentityId);
+            snapshot.AuthorizedIdentityId,
+            Author: snapshot.Author);
 
         return Task.FromResult(pullRequest);
     }

@@ -264,6 +264,7 @@ public sealed class ForgejoPullRequestFetcherTests
                             merged = false,
                             head = new { @ref = "feature/providers", sha = "head-sha" },
                             @base = new { @ref = "main", sha = "base-sha" },
+                            user = new { id = 88, login = "octo-dev", full_name = "Octo Dev" },
                         }),
                 "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/files?limit=100" => ForgejoTestHelpers
                     .CreateJsonResponse(
@@ -346,6 +347,21 @@ public sealed class ForgejoPullRequestFetcherTests
         // identifier rather than the first comment's.
         Assert.Null(thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
+
+        // The comment author's numeric account id, in the same form the pull-request payload states it, so one
+        // person is one identifier across both reads. The derived identifier beside it is a different value.
+        var comment = Assert.Single(thread.Comments);
+        Assert.Equal("99", comment.AuthorNativeId);
+        Assert.NotEqual("99", comment.AuthorId?.ToString());
+        Assert.NotNull(result.Author);
+        Assert.Equal(ScmProvider.Forgejo, result.Author!.Host.Provider);
+        Assert.Equal("https://codeberg.example.com", result.Author.Host.HostBaseUrl);
+        Assert.Equal("88", result.Author.ExternalUserId);
+        Assert.Equal("octo-dev", result.Author.Login);
+        Assert.Equal("Octo Dev", result.Author.DisplayName);
+
+        // Forgejo states nothing about a bot on this payload, so the signal stays unset.
+        Assert.Null(result.Author.IsBot);
     }
 
     [Fact]
@@ -525,6 +541,50 @@ public sealed class ForgejoPullRequestFetcherTests
         Assert.Equal("Fetch path-based Forgejo identifiers", result.Title);
         Assert.Equal("feature/providers", result.SourceBranch);
         Assert.Empty(result.ChangedFiles);
+    }
+
+    [Fact]
+    public async Task FetchAsync_PayloadWithoutUser_YieldsNoAuthor()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42" => ForgejoTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            title = "Add provider-neutral fetchers",
+                            body = "Fetch Forgejo pull requests without Azure-only code.",
+                            state = "open",
+                            merged = false,
+                            head = new { @ref = "feature/providers", sha = "head-sha" },
+                            @base = new { @ref = "main", sha = "base-sha" },
+                        }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/files?limit=100" =>
+                    ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews?limit=100" =>
+                    ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new ForgejoPullRequestFetcher(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://codeberg.example.com",
+            "acme",
+            "acme/propr",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Null(result.Author);
     }
 }
 

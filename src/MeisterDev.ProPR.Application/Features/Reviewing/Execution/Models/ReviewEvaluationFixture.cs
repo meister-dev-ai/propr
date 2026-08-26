@@ -231,7 +231,8 @@ public sealed record PullRequestSnapshot(
     string TargetBranch,
     IReadOnlyList<FixtureChangedFile> ChangedFiles,
     IReadOnlyList<ChangedFileSummary>? AllChangedFileSummaries = null,
-    Guid? AuthorizedIdentityId = null);
+    Guid? AuthorizedIdentityId = null,
+    PullRequestAuthor? Author = null);
 
 /// <summary>
 ///     One changed file supplied by the offline fixture.

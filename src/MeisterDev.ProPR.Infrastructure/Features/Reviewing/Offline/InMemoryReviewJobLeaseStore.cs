@@ -44,21 +44,40 @@ public sealed class InMemoryReviewJobLeaseStore(
         await this._gate.WaitAsync(ct);
         try
         {
-            var job = jobs.GetById(jobId);
-            if (job is null || job.Status != JobStatus.Pending)
+            return this.ClaimHeld(jobId, owner, leaseDuration);
+        }
+        finally
+        {
+            this._gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewJobCappedClaim> TryClaimWithinProcessingCapAsync(
+        Guid jobId,
+        string owner,
+        TimeSpan leaseDuration,
+        int cap,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        ArgumentOutOfRangeException.ThrowIfLessThan(cap, 1);
+
+        // The lock holds for the count and the claim together. Counting outside it would let two callers
+        // read the same figure and both claim against it, which is the failure the cap exists to prevent.
+        await this._gate.WaitAsync(ct);
+        try
+        {
+            var processing = await jobs.CountProcessingJobsAsync(ct);
+            if (processing >= cap)
             {
-                return null;
+                // The refusal carries both numbers, as the database store does, so a caller reports the same
+                // detail on either store.
+                return ReviewJobCappedClaim.AtCapacity(cap, processing);
             }
 
-            var now = DateTimeOffset.UtcNow;
-            job.Status = JobStatus.Processing;
-            job.ProcessingStartedAt = now;
-            // A claim starts a fresh attempt; a publication stamp left by an interrupted earlier one would
-            // have the timeout sweep fail this attempt for something it never did.
-            job.ClearPublishing();
-            var expiresAt = now + leaseDuration;
-            job.ApplyLease(owner, job.LeaseGeneration + 1, expiresAt, now);
-            return new ReviewJobLease(jobId, owner, job.LeaseGeneration, expiresAt);
+            var lease = this.ClaimHeld(jobId, owner, leaseDuration);
+            return lease is null ? ReviewJobCappedClaim.NotClaimable : ReviewJobCappedClaim.Granted(lease);
         }
         finally
         {
@@ -146,20 +165,6 @@ public sealed class InMemoryReviewJobLeaseStore(
             job.ClearLease();
             job.ClearPublishing();
             return true;
-        }
-        finally
-        {
-            this._gate.Release();
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task ClearLeaseAsync(Guid jobId, CancellationToken ct = default)
-    {
-        await this._gate.WaitAsync(ct);
-        try
-        {
-            jobs.GetById(jobId)?.ClearLease();
         }
         finally
         {
@@ -259,6 +264,29 @@ public sealed class InMemoryReviewJobLeaseStore(
         CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<Guid>>([]);
+    }
+
+    /// <summary>
+    ///     The state transition a claim performs. The caller holds the gate, so both claim paths make the
+    ///     same transition and neither can interleave with the other.
+    /// </summary>
+    private ReviewJobLease? ClaimHeld(Guid jobId, string owner, TimeSpan leaseDuration)
+    {
+        var job = jobs.GetById(jobId);
+        if (job is null || job.Status != JobStatus.Pending)
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        job.Status = JobStatus.Processing;
+        job.ProcessingStartedAt = now;
+        // A claim starts a fresh attempt; a publication stamp left by an interrupted earlier one would
+        // have the timeout sweep fail this attempt for something it never did.
+        job.ClearPublishing();
+        var expiresAt = now + leaseDuration;
+        job.ApplyLease(owner, job.LeaseGeneration + 1, expiresAt, now);
+        return new ReviewJobLease(jobId, owner, job.LeaseGeneration, expiresAt);
     }
 
     private static ReviewJobLeaseRenewal ExplainRefusal(ReviewJob? job, ReviewJobLease lease)

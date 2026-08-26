@@ -4,8 +4,6 @@
 
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
-using MeisterDev.ProPR.Application.Features.Licensing.Models;
-using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -14,14 +12,15 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Budgeting;
 
 /// <summary>
 ///     Reads a client's configured USD budget caps from its persisted record and raises the monthly caps by the
-///     allowance any manual spend resets granted in the period. Budgeting is a licensed capability, so when it is not
-///     enabled the caps are reported as uncapped and nothing is enforced.
+///     allowance any manual spend resets granted in the period. Caps exist to protect an installation from spend, so
+///     this read path does not consult the Budgeting capability: a cap already configured keeps blocking spend in
+///     every edition and at every licensing stage, including after a license has expired. Setting, editing and
+///     viewing budgets stay licensed and are gated on their own surfaces.
 /// </summary>
 public sealed class BudgetCapsProvider(
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
     IBudgetSpendResetRepository resetRepository,
-    TimeProvider timeProvider,
-    ILicensingCapabilityService? licensingCapabilityService = null) : IBudgetCapsProvider
+    TimeProvider timeProvider) : IBudgetCapsProvider
 {
     /// <inheritdoc />
     public async Task<BudgetCaps> GetCapsAsync(Guid clientId, CancellationToken ct = default)
@@ -45,12 +44,6 @@ public sealed class BudgetCapsProvider(
     /// <inheritdoc />
     public async Task<BudgetCaps> GetConfiguredCapsAsync(Guid clientId, CancellationToken ct = default)
     {
-        if (licensingCapabilityService is not null
-            && !await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.Budgeting, ct).ConfigureAwait(false))
-        {
-            return BudgetCaps.None;
-        }
-
         await using var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var caps = await context.Clients
             .AsNoTracking()

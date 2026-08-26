@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.Clients;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,7 +46,7 @@ public sealed class ClientsModuleTests
             });
         await db.SaveChangesAsync();
 
-        var sut = new ClientAdminService(db);
+        var sut = new ClientAdminService(db, new UnlimitedStockQuotaGate());
 
         var result = await sut.PatchAsync(clientId, null, null, null, string.Empty);
 

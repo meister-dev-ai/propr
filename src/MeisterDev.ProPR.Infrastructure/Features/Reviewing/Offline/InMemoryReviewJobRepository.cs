@@ -746,6 +746,18 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.CompletedTask;
     }
 
+    public Task UpdatePullRequestAuthorAsync(Guid id, PullRequestAuthor author, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(author);
+
+        if (this._jobs.TryGetValue(id, out var job))
+        {
+            job.SetPullRequestAuthor(author);
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<string?> FindRecordedRepositoryIdAsync(
         Guid clientId,
         string organizationUrl,

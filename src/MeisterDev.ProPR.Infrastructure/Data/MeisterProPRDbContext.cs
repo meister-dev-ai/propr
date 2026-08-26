@@ -165,6 +165,42 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Installation-wide override rows for premium capability state.</summary>
     public DbSet<PremiumCapabilityOverrideRecord> PremiumCapabilityOverrides => this.Set<PremiumCapabilityOverrideRecord>();
 
+    /// <summary>Singleton row holding the license document this installation has activated.</summary>
+    public DbSet<InstallationLicenseRecord> InstallationLicenses => this.Set<InstallationLicenseRecord>();
+
+    /// <summary>Append-only record of the license activations, replacements and removals this installation made.</summary>
+    public DbSet<LicenseActivationEventRecord> LicenseActivationEvents => this.Set<LicenseActivationEventRecord>();
+
+    /// <summary>Singleton row holding the highest instant this installation has observed.</summary>
+    public DbSet<InstallationObservedTimeRecord> InstallationObservedTime =>
+        this.Set<InstallationObservedTimeRecord>();
+
+    /// <summary>Singleton random identifier this installation reports itself under.</summary>
+    public DbSet<LicensingIdentityRecord> LicensingIdentity => this.Set<LicensingIdentityRecord>();
+
+    /// <summary>Singleton row holding the profile this installation has observed about the system it runs on.</summary>
+    public DbSet<LicensingSystemProfileRecord> LicensingSystemProfile => this.Set<LicensingSystemProfileRecord>();
+
+    /// <summary>Append-only record of the changes observed in this installation's stable system components.</summary>
+    public DbSet<LicensingSystemProfileDriftRecord> LicensingSystemProfileDrift =>
+        this.Set<LicensingSystemProfileDriftRecord>();
+
+    /// <summary>The host names this installation has been observed running on.</summary>
+    public DbSet<LicensingReplicaHostnameRecord> LicensingReplicaHostnames =>
+        this.Set<LicensingReplicaHostnameRecord>();
+
+    /// <summary>One row per calendar month and author ProPR finished work for.</summary>
+    public DbSet<LicensingAuthorActivityRecord> LicensingAuthorActivity =>
+        this.Set<LicensingAuthorActivityRecord>();
+
+    /// <summary>One row per calendar month whose counted authors went above the number the license states.</summary>
+    public DbSet<LicensingAuthorOverageRecord> LicensingAuthorOverage =>
+        this.Set<LicensingAuthorOverageRecord>();
+
+    /// <summary>One row per UTC day carrying the highest number of reviews seen executing at the same time.</summary>
+    public DbSet<LicensingConcurrentReviewPeakRecord> LicensingConcurrentReviewPeak =>
+        this.Set<LicensingConcurrentReviewPeakRecord>();
+
     /// <summary>Singleton random identifier this installation reports in anonymous usage statistics.</summary>
     public DbSet<UsageStatisticsIdentityRecord> UsageStatisticsIdentity => this.Set<UsageStatisticsIdentityRecord>();
 

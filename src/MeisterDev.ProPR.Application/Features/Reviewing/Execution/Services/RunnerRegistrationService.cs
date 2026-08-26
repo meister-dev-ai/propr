@@ -30,8 +30,12 @@ public sealed partial class RunnerRegistrationService(
     IPasswordHashService hashes,
     TimeProvider timeProvider,
     ILogger<RunnerRegistrationService> logger,
-    ILicensingCapabilityService? licensing = null) : IRunnerRegistrationService
+    ILicensingCapabilityService? licensing = null,
+    IStockQuotaGate? stockQuotaGate = null) : IRunnerRegistrationService
 {
+    /// <summary>The refusal a host presenting an unusable registration token is given, wherever that is decided.</summary>
+    private const string UnusableTokenRefusal = "The registration token is not valid.";
+
     /// <summary>How long an issued runner credential is valid before it must be renewed.</summary>
     private static readonly TimeSpan CredentialLifetime = TimeSpan.FromDays(30);
 
@@ -90,10 +94,27 @@ public sealed partial class RunnerRegistrationService(
             || !hashes.Verify(request.RegistrationToken, token.TokenHash))
         {
             LogRegistrationRefused(logger);
-            return RunnerRegistrationResult.Refused("The registration token is not valid.");
+            return RunnerRegistrationResult.Refused(UnusableTokenRefusal);
         }
 
+        // Minted before the admission. Hashing the secret costs on the order of a hundred milliseconds of
+        // CPU, and doing it inside the admission would hold the installation-wide lock for that long on every
+        // enrollment, so a fleet coming back would enroll one host at a time. It depends on nothing the
+        // admission provides, and a refused enrollment discards it.
         var (secret, credentialHash, lookupHash) = this.IssueCredential();
+
+        // Asked for before the token is spent, so a refusal leaves the token usable for a later attempt. The
+        // admission holds the transaction the spent use and the enrollment below are saved in, because the
+        // registry writes both through the same scoped context.
+        await using var admission = stockQuotaGate is null
+            ? null
+            : await stockQuotaGate.AdmitOneAsync(LicenseLimitKey.Runners, ct).ConfigureAwait(false);
+        if (admission is { IsAdmitted: false })
+        {
+            LogEnrollmentRefusedAtCeiling(logger, admission.CurrentCount, admission.Limit.Count);
+            return RunnerRegistrationResult.Refused(DescribeRunnerCeilingRefusal(admission));
+        }
+
         var runner = new ReviewRunner(
             Guid.NewGuid(),
             token.TenantId,
@@ -107,11 +128,106 @@ public sealed partial class RunnerRegistrationService(
             now);
         runner.DeclareTags(request.Tags);
 
-        token.RecordUse();
-        await registry.AddAsync(runner, token, ct);
+        // The use is spent where the count is kept, by the statement that checks one is left. The check above
+        // was made on a token loaded before the admission, and two enrollments presenting one token load the
+        // same count and both pass it, so a single-use token would enroll both. A token that has nothing left
+        // by the time it is spent is refused in the same words as any other unusable one.
+        if (!await registry.TryAddAsync(runner, token, now, ct))
+        {
+            LogRegistrationRefused(logger);
+            return RunnerRegistrationResult.Refused(UnusableTokenRefusal);
+        }
+
+        // After the save, because committing ends the transaction the save was written in. An admission disposed
+        // without a commit discards the enrollment and the spent use with it.
+        if (admission is not null)
+        {
+            await admission.CommitAsync(ct).ConfigureAwait(false);
+        }
 
         LogRunnerEnrolled(logger, runner.Id, runner.TenantId, runner.ClientScope.Count);
         return RunnerRegistrationResult.Enrolled(runner.Id, secret, runner.CredentialExpiresAt);
+    }
+
+    /// <summary>
+    ///     The refusal an enrolling host is told. An enrollment is refused at the ceiling, where removing one
+    ///     runner frees the place the new one needs, so that is the remedy it names.
+    /// </summary>
+    /// <param name="admission">The refused admission, which carries both numbers and their source.</param>
+    /// <returns>The refusal.</returns>
+    private static string DescribeRunnerCeilingRefusal(StockQuotaAdmission admission)
+    {
+        return DescribeRunnerCeilingRefusal(
+            admission,
+            "enrollment",
+            "Enrolling another requires removing a runner, or a license that allows more.");
+    }
+
+    /// <summary>
+    ///     The refusal a renewing host is told. A renewal is refused only once the count has passed the
+    ///     ceiling, which is the state a lowered ceiling produces, so removing one runner is not necessarily
+    ///     enough to bring the count back within it and the remedy names the count rather than one removal.
+    /// </summary>
+    /// <param name="admission">The refused admission, which carries both numbers and their source.</param>
+    /// <returns>The refusal.</returns>
+    private static string DescribeRunnerRenewalCeilingRefusal(StockQuotaAdmission admission)
+    {
+        return DescribeRunnerCeilingRefusal(
+            admission,
+            "credential renewal",
+            "Renewing requires the count back within that number, by removing runners or by a license that allows more.");
+    }
+
+    /// <summary>
+    ///     The refusal a host is told, naming the licensed number of registrations and how many runners the
+    ///     installation can still be given work by. Each noun and verb agrees with the number in front of it,
+    ///     because either can be one. Enrollment and renewal name the same two numbers and differ only in what
+    ///     they say makes the next attempt succeed.
+    ///     <para>
+    ///         A runner ceiling can also come from the community values, which allow none. Naming a license there
+    ///         would report a grant the installation does not have, so that case has its own wording.
+    ///     </para>
+    ///     <para>
+    ///         A licensed ceiling of zero has its own wording as well. Removing a runner does not free a seat
+    ///         under it, so the refusal does not suggest that.
+    ///     </para>
+    /// </summary>
+    /// <param name="admission">The refused admission, which carries both numbers and their source.</param>
+    /// <param name="refusedAction">What was refused, for the fault raised when there is no number to report.</param>
+    /// <param name="remedy">The closing sentence, which says what makes the next attempt succeed.</param>
+    /// <returns>The refusal.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The refusal carries no counted ceiling, which is a fault in the decision rather than a number to
+    ///     report: a registration is only refused against a ceiling a count was compared with.
+    /// </exception>
+    private static string DescribeRunnerCeilingRefusal(
+        StockQuotaAdmission admission,
+        string refusedAction,
+        string remedy)
+    {
+        if (admission.Limit.Source != LicenseLimitSource.License)
+        {
+            return "This installation is not entitled to register runners.";
+        }
+
+        if (admission.Limit.Count is not { } ceiling)
+        {
+            throw new InvalidOperationException(
+                $"A runner {refusedAction} was refused against a {admission.Limit.Ceiling} ceiling, which carries no number to report.");
+        }
+
+        if (ceiling == 0)
+        {
+            return "The license in force allows no registered runners.";
+        }
+
+        var enrolled = admission.CurrentCount;
+
+        // The number counted is the runners that can still be given work, so the message names that rather
+        // than enrollment: a row whose credential has expired is not among them and removing it frees nothing.
+        return $"The license in force allows {ceiling} registered {(ceiling == 1 ? "runner" : "runners")} "
+               + $"and {enrolled} {(enrolled == 1 ? "holds" : "hold")} a current credential. "
+               + remedy;
     }
 
     /// <inheritdoc />
@@ -135,7 +251,33 @@ public sealed partial class RunnerRegistrationService(
             return RunnerRegistrationResult.Refused(RunnerContractVersion.DescribeMismatch(contractVersion));
         }
 
+        // Minted before the admission for the same reason enrollment mints before its own: hashing the
+        // secret costs on the order of a hundred milliseconds of CPU, and doing it inside the admission
+        // would hold the installation-wide lock for that long.
         var (secret, credentialHash, lookupHash) = this.IssueCredential();
+
+        // Renewal is where a lowered runner ceiling reaches the runners that are already enrolled. Without
+        // this the count only bounds enrollment, and a fleet that was licensed for ten keeps all ten leasing
+        // work and renewing indefinitely after the license drops to two.
+        //
+        // Asked as "does this one still fit" rather than "does one more fit". The renewing runner is inside
+        // the count: only a runner whose credential is still current can authenticate, and authenticating is
+        // how it reaches this call, so it is one of the enrolled runners counted here. Asking for one more
+        // would refuse every renewal on a fleet sitting exactly at its ceiling and empty it within one
+        // credential lifetime.
+        await using var admission = stockQuotaGate is null
+            ? null
+            : await stockQuotaGate.AdmitExistingAsync(LicenseLimitKey.Runners, ct).ConfigureAwait(false);
+        if (admission is { IsAdmitted: false })
+        {
+            LogRenewalRefusedAtCeiling(logger, runnerId, admission.CurrentCount, admission.Limit.Count);
+
+            // Which runners keep working after a ceiling is lowered follows from the order they happen to
+            // renew in, and nothing chooses between them beyond that. A refused runner keeps the credential
+            // it already holds until that credential expires, so none is stopped while it is executing a
+            // review, and the fleet is back within the licensed number within one credential lifetime.
+            return RunnerRegistrationResult.Refused(DescribeRunnerRenewalCeilingRefusal(admission));
+        }
 
         // Same identity, same scope. Renewal exists so a credential can expire without an operator having to
         // enroll the host again, and re-stamping the scope here would undo an operator's change.
@@ -145,6 +287,13 @@ public sealed partial class RunnerRegistrationService(
             timeProvider.GetUtcNow() + LifetimeFor(runner.TenantId),
             contractVersion);
         await registry.UpdateAsync(runner, ct);
+
+        // After the save, because committing ends the transaction the save was written in. An admission
+        // disposed without a commit discards the renewal.
+        if (admission is not null)
+        {
+            await admission.CommitAsync(ct).ConfigureAwait(false);
+        }
 
         return RunnerRegistrationResult.Enrolled(runner.Id, secret, runner.CredentialExpiresAt);
     }
@@ -324,7 +473,7 @@ public sealed partial class RunnerRegistrationService(
         return (secret, hashes.Hash(secret), PatTokenLookupHash.Compute(secret));
     }
 
-    // Every one of these deliberately omits the token and the credential. A secret in a log is a secret
+    // Every one of these omits the token and the credential. A secret in a log is a secret
     // that has left the system, and nothing recoverable from these lines identifies one.
     [LoggerMessage(
         EventId = 5511, Level = LogLevel.Information,
@@ -340,8 +489,18 @@ public sealed partial class RunnerRegistrationService(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Runner registration refused: the token was not valid")]
     private static partial void LogRegistrationRefused(ILogger logger);
 
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Runner registration refused: {Enrolled} enrolled against a ceiling of {Ceiling}")]
+    private static partial void LogEnrollmentRefusedAtCeiling(ILogger logger, long? enrolled, long? ceiling);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Runner {RunnerId} credential renewal refused")]
     private static partial void LogRenewalRefused(ILogger logger, Guid runnerId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Runner {RunnerId} credential renewal refused: {Enrolled} hold a current credential against a ceiling of {Ceiling}")]
+    private static partial void LogRenewalRefusedAtCeiling(ILogger logger, Guid runnerId, long? enrolled, long? ceiling);
 
     [LoggerMessage(
         Level = LogLevel.Information,

@@ -139,7 +139,6 @@ public sealed class MentionScanWorkerTests
             capabilityKey,
             capabilityKey,
             true,
-            true,
             PremiumCapabilityOverrideState.Default,
             isAvailable,
             isAvailable ? null : $"{capabilityKey} requires a commercial license.");

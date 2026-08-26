@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
+using Microsoft.VisualStudio.Services.WebApi;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 
@@ -71,6 +72,7 @@ public sealed partial class AdoPrFetcher(
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
         await connection.ConnectAsync(cancellationToken);
         var authorizedIdentityId = connection.AuthorizedIdentity?.Id;
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl);
         var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         // Get PR metadata
@@ -173,7 +175,8 @@ public sealed partial class AdoPrFetcher(
             changedFiles.AsReadOnly(),
             ExistingThreads: existingThreads,
             AllChangedFileSummaries: allChangedFileSummaries,
-            AuthorizedIdentityId: authorizedIdentityId);
+            AuthorizedIdentityId: authorizedIdentityId,
+            Author: ToPullRequestAuthor(host, pr.CreatedBy));
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(
@@ -268,6 +271,7 @@ public sealed partial class AdoPrFetcher(
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
         await connection.ConnectAsync(cancellationToken);
         var authorizedIdentityId = connection.AuthorizedIdentity?.Id;
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl);
         var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         var pr = await gitClient.GetPullRequestAsync(
@@ -324,7 +328,8 @@ public sealed partial class AdoPrFetcher(
             },
             threads,
             changedFileManifest,
-            AuthorizedIdentityId: authorizedIdentityId);
+            AuthorizedIdentityId: authorizedIdentityId,
+            Author: ToPullRequestAuthor(host, pr.CreatedBy));
     }
 
     public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
@@ -365,6 +370,22 @@ public sealed partial class AdoPrFetcher(
     {
         var normalized = path.Replace('\\', '/').Trim();
         return normalized.StartsWith('/') ? normalized : "/" + normalized;
+    }
+
+    // The host is derived from the organization URL the same way every other Azure DevOps host-scoped id in
+    // this adapter family is derived, which normalizes to the host authority: all organizations on one host
+    // share the key space. Azure DevOps identity ids are GUIDs, so that is safe. The payload states nothing
+    // about an identity being a bot, so the signal stays absent rather than being guessed from the name.
+    internal static PullRequestAuthor? ToPullRequestAuthor(ProviderHostRef host, IdentityRef? createdBy)
+    {
+        if (string.IsNullOrWhiteSpace(createdBy?.Id))
+        {
+            return null;
+        }
+
+        var login = string.IsNullOrWhiteSpace(createdBy.UniqueName) ? createdBy.DisplayName : createdBy.UniqueName;
+
+        return new PullRequestAuthor(host, createdBy.Id, login, createdBy.DisplayName);
     }
 
     internal static ChangedFileSummary? CreateSummaryFromChange(GitPullRequestChange change)
@@ -731,21 +752,36 @@ public sealed partial class AdoPrFetcher(
                 t.ThreadContext?.RightFileStart?.Line,
                 t.Comments!
                     .Where(c => !c.IsDeleted)
-                    .Select(c => new PrThreadComment(
-                        c.Author?.DisplayName ?? "Unknown",
-                        c.Content ?? "",
-                        Guid.TryParse(c.Author?.Id, out var aid) ? aid : null,
-                        c.Id,
-                        c.PublishedDate != default
-                            ? new DateTimeOffset(c.PublishedDate, TimeSpan.Zero)
-                            : null,
-                        // Azure DevOps returns its own activity entries ("added a reviewer", a vote, a policy
-                        // result) through this same API, authored by a system identity and typed as System.
-                        c.CommentType == CommentType.System))
+                    .Select(ToThreadComment)
                     .ToList()
                     .AsReadOnly(),
                 t.Status.ToString()))
             .ToList()
             .AsReadOnly();
+    }
+
+    internal static PrThreadComment ToThreadComment(Comment comment)
+    {
+        return new PrThreadComment(
+            comment.Author?.DisplayName ?? "Unknown",
+            comment.Content ?? "",
+            Guid.TryParse(comment.Author?.Id, out var authorId) ? authorId : null,
+            comment.Id,
+            comment.PublishedDate != default
+                ? new DateTimeOffset(comment.PublishedDate, TimeSpan.Zero)
+                : null,
+            // Azure DevOps returns its own activity entries ("added a reviewer", a vote, a policy
+            // result) through this same API, authored by a system identity and typed as System.
+            comment.CommentType == CommentType.System,
+            // The VSS identity GUID as the payload spells it. It is the same identifier the pull-request
+            // payload carries for its author, so one account is one identifier across the two reads. Carried
+            // as text rather than as the parsed GUID above, so an identifier this adapter cannot parse still
+            // names the account.
+            NormalizeOptional(comment.Author?.Id));
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

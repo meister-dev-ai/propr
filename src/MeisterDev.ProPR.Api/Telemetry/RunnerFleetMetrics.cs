@@ -32,6 +32,7 @@ public sealed class RunnerFleetMetrics : IDisposable
     private readonly Counter<long> _leaseReclaims;
     private readonly Counter<long> _leaseExpiries;
     private readonly Counter<long> _slotRefusals;
+    private readonly Counter<long> _ceilingRefusals;
     private readonly Meter _meter;
 
     /// <summary>Creates the fleet instruments and starts observing the fleet.</summary>
@@ -91,7 +92,17 @@ public sealed class RunnerFleetMetrics : IDisposable
         this._slotRefusals = this._meter.CreateCounter<long>(
             "review_runner_slot_refusals_total",
             "refusals",
-            "Lease requests refused because no entitled runner slot was free");
+            "Lease requests refused because distributed execution is not licensed on this installation");
+
+        // Its own instrument rather than another cause on the refusals above, for three reasons. A
+        // concurrency ceiling limits how many reviews run at once across the installation and says nothing
+        // about the runner that asked. It clears as soon as a running review finishes, where an unlicensed
+        // capability stands until an operator acts, so an alert on one should not be woken by the other.
+        // And it carries the ceiling that was reached, which the other refusals have no value for.
+        this._ceilingRefusals = this._meter.CreateCounter<long>(
+            "review_runner_ceiling_refusals_total",
+            "refusals",
+            "Lease requests refused because the installation is at its concurrent-review ceiling");
     }
 
     /// <summary>Records one expired lease and what reclaiming it did.</summary>
@@ -107,6 +118,17 @@ public sealed class RunnerFleetMetrics : IDisposable
     public void RecordSlotRefusal(RunnerLeaseRefusal refusal)
     {
         this._slotRefusals.Add(1, new TagList { { "refusal", refusal.ToString() } });
+    }
+
+    /// <summary>
+    ///     Records one lease request refused because the installation is already running as many reviews as
+    ///     its ceiling allows. Labelled with that ceiling, because the number is what an operator needs to
+    ///     decide between waiting and raising the limit.
+    /// </summary>
+    /// <param name="ceiling">The concurrent-review ceiling that was reached.</param>
+    public void RecordConcurrencyCeilingRefusal(int ceiling)
+    {
+        this._ceilingRefusals.Add(1, new TagList { { "ceiling", ceiling } });
     }
 
     /// <summary>Disposes the underlying meter.</summary>

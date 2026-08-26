@@ -17,7 +17,10 @@ public enum LeaseOutcome
     /// <summary>Nothing matched. The ordinary answer on a quiet queue, and not an error.</summary>
     NoWork,
 
-    /// <summary>Every entitled runner slot is held, or the installation is not licensed for runners.</summary>
+    /// <summary>
+    ///     The control plane refused the request for capacity or entitlement reasons. The only such refusal
+    ///     a current control plane sends is an installation not licensed to run reviews on runners.
+    /// </summary>
     NoSlot,
 
     /// <summary>This runner's registration is no longer usable.</summary>
@@ -43,9 +46,9 @@ public sealed record LeaseResult(LeaseOutcome Outcome, RunnerJobManifest? Manife
 ///     The runner's side of the contract, over HTTP.
 ///     <para>
 ///         Every refusal the control plane can give is mapped to a named outcome rather than to an
-///         exception. A runner has to keep running through all of them: a full slot pool, a quiet queue,
-///         and an unreachable control plane are all conditions it should report and retry, not die on. The
-///         one that is genuinely terminal for the loop, a contract the control plane cannot serve, is
+///         exception. A runner has to keep running through all of them: a refused entitlement, a quiet
+///         queue, and an unreachable control plane are all conditions it should report and retry, not die
+///         on. The one that is genuinely terminal for the loop, a contract the control plane cannot serve, is
 ///         reported so an operator sees why the host is idle instead of watching it crash-loop.
 ///     </para>
 /// </summary>

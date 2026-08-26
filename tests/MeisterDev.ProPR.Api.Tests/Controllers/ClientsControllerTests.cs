@@ -9,6 +9,8 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -17,6 +19,7 @@ using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -501,6 +504,46 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(tenantId, createdClient.TenantId);
     }
 
+    // A creation refused against the licensed client ceiling reaches the caller as a conflict carrying the
+    // refusal, so an operator reads the licensed number and the number the installation holds.
+    [Fact]
+    public async Task PostClients_AtTheLicensedClientCeiling_Returns409WithTheRefusal()
+    {
+        var tenantId = Guid.NewGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Tenants.Add(CreateTenantRecord(tenantId, $"ceiling-{tenantId:N}", "Ceiling Tenant"));
+            await db.SaveChangesAsync();
+        }
+
+        factory.RefusedClientQuota = (Ceiling: 5, Held: 5);
+        try
+        {
+            var client = factory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+            request.Content = JsonContent.Create(new { displayName = "Over The Ceiling", tenantId });
+
+            var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal(
+                "The license in force allows 5 clients and 5 exist. "
+                + "Creating another requires removing a client, or a license that allows more.",
+                body.GetProperty("error").GetString());
+
+            using var verificationScope = factory.Services.CreateScope();
+            var verificationDb = verificationScope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            Assert.False(await verificationDb.Clients.AnyAsync(record => record.TenantId == tenantId));
+        }
+        finally
+        {
+            factory.RefusedClientQuota = null;
+        }
+    }
+
     // T036 — PATCH /clients/{id} customSystemMessage (admin)
 
     [Fact]
@@ -903,6 +946,50 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     }
 
     [Fact]
+    public async Task PatchClient_BudgetConfig_WhenBudgetingIsNotAvailable_IsRefusedAndPersistsNothing()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "budget-unlicensed", "Budget Unlicensed Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Budget Unlicensed",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        factory.BudgetingAvailable = false;
+        try
+        {
+            var client = factory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+            request.Content = JsonContent.Create(new { budgetConfig = new { monthlyHardCapUsd = 100m } });
+
+            var response = await client.SendAsync(request);
+
+            // Setting caps stays licensed even though enforcing the caps already configured does not.
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
+            Assert.Equal(PremiumCapabilityKey.Budgeting, body.GetProperty("feature").GetString());
+
+            db.ChangeTracker.Clear();
+            var unchanged = await db.Clients.SingleAsync(c => c.Id == record.Id);
+            Assert.Null(unchanged.MonthlyBudgetHardCapUsd);
+        }
+        finally
+        {
+            factory.BudgetingAvailable = true;
+        }
+    }
+
+    [Fact]
     public async Task PatchClient_OmittedBudgetConfig_LeavesExistingCapsUnchanged()
     {
         using var scope = factory.Services.CreateScope();
@@ -1204,6 +1291,15 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         public Guid TenantId { get; } = Guid.NewGuid();
 
+        /// <summary>Toggles whether the substituted licensing service reports the Budgeting capability as available.</summary>
+        public bool BudgetingAvailable { get; set; } = true;
+
+        /// <summary>
+        ///     The ceiling and the held count the substituted stock-quota gate refuses a client creation against.
+        ///     Null admits, as an installation with no client ceiling does.
+        /// </summary>
+        public (long Ceiling, long Held)? RefusedClientQuota { get; set; }
+
         public string GenerateAdminToken()
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
@@ -1253,6 +1349,13 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                         // ignores transactions and otherwise throws TransactionIgnoredWarning.
                         .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+
+                // The licensing module is not composed here, so the stock-quota gate is substituted. It decides
+                // from RefusedClientQuota, so a test can put a client ceiling in place for the duration.
+                var quotaGate = Substitute.For<IStockQuotaGate>();
+                quotaGate.AdmitOneAsync(Arg.Any<LicenseLimitKey>(), Arg.Any<CancellationToken>())
+                    .Returns(call => Task.FromResult(this.DecideStockQuota(call.Arg<LicenseLimitKey>())));
+                services.AddScoped(_ => quotaGate);
                 services
                     .AddScoped<MeisterDev.ProPR.Application.Interfaces.IClientTokenUsageRepository,
                         MeisterDev.ProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
@@ -1273,8 +1376,42 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 services.AddSingleton(Substitute.For<IJobRepository>());
+
+                // Substitute licensing so the Budgeting gate on the budget-config patch is controllable per
+                // test. Every capability reports available by default, which is what these endpoints saw when
+                // no licensing service was registered at all.
+                var licensing = Substitute.For<ILicensingCapabilityService>();
+                licensing.IsEnabledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                    .Returns(new ValueTask<bool>(true));
+                licensing.GetCapabilityAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                    .Returns(call => Task.FromResult(CreateCapabilitySnapshot(call.Arg<string>(), true)));
+                licensing.GetCapabilityAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>())
+                    .Returns(_ => Task.FromResult(CreateCapabilitySnapshot(PremiumCapabilityKey.Budgeting, this.BudgetingAvailable)));
+                services.AddScoped(_ => licensing);
             });
         }
+
+        private StockQuotaAdmission DecideStockQuota(LicenseLimitKey key)
+        {
+            if (this.RefusedClientQuota is not { } quota)
+            {
+                return StockQuotaAdmission.Admitted(LicenseLimitResolution.Unlimited(key, LicenseLimitSource.Community, LicenseStage.None));
+            }
+
+            return StockQuotaAdmission.Refused(
+                LicenseLimitResolution.Of(key, quota.Ceiling, LicenseLimitSource.License, LicenseStage.Active),
+                quota.Held);
+        }
+
+        private static CapabilitySnapshot CreateCapabilitySnapshot(string key, bool isAvailable) =>
+            new(
+                key,
+                key,
+                RequiresCommercial: true,
+                OverrideState: PremiumCapabilityOverrideState.Default,
+                IsAvailable: isAvailable,
+                Message: isAvailable ? null : "A commercial license is required.",
+                Reason: isAvailable ? null : PremiumCapabilityUnavailableReason.NoLicense);
 
         protected override IHost CreateHost(IHostBuilder builder)
         {
@@ -1494,6 +1631,8 @@ public sealed class ClientsControllerJwtTests(ClientsControllerJwtTests.ClientsJ
                         // ignores transactions and otherwise throws TransactionIgnoredWarning.
                         .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                // The licensing module is not composed here, so client creation admits through a gate with no ceiling.
+                services.AddScoped<IStockQuotaGate, UnlimitedStockQuotaGate>();
                 services
                     .AddScoped<MeisterDev.ProPR.Application.Interfaces.IClientTokenUsageRepository,
                         MeisterDev.ProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();

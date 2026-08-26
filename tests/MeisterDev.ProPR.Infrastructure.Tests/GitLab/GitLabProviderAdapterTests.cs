@@ -228,6 +228,7 @@ public sealed class GitLabPullRequestFetcherTests
                             sha = "head-sha",
                             diff_refs = new { base_sha = "base-sha", head_sha = "head-sha", start_sha = "start-sha" },
                             references = new { full = "acme/platform/propr!42", @short = "propr!42" },
+                            author = new { id = 77, username = "octo-dev", name = "Octo Dev" },
                         }),
                 "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/changes" => GitLabTestHelpers
                     .CreateJsonResponse(
@@ -308,6 +309,117 @@ public sealed class GitLabPullRequestFetcherTests
         var thread = Assert.Single(result.ExistingThreads!);
         Assert.Equal("3f2b1c9d", thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
+
+        // The note author's numeric account id, in the same form the merge-request payload states it, so one
+        // person is one identifier across both reads. The derived identifier beside it is a different value.
+        var note = Assert.Single(thread.Comments);
+        Assert.Equal("99", note.AuthorNativeId);
+        Assert.NotEqual("99", note.AuthorId?.ToString());
+        Assert.NotNull(result.Author);
+        Assert.Equal(ScmProvider.GitLab, result.Author!.Host.Provider);
+        Assert.Equal("https://gitlab.example.com", result.Author.Host.HostBaseUrl);
+        Assert.Equal("77", result.Author.ExternalUserId);
+        Assert.Equal("octo-dev", result.Author.Login);
+        Assert.Equal("Octo Dev", result.Author.DisplayName);
+
+        // The documented merge-request author object carries no bot field, so the signal stays unset.
+        Assert.Null(result.Author.IsBot);
+    }
+
+    [Fact]
+    public async Task FetchAsync_AuthorFlaggedAsBot_ReportsTheBotSignal()
+    {
+        // "bot" is not part of the documented merge-request author object, so this covers the mapping rather
+        // than a payload shape GitLab is known to produce.
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42" => GitLabTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            title = "Bump dependencies",
+                            description = "Automated dependency update.",
+                            state = "opened",
+                            source_branch = "renovate/nuget",
+                            target_branch = "main",
+                            sha = "head-sha",
+                            diff_refs = new { base_sha = "base-sha", head_sha = "head-sha", start_sha = "start-sha" },
+                            references = new { full = "acme/platform/propr!42", @short = "propr!42" },
+                            author = new { id = 4111, username = "project_4_bot", name = "Renovate", bot = true },
+                        }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/changes" => GitLabTestHelpers
+                    .CreateJsonResponse(new { changes = Array.Empty<object>() }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions?per_page=100" =>
+                    GitLabTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new GitLabPullRequestFetcher(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://gitlab.example.com",
+            "acme/platform",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal("4111", result.Author!.ExternalUserId);
+        Assert.True(result.Author.IsBot);
+    }
+
+    [Fact]
+    public async Task FetchAsync_PayloadWithoutAuthor_YieldsNoAuthor()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42" => GitLabTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            title = "Add provider fetchers",
+                            description = "Fetch PRs without Azure-specific infrastructure.",
+                            state = "opened",
+                            source_branch = "feature/providers",
+                            target_branch = "main",
+                            sha = "head-sha",
+                            diff_refs = new { base_sha = "base-sha", head_sha = "head-sha", start_sha = "start-sha" },
+                            references = new { full = "acme/platform/propr!42", @short = "propr!42" },
+                        }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/changes" => GitLabTestHelpers
+                    .CreateJsonResponse(new { changes = Array.Empty<object>() }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions?per_page=100" =>
+                    GitLabTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new GitLabPullRequestFetcher(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://gitlab.example.com",
+            "acme/platform",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Null(result.Author);
     }
 
     [Fact]

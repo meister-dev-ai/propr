@@ -410,7 +410,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     public async Task ReviewPasses_PatchPersistsOrderedListAndGetEchoesIt()
     {
         var client = await this.SeedClientAsync();
-        var adminService = new ClientAdminService(this._dbContext);
+        var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
         // Each pass must reference a configured model that exists (the FK to ai_configured_models is enforced).
         var modelA = await this.SeedChatModelAsync(client.Id);
         var modelB = await this.SeedChatModelAsync(client.Id);
@@ -462,7 +462,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     public async Task ReviewPasses_NameBasedPass_PersistsAndReadsBack()
     {
         var client = await this.SeedClientAsync();
-        var adminService = new ClientAdminService(this._dbContext);
+        var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
 
         var updated = await adminService.PatchAsync(
             client.Id,
@@ -485,7 +485,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     public async Task ReviewPasses_PatchPersistsLens_AndGetEchoesIt()
     {
         var client = await this.SeedClientAsync();
-        var adminService = new ClientAdminService(this._dbContext);
+        var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
         var resampleModel = await this.SeedChatModelAsync(client.Id);
         var securityModel = await this.SeedChatModelAsync(client.Id);
 
@@ -510,7 +510,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     public async Task ReviewPasses_PatchPersistsScopeAndShadow_AndGetEchoesIt()
     {
         var client = await this.SeedClientAsync();
-        var adminService = new ClientAdminService(this._dbContext);
+        var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
         var perFileModel = await this.SeedChatModelAsync(client.Id);
         var prWideModel = await this.SeedChatModelAsync(client.Id);
 
@@ -544,7 +544,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     public async Task ReviewPasses_PatchPersistsReasoningEffort_AndGetEchoesIt()
     {
         var client = await this.SeedClientAsync();
-        var adminService = new ClientAdminService(this._dbContext);
+        var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
         var defaultModel = await this.SeedChatModelAsync(client.Id);
         var highModel = await this.SeedChatModelAsync(client.Id);
 
@@ -580,7 +580,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     public async Task BaselineReasoningEffort_PatchPersists_AndRegistryEchoesIt()
     {
         var client = await this.SeedClientAsync();
-        var adminService = new ClientAdminService(this._dbContext);
+        var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
 
         // Default before any opt-in is None (byte-identical to today: no effort sent).
         var initial = await this._registry.GetBaselineReasoningEffortAsync(client.Id, CancellationToken.None);
@@ -604,7 +604,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     public async Task ReviewPasses_PatchReplacesListWholesale()
     {
         var client = await this.SeedClientAsync();
-        var adminService = new ClientAdminService(this._dbContext);
+        var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
         var original = await this.SeedChatModelAsync(client.Id);
         var replacement = await this.SeedChatModelAsync(client.Id);
 
@@ -630,7 +630,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     public async Task DefaultReviewPipelineProfileId_RoundTripsNullableValueAcrossPersistence()
     {
         var client = await this.SeedClientAsync();
-        var adminService = new ClientAdminService(this._dbContext);
+        var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
 
         client.DefaultReviewPipelineProfileId = ReviewPipelineProfileProvider.FileByFileAssertiveProfileId;
         client.DefaultReviewPipelineProfileUpdatedAtUtc = DateTimeOffset.UtcNow;

@@ -18,40 +18,71 @@ To regenerate it, run:
 
 ## Commercial-Only Capability Map
 
-**The authoritative definition of what is commercial-only lives in the code's licensing feature
-definitions — not in this document and not in the per-file header notices.** The capability keys are
-defined in `src/MeisterDev.ProPR.Application/Features/Licensing/Models/PremiumCapabilityKey.cs` and their
-policy (commercial-required, default-when-commercial) in
-`src/MeisterDev.ProPR.Infrastructure/Features/Licensing/Support/StaticPremiumCapabilityCatalog.cs`; the runtime
-gate is `ILicensingCapabilityService` resolving those against the installation edition and any overrides.
-That gating is what actually governs activation and use.
+**The authoritative definition of what is commercial-only lives in the code, not in this document and not in
+the per-file header notices.**
+`src/MeisterDev.ProPR.Application/Features/Licensing/Models/PremiumCapabilityKey.cs` defines the capability
+keys. `src/MeisterDev.ProPR.Infrastructure/Features/Licensing/Support/StaticPremiumCapabilityCatalog.cs`
+defines their policy: commercial-required and default-when-commercial. `ILicensingCapabilityService` resolves
+both against the installation edition and any overrides, and that resolution governs activation and use.
 
-The commercial-only capability keys (kept in sync with `PremiumCapabilityKey.cs`) are:
+The commercial-only capability keys (kept in sync with `PremiumCapabilityKey.cs`, in its canonical order) are:
 
 - `sso-authentication`
 - `parallel-review-execution`
+- `distributed-execution`
 - `multiple-scm-providers`
 - `crawl-configs`
+- `mention-answering`
 - `budgeting`
+- `code-insights`
+- `multi-tenancy`
 
-Multi-tenancy (the tenants feature) is also commercial-only. It is gated by the installation edition
-rather than by a dedicated capability key.
+An installation runs the built-in System tenant alone unless `multi-tenancy` is effective, which means the
+license names it and no override has disabled it. What each key
+covers, and what an installation does without it, is in
+[editions and licensed features](docs/reference/editions.md).
 
-These capability keys describe product rights, not separate source-code licenses.
+These capability keys describe product rights, not separate source-code licenses. The implementation code may
+ship in community artifacts. A commercial license is required to activate or use commercial-only functionality,
+not to possess the source or the binaries.
 
-- The related implementation code may ship in community artifacts.
-- The legal boundary is activation and use of commercial-only functionality, not mere possession of the source or binaries.
+## How Commercial-Only Functionality Is Activated
+
+A platform administrator activates the commercial edition by uploading the signed license file issued to the
+organization, or by pasting its contents. The file states the licensee, the term, the capability keys it grants
+and the limits it sets. ProPR verifies it offline against a root certificate committed in this source tree, and
+makes no network call on any path. The verified license is then stored in the installation's own database,
+protected by its data-protection key ring. A term has a warning window of 30 days before it ends and a grace
+window of 14 days after it, and the same file can be activated again at any point up to the end of that grace
+window. [Editions and licensed features](docs/reference/editions.md) documents the mechanism, the refusal
+reasons, and what an installation does at each stage.
+
+[The commercial license policy](COMMERCIAL-LICENSE-POLICY.md) states which installations one license may be
+activated on and how its limits are counted across them.
+
+The mechanism ships as source, so it can be edited out. Moving, changing, disabling or circumventing it breaches
+the Elastic License 2.0 restriction on license key functionality, and under the same license the rights it
+granted terminate. See [LICENSE](LICENSE) and
+[what this mechanism does and does not do](docs/reference/editions.md#what-this-mechanism-does-and-does-not-do).
 
 ## Header Conventions
 
 - ELv2 files keep the standard ELv2 header.
-- Files that implement or gate commercial-only functionality may add a short notice stating that the file
-  implements commercial-only functionality and that a commercial license is required to activate or use
-  that functionality.
-- **The in-file notice is best-effort and informational only.** It is a convenience marker, maintained by
-  hand and by `scripts/update-source-license-map.cs`, and it may be incomplete or lag the code. The
-  authoritative determination of what is commercial-only is the licensing feature definitions above
-  (`PremiumCapabilityKey.cs`, the capability catalog, and the runtime edition/capability gating), not the
-  presence or absence of the notice on any given file. A missing notice never widens a community grant, and
-  a present notice never narrows one, beyond what those definitions establish.
-- Mixed/shared files should not claim a different source-code license unless the repo's actual licensing model changes.
+- Files that implement or gate commercial-only functionality may add a short notice: the file implements
+  commercial-only functionality, and a commercial license is required to activate or use that functionality.
+- Files that implement the license key functionality itself may add a short notice: the file implements license
+  key functionality, and license logic may not be moved, changed, disabled or circumvented. This notice is
+  separate from the commercial-only one. The licensing mechanism runs in both editions and decides
+  what an installation is entitled to, so it is not itself something an entitlement unlocks. The restriction it
+  names is the license key limitation under Limitations in [LICENSE](LICENSE), and it binds every recipient of
+  the source whether or not a file carries the notice. A file that both implements license key functionality
+  and gates a commercial capability carries both notices.
+- **A file whose only type is an enum carries neither notice.** It declares a set of names and no mechanism, so
+  the notices go on the code that reads those names.
+- **The in-file notices are informational.** They are convenience markers, maintained by hand and by
+  `scripts/update-source-license-map.cs`, and they may be incomplete or lag the code. The authoritative
+  determination of what is commercial-only is the licensing feature definitions above, not the presence or
+  absence of a notice on any given file. A missing notice never widens a community grant, and a present notice
+  never narrows one, beyond what those definitions establish. The Elastic License 2.0 restriction on license key
+  functionality likewise applies from the license text, not from the notice.
+- Mixed or shared files should not claim a different source-code license unless the repository's licensing model changes.

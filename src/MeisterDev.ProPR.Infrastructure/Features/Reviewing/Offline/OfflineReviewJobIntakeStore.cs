@@ -61,12 +61,6 @@ public sealed class OfflineReviewJobIntakeStore(InMemoryReviewJobRepository jobs
         return Task.FromResult(jobs.GetById(jobId));
     }
 
-    public Task<int> CountActiveJobsAsync(CancellationToken cancellationToken = default)
-    {
-        return jobs.CountProcessingJobsAsync(cancellationToken)
-            .ContinueWith(task => jobs.GetPendingJobs().Count + task.Result, cancellationToken);
-    }
-
     public Task UpdatePrContextAsync(
         Guid jobId,
         string? title,

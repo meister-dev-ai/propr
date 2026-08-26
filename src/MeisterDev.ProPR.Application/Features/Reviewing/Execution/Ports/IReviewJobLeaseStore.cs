@@ -47,6 +47,30 @@ public interface IReviewJobLeaseStore
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Attempts to claim a specific job, and grants it only while fewer than <paramref name="cap" /> jobs
+    ///     are executing across every host sharing the store. Counting first and claiming afterwards cannot
+    ///     enforce a cap: two parties claiming two different jobs both read a count taken before either
+    ///     claim, so both pass. This admits one claimant at a time so the count is read after every claim
+    ///     that precedes it.
+    ///     <para>
+    ///         An at-capacity refusal carries the cap and the executing count the store observed inside the
+    ///         admission, so the caller can report both numbers. The count is absent when the claimant never
+    ///         reached the admission.
+    ///     </para>
+    /// </summary>
+    /// <param name="jobId">The job to claim.</param>
+    /// <param name="owner">Identity to stamp as the holder.</param>
+    /// <param name="leaseDuration">How long the lease is granted for before it must be renewed.</param>
+    /// <param name="cap">How many jobs may execute at once across the installation.</param>
+    /// <param name="ct">The cancellation token.</param>
+    Task<ReviewJobCappedClaim> TryClaimWithinProcessingCapAsync(
+        Guid jobId,
+        string owner,
+        TimeSpan leaseDuration,
+        int cap,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Extends the lease's expiry when the caller still holds it. A caller whose generation is stale, who
     ///     is not the recorded owner, or whose job has since reached a terminal state is rejected and the
     ///     expiry is left untouched.
@@ -68,14 +92,6 @@ public interface IReviewJobLeaseStore
     /// <param name="ct">The cancellation token.</param>
     /// <returns><c>true</c> when the lease was still held and has been released.</returns>
     Task<bool> TryReleaseAsync(ReviewJobLease lease, CancellationToken ct = default);
-
-    /// <summary>
-    ///     Clears the lease from a job that has reached a terminal state, so nothing continues to look
-    ///     leased once it is finished. Leaves the generation intact so a holder that comes back stays stale.
-    /// </summary>
-    /// <param name="jobId">The job whose lease to clear.</param>
-    /// <param name="ct">The cancellation token.</param>
-    Task ClearLeaseAsync(Guid jobId, CancellationToken ct = default);
 
     /// <summary>
     ///     Reports whether the caller's lease is still the current one. The generation is the fencing token:

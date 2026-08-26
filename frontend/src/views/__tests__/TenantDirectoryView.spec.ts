@@ -7,7 +7,7 @@ const createTenantMock = vi.fn()
 const notifyMock = vi.fn()
 const pushMock = vi.fn()
 const isAdmin = ref(true)
-const edition = ref('commercial')
+const availableCapabilities = ref<string[]>(['multi-tenancy'])
 const hasTenantRoleMock = vi.fn((_tenantId: string, _minRole: number) => false)
 
 vi.mock('vue-router', async () => {
@@ -35,9 +35,8 @@ vi.mock('@/composables/useNotification', () => ({
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     isAdmin: computed(() => isAdmin.value),
-    edition: computed(() => edition.value),
     hasTenantRole: hasTenantRoleMock,
-    isCapabilityAvailable: () => false,
+    isCapabilityAvailable: (key: string) => availableCapabilities.value.includes(key),
   }),
 }))
 
@@ -59,7 +58,7 @@ describe('TenantDirectoryView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     isAdmin.value = true
-    edition.value = 'commercial'
+    availableCapabilities.value = ['multi-tenancy']
     hasTenantRoleMock.mockReset()
     hasTenantRoleMock.mockReturnValue(false)
 
@@ -151,8 +150,8 @@ describe('TenantDirectoryView', () => {
     expect(wrapper.find('[data-testid="tenant-row-tenant-1"]').exists()).toBe(true)
   })
 
-  it('hides tenant creation in community edition', async () => {
-    edition.value = 'community'
+  it('hides tenant creation when multi-tenancy is not licensed', async () => {
+    availableCapabilities.value = []
 
     const wrapper = await mountView()
     await flushPromises()

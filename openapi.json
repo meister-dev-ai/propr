@@ -442,10 +442,10 @@
         "tags": [
           "AdminLicensing"
         ],
-        "summary": "Returns the current installation edition and premium capability state.",
+        "summary": "Returns the current installation edition, premium capability state, and every quantitative limit\nwith the ceiling the installation is held to beside what the license states and what the\ninstallation currently holds. The effective ceiling is the number an enforcement refusal quotes.",
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "The current licensing summary.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -465,7 +465,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "No valid credentials were supplied.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -485,7 +485,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "The caller is not an administrator.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -505,37 +505,365 @@
             }
           },
           "503": {
-            "description": "Service Unavailable"
+            "description": "Licensing is not available on this deployment."
           }
         }
-      },
-      "patch": {
+      }
+    },
+    "/admin/licensing/license": {
+      "put": {
         "tags": [
           "AdminLicensing"
         ],
-        "summary": "Updates the installation edition and optional per-capability overrides.",
+        "summary": "Activates a license document, replacing the one on file. The document is verified before it is\nstored, so a refused request leaves the previous license in place.",
         "requestBody": {
+          "description": "The license document.",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PatchAdminLicensingRequest"
+                "$ref": "#/components/schemas/ActivateLicenseRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/PatchAdminLicensingRequest"
+                "$ref": "#/components/schemas/ActivateLicenseRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/PatchAdminLicensingRequest"
+                "$ref": "#/components/schemas/ActivateLicenseRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "The licensing summary the installation now reports.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "The license was stored and the summary could not be read back."
+          },
+          "400": {
+            "description": "The document was refused; the body names the reason.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseActivationRefusedPayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseActivationRefusedPayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseActivationRefusedPayload"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials were supplied.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Licensing is not available on this deployment."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AdminLicensing"
+        ],
+        "summary": "Removes the license on file. Removing when none is on file is not an error and records nothing.",
+        "responses": {
+          "204": {
+            "description": "No license is on file."
+          },
+          "401": {
+            "description": "No valid credentials were supplied.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Licensing is not available on this deployment."
+          }
+        }
+      }
+    },
+    "/admin/licensing/history": {
+      "get": {
+        "tags": [
+          "AdminLicensing"
+        ],
+        "summary": "Returns the recorded license activations, replacements and removals, newest first, at most the 200\nmost recent records. The records survive the removal of the license they describe.",
+        "responses": {
+          "200": {
+            "description": "The recorded license changes.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LicenseActivationEventDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LicenseActivationEventDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LicenseActivationEventDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials were supplied.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Licensing is not available on this deployment."
+          }
+        }
+      }
+    },
+    "/admin/licensing/profile": {
+      "get": {
+        "tags": [
+          "AdminLicensing"
+        ],
+        "summary": "Returns what the installation has observed about the system it runs on: the profile it currently\nreports, the recorded changes to that profile newest first, and the host names it has been seen\nrunning on. The profile is descriptive; no license check reads it.",
+        "responses": {
+          "200": {
+            "description": "The observed system profile.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemProfileDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemProfileDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemProfileDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials were supplied.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Licensing is not available on this deployment."
+          }
+        }
+      }
+    },
+    "/admin/licensing/overrides": {
+      "patch": {
+        "tags": [
+          "AdminLicensing"
+        ],
+        "summary": "Updates the per-capability overrides the installation applies on top of its license. An override can\nonly take a capability away, so `overrideState` carries either `default` or `disabled`.",
+        "requestBody": {
+          "description": "The override mutations to apply.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchLicensingOverridesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchLicensingOverridesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchLicensingOverridesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The licensing summary the installation now reports.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -555,7 +883,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "An override carries no capability key, names a capability that does not exist, or carries a state the\nendpoint does not accept.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -575,7 +903,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "No valid credentials were supplied.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -595,27 +923,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
+            "description": "The caller is not an administrator.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -635,7 +943,7 @@
             }
           },
           "503": {
-            "description": "Service Unavailable"
+            "description": "Licensing is not available on this deployment."
           }
         }
       }
@@ -2496,7 +2804,7 @@
         "tags": [
           "AdminUsageStatistics"
         ],
-        "summary": "Runs a send cycle now instead of waiting for the daily one.\n\nEvery rule the background loop applies still applies here, so an installation that is switched\n    off or has not shown the notice sends nothing, and one that already sent today is told it is\n    not due. The response says which of those happened.",
+        "summary": "Runs a send cycle now instead of waiting for the daily one.\n\nThe rules the background loop applies also apply here: an installation that is switched off or\n    has not shown the notice sends nothing, and one that already sent today is reported as not due.\n    The response carries which decision was taken.",
         "responses": {
           "200": {
             "description": "What the cycle decided, and the state after it.",
@@ -2569,7 +2877,7 @@
         "tags": [
           "AdminUsageStatistics"
         ],
-        "summary": "Records that the consent notice reached an administrator, which is what opens the send gate in a\ncommunity installation. Idempotent.",
+        "summary": "Records that the consent notice was shown to an administrator, which opens the send gate in a\ncommunity installation. Idempotent.",
         "responses": {
           "200": {
             "description": "The updated anonymous usage statistics state.",
@@ -2642,7 +2950,7 @@
         "tags": [
           "AdminUsageStatistics"
         ],
-        "summary": "Hides the consent notice for this installation. Dismissal changes nothing about what is sent.",
+        "summary": "Hides the consent notice for this installation. Dismissal does not change what is sent.",
         "responses": {
           "200": {
             "description": "The updated anonymous usage statistics state.",
@@ -10098,6 +10406,26 @@
           },
           "403": {
             "description": "Caller is not a global admin.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The creation was refused, such as by the licensed client ceiling.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -24465,6 +24793,21 @@
         },
         "additionalProperties": false
       },
+      "ActivateLicenseRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The compact license document. Text pasted by an operator and the contents of a file the browser read are\nthe same value here.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Payload carrying the license document to activate."
+      },
       "AdoBranchOptionDto": {
         "type": "object",
         "properties": {
@@ -25476,6 +25819,44 @@
         },
         "additionalProperties": false,
         "description": "Authenticated session snapshot shared with the admin UI after sign-in."
+      },
+      "AuthorOverageDto": {
+        "type": "object",
+        "properties": {
+          "licensedCount": {
+            "type": "integer",
+            "description": "The number the license document states for authors within one calendar month.",
+            "format": "int64"
+          },
+          "observedCount": {
+            "type": "integer",
+            "description": "The distinct authors the current UTC month holds, automation identities left out.",
+            "format": "int64"
+          },
+          "isInOverage": {
+            "type": "boolean",
+            "description": "Whether the observed count is above the licensed number. Taken from the current month's comparison, so\nit reads false again once the count is at or below the number."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Where the current calendar month's counted authors stand against the number the license states for them.\n\nReported for information. The author allowance is recorded and reported rather than enforced, so an\n    installation above the number keeps every capability its license grants and no review, answer or\n    other work is withheld, delayed or degraded because of it."
+      },
+      "AuthorPeakMonthDto": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "The first day of the month, in UTC. A date rather than an instant, because the unit is the month and no\npart of the day within it carries meaning.",
+            "format": "date"
+          },
+          "authorCount": {
+            "type": "integer",
+            "description": "Distinct authors the month held, automation identities left out.",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false,
+        "description": "The busiest of the twelve calendar months ending with the current one, and how many authors it held."
       },
       "BlockPullRequestRequest": {
         "type": "object",
@@ -28696,6 +29077,165 @@
         "type": "string",
         "description": "Status of a review job."
       },
+      "LicenseActivationAction": {
+        "enum": [
+          "activated",
+          "replaced",
+          "removed"
+        ],
+        "type": "string",
+        "description": "What an operator did to the installation's license. An installation holds one license, so replacing it\nis recorded as a single action rather than as a removal followed by an activation: that keeps the record\nof what the installation ran on continuous, with no instant in the history where it appears to have held\nno license."
+      },
+      "LicenseActivationEventDto": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/LicenseActivationAction"
+          },
+          "occurredAt": {
+            "type": "string",
+            "description": "When it was done, in UTC.",
+            "format": "date-time"
+          },
+          "actorUserId": {
+            "type": "string",
+            "description": "Who did it, when a signed-in user did.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "licenseId": {
+            "type": "string",
+            "description": "The `jti` claim of the license concerned, when it could be established.",
+            "nullable": true
+          },
+          "licensee": {
+            "type": "string",
+            "description": "The organization the license was issued to, when it could be established.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One entry of the installation's license activation history."
+      },
+      "LicenseActivationRefusedPayload": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "The stable code for an activation refusal.",
+            "nullable": true
+          },
+          "reason": {
+            "$ref": "#/components/schemas/LicenseFailureReason"
+          },
+          "message": {
+            "type": "string",
+            "description": "What an operator has to change about the document.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Body naming why an activation was refused."
+      },
+      "LicenseFailureReason": {
+        "enum": [
+          "malformed",
+          "unsupportedSchemaVersion",
+          "untrustedSigner",
+          "expired",
+          "notYetValid",
+          "noAnchorInThisBuild"
+        ],
+        "type": "string",
+        "description": "Why a license was not accepted. The reasons are separate because they point at different things to\ncheck: a malformed file at the file itself, a schema version this build does not read at the build,\nan expired license at the term.\n\nNone of them says the document is genuine. A reason is reported as soon as the check that produced\n    it fails, and the checks that establish who issued the document do not all run first, so a reason\n    states what stopped verification rather than what the document is."
+      },
+      "LicenseLimitAllowance": {
+        "enum": [
+          "absent",
+          "unlimited",
+          "count"
+        ],
+        "type": "string",
+        "description": "What a license states for one limit.\n\nThe three cases lead to different readings and are kept apart. An absent limit is not constrained by\n    the license at all; an unlimited limit was stated and set to no ceiling; a stated count carries the\n    ceiling, which may be zero."
+      },
+      "LicenseLimitCeiling": {
+        "enum": [
+          "unlimited",
+          "count",
+          "unmetered"
+        ],
+        "type": "string",
+        "description": "What kind of ceiling a quota is held to once the license and the community values have been read\ntogether.\n\nThis is the enforcement side of a limit, and it is not the same set of cases as\n    `LicenseLimitAllowance`, which reports what a license document states. A resolved\n    ceiling is never absent, because a limit the license leaves out falls back to the community value,\n    and it adds the unmetered case, which is a dimension nothing counts rather than one counted against\n    no ceiling."
+      },
+      "LicenseLimitDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/LicenseLimitKey"
+          },
+          "allowance": {
+            "$ref": "#/components/schemas/LicenseLimitAllowance"
+          },
+          "licensedCount": {
+            "type": "integer",
+            "description": "The stated ceiling. Set exactly when the allowance is a count.",
+            "format": "int64",
+            "nullable": true
+          },
+          "informationalCount": {
+            "type": "integer",
+            "description": "What the installation currently holds for this dimension. It is reported for information: no license\ncheck, activation or capability resolution reads it, and it is not the value an enforcement decision\nwould use. Null when the dimension is not measured, and null on a read that does not gather counts.",
+            "format": "int64",
+            "nullable": true
+          },
+          "effectiveCeiling": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LicenseLimitCeiling"
+              }
+            ],
+            "nullable": true
+          },
+          "effectiveCount": {
+            "type": "integer",
+            "description": "The ceiling the installation is held to. Set exactly when the effective ceiling is a count.",
+            "format": "int64",
+            "nullable": true
+          },
+          "effectiveSource": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LicenseLimitSource"
+              }
+            ],
+            "nullable": true
+          },
+          "excludedAutomationCount": {
+            "type": "integer",
+            "description": "How many automation identities the exclusion rules kept out of this dimension's current number. Set for\nauthors per month, where automated pull requests and questions are left out of the count. Null for a\ndimension no exclusion applies to, and null on a read that does not gather counts.",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "API-facing representation of one quantitative limit: what the license states for it, what the\ninstallation is held to, and what it currently holds.\n\nThe stated allowance and the effective ceiling are separate fields because they disagree in cases\n    an operator has to be able to read: a limit the license leaves out is enforced at the community\n    value, and a license past its grace window states a number that no longer applies. The effective\n    ceiling is the one a refusal quotes."
+      },
+      "LicenseLimitKey": {
+        "type": "string",
+        "description": "Which dimension a stated license limit constrains.\n\nKnown values are `authorsPerMonth`, `clients`, `runners`, and\n    `concurrentReviews`.\nFurther keys are added rather than replacing these, so code written against the current set keeps\n    working. A client has to tolerate a value it does not know, because a newer installation can send one."
+      },
+      "LicenseLimitSource": {
+        "enum": [
+          "license",
+          "community"
+        ],
+        "type": "string",
+        "description": "Where a resolved ceiling came from. A refusal quotes it, so an operator is told whether the number\ncomes from the license on file or from what every installation gets without one."
+      },
+      "LicenseStage": {
+        "type": "string",
+        "description": "Where an installation stands in its license's lifecycle, from the term the license carries and the\ninstant it was judged at.\n\nThis is the licensing layer's view, and it is coarser than the term alone: it adds a window before\n    the term ends in which the installation is still entitled but the expiry is close enough to act on,\n    and a window after it in which entitlement continues so an expiry does not stop work in progress.\n    MeisterDev.ProPR.Licensing.LicenseTermStatus stays the plain reading of\n    `nbf` and `exp` that the verifier reports.\nKnown values are `none`, `notYetValid`, `active`, `warning`, `grace`, and\n    `reverted`.\nFurther cases are added rather than replacing these, so code written against the current set keeps\n    working. A client has to tolerate a value it does not know, because a newer installation can send one."
+      },
       "LicensingSummaryDto": {
         "type": "object",
         "properties": {
@@ -28704,6 +29244,7 @@
           },
           "activatedAt": {
             "type": "string",
+            "description": "When the license in force was activated, when one is in force.",
             "format": "date-time",
             "nullable": true
           },
@@ -28712,6 +29253,80 @@
             "items": {
               "$ref": "#/components/schemas/PremiumCapabilityDto"
             },
+            "description": "The effective state of every premium capability.",
+            "nullable": true
+          },
+          "stage": {
+            "$ref": "#/components/schemas/LicenseStage"
+          },
+          "notBefore": {
+            "type": "string",
+            "description": "When the license term begins.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "warningStartsAt": {
+            "type": "string",
+            "description": "When the installation starts being reported as approaching expiry. Never earlier than the start of the\nterm, so a term shorter than the warning window reports its own start.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the license term ends.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "graceEndsAt": {
+            "type": "string",
+            "description": "When the grace window after the term ends, after which the installation is Community.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "daysRemaining": {
+            "type": "integer",
+            "description": "Whole days of entitlement left: until the term ends while it is running, until the grace window ends once\nthe term has, and zero once both have. Null before the term begins, when no entitlement has started, and\nnull when there is no license to read a term from.",
+            "format": "int32",
+            "nullable": true
+          },
+          "licensingIdentity": {
+            "type": "string",
+            "description": "The identifier this installation reports itself under, for telling usage reports from different\ninstallations apart and for quoting in a support conversation. It binds nothing: no license is issued\nagainst it and no license check reads it. Null on a host that has no licensing store to read it from.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "licensee": {
+            "type": "string",
+            "description": "The organization the license in force was issued to. Null when no license is verified.",
+            "nullable": true
+          },
+          "licenseId": {
+            "type": "string",
+            "description": "The identifier of the license in force, for quoting in a renewal or support request.",
+            "nullable": true
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LicenseLimitDto"
+            },
+            "description": "Every quantitative limit, each with what the license states for it, the ceiling the installation is\nheld to, and what it currently holds. The effective ceiling and the count are filled in by the\nadministration read alone; the responses to activating a license and to patching the capability\noverrides carry the stated allowance only. Null on a host that reports no license state at all.",
+            "nullable": true
+          },
+          "authorOverage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuthorOverageDto"
+              }
+            ],
+            "nullable": true
+          },
+          "authorPeakMonth": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuthorPeakMonthDto"
+              }
+            ],
             "nullable": true
           }
         },
@@ -29084,26 +29699,6 @@
         "additionalProperties": false,
         "description": "Request body for patching an admin-managed crawl configuration.\nOmit a field to leave it unchanged. Set `reviewTemperature` to null to clear the override."
       },
-      "PatchAdminLicensingRequest": {
-        "required": [
-          "edition"
-        ],
-        "type": "object",
-        "properties": {
-          "edition": {
-            "$ref": "#/components/schemas/InstallationEdition"
-          },
-          "capabilityOverrides": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PatchPremiumCapabilityOverrideRequest"
-            },
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "Patch payload for installation licensing updates."
-      },
       "PatchAdminProviderRequest": {
         "required": [
           "isEnabled"
@@ -29323,6 +29918,21 @@
         "additionalProperties": false,
         "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default."
       },
+      "PatchLicensingOverridesRequest": {
+        "type": "object",
+        "properties": {
+          "capabilityOverrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatchPremiumCapabilityOverrideRequest"
+            },
+            "description": "The overrides to apply. Omitting it changes nothing.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Patch payload for the installation's premium capability overrides."
+      },
       "PatchMentionConfigRequest": {
         "type": "object",
         "properties": {
@@ -29354,6 +29964,7 @@
         "properties": {
           "key": {
             "type": "string",
+            "description": "The capability key.",
             "nullable": true
           },
           "overrideState": {
@@ -29678,9 +30289,6 @@
           "requiresCommercial": {
             "type": "boolean"
           },
-          "defaultWhenCommercial": {
-            "type": "boolean"
-          },
           "overrideState": {
             "$ref": "#/components/schemas/PremiumCapabilityOverrideState"
           },
@@ -29690,19 +30298,30 @@
           "message": {
             "type": "string",
             "nullable": true
+          },
+          "reason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PremiumCapabilityUnavailableReason"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "API-facing representation of one premium capability's effective state."
+        "description": "API-facing representation of one premium capability's effective state. `reason` is set exactly when\n`isAvailable` is false."
       },
       "PremiumCapabilityOverrideState": {
         "enum": [
           "default",
-          "enabled",
           "disabled"
         ],
         "type": "string",
-        "description": "Optional installation override for one premium capability."
+        "description": "Optional installation override for one premium capability. An override can only take a capability away:\nwhat an installation is entitled to comes from the license it has activated, so there is no state that\nturns a capability on."
+      },
+      "PremiumCapabilityUnavailableReason": {
+        "type": "string",
+        "description": "Why a premium capability is not available, in a form a caller can branch on.\n\nThe cases are separate because the operator response differs: an installation with no license activates\n    one, an installation whose license does not name the capability needs a license that covers it, an\n    installation whose license ran out renews it, an installation whose license has not started yet waits,\n    and a capability an administrator turned off is turned back on through the override endpoint.\nKnown values are `noLicense`, `notInLicense`, `disabledByOverride`,\n    `reverted`, and `notYetValid`.\nFurther cases are added rather than replacing these, so code written against the current set keeps\n    working. A client has to tolerate a value it does not know, because a newer installation can send one."
       },
       "PremiumFeatureUnavailablePayload": {
         "type": "object",
@@ -29718,10 +30337,13 @@
           "message": {
             "type": "string",
             "nullable": true
+          },
+          "reason": {
+            "$ref": "#/components/schemas/PremiumCapabilityUnavailableReason"
           }
         },
         "additionalProperties": false,
-        "description": "JSON payload used for premium-unavailable responses."
+        "description": "JSON payload used for premium-unavailable responses. `reason` carries which of the ways a capability\ncan be unavailable applies, so a caller can act on it without reading `message`."
       },
       "ProCursorEmbeddingBatchRequest": {
         "type": "object",
@@ -30866,7 +31488,7 @@
           },
           "link": {
             "type": "string",
-            "description": "Where to read the details.",
+            "description": "A link to the advisory details.",
             "nullable": true
           }
         },
@@ -31959,6 +32581,28 @@
         },
         "additionalProperties": false,
         "description": "Rename payload."
+      },
+      "ReplicaHostnameDto": {
+        "type": "object",
+        "properties": {
+          "hostname": {
+            "type": "string",
+            "description": "The host name the replica reported.",
+            "nullable": true
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "description": "When it was first observed.",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "description": "When it was last observed.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A host name the installation has been observed running on."
       },
       "ResolutionClarity": {
         "enum": [
@@ -34620,6 +35264,171 @@
         "additionalProperties": false,
         "description": "Request payload for provider-neutral review intake."
       },
+      "SystemProfileDriftDto": {
+        "type": "object",
+        "properties": {
+          "occurredAt": {
+            "type": "string",
+            "description": "When the change was observed.",
+            "format": "date-time"
+          },
+          "changedComponents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Which components changed, named as the profile document names them.",
+            "nullable": true
+          },
+          "previousHash": {
+            "type": "string",
+            "description": "The profile hash that held before the change.",
+            "nullable": true
+          },
+          "newHash": {
+            "type": "string",
+            "description": "The profile hash the installation reports after it.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One recorded change to the installation's stable components."
+      },
+      "SystemProfileDto": {
+        "type": "object",
+        "properties": {
+          "current": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SystemProfileSnapshotDto"
+              }
+            ],
+            "nullable": true
+          },
+          "drift": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemProfileDriftDto"
+            },
+            "description": "The recorded changes to the stable components, newest first.",
+            "nullable": true
+          },
+          "hostnames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReplicaHostnameDto"
+            },
+            "description": "The host names the installation has been observed running on, most recently seen first.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What the installation has observed about the system it runs on.\n\nThe profile is descriptive: nothing in verification, resolution, activation or quota enforcement\n    reads it."
+      },
+      "SystemProfileSnapshotDto": {
+        "type": "object",
+        "properties": {
+          "profileHash": {
+            "type": "string",
+            "description": "SHA-256 over the canonical rendering of the stable components, in lower-case hexadecimal.",
+            "nullable": true
+          },
+          "capturedAt": {
+            "type": "string",
+            "description": "When the profile was first recorded.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "When it was last observed, whether or not the observation changed anything.",
+            "format": "date-time"
+          },
+          "stable": {
+            "$ref": "#/components/schemas/SystemProfileStableComponentsDto"
+          },
+          "volatile": {
+            "$ref": "#/components/schemas/SystemProfileVolatileComponentsDto"
+          }
+        },
+        "additionalProperties": false,
+        "description": "The installation's current profile."
+      },
+      "SystemProfileStableComponentsDto": {
+        "type": "object",
+        "properties": {
+          "postgresSystemIdentifier": {
+            "type": "string",
+            "description": "The PostgreSQL cluster's system identifier. Null when the database role may not execute the function\nthat reports it.",
+            "nullable": true
+          },
+          "databaseName": {
+            "type": "string",
+            "description": "The name of the database the installation keeps its state in.",
+            "nullable": true
+          },
+          "databaseOid": {
+            "type": "integer",
+            "description": "The object identifier PostgreSQL holds that database under.",
+            "format": "int64",
+            "nullable": true
+          },
+          "identityCreatedAt": {
+            "type": "string",
+            "description": "When the installation's licensing identity was created, to whole seconds.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scmHostHashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The salted hashes of the configured SCM hosts, sorted. Null when no verified license is on file, because\nthe salt is derived from the license identifier. An empty list means a license is on file and no SCM\nconnection is configured. The plain host is not recorded anywhere.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The components that stay the same while the installation stays the same installation. A null member is a\ncomponent the installation could not observe, which is part of the profile rather than a gap in it."
+      },
+      "SystemProfileVolatileComponentsDto": {
+        "type": "object",
+        "properties": {
+          "operatingSystem": {
+            "type": "string",
+            "description": "The operating system, as the runtime describes it.",
+            "nullable": true
+          },
+          "runtime": {
+            "type": "string",
+            "description": "The .NET runtime, as it describes itself.",
+            "nullable": true
+          },
+          "processorCount": {
+            "type": "integer",
+            "description": "How many processors the replica sees.",
+            "format": "int32",
+            "nullable": true
+          },
+          "totalAvailableMemoryBytes": {
+            "type": "integer",
+            "description": "How much memory is available to the replica, in bytes.",
+            "format": "int64",
+            "nullable": true
+          },
+          "timeZoneId": {
+            "type": "string",
+            "description": "The identifier of the replica's local time zone.",
+            "nullable": true
+          },
+          "machineName": {
+            "type": "string",
+            "description": "The host name of the replica that made the last observation.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The components describing the host a replica runs on. None of them is part of the profile hash, and a\nchange to any of them records nothing."
+      },
       "TenantAuthSessionDto": {
         "type": "object",
         "properties": {
@@ -35531,14 +36340,14 @@
           "commercial"
         ],
         "type": "string",
-        "description": "The edition an installation reports in its anonymous usage statistics.\n\nTwo values, always. This is a wire type rather than a reuse of the licensing enum on purpose: a\n    licensing state added later for a trial, an expiry or a grace period must not reach the vendor, and a\n    separate enum with an exhaustive mapping makes that a compile-time obligation rather than a promise."
+        "description": "The edition an installation reports in its anonymous usage statistics.\n\nThis is a separate wire type rather than a reuse of the licensing enum. The licensing layer\n    distinguishes states this wire does not carry, such as a term approaching its end and the grace window\n    after one has ended, and a state added later for a trial would be another. A separate enum forces\n    every one of them to be mapped onto these two values before it can be sent."
       },
       "UsageStatisticsPreviewDto": {
         "type": "object",
         "properties": {
           "endpoint": {
             "type": "string",
-            "description": "Where this payload would be posted.",
+            "description": "The address this payload would be posted to.",
             "nullable": true
           },
           "contentType": {
@@ -35548,17 +36357,17 @@
           },
           "payload": {
             "type": "string",
-            "description": "The literal request body, byte for byte.",
+            "description": "The request body as it would be sent.",
             "nullable": true
           },
           "payloadDocumentationUrl": {
             "type": "string",
-            "description": "Where each field is documented.",
+            "description": "Where the payload fields are documented.",
             "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "The exact payload the next ping would carry.\n\nThe payload is handed over as the serialized text rather than as an object, because an object would\n    be written a second time by the API's own serializer and the preview would then be a re-rendering of\n    the snapshot instead of the thing that goes on the wire."
+        "description": "The payload the next ping would carry.\n\nThe payload is carried as serialized text rather than as an object. An object would be serialized a\n    second time by the API's own serializer, so the preview would show that re-serialization rather than\n    the bytes the sender produces."
       },
       "UsageStatisticsSendDecision": {
         "enum": [
@@ -35581,7 +36390,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "What an administrator's request to send now actually did.\n\nThe decision travels back because the interesting answers are the ones where nothing was sent: an\n    installation that is switched off, one that has not shown the notice yet, and one that already sent\n    today all look identical from the settings page otherwise."
+        "description": "The result of an administrator's request to send now.\n\nThe decision is returned because the settings page cannot otherwise tell the cases apart where\n    nothing was sent: switched off, awaiting the consent notice, and already sent today all leave the\n    same visible state."
       },
       "UsageStatisticsSettingsDto": {
         "type": "object",
@@ -35595,7 +36404,7 @@
           },
           "communityOptIn": {
             "type": "boolean",
-            "description": "The stored toggle, which is what applies when no license is installed."
+            "description": "The stored toggle. It applies when no license is installed."
           },
           "managedByLicense": {
             "type": "boolean",
@@ -35603,7 +36412,7 @@
           },
           "consentGateSatisfied": {
             "type": "boolean",
-            "description": "Whether an administrator has seen what sending means."
+            "description": "Whether an administrator has been shown what is sent."
           },
           "noticeRequired": {
             "type": "boolean",
@@ -35633,17 +36442,17 @@
           },
           "pingEndpoint": {
             "type": "string",
-            "description": "The exact address a snapshot is posted to.",
+            "description": "The address a snapshot is posted to.",
             "nullable": true
           },
           "payloadDocumentationUrl": {
             "type": "string",
-            "description": "Where the payload is documented field by field.",
+            "description": "Where the payload fields are documented.",
             "nullable": true
           },
           "privacyContact": {
             "type": "string",
-            "description": "Where privacy questions about the payload go.",
+            "description": "The contact address for privacy questions about the payload.",
             "nullable": true
           },
           "update": {
@@ -35686,7 +36495,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "What the last successful ping said about newer releases and security advisories.\n\nAbsent information renders nothing. An installation that has never pinged, or has usage statistics\n    off, sees no badge and no error."
+        "description": "What the last successful ping reported about newer releases and security advisories.\n\nAbsent information renders nothing. An installation that has never pinged, or that has usage\n    statistics off, shows no badge and no error."
       },
       "WebhookConfigurationResponse": {
         "type": "object",

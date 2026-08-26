@@ -53,7 +53,6 @@ public sealed class AdoPrCrawlerWorkerTests
                         PremiumCapabilityKey.CrawlConfigs,
                         PremiumCapabilityKey.CrawlConfigs,
                         true,
-                        true,
                         PremiumCapabilityOverrideState.Default,
                         isAvailable,
                         isAvailable ? null : "Crawl configs requires a premium license.")));

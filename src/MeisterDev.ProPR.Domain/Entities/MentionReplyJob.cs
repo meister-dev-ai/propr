@@ -46,7 +46,8 @@ public sealed class MentionReplyJob
         int? threadLineNumber = null,
         Guid? commentAuthorId = null,
         string? commentAuthorName = null,
-        DateTimeOffset? commentPublishedAt = null)
+        DateTimeOffset? commentPublishedAt = null,
+        string? commentAuthorNativeId = null)
     {
         if (id == Guid.Empty)
         {
@@ -86,6 +87,7 @@ public sealed class MentionReplyJob
         this.CommentAuthorExternalUserId = commentAuthorId?.ToString("D");
         this.CommentAuthorLogin = NormalizeOptional(commentAuthorName);
         this.CommentAuthorDisplayName = NormalizeOptional(commentAuthorName);
+        this.CommentAuthorNativeId = NormalizeOptional(commentAuthorNativeId);
         this.CommentPublishedAt = commentPublishedAt;
         this.Status = MentionJobStatus.Pending;
         this.CreatedAt = DateTimeOffset.UtcNow;
@@ -132,6 +134,19 @@ public sealed class MentionReplyJob
 
     /// <summary>Whether the captured mention comment author is a bot.</summary>
     public bool CommentAuthorIsBot { get; private set; }
+
+    /// <summary>
+    ///     The mention comment author's identifier as the host itself issues it. Null on a comment whose payload
+    ///     named none, and on every job written before the column existed.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="CommentAuthorExternalUserId" /> cannot serve this purpose. It holds the value the mention
+    ///     scan derived, which is the VSS identity GUID on Azure DevOps but a GUID synthesized from the login
+    ///     everywhere else, so for one person it differs from the identifier a pull-request fetch reports. This
+    ///     column holds the host's own identifier, which makes the same account recognizable across a reviewed
+    ///     pull request and an answered mention.
+    /// </remarks>
+    public string? CommentAuthorNativeId { get; private set; }
 
     /// <summary>Published timestamp of the mention comment when known.</summary>
     public DateTimeOffset? CommentPublishedAt { get; private set; }

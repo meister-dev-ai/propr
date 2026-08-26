@@ -75,24 +75,37 @@ public sealed class RunnerLeaseController(
 
         // Counted here rather than deeper down, because this is the one place every refusal passes through
         // on its way to a runner, and a refusal an operator never sees is an idle queue with no explanation.
-        if (offer.Refusal is RunnerLeaseRefusal.SlotLimitReached or RunnerLeaseRefusal.NotLicensed)
+        // The concurrency ceiling is counted on its own instrument, against the ceiling that was reached:
+        // it answers 204 like an empty queue, so the count is the only thing that tells the two apart.
+        if (offer.Refusal is RunnerLeaseRefusal.NotLicensed)
         {
             metrics?.RecordSlotRefusal(offer.Refusal);
+        }
+        else if (offer.Refusal is RunnerLeaseRefusal.ConcurrencyCeilingReached && offer.Ceiling is { } ceiling)
+        {
+            metrics?.RecordConcurrencyCeilingRefusal(ceiling);
         }
 
         // An empty queue is not an error, and answering it with one would have every idle runner logging
         // failures. Everything an operator has to act on is a refusal with its own status.
         return offer.Refusal switch
         {
-            RunnerLeaseRefusal.NoMatchingWork or RunnerLeaseRefusal.NoFreeCapacity => this.NoContent(),
+            // A full concurrency ceiling is answered like an empty queue on purpose. It clears when a
+            // running review finishes, and a runner told to back off or to report a fault would be acting
+            // on an installation-wide limit that is none of its business.
+            RunnerLeaseRefusal.NoMatchingWork
+                or RunnerLeaseRefusal.NoFreeCapacity
+                or RunnerLeaseRefusal.ConcurrencyCeilingReached => this.NoContent(),
             RunnerLeaseRefusal.UnsupportedContractVersion => this.StatusCode(
                 StatusCodes.Status409Conflict,
                 new RunnerContractError(RunnerContractError.UnsupportedContractVersion, offer.Detail ?? "Unsupported contract version.")),
             RunnerLeaseRefusal.RegistrationNotUsable => this.Unauthorized(
                 new RunnerContractError(RunnerContractError.RegistrationRevoked, "This registration can no longer lease.")),
-            RunnerLeaseRefusal.SlotLimitReached or RunnerLeaseRefusal.NotLicensed => this.StatusCode(
+            RunnerLeaseRefusal.NotLicensed => this.StatusCode(
                 StatusCodes.Status429TooManyRequests,
-                new RunnerContractError(RunnerContractError.SlotLimitReached, offer.Detail ?? "No entitled runner slot is free.")),
+                new RunnerContractError(
+                    RunnerContractError.SlotLimitReached,
+                    offer.Detail ?? "Distributed review execution is not licensed for this installation.")),
             RunnerLeaseRefusal.Draining => this.StatusCode(
                 StatusCodes.Status503ServiceUnavailable,
                 new RunnerContractError("draining", offer.Detail ?? "This control plane is draining and is issuing no new leases.")),

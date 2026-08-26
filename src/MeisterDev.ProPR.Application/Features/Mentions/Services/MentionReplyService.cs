@@ -226,8 +226,8 @@ public sealed partial class MentionReplyService(
             return null;
         }
 
-        // An installation without the Budgeting capability reports no caps here, so an unlicensed client is
-        // metered without ever being held.
+        // A client with no caps configured is metered without ever being held. Whether the installation has
+        // the Budgeting capability does not enter into it: a configured cap is enforced in every edition.
         var caps = await budgetCapsProvider.GetCapsAsync(job.ClientId, ct);
         if (!caps.AnyConfigured)
         {

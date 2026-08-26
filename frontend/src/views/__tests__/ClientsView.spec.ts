@@ -38,6 +38,8 @@ vi.mock('@/services/api', () => ({
     GET: getClientsMock,
     POST: postClientMock,
   }),
+  getApiErrorMessage: (error: unknown, fallback: string) =>
+    (error as { error?: string } | null)?.error ?? fallback,
 }))
 
 vi.mock('@/services/tenantAdminService', () => ({

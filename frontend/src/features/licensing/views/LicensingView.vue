@@ -1,138 +1,83 @@
 <!-- Copyright (c) Andreas Rain. -->
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+<!-- This file implements license key functionality. License logic may not be moved, changed, disabled or circumvented. -->
+
+<script setup lang="ts">
+/**
+ * The licensing panel: the license on file, what it grants, what it limits, and what has been done to it.
+ *
+ * The panel loads the summary once and keeps it in the shared licensing state, so the expiry notice beside
+ * every page and this page never report different stages. The session's edition and capability list are
+ * primed from the same read, which is what keeps the header badge and the navigation in step after an
+ * activation without a sign-out.
+ *
+ * The observed system profile is not rendered here. The endpoint that serves it exists, and the panel is
+ * where it will go; what it should show an operator has not been settled, and a descriptive dump of the host
+ * would read as something licensing checks when nothing does.
+ */
+import { onMounted, ref, watch } from 'vue'
+import LicenseActivationCard from '@/features/licensing/components/LicenseActivationCard.vue'
+import LicenseActivationHistory from '@/features/licensing/components/LicenseActivationHistory.vue'
+import LicenseEntitlementsCard from '@/features/licensing/components/LicenseEntitlementsCard.vue'
+import LicenseLimitsCard from '@/features/licensing/components/LicenseLimitsCard.vue'
+import LicensingIdentityCard from '@/features/licensing/components/LicensingIdentityCard.vue'
+import { useLicensing } from '@/composables/useLicensing'
+import { useSession } from '@/composables/useSession'
+
+const { edition, setLicensingState } = useSession()
+const { summary, loading, load } = useLicensing()
+
+const errorMessage = ref('')
+
+onMounted(async () => {
+  // Forced, because the page is where an operator goes to change the license and a cached answer taken before
+  // that change would report the license that was replaced.
+  await load(true)
+
+  if (summary.value === null) {
+    errorMessage.value = 'Failed to load licensing settings.'
+  }
+})
+
+// Every read of the summary re-primes the session, so an activation reaches the header badge and the
+// capability-gated navigation without a sign-out.
+watch(summary, (loaded) => {
+  if (loaded !== null) {
+    errorMessage.value = ''
+    setLicensingState(loaded.edition, loaded.capabilities)
+  }
+})
+</script>
 
 <template>
   <div class="page-view licensing-view">
     <div class="licensing-page-header">
       <h2 class="view-title">Licensing</h2>
-        <p class="licensing-description">
-          Review the configured product edition and the premium capabilities that require a commercial license.
-        </p>
+      <p class="licensing-description">
+        The license file this installation runs under, the capabilities it grants, and the limits it states.
+        The product edition does not replace the source-license boundaries documented in LICENSE and
+        LICENSING.md.
+      </p>
+      <span :class="['chip', edition === 'commercial' ? 'chip-success' : 'chip-muted']" data-testid="licensing-edition-chip">
+        {{ edition === 'commercial' ? 'Commercial active' : 'Community active' }}
+      </span>
     </div>
 
-    <section class="section-card licensing-card">
-      <div class="section-card-header licensing-card-header">
-        <div>
-          <h3>Edition</h3>
-          <p class="licensing-subtitle">The configured product edition does not replace the source-license boundaries documented in LICENSE and LICENSING.md.</p>
-        </div>
-        <span :class="['chip', currentEdition === 'commercial' ? 'chip-success' : 'chip-muted']">
-          {{ currentEdition === 'commercial' ? 'Commercial active' : 'Community active' }}
-        </span>
-      </div>
+    <div v-if="loading && summary === null" class="licensing-loading" data-testid="licensing-loading">
+      Loading licensing settings…
+    </div>
 
-      <div class="section-card-body">
-        <div v-if="loading" class="muted-hint">Loading licensing settings…</div>
-        <template v-else>
-          <div class="edition-selector-grid">
-            <button
-              type="button"
-              class="edition-card"
-              :class="{ active: selectedEdition === 'community' }"
-              @click="selectedEdition = 'community'"
-            >
-              <strong>Community</strong>
-              <span>Password sign-in and a single active review or provider workflow.</span>
-            </button>
-            <button
-              type="button"
-              class="edition-card"
-              :class="{ active: selectedEdition === 'commercial' }"
-              @click="selectedEdition = 'commercial'"
-            >
-              <strong>Commercial</strong>
-              <span>Commercial-only capabilities require a commercial license, including in self-hosted deployments.</span>
-            </button>
-          </div>
+    <template v-else>
+      <p v-if="errorMessage" class="error" data-testid="licensing-load-error">{{ errorMessage }}</p>
 
-          <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-          <p v-if="successMessage" class="success-hint">{{ successMessage }}</p>
-
-          <div v-if="hasEditionChange" class="form-actions licensing-actions">
-            <button
-              class="btn-primary"
-              type="button"
-              :disabled="saving"
-              @click="applyLicensingChange"
-            >
-              {{ saving ? 'Saving…' : applyActionLabel }}
-            </button>
-          </div>
-
-          <div class="licensing-capability-grid">
-            <article v-for="capability in displayedCapabilities" :key="capability.key ?? ''" class="licensing-capability-card">
-              <div class="licensing-capability-header">
-                <h4>{{ capability.displayName }}</h4>
-                <span :class="['chip', capability.isAvailable ? 'chip-success' : 'chip-muted']">
-                  {{ capability.isAvailable ? 'Available' : 'Commercial license required' }}
-                </span>
-              </div>
-              <p>{{ capability.message ?? 'Available for the current configured product edition.' }}</p>
-            </article>
-          </div>
-        </template>
-      </div>
-    </section>
+      <LicenseActivationCard />
+      <LicenseEntitlementsCard />
+      <LicenseLimitsCard />
+      <LicensingIdentityCard />
+      <LicenseActivationHistory />
+    </template>
   </div>
 </template>
-
-<script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { getLicensingSummary, updateLicensing, type InstallationEdition } from '@/services/licensingService'
-import { useSession } from '@/composables/useSession'
-
-const { edition, capabilities, setLicensingState } = useSession()
-
-const loading = ref(false)
-const saving = ref(false)
-const errorMessage = ref('')
-const successMessage = ref('')
-const selectedEdition = ref<InstallationEdition>(edition.value)
-
-const currentEdition = computed(() => edition.value)
-const displayedCapabilities = computed(() => capabilities.value)
-const hasEditionChange = computed(() => selectedEdition.value !== currentEdition.value)
-const applyActionLabel = computed(() =>
-  selectedEdition.value === 'commercial' ? 'Set Commercial Edition' : 'Set Community Edition',
-)
-
-onMounted(async () => {
-  loading.value = true
-
-  try {
-    const summary = await getLicensingSummary()
-    selectedEdition.value = summary.edition
-    setLicensingState(summary.edition, summary.capabilities)
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Failed to load licensing settings.'
-  } finally {
-    loading.value = false
-  }
-})
-
-async function applyLicensingChange() {
-  errorMessage.value = ''
-  successMessage.value = ''
-  saving.value = true
-
-  try {
-    const summary = await updateLicensing({
-      edition: selectedEdition.value,
-      capabilityOverrides: [],
-    })
-
-    setLicensingState(summary.edition, summary.capabilities)
-    selectedEdition.value = summary.edition
-    successMessage.value = summary.edition === 'commercial'
-      ? 'Configured product edition set to Commercial.'
-      : 'Configured product edition set to Community.'
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Failed to update licensing settings.'
-  } finally {
-    saving.value = false
-  }
-}
-</script>
 
 <style scoped>
 .licensing-view {
@@ -145,92 +90,12 @@ async function applyLicensingChange() {
   margin-bottom: 0.25rem;
 }
 
-.licensing-description,
-.licensing-subtitle {
+.licensing-description {
   color: var(--color-text-muted);
-  margin: 0.5rem 0 0;
+  margin: 0.5rem 0 0.75rem;
 }
 
-.licensing-card-header {
-  gap: 1rem;
-}
-
-.edition-selector-grid,
-.licensing-capability-grid {
-  display: grid;
-  gap: 0.9rem;
-}
-
-.edition-selector-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-bottom: 1rem;
-}
-
-.edition-card,
-.licensing-capability-card {
-  border: 1px solid var(--color-border);
-  border-radius: 0.9rem;
-  background: var(--color-surface);
-  padding: 1rem;
-  text-align: left;
-}
-
-.edition-card {
-  appearance: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: 0.4rem;
-  cursor: pointer;
-  color: var(--color-text);
-}
-
-.edition-card:hover {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(34, 211, 238, 0.18);
-}
-
-.edition-card:focus-visible {
-  outline: none;
-  border-color: rgba(34, 211, 238, 0.45);
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.24);
-}
-
-.edition-card.active {
-  border-color: rgba(34, 211, 238, 0.35);
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.18);
-}
-
-.edition-card strong {
-  color: var(--color-text);
-}
-
-.edition-card span,
-.licensing-capability-card p {
+.licensing-loading {
   color: var(--color-text-muted);
-  margin: 0;
-}
-
-.licensing-capability-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.licensing-capability-header h4 {
-  margin: 0;
-}
-
-.licensing-actions {
-  margin-bottom: 1rem;
-}
-
-@media (max-width: 760px) {
-  .edition-selector-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

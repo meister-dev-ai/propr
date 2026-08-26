@@ -297,6 +297,28 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasMaxLength(200)
             .IsRequired(false);
 
+        builder.Property(j => j.PrAuthorExternalUserId)
+            .HasColumnName("pr_author_external_user_id")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
+        builder.Property(j => j.PrAuthorLogin)
+            .HasColumnName("pr_author_login")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
+        builder.Property(j => j.PrAuthorDisplayName)
+            .HasColumnName("pr_author_display_name")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
+        // Nullable rather than defaulted to false. A provider that states nothing about the account gives a
+        // different answer from one that states the account is not a bot, and a later exclusion rule reads the
+        // two differently.
+        builder.Property(j => j.PrAuthorIsBot)
+            .HasColumnName("pr_author_is_bot")
+            .IsRequired(false);
+
         builder.HasMany(j => j.Protocols)
             .WithOne()
             .HasForeignKey(p => p.JobId)
@@ -346,6 +368,7 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
         builder.Ignore(j => j.RepositoryReference);
         builder.Ignore(j => j.CodeReviewReference);
         builder.Ignore(j => j.ReviewRevisionReference);
+        builder.Ignore(j => j.PullRequestAuthorReference);
 
         var tokenBreakdownConverter = new ValueConverter<List<TokenBreakdownEntry>, string>(
             v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),

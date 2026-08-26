@@ -1,172 +1,103 @@
-# Anonymous usage statistics
+# Usage statistics
 
-Every field this installation sends about itself, what each one is for, what is never collected, how long it
-is kept, and how to switch it off.
+ProPR sends one report a day to `https://telemetry.meister-dev.ai/v1/ping`. The report describes the
+installation: which version it runs, which edition, and how much it is used. It contains no code, no
+repository names and no user names.
 
-Once a day a ProPR installation posts an anonymous snapshot of itself to
-`https://telemetry.meister-dev.ai/v1/ping`. The response reports newer releases and security advisories
-affecting the version it runs. The snapshot contains nothing about your code, your repositories, your
-organization or the people using it. Every field it does contain is listed below. **Administration → Usage
-Statistics** shows the request body your own installation would send.
+A Community installation's report is anonymous, and you can switch it off. A commercial installation also
+sends its license identifier and its usage against the license limits, and keeps sending while the license is
+in force.
+
+**Administration → Usage Statistics** shows the exact request body your installation would send.
 
 ## What is sent
-
-Nine fields, and no others. A test in the product's own suite compares this table against the sending code, so
-a field added to the payload without an entry here fails the build.
 
 | Field | Type | Example | What it answers |
 |---|---|---|---|
 | `schemaVersion` | integer | `1` | Which version of this payload the installation speaks |
-| `instanceId` | UUID | `9f1c2c8a-3f04-4d9c-9f1a-6d4a9a2b7c31` | Whether two pings on different days came from the same installation, so installations can be counted rather than pings |
-| `productVersion` | string | `1.0.0.alpha.0049` | How far behind installations run, which informs how long a release stays supported |
-| `edition` | `community` or `commercial` | `community` | How the two editions are used, which informs where engineering effort goes |
-| `activeUsers` | range label | `2-5` | The size of a typical installation, which informs performance targets |
-| `pullRequestsPerWeek` | range label | `21-100` | Review volume per installation, which informs the throughput the product is designed for |
-| `findingsRaisedPerWeek` | range label | `51-250` | How much a review posts |
+| `instanceId` | UUID | `9f1c2c8a-3f04-4d9c-9f1a-6d4a9a2b7c31` | Whether two reports came from the same installation |
+| `productVersion` | string | `1.0.0.alpha.0049` | Which version you run, so releases stay supported long enough |
+| `edition` | `community` or `commercial` | `community` | Which edition you run |
+| `activeUsers` | range label: `1`, `2-5`, `6-20`, `21-50`, `50+` | `2-5` | The size of the installation |
+| `pullRequestsPerWeek` | range label: `0`, `1-20`, `21-100`, `101-500`, `500+` | `21-100` | Review volume |
+| `findingsRaisedPerWeek` | range label: `0`, `1-50`, `51-250`, `251-1000`, `1000+` | `51-250` | How much a review posts |
 | `findingsAcceptedPerWeek` | range label, optional | `51-250` | How often authors act on a finding |
-| `findingsDismissedPerWeek` | range label, optional | `1-50` | How often authors reject a finding as unwanted, which indicates review noise |
+| `findingsDismissedPerWeek` | range label, optional | `1-50` | How often authors reject a finding |
+| `licenseId` | string, commercial only | `0f4c1b7a-6d21-4f36-9e18-5a7b3c9d2e40` | Which license the installation runs under |
+| `licensingIdentity` | UUID, commercial only | `4f6b1d02-9c58-4f7a-8f2e-1d3c5b7a9e04` | Which installation sent the report, as shown on the licensing page |
+| `systemProfileHash` | 64 hex characters, commercial only | `2f0d9a71c48b3e5602d17ac9fb84e3d5a6c012bf7d94e8315a0bc6d729f4e81c` | Whether two installations under one license run on the same system |
+| `consumedClients` | integer, commercial only | `12` | Clients held, against the limit the license states |
+| `consumedRunners` | integer, commercial only | `4` | Runners holding a valid credential, against the limit the license states |
+| `peakConcurrentReviews` | integer, commercial only | `2` | Most reviews running at once on the previous day, against the limit the license states |
+| `consumedAuthorsPerMonth` | integer, commercial only | `37` | Distinct pull request authors this month, automation excluded, against the limit the license states |
 
-Requests also carry a `User-Agent` of `propr/<productVersion>`, which repeats the version field.
+Requests carry a `User-Agent` of `propr/<productVersion>`.
 
-The two optional fields are present only on installations that record finding outcomes, which happens when
-per-client code-insight collection has produced at least one. Elsewhere they are left out of the payload
-rather than reported as zero, because a zero would be indistinguishable from an installation that measures
-nothing.
+The two optional finding counters appear only where per-client code-insight collection has recorded an
+outcome.
 
-Their population also differs from `findingsRaisedPerWeek`, which counts every finding posted anywhere in the
-installation while the two outcome counters cover only the clients that record outcomes. Divide the two
-outcome counters into each other rather than into `findingsRaisedPerWeek`.
+## The commercial fields
 
-## Counters are ranges
+`licenseId` identifies the license, and a license is issued to a named organisation, so a commercial report is
+not anonymous.
 
-Each count is converted to a range label before the payload is built, so the number itself does not leave the
-installation. The table below lists every value each counter can carry.
+`systemProfileHash`, `peakConcurrentReviews` and `consumedAuthorsPerMonth` are sent only where the
+installation has that measurement. A missing field means there is no measurement, not zero.
 
-| Counter | Range labels |
-|---|---|
-| `activeUsers` | `1`, `2-5`, `6-20`, `21-50`, `50+` |
-| `pullRequestsPerWeek` | `0`, `1-20`, `21-100`, `101-500`, `500+` |
-| `findingsRaisedPerWeek`, `findingsAcceptedPerWeek`, `findingsDismissedPerWeek` | `0`, `1-50`, `51-250`, `251-1000`, `1000+` |
-
-Each top label means "more than the range below it": `50+` is 51 accounts or more, `500+` is 501 pull requests
-or more, and `1000+` is 1001 findings or more.
-
-`activeUsers` is a count of accounts that can currently sign in, taken at the moment the snapshot is built.
-The three per-week counters cover the period since the previous delivered snapshot, normalized to one week, so
-an installation that was offline for a fortnight reports its rate rather than its backlog. Before the first
-delivered snapshot the period is the preceding week. The period is bounded to between one day and thirty days,
-which keeps a short gap from being extrapolated into an implausible rate and a long one from reporting a stale
-average.
-
-`instanceId` is a random value generated on the installation the first time it is needed. It is not derived
-from the hostname, the hardware, the license or any account. It is the only value in the payload that persists
-across days. Deleting the `usage_statistics_identity` row in your own database is the only way to change it.
+One license may cover several installations, such as production, a standby site and a staging system. How
+their counts are combined depends on the license agreement and the terms of that particular license - see
+[the commercial license policy](../../COMMERCIAL-LICENSE-POLICY.md).
 
 ## What is never collected
 
-None of the following is in the payload, and no field exists that could carry it.
+ProPR transmits nothing outside the fields listed above.
 
-- Source code, diffs, file names, file paths, or any part of a review's content.
-- Repository, project, organization or tenant names and identifiers.
-- User names, email addresses, account identifiers, or anything else about a person.
-- Pull request titles, descriptions, comments, or the text of any finding.
-- AI provider names, endpoint hosts, model names, prompts, or token counts.
-- Raw counts of anything. Every counter is a range label.
-- License keys, license states, expiry dates, or customer identity of any kind.
-- Geographic location, timezone, locale, operating system, or hardware.
-- IP addresses. See [what the network sees](#what-the-network-sees) for the transient handling at the edge.
+## When a report is sent
 
-There is no event stream behind this. Each snapshot is computed when it is sent, by querying tables ProPR
-already keeps for its own purposes, so switching usage statistics off leaves nothing to collect or delete.
-
-## When a snapshot is sent
-
-Nothing is sent until a platform administrator has been shown what sending means. On a fresh install, and on
-an upgrade to the release that introduced this, the gate starts shut and stays shut until one of the
-following:
-
-- **Community.** The notice describing the payload is rendered for a platform administrator. Rendering is the
-  trigger; dismissing only hides the notice.
-- **Commercial.** A platform administrator signs in with a local account. The license relationship covers the
-  notice, so no banner is shown.
-
-An installation that no administrator signs in to sends nothing.
-
-After the gate opens, one snapshot is sent per day, at a time that varies within the day so that arrival times
-do not act as a second identifier. A send that fails is dropped, with no queue and no retry; the next day's
-cycle builds a new snapshot. Delivery does not block, delay or compete with review work, and a failure is not
-reported as an operator-facing error.
-
-**Send now** on the administration page runs a cycle immediately instead of waiting. It applies the same rules,
-so it sends nothing from an installation that is switched off or has not shown the notice.
+ProPR sends nothing until a platform administrator has been shown what the report contains. After that it
+sends one report a day. A failed send is dropped and the next day builds a new report.
 
 ## Turning it off
 
-**Community.** Under **Administration → Usage Statistics**, the toggle turns sending off, and it takes effect
-immediately. In the off state the installation performs no request and resolves no name for this feature, and a
-test in the product's own suite asserts that.
+On a Community installation, the toggle under **Administration → Usage Statistics** takes effect immediately.
+Switched off, the installation makes no request.
 
-**Commercial.** Sending is active while a commercial license is installed. The control stays visible and
-labeled as governed by the license, so administrators can read the current state. Removing the license returns
-control to the community toggle in the state it was last left.
-
-There is no environment variable for this, and `DO_NOT_TRACK` is not consulted. The administration control is
-the only mechanism, so whether an installation is sending is readable in one place.
+On a commercial installation, sending is active while the license is in force and cannot be switched off.
+Removing the license returns control to the Community toggle.
 
 ## What comes back
 
-The response carries the newest published release and any security advisories that apply to the version you
-reported, which the administration UI renders as an update marker. Every field of the response is optional; an
-installation that gets an empty answer, or no answer, shows nothing rather than an error, and nothing about
-the response triggers an automatic update.
+The response carries the newest published release and any security advisories affecting the version you
+reported, which the administration UI shows as an update marker. Nothing in the response triggers an update.
 
 ## Where the data goes and how long it is kept
-
-Everything in this section describes the receiving service, which the vendor operates and does not publish.
-These are commitments about that service rather than statements you can check against the source in this
-repository. What you can check here is what leaves your installation.
 
 | Question | Answer |
 |---|---|
 | Endpoint | `https://telemetry.meister-dev.ai/v1/ping`, over TLS |
 | Operator | Meister DEV, the vendor of ProPR |
 | Hosting | Azure Container Apps and Azure Database for PostgreSQL, in the Switzerland North region |
-| Storage shape | One row per installation per day, keyed on the instance identifier and the date |
-| Retention | Rows for an installation are deleted 180 days after that installation's last ping |
+| Storage shape | One row per installation per day |
+| Retention | Rows are deleted 180 days after that installation's last report |
 | Processors | None. No third-party analytics, no advertising service, no data broker |
-
-Duplicate pings on the same day overwrite each other rather than accumulating, so a restart loop cannot
-inflate what is stored about you.
 
 ## What the network sees
 
 Any HTTPS request reveals the client's IP address to the receiving platform while the connection is open. The
-handling is bounded: the receiver never logs `X-Forwarded-For` or the remote address, the hosting
-environment's HTTP access logs are off, and no monitoring configuration anywhere in the receiver un-masks
-addresses. No IP address is written to the database, and none is associated with an instance identifier.
+receiver does not log it, does not store it, and associates none with an installation.
 
-## Where a build sends
+## Checking it yourself
 
-The address is fixed when the product is compiled. There is no environment variable and no runtime setting, so
-a running installation cannot be redirected, and it cannot be silenced that way either. Where a given build
-sends is a property of that build, and the administration page shows the value that build will use.
+1. **Administration → Usage Statistics** shows the request body your next report would carry. Opening the
+   preview sends nothing.
+2. The sending code is in this repository under
+   `src/MeisterDev.ProPR.Application/Features/UsageStatistics`.
+3. With the Community feature off, `telemetry.meister-dev.ai` never appears in your egress logs.
 
-## Checking it for yourself
-
-1. **The payload preview.** **Administration → Usage Statistics** shows the request body your next snapshot
-   would carry, built by the same code that sends it. Opening the preview sends nothing.
-2. **The sending code.** It ships in this repository, under
-   `src/MeisterDev.ProPR.Application/Features/UsageStatistics`, and the type that defines the wire payload is
-   `UsageStatisticsSnapshot`.
-3. **Your own egress logs.** With the feature off, `telemetry.meister-dev.ai` never appears in them.
-
-## Running without internet access
-
-An installation on an isolated network cannot reach the receiver, and nothing degrades as a result. The daily
-attempt fails, the snapshot is discarded, and reviews are unaffected. Turning the feature off avoids the
-attempt altogether. See [running without internet access](../guides/air-gapped.md).
+An installation with no internet access cannot reach the receiver, and reviews are unaffected - see
+[running without internet access](../guides/air-gapped.md).
 
 ## Contact
 
-Privacy questions about this payload go to `privacy@meister-dev.ai`. To report a vulnerability, see
+Privacy questions about this report go to `privacy@meister-dev.ai`. To report a vulnerability, see
 [SECURITY.md](../../SECURITY.md) instead.

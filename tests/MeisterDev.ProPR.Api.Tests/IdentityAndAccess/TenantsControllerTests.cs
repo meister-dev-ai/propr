@@ -23,6 +23,7 @@ using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Licensing.Support;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -162,7 +163,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
     }
 
     [Fact]
-    public async Task ListTenants_CommunityEdition_ReturnsOnlySystemTenant()
+    public async Task ListTenants_WithoutMultiTenancy_ReturnsOnlySystemTenant()
     {
         factory.ResetLicensing();
         factory.SetEdition(InstallationEdition.Community);
@@ -185,7 +186,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
     }
 
     [Fact]
-    public async Task PostTenant_CommunityEdition_Returns409Conflict()
+    public async Task PostTenant_WithoutMultiTenancy_Returns409Conflict()
     {
         factory.ResetLicensing();
         factory.SetEdition(InstallationEdition.Community);
@@ -202,7 +203,9 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("Community edition only supports the internal System tenant.", body.GetProperty("error").GetString());
+        Assert.Equal(
+            "A commercial license is required to use more than the built-in System tenant, including in self-hosted deployments.",
+            body.GetProperty("error").GetString());
     }
 }
 
@@ -478,6 +481,8 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
             services.AddScoped<IUserPatRepository, UserPatRepository>();
             services.AddScoped<IClientAdminService, ClientAdminService>();
+            // The licensing module is not composed here, so client creation admits through a gate with no ceiling.
+            services.AddScoped<IStockQuotaGate, UnlimitedStockQuotaGate>();
             services
                 .AddScoped<MeisterDev.ProPR.Application.Interfaces.IClientTokenUsageRepository,
                     MeisterDev.ProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
@@ -576,6 +581,13 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
         private readonly object _sync = new();
         private InstallationEdition _edition = InstallationEdition.Commercial;
 
+        // Seeded on construction, because the real catalog answers for every key from the first request. A test
+        // that never touches licensing still has its capability checks resolved rather than raising.
+        public TestLicensingCapabilityService()
+        {
+            this.Reset();
+        }
+
         public Task<LicensingSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default)
         {
             lock (this._sync)
@@ -589,10 +601,10 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
                                 capability.Key,
                                 capability.DisplayName,
                                 capability.RequiresCommercial,
-                                capability.DefaultWhenCommercial,
                                 capability.OverrideState,
                                 capability.IsAvailable,
-                                capability.Message))
+                                capability.Message,
+                                capability.Reason))
                             .ToList()
                             .AsReadOnly()));
             }
@@ -631,16 +643,10 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
         }
 
         public Task<LicensingSummaryDto> UpdateAsync(
-            InstallationEdition edition,
             IReadOnlyCollection<CapabilityOverrideMutation> capabilityOverrides,
             Guid? actorUserId,
             CancellationToken cancellationToken = default)
         {
-            lock (this._sync)
-            {
-                this._edition = edition;
-            }
-
             return this.GetSummaryAsync(cancellationToken);
         }
 
@@ -653,14 +659,7 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
 
                 foreach (var definition in this._catalog.GetAll())
                 {
-                    this._capabilities[definition.Key] = new CapabilitySnapshot(
-                        definition.Key,
-                        definition.DisplayName,
-                        definition.RequiresCommercial,
-                        definition.DefaultWhenCommercial,
-                        PremiumCapabilityOverrideState.Default,
-                        true,
-                        null);
+                    this._capabilities[definition.Key] = Available(definition);
                 }
             }
         }
@@ -672,23 +671,64 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
 
             lock (this._sync)
             {
-                this._capabilities[capabilityKey] = new CapabilitySnapshot(
-                    definition.Key,
-                    definition.DisplayName,
-                    definition.RequiresCommercial,
-                    definition.DefaultWhenCommercial,
-                    PremiumCapabilityOverrideState.Default,
-                    isAvailable,
-                    isAvailable ? null : message ?? definition.CommercialRequiredMessage);
+                this._capabilities[capabilityKey] = isAvailable
+                    ? Available(definition)
+                    : Unavailable(
+                        definition,
+                        message ?? definition.CommercialRequiredMessage,
+                        PremiumCapabilityUnavailableReason.NotInLicense);
             }
         }
 
+        /// <summary>
+        ///     Puts the installation on an edition. The community edition also takes every capability that needs a
+        ///     license away, as the real resolution does when no license is in force.
+        /// </summary>
         public void SetEdition(InstallationEdition edition)
         {
             lock (this._sync)
             {
                 this._edition = edition;
+
+                if (edition != InstallationEdition.Community)
+                {
+                    return;
+                }
+
+                foreach (var definition in this._catalog.GetAll().Where(entry => entry.RequiresCommercial))
+                {
+                    this._capabilities[definition.Key] = Unavailable(
+                        definition,
+                        definition.CommercialRequiredMessage,
+                        PremiumCapabilityUnavailableReason.NoLicense);
+                }
             }
+        }
+
+        private static CapabilitySnapshot Available(PremiumCapabilityDefinition definition)
+        {
+            return new CapabilitySnapshot(
+                definition.Key,
+                definition.DisplayName,
+                definition.RequiresCommercial,
+                PremiumCapabilityOverrideState.Default,
+                true,
+                null);
+        }
+
+        private static CapabilitySnapshot Unavailable(
+            PremiumCapabilityDefinition definition,
+            string message,
+            PremiumCapabilityUnavailableReason reason)
+        {
+            return new CapabilitySnapshot(
+                definition.Key,
+                definition.DisplayName,
+                definition.RequiresCommercial,
+                PremiumCapabilityOverrideState.Default,
+                false,
+                message,
+                reason);
         }
     }
 

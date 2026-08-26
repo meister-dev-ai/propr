@@ -36,8 +36,13 @@ public enum RunnerLeaseRefusal
     /// <summary>Distributed execution is not licensed on this installation.</summary>
     NotLicensed,
 
-    /// <summary>Every entitled runner slot is already held.</summary>
-    SlotLimitReached,
+    /// <summary>
+    ///     The installation is already running as many reviews at once as its concurrent-review ceiling
+    ///     allows. Held apart from <see cref="NoMatchingWork" /> because the queue is not empty: the work
+    ///     exists and is waiting for a running review to finish, which is a different thing for an
+    ///     operator to see.
+    /// </summary>
+    ConcurrencyCeilingReached,
 
     /// <summary>The control plane is draining and is deliberately handing out no new work.</summary>
     Draining,
@@ -53,11 +58,12 @@ public enum RunnerLeaseRefusal
 /// </summary>
 public sealed record RunnerLeaseOffer
 {
-    private RunnerLeaseOffer(RunnerJobManifest? manifest, RunnerLeaseRefusal refusal, string? detail)
+    private RunnerLeaseOffer(RunnerJobManifest? manifest, RunnerLeaseRefusal refusal, string? detail, int? ceiling = null)
     {
         this.Manifest = manifest;
         this.Refusal = refusal;
         this.Detail = detail;
+        this.Ceiling = ceiling;
     }
 
     /// <summary>The manifest for the job this runner now holds, or null when none was granted.</summary>
@@ -68,6 +74,13 @@ public sealed record RunnerLeaseOffer
 
     /// <summary>Operator-readable detail for a refusal, when there is more to say than its name.</summary>
     public string? Detail { get; }
+
+    /// <summary>
+    ///     The concurrent-review ceiling a <see cref="RunnerLeaseRefusal.ConcurrencyCeilingReached" />
+    ///     refusal was made against, and null for every other answer. Carried as a number because the
+    ///     detail states the same ceiling in prose, and a metric label cannot use prose.
+    /// </summary>
+    public int? Ceiling { get; }
 
     /// <summary>Whether a job was leased.</summary>
     public bool Granted => this.Manifest is not null;
@@ -96,5 +109,20 @@ public sealed record RunnerLeaseOffer
         }
 
         return new RunnerLeaseOffer(null, refusal, detail);
+    }
+
+    /// <summary>
+    ///     No lease, because the installation is at its concurrent-review ceiling.
+    ///     <para>
+    ///         Built here rather than through <see cref="Refuse" /> so the ceiling reaches the caller as a
+    ///         number. The controller counts the refusal against that number, which is how an operator sees
+    ///         which limit an idle fleet is waiting on.
+    ///     </para>
+    /// </summary>
+    /// <param name="ceiling">The ceiling that was reached.</param>
+    /// <param name="detail">Operator-readable detail naming the ceiling and where it comes from.</param>
+    public static RunnerLeaseOffer RefuseAtConcurrencyCeiling(int ceiling, string? detail = null)
+    {
+        return new RunnerLeaseOffer(null, RunnerLeaseRefusal.ConcurrencyCeilingReached, detail, ceiling);
     }
 }

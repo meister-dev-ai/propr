@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { components } from '@/types'
 import { type RoleLevel } from '@/composables/roles'
+import { normalizeCapability, type PremiumCapability } from '@/services/licensingShared'
 
 const CLIENT_ROLES_KEY = 'meisterpropr_client_roles'
 /** Cross-tab logout signal: writing it fires a `storage` event in other tabs (see main.ts). */
@@ -81,13 +82,13 @@ function readStoredJsonObject(key: string): Record<string, number> {
   }
 }
 
-function readStoredJsonArray(key: string): PremiumCapabilityDto[] {
+function readStoredJsonArray(key: string): PremiumCapability[] {
   const rawValue = sessionStorage.getItem(key)
   if (!rawValue) return []
 
   try {
     const parsed = JSON.parse(rawValue) as unknown
-    return Array.isArray(parsed) ? (parsed as PremiumCapabilityDto[]) : []
+    return Array.isArray(parsed) ? (parsed as PremiumCapabilityDto[]).map(normalizeCapability) : []
   } catch {
     return []
   }
@@ -103,7 +104,7 @@ const accessToken = ref<string | null>(null)
 const clientRoles = ref<Record<string, number>>(readStoredJsonObject(CLIENT_ROLES_KEY))
 
 const edition = ref<InstallationEdition>((sessionStorage.getItem(EDITION_KEY) as InstallationEdition | null) ?? 'community')
-const capabilities = ref<PremiumCapabilityDto[]>(readStoredJsonArray(CAPABILITIES_KEY))
+const capabilities = ref<PremiumCapability[]>(readStoredJsonArray(CAPABILITIES_KEY))
 
 /** tenantRoles: tenantId -> 0 (TenantUser) | 1 (TenantAdministrator) */
 const tenantRoles = ref<Record<string, number>>(readStoredJsonObject(TENANT_ROLES_KEY))
@@ -214,16 +215,16 @@ export function useSession() {
     clientRoles.value = roles
   }
 
-  function setLicensingState(nextEdition: InstallationEdition, nextCapabilities: PremiumCapabilityDto[]): void {
+  function setLicensingState(nextEdition: InstallationEdition, nextCapabilities: PremiumCapability[]): void {
     sessionStorage.setItem(EDITION_KEY, nextEdition)
     sessionStorage.setItem(CAPABILITIES_KEY, JSON.stringify(nextCapabilities))
     edition.value = nextEdition
     capabilities.value = nextCapabilities
   }
 
-  function getCapability(key: string): PremiumCapabilityDto | null {
+  function getCapability(key: string): PremiumCapability | null {
     const normalizedKey = key.trim().toLowerCase()
-    return capabilities.value.find((capability) => capability.key?.toLowerCase() === normalizedKey) ?? null
+    return capabilities.value.find((capability) => capability.key.toLowerCase() === normalizedKey) ?? null
   }
 
   function isCapabilityAvailable(key: string): boolean {
@@ -282,7 +283,7 @@ export function useSession() {
         setClientRoles(data.clientRoles ?? {})
         setTenantRoles(data.tenantRoles ?? {})
         setHasLocalPassword(data.hasLocalPassword === true)
-        setLicensingState(data.edition ?? 'community', data.capabilities ?? [])
+        setLicensingState(data.edition ?? 'community', (data.capabilities ?? []).map(normalizeCapability))
         return true
       }
 

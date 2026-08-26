@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      The license document format: the payload model, the compact-JWS primitives that sign and verify it,
+      the typed refusal reasons, and the trust anchor a signing chain leads back to. The product references
+      it to verify a license and the offline issuing tool references it to sign one, so both sides run the
+      same format code. It therefore carries no package or project references and reads no configuration.
+    -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <!--
+      The trust anchor ships inside the assembly, so the certificate a build accepts signatures under comes
+      from the source tree alone. It is embedded rather than copied to the output directory because a file
+      beside the binary could be replaced without rebuilding.
+    -->
+    <ItemGroup>
+        <EmbeddedResource Include="licensing-root.cer"/>
+    </ItemGroup>
+
+    <!--
+      The chain policy decides what a certificate path means and produces no result of its own, so the tests
+      read the configured policy back instead of inferring it from documents that would verify either way.
+    -->
+    <ItemGroup>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.Licensing.Tests"/>
+    </ItemGroup>
+
+</Project>

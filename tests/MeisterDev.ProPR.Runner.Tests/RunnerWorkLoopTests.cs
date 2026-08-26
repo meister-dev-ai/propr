@@ -106,19 +106,23 @@ public sealed class RunnerWorkLoopTests
         await loop.StopAsync(CancellationToken.None);
     }
 
+    // The refusal a control plane answers with the slot_limit_reached code is an installation not licensed
+    // for distributed execution. A license can be added while the fleet is running, so the host reports the
+    // refusal and goes on asking rather than treating it as terminal.
     [Fact]
-    public async Task AFullSlotPool_LeavesTheRunnerIdleRatherThanFailing()
+    public async Task ARefusedEntitlement_LeavesTheRunnerIdleRatherThanFailing()
     {
+        const string detail = "Distributed review execution is not licensed for this installation.";
         var handler = new RecordingHandler();
-        handler.AlwaysRespond(HttpStatusCode.TooManyRequests, new RunnerContractError(RunnerContractError.SlotLimitReached, "all 3 slots held"));
+        handler.AlwaysRespond(HttpStatusCode.TooManyRequests, new RunnerContractError(RunnerContractError.SlotLimitReached, detail));
         var health = new RunnerHealthState();
         using var loop = CreateLoop(handler, new NoopExecutor(), capacity: 1, health: health);
 
         await loop.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => health.Read().Detail == "all 3 slots held", "The runner never reported the slot refusal.");
+        await WaitUntilAsync(() => health.Read().Detail == detail, "The runner never reported the refusal.");
 
         var asksSoFar = handler.LeaseRequests.Count;
-        await WaitUntilAsync(() => handler.LeaseRequests.Count > asksSoFar, "The runner stopped asking once the slot pool was full.");
+        await WaitUntilAsync(() => handler.LeaseRequests.Count > asksSoFar, "The runner stopped asking after a refused entitlement.");
 
         Assert.Equal(RunnerHealthState.Status.Idle, health.Read().Current);
 

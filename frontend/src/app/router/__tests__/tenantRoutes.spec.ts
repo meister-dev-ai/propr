@@ -6,7 +6,7 @@ const isAuthenticated = ref(false)
 const isAdmin = ref(false)
 const clientRoles = ref<Record<string, number>>({})
 const tenantRoles = ref<Record<string, number>>({})
-const edition = ref<'community' | 'commercial'>('commercial')
+const availableCapabilities = ref<string[]>(['multi-tenancy'])
 const hasClientRole = vi.fn(() => false)
 const hasTenantRole = vi.fn(() => false)
 
@@ -16,11 +16,10 @@ vi.mock('@/composables/useSession', () => ({
     isAdmin: computed(() => isAdmin.value),
     clientRoles,
     tenantRoles,
-    edition: computed(() => edition.value),
     hasClientRole,
     hasTenantRole,
-    // The guard chain asks about licensed capabilities for the routes that declare one; none of these do.
-    isCapabilityAvailable: () => false,
+    // Tenant administration is licensed, so the guard chain asks about the capability rather than the edition.
+    isCapabilityAvailable: (key: string) => availableCapabilities.value.includes(key),
   }),
 }))
 
@@ -36,7 +35,7 @@ describe('tenant router scaffolding', () => {
     isAdmin.value = false
     clientRoles.value = {}
     tenantRoles.value = {}
-    edition.value = 'commercial'
+    availableCapabilities.value = ['multi-tenancy']
     hasClientRole.mockReset()
     hasClientRole.mockReturnValue(false)
     hasTenantRole.mockReset()
@@ -61,6 +60,7 @@ describe('tenant router scaffolding', () => {
 
     expect(route?.meta.requiresAuth).toBe(true)
     expect(route?.meta.requiresTenantDirectoryAccess).toBe(true)
+    expect(route?.meta.requiresCapability).toBe('multi-tenancy')
   })
 
   it('registers a tenant-settings route for tenant administration', async () => {
@@ -75,6 +75,7 @@ describe('tenant router scaffolding', () => {
 
     expect(route?.meta.requiresAuth).toBe(true)
     expect(route?.meta.requiresTenantAdmin).toBe(true)
+    expect(route?.meta.requiresCapability).toBe('multi-tenancy')
   })
 
   it('registers a tenant-members route for tenant membership management', async () => {
@@ -83,6 +84,7 @@ describe('tenant router scaffolding', () => {
 
     expect(route?.meta.requiresAuth).toBe(true)
     expect(route?.meta.requiresTenantAdmin).toBe(true)
+    expect(route?.meta.requiresCapability).toBe('multi-tenancy')
   })
 
   it('registers the tenant workspace the sections live in', async () => {
@@ -92,6 +94,7 @@ describe('tenant router scaffolding', () => {
     expect(route?.path).toBe('/tenants/:tenantId')
     expect(route?.meta.requiresAuth).toBe(true)
     expect(route?.meta.requiresTenantAdmin).toBe(true)
+    expect(route?.meta.requiresCapability).toBe('multi-tenancy')
   })
 
   // The four tenant pages became sections of that workspace. Their paths still resolve, so a bookmark or an
@@ -150,13 +153,46 @@ describe('tenant router scaffolding', () => {
     expect(redirect?.()).toEqual({ name: 'tenant-directory' })
   })
 
-  it('blocks tenant administration routes in community edition', async () => {
+  it('sends a tenant-only administrator to the reviews page when multi-tenancy is not licensed', async () => {
+    isAuthenticated.value = true
+    tenantRoles.value = { 'tenant-1': 1 }
+    availableCapabilities.value = []
+
+    const router = await importRouter()
+    const homeRoute = router.getRoutes().find((candidate) => candidate.name === 'home')
+    const redirect = homeRoute?.redirect as (() => unknown) | undefined
+
+    expect(redirect?.()).toEqual({ name: 'reviews' })
+  })
+
+  it('allows tenant administration routes when multi-tenancy is licensed', async () => {
     isAuthenticated.value = true
     isAdmin.value = true
-    edition.value = 'community'
 
     const router = await importRouter()
     await router.push({ name: 'tenant-directory' })
+
+    expect(router.currentRoute.value.name).toBe('tenant-directory')
+  })
+
+  it('blocks tenant administration routes when multi-tenancy is not licensed', async () => {
+    isAuthenticated.value = true
+    isAdmin.value = true
+    availableCapabilities.value = []
+
+    const router = await importRouter()
+    await router.push({ name: 'tenant-directory' })
+
+    expect(router.currentRoute.value.name).toBe('access-denied')
+  })
+
+  it('blocks the tenant workspace when multi-tenancy is not licensed', async () => {
+    isAuthenticated.value = true
+    isAdmin.value = true
+    availableCapabilities.value = []
+
+    const router = await importRouter()
+    await router.push({ name: 'tenant-detail', params: { tenantId: 'tenant-1' } })
 
     expect(router.currentRoute.value.name).toBe('access-denied')
   })

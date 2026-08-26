@@ -25,9 +25,9 @@ public sealed class UsageStatisticsService(
     IProductVersionProvider productVersionProvider,
     UsageStatisticsSender? sender = null)
 {
-    /// <summary>The message shown when a commercial license governs the control.</summary>
+    /// <summary>The message shown while a commercial license is in force and governs the control.</summary>
     public const string ManagedByLicenseMessage =
-        "Anonymous usage statistics are managed by your commercial license.";
+        "Usage statistics are managed by your commercial license.";
 
     /// <summary>Returns the current settings, including the last send outcome and any update information.</summary>
     public async Task<UsageStatisticsSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
@@ -41,11 +41,14 @@ public sealed class UsageStatisticsService(
     /// <summary>
     ///     Stores the community toggle.
     ///     <para>
-    ///         Refused while a license is installed. The control stays visible in that state rather than being
-    ///         hidden, so administrators can still see what the installation sends.
+    ///         Refused while a commercial license is in force, which covers the term and the grace window after
+    ///         it. An installation whose license is past that window reports the community edition, so the
+    ///         toggle applies to it like it does to any other community installation. The control stays visible
+    ///         in the refused state rather than being hidden, so administrators can still see what the
+    ///         installation sends.
     ///     </para>
     /// </summary>
-    /// <exception cref="InvalidOperationException">A commercial license governs the setting.</exception>
+    /// <exception cref="InvalidOperationException">A commercial license is in force and governs the setting.</exception>
     public async Task<UsageStatisticsSettingsDto> SetCommunityOptInAsync(
         bool optIn,
         Guid? actorUserId,

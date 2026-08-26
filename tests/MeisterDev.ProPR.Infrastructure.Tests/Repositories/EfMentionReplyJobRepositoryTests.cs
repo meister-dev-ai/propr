@@ -1,16 +1,21 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Features.Licensing.Services;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
+using MeisterDev.ProPR.Infrastructure.Features.Licensing.Persistence;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.TestSupport;
 
@@ -54,6 +59,7 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
 
         // Wipe mention reply jobs between tests.
         await this._dbContext.MentionReplyJobs.ExecuteDeleteAsync();
+        await this._dbContext.LicensingAuthorActivity.ExecuteDeleteAsync();
         this._repo = new EfMentionReplyJobRepository(this._dbContext);
     }
 
@@ -66,6 +72,7 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
 
         // Clean up mention_reply_jobs so the shared client row can be deleted by other test classes.
         await this._dbContext.MentionReplyJobs.ExecuteDeleteAsync();
+        await this._dbContext.LicensingAuthorActivity.ExecuteDeleteAsync();
 
         // The thread pass seeded for the owner-rule test holds the same client down.
         await this._dbContext.ThreadPassJobs.Where(p => p.PullRequestId == 777).ExecuteDeleteAsync();
@@ -81,7 +88,8 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         int prId = 1,
         string threadId = "10",
         int commentId = 100,
-        string mentionText = "what does this do?")
+        string mentionText = "what does this do?",
+        string? commentAuthorNativeId = null)
     {
         return new MentionReplyJob(
             Guid.NewGuid(),
@@ -92,7 +100,8 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
             prId,
             threadId,
             commentId,
-            mentionText);
+            mentionText,
+            commentAuthorNativeId: commentAuthorNativeId);
     }
 
 
@@ -518,5 +527,164 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         Assert.Equal(10m, stored.BudgetBlockThresholdUsd);
         Assert.Equal(11.5m, stored.BudgetBlockSpentUsd);
         Assert.NotNull(stored.CompletedAt);
+    }
+
+    [Fact]
+    public async Task AddAsync_CarriesTheHostsOwnIdentifierForTheAskerSeparatelyFromTheDerivedOne()
+    {
+        var askerIdentity = Guid.Parse("6f0c1a2b-3d4e-5f60-7182-93a4b5c6d7e8");
+        var job = new MentionReplyJob(
+            Guid.NewGuid(),
+            ClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            31,
+            "310",
+            3100,
+            "what does this do?",
+            commentAuthorId: askerIdentity,
+            commentAuthorName: "Octo Dev",
+            commentAuthorNativeId: askerIdentity.ToString("D"));
+
+        await this._repo.AddAsync(job);
+
+        var stored = await this._dbContext.MentionReplyJobs.AsNoTracking().FirstAsync(j => j.Id == job.Id);
+        Assert.Equal(askerIdentity.ToString("D"), stored.CommentAuthorNativeId);
+        Assert.Equal(askerIdentity.ToString("D"), stored.CommentAuthorExternalUserId);
+    }
+
+    [Fact]
+    public async Task AddAsync_WithoutTheHostsOwnIdentifier_LeavesTheColumnEmpty()
+    {
+        // Absent over fabricated: a payload that named no identifier must not have the derived one copied into
+        // this column, or one person would be counted twice.
+        var job = new MentionReplyJob(
+            Guid.NewGuid(),
+            ClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            32,
+            "320",
+            3200,
+            "what does this do?",
+            commentAuthorId: Guid.NewGuid(),
+            commentAuthorName: "Octo Dev");
+
+        await this._repo.AddAsync(job);
+
+        var stored = await this._dbContext.MentionReplyJobs.AsNoTracking().FirstAsync(j => j.Id == job.Id);
+        Assert.Null(stored.CommentAuthorNativeId);
+        Assert.NotNull(stored.CommentAuthorExternalUserId);
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_PutsTheAskerIntoTheMonthsRollup()
+    {
+        var repo = this.CreateRepositoryWithRollup();
+        var job = MakeJob(prId: 33, threadId: "330", commentId: 3300, commentAuthorNativeId: "vss-guid-33");
+        await repo.AddAsync(job);
+        await repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+
+        await repo.SetCompletedAsync(job.Id, "answer-comment-33");
+
+        var recorded = await this._dbContext.LicensingAuthorActivity.AsNoTracking().SingleAsync();
+        Assert.Equal(job.ProviderHost.ScopedKey("vss-guid-33"), recorded.AuthorKey);
+        Assert.Equal(AuthorActivitySource.MentionAnswer, recorded.FirstSeenSource);
+        Assert.False(recorded.Excluded);
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_JobWithoutTheHostsOwnIdentifier_PutsNothingIntoTheRollup()
+    {
+        var repo = this.CreateRepositoryWithRollup();
+        var job = MakeJob(prId: 34, threadId: "340", commentId: 3400);
+        await repo.AddAsync(job);
+        await repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+
+        await repo.SetCompletedAsync(job.Id, "answer-comment-34");
+
+        Assert.Empty(await this._dbContext.LicensingAuthorActivity.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_WhenTheRollupWriteThrows_StillCompletesTheJob()
+    {
+        // The answer is already on the pull request by this point. Failing the completion over a reporting row
+        // would leave the job to be answered again.
+        var repo = new EfMentionReplyJobRepository(
+            this._dbContext,
+            new AuthorActivityRecorder(
+                new ThrowingAuthorActivityRollupStore(),
+                new ConfiguredReviewerIdentityRepository(this._dbContext)));
+        var job = MakeJob(prId: 35, threadId: "350", commentId: 3500, commentAuthorNativeId: "vss-guid-35");
+        await repo.AddAsync(job);
+        await repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+
+        await repo.SetCompletedAsync(job.Id, "answer-comment-35");
+
+        var stored = await this._dbContext.MentionReplyJobs.AsNoTracking().FirstAsync(j => j.Id == job.Id);
+        Assert.Equal(MentionJobStatus.Completed, stored.Status);
+        Assert.Equal("answer-comment-35", stored.PostedReplyCommentId);
+    }
+
+    // The mention side's bot column cannot say "the payload stated nothing", so the name is what identifies
+    // automation there. An answered question from a bot does not put it into the count.
+    [Fact]
+    public async Task SetCompletedAsync_AnAskerWhoseNameNamesAutomation_IsRecordedExcluded()
+    {
+        var repo = this.CreateRepositoryWithRollup();
+        var job = new MentionReplyJob(
+            Guid.NewGuid(),
+            ClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            36,
+            "360",
+            3600,
+            "what does this do?",
+            commentAuthorId: Guid.NewGuid(),
+            commentAuthorName: "renovate[bot]",
+            commentAuthorNativeId: "vss-guid-36");
+        await repo.AddAsync(job);
+        await repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+
+        await repo.SetCompletedAsync(job.Id, "answer-comment-36");
+
+        var recorded = await this._dbContext.LicensingAuthorActivity.AsNoTracking().SingleAsync();
+        Assert.True(recorded.Excluded);
+    }
+
+    // The exclusion decision reads the configured identities from the database, so that read is a second way
+    // the hook can fail. It is absorbed like the write is, and the answer stays posted.
+    [Fact]
+    public async Task SetCompletedAsync_WhenTheIdentityReadThrows_StillCompletesTheJob()
+    {
+        var identities = Substitute.For<IConfiguredReviewerIdentitySource>();
+        identities.ListExternalUserIdsAsync(Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<string>>>(_ => throw new InvalidOperationException("unreachable"));
+        var repo = new EfMentionReplyJobRepository(
+            this._dbContext,
+            new AuthorActivityRecorder(new AuthorActivityRollupRepository(this._dbContext), identities));
+        var job = MakeJob(prId: 37, threadId: "370", commentId: 3700, commentAuthorNativeId: "vss-guid-37");
+        await repo.AddAsync(job);
+        await repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+
+        await repo.SetCompletedAsync(job.Id, "answer-comment-37");
+
+        var stored = await this._dbContext.MentionReplyJobs.AsNoTracking().FirstAsync(j => j.Id == job.Id);
+        Assert.Equal(MentionJobStatus.Completed, stored.Status);
+        Assert.Empty(await this._dbContext.LicensingAuthorActivity.AsNoTracking().ToListAsync());
+    }
+
+    private EfMentionReplyJobRepository CreateRepositoryWithRollup()
+    {
+        return new EfMentionReplyJobRepository(
+            this._dbContext,
+            new AuthorActivityRecorder(
+                new AuthorActivityRollupRepository(this._dbContext),
+                new ConfiguredReviewerIdentityRepository(this._dbContext)));
     }
 }

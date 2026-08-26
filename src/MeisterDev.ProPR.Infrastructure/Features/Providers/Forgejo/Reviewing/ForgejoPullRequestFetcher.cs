@@ -96,7 +96,8 @@ internal sealed class ForgejoPullRequestFetcher(
             MapStatus(pullRequest),
             existingThreads,
             isDeltaReview ? allChangedFileSummaries : null,
-            AuthorizedIdentityName: context.AuthenticatedUsername);
+            AuthorizedIdentityName: context.AuthenticatedUsername,
+            Author: ToPullRequestAuthor(host, pullRequest));
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(
@@ -232,7 +233,14 @@ internal sealed class ForgejoPullRequestFetcher(
                         null,
                         comment.Id,
                         comment.CreatedAt,
-                        false),
+                        false,
+
+                        // Mention scanning reads this listing as well as the review comments, so a question
+                        // asked on the pull request itself names its author the same way one asked on a line
+                        // of code does.
+                        comment.User?.Id is > 0 and { } userId
+                            ? userId.ToString(CultureInfo.InvariantCulture)
+                            : null),
                 ],
                 "Active"))
             .ToList()
@@ -331,7 +339,8 @@ internal sealed class ForgejoPullRequestFetcher(
             MapStatus(pullRequest),
             existingThreads,
             changedFileManifest,
-            AuthorizedIdentityName: context.AuthenticatedUsername);
+            AuthorizedIdentityName: context.AuthenticatedUsername,
+            Author: ToPullRequestAuthor(host, pullRequest));
     }
 
     private async Task<IReadOnlyList<ForgejoPullRequestFileResponse>?> TryGetDeltaFilesAsync(
@@ -775,12 +784,21 @@ internal sealed class ForgejoPullRequestFetcher(
             ? null
             : StableGuidGenerator.Create(externalUserId);
 
+        // The account's numeric id, so one person is the same identifier whether they opened the pull request
+        // or commented on it. A comment the payload names no user on, and a user object without an id, both
+        // leave it absent: Forgejo issues no account id of zero, so a zero here comes from the field being
+        // missing and naming an account by it would merge two people into one.
+        var nativeAuthorId = comment.User?.Id is > 0 and { } userId
+            ? userId.ToString(CultureInfo.InvariantCulture)
+            : null;
+
         return new PrThreadComment(
             comment.User?.Login ?? "Unknown",
             comment.Body ?? string.Empty,
             stableAuthorId,
             comment.Id,
-            comment.CreatedAt);
+            comment.CreatedAt,
+            AuthorNativeId: nativeAuthorId);
     }
 
     private static string BuildThreadKey(ForgejoPullReviewCommentResponse comment)
@@ -813,6 +831,25 @@ internal sealed class ForgejoPullRequestFetcher(
             "renamed" => ChangeType.Rename,
             _ => ChangeType.Edit,
         };
+    }
+
+    // "user" carries the author: "id" is the identifier, "login" the login, "full_name" the display name.
+    // Forgejo states nothing about an account being a bot on this payload, so the signal stays absent rather
+    // than being guessed from the login.
+    private static PullRequestAuthor? ToPullRequestAuthor(
+        ProviderHostRef host,
+        ForgejoPullRequestResponse pullRequest)
+    {
+        if (pullRequest.User?.Id is not { } userId)
+        {
+            return null;
+        }
+
+        return new PullRequestAuthor(
+            host,
+            userId.ToString(CultureInfo.InvariantCulture),
+            pullRequest.User.Login,
+            pullRequest.User.FullName);
     }
 
     private static PrStatus MapStatus(ForgejoPullRequestResponse pullRequest)
@@ -873,7 +910,9 @@ internal sealed class ForgejoPullRequestFetcher(
         DateTimeOffset? CreatedAt,
         [property: JsonPropertyName("user")] ForgejoCommentUserResponse? User);
 
-    private sealed record ForgejoCommentUserResponse([property: JsonPropertyName("login")] string? Login);
+    private sealed record ForgejoCommentUserResponse(
+        [property: JsonPropertyName("login")] string? Login,
+        [property: JsonPropertyName("id")] long? Id);
 
     private sealed record ForgejoPullRequestResponse(
         [property: JsonPropertyName("title")] string? Title,
@@ -883,7 +922,14 @@ internal sealed class ForgejoPullRequestFetcher(
         [property: JsonPropertyName("merged_at")]
         DateTimeOffset? MergedAt,
         [property: JsonPropertyName("head")] ForgejoBranchRefResponse? Head,
-        [property: JsonPropertyName("base")] ForgejoBranchRefResponse? Base);
+        [property: JsonPropertyName("base")] ForgejoBranchRefResponse? Base,
+        [property: JsonPropertyName("user")] ForgejoPullRequestUserResponse? User);
+
+    private sealed record ForgejoPullRequestUserResponse(
+        [property: JsonPropertyName("id")] long? Id,
+        [property: JsonPropertyName("login")] string? Login,
+        [property: JsonPropertyName("full_name")]
+        string? FullName);
 
     private sealed record ForgejoBranchRefResponse(
         [property: JsonPropertyName("ref")] string? Ref,

@@ -13,18 +13,21 @@ using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Api.Features.Crawling.Webhooks.Validators;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
+using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Api.Features.Reviewing.Runners;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Validators;
-using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Api.Features.ProCursor;
 using MeisterDev.ProPR.Api.Features.ProCursor.Broker.Auth;
 using MeisterDev.ProPR.Api.Features.ProCursor.Broker.Services;
 using MeisterDev.ProPR.Api.HealthChecks;
+using MeisterDev.ProPR.Api.OpenApi;
 using MeisterDev.ProPR.Api.Telemetry;
 using MeisterDev.ProPR.Api.Validators;
 using MeisterDev.ProPR.Api.Workers;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.CodeInsights;
@@ -61,8 +64,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
-using Microsoft.FeatureManagement;
 using Microsoft.OpenApi;
+using Npgsql;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -88,6 +91,16 @@ try
         return;
     }
 
+    // Verifies a license document against the trust anchor compiled into this build and exits. Handled here,
+    // ahead of the host, because the mode reads no configuration and opens no database or socket, which is what
+    // lets a release run it inside the built image.
+    if (await LicenseVerificationCommand.TryRunAsync(args, Console.Out, Console.Error, Console.In) is { } verifyExitCode)
+    {
+        Environment.ExitCode = verifyExitCode;
+
+        return;
+    }
+
     var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddHttpContextAccessor();
 
@@ -102,8 +115,21 @@ try
     var hasDatabaseConnectionString = builder.Configuration.HasDatabaseConnectionString();
     var isTesting = builder.Environment.IsEnvironment("Testing");
     var disableHostedServices = builder.Configuration.GetValue<bool>("MEISTER_DISABLE_HOSTED_SERVICES");
+    var printsLicensingIdentity = args.Contains("--print-licensing-identity", StringComparer.OrdinalIgnoreCase);
 
-    builder.Host.UseSerilog((context, services, configuration) => { ConfigureSerilog(context, services, configuration); });
+    builder.Host.UseSerilog((context, services, configuration) =>
+    {
+        // The identifier command writes its answer to stdout and reports a failure as one line on stderr. It
+        // handles that failure at the command boundary, so application logging is suppressed for this mode to
+        // keep both streams machine-readable while startup maintenance runs.
+        if (printsLicensingIdentity)
+        {
+            configuration.MinimumLevel.Is(LogEventLevel.Fatal);
+            return;
+        }
+
+        ConfigureSerilog(context, services, configuration);
+    });
 
     builder.Services.Configure<HostOptions>(opts =>
         opts.ShutdownTimeout = TimeSpan.FromMinutes(3));
@@ -163,12 +189,6 @@ try
             .RequireAuthenticatedUser()
             .Build();
     });
-
-    if (hasDatabaseConnectionString)
-    {
-        builder.Services.AddFeatureManagement()
-            .UseDisabledFeaturesHandler(new PremiumFeatureDisabledHandler());
-    }
 
     // Data protection: used to encrypt sensitive configuration values (e.g., AdoClientSecret).
     var dataProtectionBuilder = builder.Services.AddDataProtection()
@@ -367,6 +387,14 @@ try
         builder.Services.AddHostedService(sp => sp.GetRequiredService<RunnerRegistryPruneWorker>());
     }
 
+    // LicenseStageWorker reports the installation crossing a license lifecycle boundary. Gated on the database
+    // because the license state provider is only registered with one; without it there is no license to read.
+    builder.Services.AddSingleton<LicenseStageWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<LicenseStageWorker>());
+    }
+
     // UsageStatisticsSendWorker sends the daily anonymous usage snapshot. Gated on the database because the
     // consent state, the opt-out and the installation identity are stored there; without one the loop has
     // nothing to read and cannot determine whether sending is permitted.
@@ -521,8 +549,7 @@ try
         // Feature projects that ship their own endpoints have to be named here: MVC discovers controllers in the
         // entry assembly and in referenced assemblies it can see parts for, not in every reference.
         .AddApplicationPart(typeof(CodeQualityController).Assembly)
-        .AddJsonOptions(opts =>
-            opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+        .AddJsonOptions(opts => Program.ConfigureJsonSerialization(opts.JsonSerializerOptions));
 
     builder.Services.AddSingleton<ReviewJobMetrics>();
     builder.Services.AddSingleton<RunnerFleetMetrics>();
@@ -542,6 +569,7 @@ try
     builder.Services.AddSwaggerGen(options =>
     {
         options.SwaggerDoc("v1", new OpenApiInfo { Title = "Meister DEV ProPR API", Version = "v1" });
+        options.SchemaFilter<LicensingNullableReferenceSchemaFilter>();
         // Matches every first-party assembly, not just MeisterDev.ProPR.*, so types contributed by the
         // extracted provider library keep their documentation in the emitted contract. A narrower glob drops
         // those descriptions silently: the schema still generates, it just loses its prose.
@@ -604,8 +632,66 @@ try
         return;
     }
 
+    // Prints the identifier this installation reports itself under, so it can be read from a shell without the
+    // admin UI. The identifier is created on this read when the installation has none yet.
+    //
+    // The command applies no migrations and runs no seeding, because a command that reads an identifier must
+    // not change the schema of a live installation. Run from a newer image against a database that running
+    // replicas serve from, startup maintenance would apply that image's migrations to it, and this mode holds
+    // application logging at fatal, so no record of the change would be written. The schema has to be in place
+    // already, which it is once the API has started against this database.
+    if (printsLicensingIdentity)
+    {
+        if (!hasDatabaseConnectionString)
+        {
+            await Console.Error.WriteLineAsync("No database is configured. Set DB_CONNECTION_STRING and run the command again.");
+            Environment.ExitCode = 1;
+            return;
+        }
+
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var licensingIdentityStore = scope.ServiceProvider.GetRequiredService<ILicensingIdentityStore>();
+            Console.WriteLine(await licensingIdentityStore.GetOrCreateAsync());
+        }
+        catch (Exception exception) when (IsMissingRelation(exception))
+        {
+            // The database is reachable but carries no licensing tables. Reported as its own line because the
+            // remedy is not the same as for a connection or permission failure, and the raw message names a
+            // relation without saying what creates it.
+            await Console.Error.WriteLineAsync(
+                "The licensing schema is not present in this database. Start the API once against it so the migrations are applied, then run the command again.");
+            Environment.ExitCode = 1;
+        }
+        catch (Exception exception)
+        {
+            // Everything is caught because this is an entry point. A stack trace is not what a shell caller can
+            // act on, so a failure is reported as one line naming what went wrong plus a non-zero status a
+            // script can read.
+            await Console.Error.WriteLineAsync($"The licensing identity could not be read: {exception.Message}");
+            Environment.ExitCode = 1;
+        }
+
+        return;
+    }
+
     // Apply migrations, secret/logical-model backfills, startup recovery, and seeding when a database is configured.
     await app.ApplyStartupMaintenanceAsync(hasDatabaseConnectionString);
+
+    // Written once per replica at startup so the identifier can be found in the log of an installation whose
+    // admin UI is not reachable. It is created on this read when the installation has none yet.
+    if (hasDatabaseConnectionString)
+    {
+        using var licensingIdentityScope = app.Services.CreateScope();
+        var licensingIdentity = await licensingIdentityScope.ServiceProvider
+            .GetRequiredService<ILicensingIdentityStore>()
+            .GetOrCreateAsync();
+
+        LogLicensingIdentity(
+            licensingIdentityScope.ServiceProvider.GetRequiredService<ILogger<Program>>(),
+            licensingIdentity);
+    }
 
     app.UseForwardedHeaders();
 
@@ -690,6 +776,11 @@ try
 catch (Exception ex) when (ex is not HostAbortedException and not InvalidOperationException)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
+
+    // Reported as a failure to whatever started the process. Falling out of this block sets no exit code, so
+    // the process would end at zero and a container runtime, an orchestrator or a release step would read a
+    // fatal startup failure as a clean run.
+    Environment.ExitCode = 1;
 }
 finally
 {
@@ -735,6 +826,40 @@ public partial class Program
     /// </summary>
     protected Program()
     {
+    }
+
+    /// <summary>
+    ///     Writes the identifier this installation reports itself under. Information level, because it is
+    ///     startup information an operator looks for and not a fault. The logger type is written out in full
+    ///     because this file also imports Serilog, which has a type of the same name.
+    /// </summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message =
+            "Licensing identity {LicensingIdentity}. Quote it in usage reports and support requests; it grants nothing and no license is issued against it.")]
+    private static partial void LogLicensingIdentity(
+        Microsoft.Extensions.Logging.ILogger logger,
+        Guid licensingIdentity);
+
+    /// <summary>
+    ///     Whether the failure is PostgreSQL reporting that a table the query named does not exist, which is what
+    ///     a database without the migrations applied answers.
+    ///     <para>
+    ///         The chain is walked because the same condition arrives wrapped when it surfaces on a write: Entity
+    ///         Framework raises <see cref="DbUpdateException" /> and carries the provider exception as its inner.
+    ///     </para>
+    /// </summary>
+    internal static bool IsMissingRelation(Exception? exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PostgresException { SqlState: PostgresErrorCodes.UndefinedTable })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     internal static async Task<bool> TryRunHealthCheckAsync(string[] args)
@@ -787,5 +912,23 @@ public partial class Program
     internal static string GetSelectedCommentRelevanceFilterId()
     {
         return "hybrid-v1";
+    }
+
+    /// <summary>
+    ///     Configures how the API reads and writes JSON. Enums travel as their camelCase names.
+    ///     <para>
+    ///         Order matters: the first converter that accepts a type handles it, so the capability override
+    ///         state is registered ahead of the general enum converter and keeps its own refusal message. For
+    ///         the states that enum defines the two write the same camelCase names; they differ on a value it
+    ///         does not define, which the general converter writes as its number and the override converter
+    ///         writes as the default name.
+    ///     </para>
+    /// </summary>
+    internal static void ConfigureJsonSerialization(JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        options.Converters.Add(new PremiumCapabilityOverrideStateJsonConverter());
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     }
 }

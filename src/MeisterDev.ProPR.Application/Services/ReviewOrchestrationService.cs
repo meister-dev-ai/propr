@@ -1100,6 +1100,7 @@ public sealed partial class ReviewOrchestrationService(
 
         if (pr.Status == PrStatus.Active)
         {
+            await this.RecordPullRequestAuthorAsync(job, pr.Author, ct);
             return pr;
         }
 
@@ -1115,6 +1116,35 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         return null;
+    }
+
+    // Recorded from the fetch rather than from the completion. This is the one point where the adapter's fetch
+    // result is in hand: every later projection of the pull request rebuilds the record and drops the author,
+    // and a completion can be handled on a replica that never performed the fetch. A review that did not
+    // complete is excluded by the reader of these columns, not by withholding this write.
+    //
+    // A fetch that named no author records nothing, which leaves the columns empty. The authenticated identity
+    // that performed the fetch is never substituted: it names the connection ProPR posts as, not the person who
+    // opened the pull request.
+    //
+    // The write is isolated from the review. These columns feed metering and nothing in the review reads them,
+    // so a write that fails is logged and the review continues rather than failing the job over it. Cancellation
+    // is rethrown, because reporting it as a failed write would hide that the job was cancelled.
+    private async Task RecordPullRequestAuthorAsync(ReviewJob job, PullRequestAuthor? author, CancellationToken ct)
+    {
+        if (author is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await jobs.UpdatePullRequestAuthorAsync(job.Id, author, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPullRequestAuthorNotRecorded(logger, job.Id, ex);
+        }
     }
 
     // Build review context — reuse prior results, fetch instructions and exclusions.

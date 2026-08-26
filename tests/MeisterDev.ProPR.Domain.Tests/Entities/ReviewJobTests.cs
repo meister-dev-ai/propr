@@ -9,6 +9,21 @@ namespace MeisterDev.ProPR.Domain.Tests.Entities;
 
 public class ReviewJobTests
 {
+    // The check compares the author's host against the job's provider host. Varying only the host URL (not
+    // the provider) isolates the host-equality rule; changing both would let the test pass if only the
+    // provider were compared. GitLab can be self-hosted at different authorities, so two GitLab instances
+    // with different URLs test the host comparison without varying the provider.
+    [Fact]
+    public void SetPullRequestAuthor_WithAnotherHost_Throws()
+    {
+        var job = CreateJob(orgUrl: "https://gitlab.example.com/group/project");
+        var foreignAuthor = new PullRequestAuthor(
+            new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.other.com/group/project"),
+            "someone");
+
+        Assert.Throws<InvalidOperationException>(() => job.SetPullRequestAuthor(foreignAuthor));
+    }
+
     private static ReviewJob CreateJob(
         Guid? id = null,
         Guid? clientId = null,

@@ -4,7 +4,13 @@
 <template>
   <div id="app">
     <AppHeader v-if="isAuthenticated" />
-    <UsageStatisticsNotice v-if="isAuthenticated" />
+    <!-- One region for every application-wide notice, so the spacing around them is set in one place
+         rather than by each notice. See `.app-notices` in layout.css. -->
+    <div v-if="isAuthenticated" class="app-notices">
+      <LicenseExpiryNotice />
+      <AuthorOverageNotice />
+      <UsageStatisticsNotice />
+    </div>
     <RouterView />
     <AppNotification />
     <footer v-if="isAuthenticated" class="app-footer">
@@ -18,6 +24,8 @@ import { RouterView } from 'vue-router'
 import AppHeader from '@/components/navigation/AppHeader.vue'
 import AppNotification from '@/components/feedback/AppNotification.vue'
 import UsageStatisticsNotice from '@/features/usage-statistics/components/UsageStatisticsNotice.vue'
+import LicenseExpiryNotice from '@/features/licensing/components/LicenseExpiryNotice.vue'
+import AuthorOverageNotice from '@/features/licensing/components/AuthorOverageNotice.vue'
 import { useSession } from '@/composables/useSession'
 
 const { isAuthenticated } = useSession()

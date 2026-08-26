@@ -166,11 +166,13 @@ public sealed class ClientsController(
     /// <response code="400">Validation failure.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller is not a global admin.</response>
+    /// <response code="409">The creation was refused, such as by the licensed client ceiling.</response>
     [HttpPost]
     [ProducesResponseType(typeof(ClientResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateClient(
         [FromBody] CreateClientRequest request,
         [FromServices] IValidator<CreateClientRequest> validator,

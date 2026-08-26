@@ -1,8 +1,10 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
@@ -10,6 +12,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Budgeting;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.TestSupport;
@@ -18,7 +21,8 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Budgeting;
 
 /// <summary>
 ///     Integration tests for <see cref="BudgetCapsProvider" /> against a real PostgreSQL instance, covering the
-///     Budgeting license gate and the manual-reset allowance folded into the monthly caps.
+///     configured caps, that enforcement of them does not depend on the Budgeting capability, and the manual-reset
+///     allowance folded into the monthly caps.
 /// </summary>
 [Collection("PostgresIntegration")]
 public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : IAsyncLifetime
@@ -72,11 +76,9 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
     }
 
     [Fact]
-    public async Task GetCapsAsync_ReturnsConfiguredCaps_WhenBudgetingIsLicensed()
+    public async Task GetCapsAsync_ReturnsTheConfiguredCaps()
     {
-        var licensing = Substitute.For<ILicensingCapabilityService>();
-        licensing.IsEnabledAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>()).Returns(true);
-        var provider = this.CreateProvider(licensing);
+        var provider = this.CreateProvider();
 
         var caps = await provider.GetCapsAsync(this._clientId);
 
@@ -85,25 +87,38 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
     }
 
     [Fact]
-    public async Task GetCapsAsync_ReturnsNone_WhenBudgetingIsNotLicensed()
+    public async Task GetCapsAsync_ReturnsTheConfiguredCaps_WhenTheBudgetingCapabilityIsUnavailable()
     {
+        // Caps configured while the installation was licensed keep blocking spend after the license expired
+        // past its grace window. The provider is resolved from a container that holds a licensing service
+        // reporting Budgeting unavailable, so a capability check re-entering the constructor would surface
+        // here as no caps.
         var licensing = Substitute.For<ILicensingCapabilityService>();
-        licensing.IsEnabledAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>()).Returns(false);
-        var provider = this.CreateProvider(licensing);
+        licensing.IsEnabledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<bool>(false));
+        licensing.GetCapabilityAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new CapabilitySnapshot(
+                        PremiumCapabilityKey.Budgeting,
+                        "Budgeting",
+                        RequiresCommercial: true,
+                        OverrideState: PremiumCapabilityOverrideState.Default,
+                        IsAvailable: false,
+                        Message: "Budgeting requires a commercial license.",
+                        Reason: PremiumCapabilityUnavailableReason.Reverted)));
 
-        var caps = await provider.GetCapsAsync(this._clientId);
+        await using var services = new ServiceCollection()
+            .AddSingleton(licensing)
+            .AddSingleton<IDbContextFactory<MeisterProPRDbContext>>(this._factory)
+            .AddSingleton<IBudgetSpendResetRepository>(this._resetRepository)
+            .AddSingleton<TimeProvider>(new FixedTimeProvider(Now))
+            .AddScoped<IBudgetCapsProvider, BudgetCapsProvider>()
+            .BuildServiceProvider();
 
-        Assert.False(caps.AnyConfigured);
-        Assert.Null(caps.MonthlyHardCapUsd);
-    }
+        var caps = await services.GetRequiredService<IBudgetCapsProvider>().GetCapsAsync(this._clientId);
 
-    [Fact]
-    public async Task GetCapsAsync_ReadsConfiguredCaps_WhenNoLicensingServiceIsRegistered()
-    {
-        var provider = this.CreateProvider();
-
-        var caps = await provider.GetCapsAsync(this._clientId);
-
+        Assert.True(caps.AnyConfigured);
         Assert.Equal(100m, caps.MonthlyHardCapUsd);
     }
 
@@ -140,8 +155,8 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
         Assert.Equal(100m, caps.MonthlyHardCapUsd);
     }
 
-    private BudgetCapsProvider CreateProvider(ILicensingCapabilityService? licensing = null) =>
-        new(this._factory, this._resetRepository, new FixedTimeProvider(Now), licensing);
+    private BudgetCapsProvider CreateProvider() =>
+        new(this._factory, this._resetRepository, new FixedTimeProvider(Now));
 
     private async Task GrantResetAsync(DateTime performedAt, decimal topUpHardUsd)
     {

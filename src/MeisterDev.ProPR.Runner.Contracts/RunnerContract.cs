@@ -108,7 +108,13 @@ public sealed record RunnerContractError(string Code, string Message)
     /// <summary>The request exceeded a payload or batch ceiling.</summary>
     public const string PayloadTooLarge = "payload_too_large";
 
-    /// <summary>No lease is available: the entitled concurrent-job count is already in use.</summary>
+    /// <summary>
+    ///     No lease is available: distributed execution is not licensed on this installation. That is the
+    ///     only refusal this version answers with the code. A per-runner slot ceiling, which the name comes
+    ///     from, no longer exists, and an installation at its concurrent-review limit is answered with no
+    ///     work rather than a refusal. The code itself is unchanged because it is published on the wire and
+    ///     a deployed runner or a log filter may already match the string.
+    /// </summary>
     public const string SlotLimitReached = "slot_limit_reached";
 
     /// <summary>Builds the refusal for an executor whose contract version cannot be served.</summary>

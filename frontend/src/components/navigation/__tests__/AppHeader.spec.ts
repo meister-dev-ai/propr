@@ -67,7 +67,8 @@ describe('AppHeader', () => {
     clientRoles.value = {}
     tenantRoles.value = {}
     edition.value = 'commercial'
-    availableCapabilities.value = []
+    // Tenant administration is licensed, so the entry follows the capability rather than the edition.
+    availableCapabilities.value = ['multi-tenancy']
     updateAvailable.value = false
     advisories.value = []
   })
@@ -122,9 +123,9 @@ describe('AppHeader', () => {
     expect(wrapper.text()).toContain('Clients')
   })
 
-  it('hides Tenants in community edition', async () => {
+  it('hides Tenants when multi-tenancy is not licensed', async () => {
     isAdmin.value = true
-    edition.value = 'community'
+    availableCapabilities.value = []
 
     const wrapper = await mountHeader()
     await wrapper.get('.dropdown-toggle').trigger('click')
@@ -132,9 +133,20 @@ describe('AppHeader', () => {
     expect(wrapper.text()).not.toContain('Tenants')
     expect(wrapper.text()).toContain('Licensing')
   })
+
+  // The edition can read commercial while the license leaves multi-tenancy out, and the entry follows the
+  // capability in that case rather than the edition.
+  it('hides Tenants for a tenant administrator when multi-tenancy is not licensed', async () => {
+    tenantRoles.value = { 'tenant-1': 1 }
+    availableCapabilities.value = []
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.text()).not.toContain('Tenants')
+  })
   it('offers Code Quality when the capability is licensed and the caller can see a client', async () => {
     clientRoles.value = { 'client-1': 0 }
-    availableCapabilities.value = ['code-insights']
+    availableCapabilities.value = ['multi-tenancy', 'code-insights']
 
     const wrapper = await mountHeader()
 
@@ -164,7 +176,7 @@ describe('AppHeader', () => {
   it('does not offer a client user Reviewer Performance anywhere', async () => {
     // It judges the tool from AI-estimated evidence, so it belongs with the operator surfaces.
     clientRoles.value = { 'client-1': 0 }
-    availableCapabilities.value = ['code-insights']
+    availableCapabilities.value = ['multi-tenancy', 'code-insights']
 
     const wrapper = await mountHeader()
 
@@ -173,7 +185,7 @@ describe('AppHeader', () => {
 
   it('offers Reviewer Performance inside Administration to a tenant administrator', async () => {
     tenantRoles.value = { 'tenant-1': 1 }
-    availableCapabilities.value = ['code-insights']
+    availableCapabilities.value = ['multi-tenancy', 'code-insights']
 
     const wrapper = await mountHeader()
     await wrapper.get('.dropdown-toggle').trigger('click')

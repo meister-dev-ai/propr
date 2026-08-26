@@ -94,7 +94,8 @@ internal sealed class GitLabPullRequestFetcher(
             MapStatus(mergeRequest.State),
             existingThreads,
             isDeltaReview ? allChangedFileSummaries : null,
-            AuthorizedIdentityName: context.AuthenticatedUsername);
+            AuthorizedIdentityName: context.AuthenticatedUsername,
+            Author: ToPullRequestAuthor(host, mergeRequest));
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(
@@ -242,7 +243,8 @@ internal sealed class GitLabPullRequestFetcher(
             MapStatus(mergeRequest.State),
             existingThreads,
             changedFileManifest,
-            AuthorizedIdentityName: context.AuthenticatedUsername);
+            AuthorizedIdentityName: context.AuthenticatedUsername,
+            Author: ToPullRequestAuthor(host, mergeRequest));
     }
 
     private async Task<IReadOnlyList<GitLabMergeRequestChangeResponse>?> TryGetDeltaChangesAsync(
@@ -645,7 +647,14 @@ internal sealed class GitLabPullRequestFetcher(
             note.CreatedAt,
             // Discussions already drop GitLab's own activity notes, and carrying the flag as well keeps the
             // provider boundary uniform for anything that reads a thread without going through that filter.
-            note.System);
+            note.System,
+            // The account's numeric id, so one person is the same identifier whether they opened the merge
+            // request or commented on it. A note the payload names no author on, and an author object without
+            // an id, both leave it absent: GitLab issues no account id of zero, so a zero here comes from the
+            // field being missing and naming an account by it would merge two people into one.
+            note.Author?.Id is > 0 and { } authorId
+                ? authorId.ToString(CultureInfo.InvariantCulture)
+                : null);
     }
 
     private static ChangedFileSummary MapSummary(GitLabMergeRequestChangeResponse change)
@@ -698,6 +707,26 @@ internal sealed class GitLabPullRequestFetcher(
         var startSha = NormalizeOptional(mergeRequest.DiffRefs?.StartSha) ?? baseSha;
 
         return new ReviewRevision(headSha, baseSha, startSha, headSha, $"{baseSha}...{headSha}");
+    }
+
+    // "author" carries the author: "id" is the identifier, "username" the login, "name" the display name.
+    // GitLab's merge-request author object is not documented to carry "bot", so the signal is usually unset.
+    // It is read when a host does send it, and a nullable value keeps "absent" distinct from "not a bot".
+    private static PullRequestAuthor? ToPullRequestAuthor(
+        ProviderHostRef host,
+        GitLabMergeRequestResponse mergeRequest)
+    {
+        if (mergeRequest.Author?.Id is not { } authorId)
+        {
+            return null;
+        }
+
+        return new PullRequestAuthor(
+            host,
+            authorId.ToString(CultureInfo.InvariantCulture),
+            mergeRequest.Author.Username,
+            mergeRequest.Author.Name,
+            mergeRequest.Author.Bot);
     }
 
     private static PrStatus MapStatus(string? state)
@@ -758,7 +787,15 @@ internal sealed class GitLabPullRequestFetcher(
         [property: JsonPropertyName("diff_refs")]
         GitLabCodeReviewQueryService.GitLabDiffRefsResponse? DiffRefs,
         [property: JsonPropertyName("references")]
-        GitLabMergeRequestReferencesResponse? References);
+        GitLabMergeRequestReferencesResponse? References,
+        [property: JsonPropertyName("author")] GitLabMergeRequestAuthorResponse? Author);
+
+    private sealed record GitLabMergeRequestAuthorResponse(
+        [property: JsonPropertyName("id")] long? Id,
+        [property: JsonPropertyName("username")]
+        string? Username,
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("bot")] bool? Bot);
 
     private sealed record GitLabMergeRequestReferencesResponse(
         [property: JsonPropertyName("short")] string? Short,

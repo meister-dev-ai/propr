@@ -154,13 +154,13 @@ jobs:
 
       # Backend image
 
-      - name: Build and push backend image
+      - name: Build backend image
         id: build-backend
         uses: docker/build-push-action@v7.2.0
         with:
           context: .
           file: Dockerfile
-          push: true
+          load: true
           pull: true
           tags: ${{ steps.tags.outputs.backend }}
           build-args: |
@@ -173,18 +173,53 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Proves that the locally built image carries the publisher's licensing trust anchor and verifies a license
+      # signed under it. The tests cannot establish this: they sign with chains they generate, so a build whose
+      # anchor was replaced or corrupted would pass them. The following push publishes these locally verified tags
+      # without rebuilding the image.
+      #
+      # The license in LICENSING_RELEASE_CHECK_TOKEN is issued with nothing listed under its capabilities and
+      # every limit at zero, so a leaked copy grants no capability worth having and no headroom under any limit.
+      # The step runs on every release, so a missing secret fails the release rather than skipping the check.
+
+      - name: Verify backend image licensing
+        env:
+          LICENSE: ${{ secrets.LICENSING_RELEASE_CHECK_TOKEN }}
+        run: |
+          if [ -z "$LICENSE" ]; then
+            echo "LICENSING_RELEASE_CHECK_TOKEN is empty. It has to hold a license issued from the publisher's chain, which this step verifies inside the built image to prove the image accepts one." >&2
+            exit 1
+          fi
+          printf '%s' "$LICENSE" | docker run --rm --interactive \
+            "${{ steps.images.outputs.backend }}:${{ steps.version.outputs.version }}" \
+            --verify-license -
+
+      - name: Push verified backend image
+        id: push-backend
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done <<'TAGS'
+          ${{ steps.tags.outputs.backend }}
+          TAGS
+
+          digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${{ steps.images.outputs.backend }}:${{ steps.version.outputs.version }}")"
+          [ -n "$digest" ]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
       - name: Attest backend image
         uses: actions/attest@v4.1.0
         with:
           subject-name: ${{ steps.images.outputs.backend }}
-          subject-digest: ${{ steps.build-backend.outputs.digest }}
+          subject-digest: ${{ steps.push-backend.outputs.digest }}
           push-to-registry: true
 
       - name: Scan backend image
         uses: anchore/scan-action@v7.4.0
         id: scan-backend
         with:
-          image: ${{ steps.images.outputs.backend }}@${{ steps.build-backend.outputs.digest }}
+          image: ${{ steps.images.outputs.backend }}@${{ steps.push-backend.outputs.digest }}
           fail-build: false
           output-format: sarif
 

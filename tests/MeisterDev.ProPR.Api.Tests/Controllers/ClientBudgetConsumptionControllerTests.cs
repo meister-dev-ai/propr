@@ -380,7 +380,6 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
                             PremiumCapabilityKey.Budgeting,
                             "Budgeting",
                             RequiresCommercial: true,
-                            DefaultWhenCommercial: true,
                             OverrideState: PremiumCapabilityOverrideState.Default,
                             IsAvailable: this.BudgetingAvailable,
                             Message: this.BudgetingAvailable ? null : "Budgeting requires a commercial license.")));

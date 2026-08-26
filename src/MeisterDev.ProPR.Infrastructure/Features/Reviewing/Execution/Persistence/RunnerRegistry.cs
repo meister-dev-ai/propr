@@ -36,16 +36,52 @@ public sealed class RunnerRegistry(MeisterProPRDbContext dbContext) : IRunnerReg
     }
 
     /// <inheritdoc />
-    public async Task AddAsync(ReviewRunner runner, RunnerRegistrationToken token, CancellationToken ct = default)
+    public async Task<bool> TryAddAsync(
+        ReviewRunner runner,
+        RunnerRegistrationToken token,
+        DateTimeOffset now,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(token);
 
-        // One save for both. The enrollment and the token use it consumed have to land together, or a
-        // crash between them either loses the runner or lets its token be spent twice.
-        dbContext.ReviewRunners.Add(runner);
-        dbContext.RunnerRegistrationTokens.Update(token);
-        await dbContext.SaveChangesAsync(ct);
+        // One transaction for both. The enrollment and the token use it consumed have to land together, or a
+        // crash between them either loses the runner or lets its token be spent twice. An admission has
+        // already opened one on this context and commits it itself; where there is none, this opens its own.
+        var opened = dbContext.Database.CurrentTransaction is null
+            ? await dbContext.Database.BeginTransactionAsync(ct)
+            : null;
+
+        await using (opened)
+        {
+            // The use is spent by the same statement that checks one is left, so the count decided on is the
+            // stored one. Incrementing the loaded entity and saving it writes back a count read before the
+            // check, and two enrollments presenting one token would each write the first use.
+            var spent = await dbContext.RunnerRegistrationTokens
+                .Where(candidate => candidate.Id == token.Id)
+                .Where(RunnerRegistrationToken.UsableAt(now))
+                .ExecuteUpdateAsync(
+                    row => row.SetProperty(candidate => candidate.UseCount, candidate => candidate.UseCount + 1),
+                    ct);
+
+            if (spent == 0)
+            {
+                return false;
+            }
+
+            // The statement above went straight to the database, so the caller's copy of the token still
+            // holds the count it was read with. It is left that way rather than incremented: a copy this
+            // context tracks as modified would have that count saved back below.
+            dbContext.ReviewRunners.Add(runner);
+            await dbContext.SaveChangesAsync(ct);
+
+            if (opened is not null)
+            {
+                await opened.CommitAsync(ct);
+            }
+
+            return true;
+        }
     }
 
     /// <inheritdoc />
@@ -65,10 +101,8 @@ public sealed class RunnerRegistry(MeisterProPRDbContext dbContext) : IRunnerReg
         var now = DateTimeOffset.UtcNow;
         return await dbContext.RunnerRegistrationTokens
             .AsNoTracking()
-            .Where(t => t.TenantId == tenantId
-                        && t.RevokedAt == null
-                        && (t.ExpiresAt == null || t.ExpiresAt > now)
-                        && (t.MaxUses == null || t.UseCount < t.MaxUses))
+            .Where(t => t.TenantId == tenantId)
+            .Where(RunnerRegistrationToken.UsableAt(now))
             .OrderByDescending(t => t.IssuedAt)
             .ToListAsync(ct);
     }

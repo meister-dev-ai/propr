@@ -31,6 +31,14 @@ public sealed record ProviderHostRef
     /// <summary>Gets the normalized base URL of the host authority.</summary>
     public string HostBaseUrl { get; }
 
+    /// <summary>Builds the host-scoped key for a provider-native identifier issued by this host.</summary>
+    /// <param name="externalId">The provider-native identifier.</param>
+    /// <returns>The key naming that identifier within this provider and host.</returns>
+    public string ScopedKey(string externalId)
+    {
+        return $"{this.Provider}|{this.HostBaseUrl}|{externalId}".ToLowerInvariant();
+    }
+
     /// <summary>Normalizes the given URI to its authority part without path, query, or fragment.</summary>
     /// <param name="uri">The URI to normalize.</param>
     /// <returns>The normalized authority part of the URI.</returns>

@@ -24,7 +24,7 @@ Read these five in order to get from nothing to a deployment you would keep.
 
 ## Common questions
 
-Questions, not symptoms. If something is broken rather than unclear, start at
+Questions, not symptoms. If something is broken, start at
 [troubleshooting](operate/troubleshooting.md), which routes by symptom.
 
 | Question | Page |
@@ -106,7 +106,7 @@ about which one to reach for first.
 | [guides/control-cost.md](guides/control-cost.md) | Reviews work but cost more than you want them to |
 | [guides/review-without-posting.md](guides/review-without-posting.md) | You want to trial ProPR on live pull requests without anything reaching them |
 | [guides/restrict-where-code-goes.md](guides/restrict-where-code-goes.md) | You have to constrain where code may be sent, and prove it |
-| [guides/air-gapped.md](guides/air-gapped.md) | You are installing on an isolated network and need to know what still crosses a boundary |
+| [guides/air-gapped.md](guides/air-gapped.md) | You are installing on an isolated network and need to know what ProPR still contacts |
 
 ### Reference
 
@@ -115,7 +115,7 @@ about which one to reach for first.
 | [reference/api.md](reference/api.md) | You are scripting setup, or triggering reviews from CI |
 | [reference/security.md](reference/security.md) | You are reviewing the boundaries: where code goes, what is stored, secrets, sessions, access control |
 | [reference/editions.md](reference/editions.md) | Something is refused and you suspect it needs a commercial license |
-| [reference/usage-statistics.md](reference/usage-statistics.md) | You are reviewing the daily anonymous snapshot an installation sends, field by field |
+| [reference/usage-statistics.md](reference/usage-statistics.md) | You are reviewing the daily snapshot an installation sends, field by field |
 | [reference/source-license-map.md](reference/source-license-map.md) | You need the generated list of commercial-only source files |
 | [glossary.md](glossary.md) | A page used a term this product invented |
 

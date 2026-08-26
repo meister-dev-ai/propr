@@ -105,13 +105,12 @@ async function dismiss(): Promise<void> {
 </template>
 
 <style scoped>
+/* Width and outer spacing come from the notice region that mounts this, so only the appearance is set here. */
 .usage-notice {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  margin: 0 auto;
   padding: 0.8rem 1rem;
-  max-width: var(--layout-page-max-width);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--surface-subtle);

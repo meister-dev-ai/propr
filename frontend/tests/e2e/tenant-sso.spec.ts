@@ -29,6 +29,98 @@ async function setMockSsoAvailability(page: import('@playwright/test').Page, tes
   expect(ok).toBeTruthy()
 }
 
+test('mock authentication options follow the effective licensing capability state', async ({ page }, testInfo) => {
+  await installLiveRuntimeApiStubs(page, testInfo)
+  await page.goto('/login')
+  await page.waitForLoadState('networkidle')
+
+  const options = await page.evaluate(async () => {
+    await fetch(`${window.location.origin}/api/admin/licensing/mock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ edition: 'community', ssoAvailable: true }),
+    })
+
+    const response = await fetch(`${window.location.origin}/api/auth/options`)
+    return response.json() as Promise<{
+      availableSignInMethods: string[]
+      capabilities: Array<{ key: string; isAvailable: boolean }>
+    }>
+  })
+
+  expect(options.availableSignInMethods).toEqual(['password'])
+  expect(options.capabilities.find((capability) => capability.key === 'sso-authentication')?.isAvailable).toBe(false)
+  expect(options.capabilities.some((capability) => capability.key === 'parallel-review-execution')).toBe(true)
+})
+
+test('mock SSO routes apply a disable override even when the raw SSO switch is on', async ({ page }, testInfo) => {
+  await installLiveRuntimeApiStubs(page, testInfo)
+  await page.goto('/login')
+  await page.waitForLoadState('networkidle')
+
+  const responses = await page.evaluate(async () => {
+    await fetch(`${window.location.origin}/api/admin/licensing/mock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ edition: 'commercial', ssoAvailable: true }),
+    })
+    await fetch(`${window.location.origin}/api/admin/licensing/overrides`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        capabilityOverrides: [{ key: 'sso-authentication', overrideState: 'disabled' }],
+      }),
+    })
+
+    const [providers, challenge, callback, administration, session] = await Promise.all([
+      fetch(`${window.location.origin}/api/auth/tenants/acme/providers`),
+      fetch(`${window.location.origin}/api/auth/external/challenge/acme/provider-1`, { redirect: 'manual' }),
+      fetch(`${window.location.origin}/api/auth/external/callback/acme`, { redirect: 'manual' }),
+      fetch(`${window.location.origin}/api/admin/tenants/tenant-1/sso-providers`),
+      fetch(`${window.location.origin}/api/auth/me`),
+    ])
+
+    return {
+      providers: await providers.json() as { providers: unknown[] },
+      challenge: {
+        status: challenge.status,
+        body: challenge.status === 409 ? await challenge.json() as { reason?: string } : {},
+      },
+      callback: {
+        status: callback.status,
+        body: callback.status === 409 ? await callback.json() as { reason?: string } : {},
+      },
+      administration: {
+        status: administration.status,
+        body: administration.status === 409 ? await administration.json() as { reason?: string } : {},
+      },
+      session: await session.json() as {
+        capabilities: Array<{ key: string, isAvailable: boolean, reason?: string }>,
+      },
+    }
+  })
+
+  expect(responses.providers.providers).toEqual([])
+  expect(responses.challenge).toMatchObject({ status: 409, body: { reason: 'disabledByOverride' } })
+  expect(responses.callback).toMatchObject({ status: 409, body: { reason: 'disabledByOverride' } })
+  expect(responses.administration).toMatchObject({ status: 409, body: { reason: 'disabledByOverride' } })
+  expect(responses.session.capabilities).toContainEqual(expect.objectContaining({
+    key: 'sso-authentication',
+    isAvailable: false,
+    reason: 'disabledByOverride',
+  }))
+
+  await page.evaluate(async () => {
+    await fetch(`${window.location.origin}/api/admin/licensing/overrides`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        capabilityOverrides: [{ key: 'sso-authentication', overrideState: 'default' }],
+      }),
+    })
+  })
+})
+
 test('tenant login stays SSO-only even when installation SSO capability is unavailable', async ({ page }, testInfo) => {
   await installLiveRuntimeApiStubs(page, testInfo)
   await setMockSsoAvailability(page, testInfo, false)
