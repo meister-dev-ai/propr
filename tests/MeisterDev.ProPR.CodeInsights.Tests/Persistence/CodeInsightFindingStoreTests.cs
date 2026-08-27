@@ -557,16 +557,122 @@ public sealed class CodeInsightFindingStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task HasHarvestedThreadAsync_ReportsWhatHasAndHasNotBeenHarvested()
+    public async Task GetJudgedThreadResolvedAsync_TellsNotHarvestedApartFromJudgedWhileOpen()
+    {
+        // Both would arrive as false if the answer were not nullable, and they call for opposite handling: one
+        // needs a first judgement, the other needs the provisional one replaced when the thread resolves.
+        var key = NewKey();
+
+        Assert.Null(await this._store.GetJudgedThreadResolvedAsync(key, "thread-9"));
+
+        await this._store.RecordMissAsync(key, Miss() with { JudgedThreadResolved = false });
+
+        Assert.False(await this._store.GetJudgedThreadResolvedAsync(key, "thread-9"));
+        Assert.Null(await this._store.GetJudgedThreadResolvedAsync(key, "thread-other"));
+
+        // The settled value round-trips too: a mapping that turned it back into false would silently re-judge
+        // every settled thread on every crawl pass.
+        await this._store.RecordMissAsync(
+            key,
+            Miss("thread-11") with { JudgedThreadResolved = true });
+
+        Assert.True(await this._store.GetJudgedThreadResolvedAsync(key, "thread-11"));
+    }
+
+    [Fact]
+    public async Task RejudgeMissAsync_ReplacesTheVerdictAndLeavesTheHarvestAlone()
+    {
+        var key = NewKey();
+        await this._store.RecordMissAsync(
+            key,
+            Miss() with { WasActedOn = false, JudgedThreadResolved = false });
+
+        var harvested = Assert.Single(await this._store.GetMissesForPullRequestAsync(key));
+
+        Assert.True(
+            await this._store.RejudgeMissAsync(
+                key,
+                Miss() with { WasActedOn = true, JudgedThreadResolved = true }));
+
+        var rejudged = Assert.Single(await this._store.GetMissesForPullRequestAsync(key));
+        Assert.True(rejudged.WasActedOn);
+        Assert.True(rejudged.CountsAsMiss);
+        Assert.True(rejudged.JudgedThreadResolved);
+
+        // Re-judging replaces the verdict; it does not re-harvest, so the row keeps its identity and its
+        // original harvest time.
+        Assert.Equal(harvested.Id, rejudged.Id);
+        Assert.Equal(harvested.HarvestedAt, rejudged.HarvestedAt);
+    }
+
+    [Fact]
+    public async Task RejudgeMissAsync_StoresTheDiscussionTheNewVerdictCameFrom()
+    {
+        // A thread gains comments between the pass that first observed it and the one that finds it resolved,
+        // and those later comments are what the re-judgement read. Keeping the shorter original text would
+        // leave the row unable to account for the verdict beside it.
+        var key = NewKey();
+        await this._store.RecordMissAsync(key, Miss() with { Discussion = "alice: this drops the retry count" });
+
+        await this._store.RejudgeMissAsync(
+            key,
+            Miss() with { Discussion = "alice: this drops the retry count\nbob: agreed, fixed in the next push" });
+
+        var rejudged = Assert.Single(await this._store.GetMissesForPullRequestAsync(key));
+        Assert.Contains("fixed in the next push", rejudged.Discussion, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public async Task AStoredMissNeverContradictsItsOwnJudgements(bool substantive, bool actedOn, bool inScope)
+    {
+        // The recall count reads CountsAsMiss, so a row whose verdict disagrees with the three answers beside it
+        // would move a metric that nothing else on the row accounts for. The verdict is computed from them and
+        // cannot be supplied, on the first harvest and on a re-judgement alike, and it has to follow them in
+        // both directions: a thread the model decides was argued down after all has to leave the recall count,
+        // not keep a verdict it earned while the thread was still open.
+        var key = NewKey();
+        var withheld = Miss() with
+        {
+            IsSubstantive = substantive,
+            WasActedOn = actedOn,
+            IsInScope = inScope,
+        };
+
+        await this._store.RecordMissAsync(key, withheld);
+
+        var harvested = Assert.Single(await this._store.GetMissesForPullRequestAsync(key));
+        Assert.False(harvested.CountsAsMiss);
+        Assert.Equal(substantive, harvested.IsSubstantive);
+        Assert.Equal(actedOn, harvested.WasActedOn);
+        Assert.Equal(inScope, harvested.IsInScope);
+
+        await this._store.RejudgeMissAsync(key, Miss() with { JudgedThreadResolved = true });
+
+        var qualified = Assert.Single(await this._store.GetMissesForPullRequestAsync(key));
+        Assert.True(qualified.CountsAsMiss);
+        Assert.True(qualified.IsSubstantive);
+        Assert.True(qualified.WasActedOn);
+        Assert.True(qualified.IsInScope);
+
+        await this._store.RejudgeMissAsync(key, withheld with { JudgedThreadResolved = true });
+
+        var disqualified = Assert.Single(await this._store.GetMissesForPullRequestAsync(key));
+        Assert.False(disqualified.CountsAsMiss);
+        Assert.Equal(substantive, disqualified.IsSubstantive);
+        Assert.Equal(actedOn, disqualified.WasActedOn);
+        Assert.Equal(inScope, disqualified.IsInScope);
+    }
+
+    [Fact]
+    public async Task RejudgeMissAsync_ReportsNoRowRatherThanCreatingOne()
     {
         var key = NewKey();
 
-        Assert.False(await this._store.HasHarvestedThreadAsync(key, "thread-9"));
-
-        await this._store.RecordMissAsync(key, Miss());
-
-        Assert.True(await this._store.HasHarvestedThreadAsync(key, "thread-9"));
-        Assert.False(await this._store.HasHarvestedThreadAsync(key, "thread-other"));
+        Assert.False(await this._store.RejudgeMissAsync(key, Miss()));
+        Assert.Empty(await this._store.GetMissesForPullRequestAsync(key));
     }
 
     [Fact]
@@ -577,7 +683,7 @@ public sealed class CodeInsightFindingStoreTests : IDisposable
         await this._store.RecordMissAsync(key, Miss());
         await this._store.RecordMissAsync(
             key,
-            Miss("thread-10") with { IsInScope = false, CountsAsMiss = false });
+            Miss("thread-10") with { IsInScope = false });
 
         var misses = await this._store.GetMissesForPullRequestAsync(key);
 
@@ -654,7 +760,6 @@ public sealed class CodeInsightFindingStoreTests : IDisposable
             "src/Service.cs",
             42,
             "alice: this drops the retry count",
-            true,
             true,
             true,
             true,

@@ -52,6 +52,18 @@ public sealed class CodeInsightPullRequest
     /// </summary>
     public DateTimeOffset LastActivityAt { get; set; }
 
+    /// <summary>
+    ///     UTC timestamp of the last time a seal sweep asked the provider about this pull request, or
+    ///     <see langword="null" /> when it has never been asked about.
+    /// </summary>
+    /// <remarks>
+    ///     Recorded on every attempt, whether or not it produced a measurement, and it is what the sweep orders
+    ///     its candidates by. A sweep that ordered only by activity and wrote nothing on a failed attempt would
+    ///     re-present the same newest rows on every cycle and never reach the ones below its cap, so a pull
+    ///     request that went quiet while the window was full would never be examined again.
+    /// </remarks>
+    public DateTimeOffset? LastSealAttemptAt { get; set; }
+
     /// <summary>UTC timestamp when this aggregate was first created.</summary>
     public DateTimeOffset CreatedAt { get; init; }
 

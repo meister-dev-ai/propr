@@ -69,6 +69,15 @@ internal sealed class CodeInsightMissConfiguration : IEntityTypeConfiguration<Co
             .HasColumnName("harvested_at")
             .IsRequired();
 
+        builder.Property(miss => miss.JudgedThreadResolved)
+            .HasColumnName("judged_thread_resolved")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(miss => miss.LastJudgedAt)
+            .HasColumnName("last_judged_at")
+            .IsRequired();
+
         // One record per human thread per pull request. A crawl re-observes the same thread on every pass, and
         // harvesting it twice would double its contribution to recall.
         builder.HasIndex(miss => new { miss.CodeInsightPullRequestId, miss.ProviderThreadId })

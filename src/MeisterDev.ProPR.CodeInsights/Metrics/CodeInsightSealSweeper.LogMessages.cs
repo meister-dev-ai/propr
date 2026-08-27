@@ -22,4 +22,10 @@ public sealed partial class CodeInsightSealSweeper
         Level = LogLevel.Debug,
         Message = "Asking the provider about PR {PullRequestId} (client {ClientId}) failed; it stays unmeasured.")]
     private static partial void LogExamineFailed(ILogger logger, long pullRequestId, Guid clientId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Recording the seal attempt on aggregate {AggregateId} failed; the next sweep may spend a slot "
+                  + "on it again.")]
+    private static partial void LogAttemptNotRecorded(ILogger logger, Guid aggregateId, Exception ex);
 }

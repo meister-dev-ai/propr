@@ -143,9 +143,14 @@ public sealed record CodeInsightDispositionRecord(
 /// <param name="IsSubstantive">Judged a real code issue rather than a question or a nit.</param>
 /// <param name="WasActedOn">Judged accepted, or to have led to a code change.</param>
 /// <param name="IsInScope">Judged within the class an automated reviewer should reasonably catch.</param>
-/// <param name="CountsAsMiss">Whether all three held and it did not restate a finding ProPR raised.</param>
 /// <param name="Confidence">The classifier's confidence, 0–1.</param>
 /// <param name="ClassifierVersion">Identifier of the classifier that judged it.</param>
+/// <param name="JudgedThreadResolved">
+///     Whether the thread was resolved at the provider when this judgement was made. Carried because
+///     <paramref name="WasActedOn" /> asks whether the concern was accepted or led to a change, and a judgement
+///     made while the thread was open is answered again once it resolves. The verdict still stands and still
+///     counts until then; the flag marks it as open to revision, not as withheld.
+/// </param>
 public sealed record CodeInsightMissRecord(
     string ProviderThreadId,
     string? FilePath,
@@ -154,9 +159,17 @@ public sealed record CodeInsightMissRecord(
     bool IsSubstantive,
     bool WasActedOn,
     bool IsInScope,
-    bool CountsAsMiss,
     double? Confidence,
-    string ClassifierVersion);
+    string ClassifierVersion,
+    bool JudgedThreadResolved = false)
+{
+    /// <summary>
+    ///     Whether all three judgements held, and so whether this counts toward recall. Computed, so no caller
+    ///     can hand the store a verdict that disagrees with the three answers it travels with. A thread that
+    ///     restated one of ProPR's own findings is dropped before it is judged and never becomes a record.
+    /// </summary>
+    public bool CountsAsMiss => this.IsSubstantive && this.WasActedOn && this.IsInScope;
+}
 
 /// <summary>A harvested miss as the store returns it, with the discussion decrypted.</summary>
 /// <param name="Id">Surrogate identity of the harvested record.</param>
@@ -171,6 +184,11 @@ public sealed record CodeInsightMissRecord(
 /// <param name="Confidence">The classifier's confidence.</param>
 /// <param name="ClassifierVersion">Identifier of the classifier that judged it.</param>
 /// <param name="HarvestedAt">When it was harvested.</param>
+/// <param name="JudgedThreadResolved">
+///     Whether the thread was resolved when the stored judgement was made. A judgement made while the thread was
+///     open cannot have seen an acceptance or a fix, so it is provisional until the thread resolves.
+/// </param>
+/// <param name="LastJudgedAt">When the stored judgement was made, which is later than harvest after a re-judgement.</param>
 public sealed record CodeInsightMissView(
     Guid Id,
     string ProviderThreadId,
@@ -183,7 +201,9 @@ public sealed record CodeInsightMissView(
     bool CountsAsMiss,
     double? Confidence,
     string ClassifierVersion,
-    DateTimeOffset HarvestedAt);
+    DateTimeOffset HarvestedAt,
+    bool JudgedThreadResolved = false,
+    DateTimeOffset? LastJudgedAt = null);
 
 /// <summary>
 ///     Where one finding stands in the classification pipeline. The three states are distinguished because a

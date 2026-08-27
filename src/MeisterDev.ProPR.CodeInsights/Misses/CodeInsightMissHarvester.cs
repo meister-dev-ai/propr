@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Text;
+using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Domain.Events;
 using Microsoft.Extensions.Logging;
 using MeisterDev.ProPR.CodeInsights.Contracts;
@@ -29,11 +30,6 @@ public sealed partial class CodeInsightMissHarvester(
     ICodeInsightsCollectionGate gate,
     ILogger<CodeInsightMissHarvester> logger) : ICodeInsightMissHarvester
 {
-    /// <summary>
-    ///     Provider-neutral token for a resolved thread, matching what the SCM adapters report.
-    /// </summary>
-    private const string ResolvedStatus = "fixed";
-
     public async Task HandleThreadObservedAsync(ThreadUpdatedEvent evt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(evt);
@@ -53,12 +49,26 @@ public sealed partial class CodeInsightMissHarvester(
             }
 
             var key = new CodeInsightPullRequestKey(evt.ClientId, evt.RepositoryId, evt.PullRequestId);
+            var threadResolved = IsResolved(evt.Status);
+            var judgedThreadResolved = await missStore.GetJudgedThreadResolvedAsync(key, evt.ThreadId, ct);
+            var alreadyHarvested = judgedThreadResolved is not null;
 
-            if (await missStore.HasHarvestedThreadAsync(key, evt.ThreadId, ct))
+            if (alreadyHarvested)
             {
-                // The crawl re-observes the same thread on every pass; harvesting it twice would double its
-                // contribution to recall.
-                return;
+                // A judgement made against a resolved thread is settled, and a thread that is still open cannot
+                // answer the acted-on question any better than it did the first time. In both cases the crawl is
+                // re-observing the thread, and judging it again would spend a model call to reach the same
+                // answer. A thread that has resolved since a judgement made while it was open is the one case
+                // where the answer can have changed.
+                if (judgedThreadResolved!.Value || !threadResolved)
+                {
+                    return;
+                }
+
+                // The stored judgement was asked whether a concern had been accepted or acted on before either
+                // could have happened. The thread has since resolved, which is the first point at which that
+                // question has an answer.
+                LogRejudgingResolvedThread(logger, evt.ThreadId, evt.ClientId);
             }
 
             var discussion = BuildDiscussion(evt);
@@ -108,7 +118,7 @@ public sealed partial class CodeInsightMissHarvester(
                     evt.ThreadId,
                     evt.FilePath,
                     discussion,
-                    IsResolved(evt.Status)),
+                    threadResolved),
                 ct);
 
             if (judgement is null)
@@ -119,26 +129,27 @@ public sealed partial class CodeInsightMissHarvester(
                 return;
             }
 
-            var countsAsMiss = judgement.IsSubstantive && judgement.WasActedOn && judgement.IsInScope;
-
             // Recorded either way, with the three judgements kept separately: the ones that did not qualify are
             // what makes the cut-off inspectable, and re-applying a changed threshold must not need the model.
-            var recorded = await missStore.RecordMissAsync(
-                key,
-                new CodeInsightMissRecord(
-                    evt.ThreadId,
-                    evt.FilePath,
-                    evt.Line,
-                    discussion,
-                    judgement.IsSubstantive,
-                    judgement.WasActedOn,
-                    judgement.IsInScope,
-                    countsAsMiss,
-                    judgement.Confidence,
-                    classifier.ClassifierVersion),
-                ct);
+            // Whether it qualifies is the record's own answer over those three, so this path has no verdict of
+            // its own to disagree with the store's.
+            var record = new CodeInsightMissRecord(
+                evt.ThreadId,
+                evt.FilePath,
+                evt.Line,
+                discussion,
+                judgement.IsSubstantive,
+                judgement.WasActedOn,
+                judgement.IsInScope,
+                judgement.Confidence,
+                classifier.ClassifierVersion,
+                threadResolved);
 
-            if (recorded && countsAsMiss)
+            var recorded = alreadyHarvested
+                ? await missStore.RejudgeMissAsync(key, record, ct)
+                : await missStore.RecordMissAsync(key, record, ct);
+
+            if (recorded && record.CountsAsMiss)
             {
                 LogMissHarvested(logger, evt.ThreadId, evt.ClientId);
             }
@@ -189,8 +200,19 @@ public sealed partial class CodeInsightMissHarvester(
         return builder.ToString().TrimEnd('\n');
     }
 
+    /// <summary>
+    ///     Whether the provider reports the thread as having reached any terminal state.
+    /// </summary>
+    /// <remarks>
+    ///     Answered through the same interpreter the crawl uses to read a thread's close, so the set of terminal
+    ///     statuses is declared once for every provider. Matching one status string here would leave a thread
+    ///     closed as <c>Closed</c>, <c>WontFix</c> or <c>ByDesign</c> looking permanently open, and those are the
+    ///     cases the acted-on judgement most needs: the last two are a human accepting the concern outright.
+    ///     Which terminal state it reached is not consulted; a thread argued down and closed has still stopped
+    ///     changing, and what the discussion amounted to is the model's judgement to make.
+    /// </remarks>
     private static bool IsResolved(string? status)
     {
-        return string.Equals(status, ResolvedStatus, StringComparison.OrdinalIgnoreCase);
+        return ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(status));
     }
 }

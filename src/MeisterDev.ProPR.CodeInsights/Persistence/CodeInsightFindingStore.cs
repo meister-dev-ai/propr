@@ -642,23 +642,29 @@ public sealed class CodeInsightFindingStore(
                     return false;
                 }
 
-                db.CodeInsightMisses.Add(
-                    new CodeInsightMiss
-                    {
-                        Id = Guid.CreateVersion7(),
-                        CodeInsightPullRequestId = pullRequest.Id,
-                        ProviderThreadId = miss.ProviderThreadId,
-                        FilePath = miss.FilePath,
-                        LineNumber = miss.LineNumber,
-                        EncryptedDiscussion = secretProtectionCodec.Protect(miss.Discussion, MissDiscussionPurpose),
-                        IsSubstantive = miss.IsSubstantive,
-                        WasActedOn = miss.WasActedOn,
-                        IsInScope = miss.IsInScope,
-                        CountsAsMiss = miss.CountsAsMiss,
-                        ClassifierConfidence = miss.Confidence,
-                        ClassifierVersion = miss.ClassifierVersion,
-                        HarvestedAt = DateTimeOffset.UtcNow,
-                    });
+                var harvestedAt = DateTimeOffset.UtcNow;
+
+                var harvested = new CodeInsightMiss
+                {
+                    Id = Guid.CreateVersion7(),
+                    CodeInsightPullRequestId = pullRequest.Id,
+                    ProviderThreadId = miss.ProviderThreadId,
+                    FilePath = miss.FilePath,
+                    LineNumber = miss.LineNumber,
+                    HarvestedAt = harvestedAt,
+                };
+
+                harvested.RecordJudgement(
+                    miss.IsSubstantive,
+                    miss.WasActedOn,
+                    miss.IsInScope,
+                    miss.Confidence,
+                    miss.ClassifierVersion,
+                    miss.JudgedThreadResolved,
+                    secretProtectionCodec.Protect(miss.Discussion, MissDiscussionPurpose),
+                    harvestedAt);
+
+                db.CodeInsightMisses.Add(harvested);
 
                 await db.SaveChangesAsync(ct);
                 return true;
@@ -666,7 +672,7 @@ public sealed class CodeInsightFindingStore(
             ct);
     }
 
-    public Task<bool> HasHarvestedThreadAsync(
+    public Task<bool?> GetJudgedThreadResolvedAsync(
         CodeInsightPullRequestKey key,
         string providerThreadId,
         CancellationToken ct = default)
@@ -680,14 +686,64 @@ public sealed class CodeInsightFindingStore(
                 var aggregateId = await FindPullRequestIdAsync(db, key, ct);
                 if (aggregateId is null)
                 {
+                    return (bool?)null;
+                }
+
+                // Projected to a nullable so "no row" and "row judged against an open thread" stay distinct: both
+                // would otherwise arrive as false, and the second one is the case that needs re-judging.
+                var judged = await db.CodeInsightMisses
+                    .Where(miss => miss.CodeInsightPullRequestId == aggregateId.Value
+                                   && miss.ProviderThreadId == providerThreadId)
+                    .Select(miss => (bool?)miss.JudgedThreadResolved)
+                    .FirstOrDefaultAsync(ct);
+
+                return judged;
+            },
+            ct);
+    }
+
+    public Task<bool> RejudgeMissAsync(
+        CodeInsightPullRequestKey key,
+        CodeInsightMissRecord miss,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(miss);
+
+        return this.WithDbAsync(
+            async db =>
+            {
+                var aggregateId = await FindPullRequestIdAsync(db, key, ct);
+                if (aggregateId is null)
+                {
                     return false;
                 }
 
-                return await db.CodeInsightMisses
-                    .AnyAsync(
-                        miss => miss.CodeInsightPullRequestId == aggregateId.Value
-                                && miss.ProviderThreadId == providerThreadId,
+                var existing = await db.CodeInsightMisses
+                    .FirstOrDefaultAsync(
+                        candidate => candidate.CodeInsightPullRequestId == aggregateId.Value
+                                     && candidate.ProviderThreadId == miss.ProviderThreadId,
                         ct);
+                if (existing is null)
+                {
+                    return false;
+                }
+
+                // The same operation the first harvest used, so the verdict, its three components and the
+                // discussion they were read from move together. The row keeps its identity, its anchor and its
+                // harvest time.
+                existing.RecordJudgement(
+                    miss.IsSubstantive,
+                    miss.WasActedOn,
+                    miss.IsInScope,
+                    miss.Confidence,
+                    miss.ClassifierVersion,
+                    miss.JudgedThreadResolved,
+                    secretProtectionCodec.Protect(miss.Discussion, MissDiscussionPurpose),
+                    DateTimeOffset.UtcNow);
+
+                await db.SaveChangesAsync(ct);
+                return true;
             },
             ct);
     }
@@ -725,7 +781,9 @@ public sealed class CodeInsightFindingStore(
                         miss.CountsAsMiss,
                         miss.ClassifierConfidence,
                         miss.ClassifierVersion,
-                        miss.HarvestedAt))
+                        miss.HarvestedAt,
+                        miss.JudgedThreadResolved,
+                        miss.LastJudgedAt))
                     .ToList();
             },
             ct);

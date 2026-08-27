@@ -154,20 +154,119 @@ public sealed class CodeInsightMissHarvesterTests
     public async Task AnAlreadyHarvestedThread_IsSkippedBeforeAnythingElse()
     {
         var harness = new Harness();
-        harness.Misses
-            .HasHarvestedThreadAsync(
-                Arg.Any<CodeInsightPullRequestKey>(),
-                "thread-9",
-                Arg.Any<CancellationToken>())
-            .Returns(true);
+        harness.WithStoredJudgement(threadResolved: true);
 
-        await harness.Harvester.HandleThreadObservedAsync(HumanThread());
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread(status: "fixed"));
 
         // A crawl re-observes the same thread on every pass; harvesting it twice would double its
         // contribution to recall.
         await harness.Classifier.DidNotReceive()
             .JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>());
         await harness.Misses.DidNotReceive().RecordMissAsync(
+            Arg.Any<CodeInsightPullRequestKey>(),
+            Arg.Any<CodeInsightMissRecord>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AThreadStillOpen_HasTheStateItWasJudgedAgainstRecordedWithTheVerdict()
+    {
+        // The verdict is the model's to give: a concern can be accepted in an open thread, so an open thread is
+        // not forced to a particular answer. What is recorded beside the verdict is the state it was reached
+        // against. That marks the verdict provisional, so the thread is judged again once it resolves.
+        var harness = new Harness();
+        harness.WithJudgement(substantive: true, actedOn: false, inScope: true);
+
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread(status: "active"));
+
+        await harness.Classifier.Received(1).JudgeAsync(
+            Arg.Is<HumanMissJudgementRequest>(request => !request.ThreadResolved),
+            Arg.Any<CancellationToken>());
+        await harness.Misses.Received(1).RecordMissAsync(
+            Arg.Any<CodeInsightPullRequestKey>(),
+            Arg.Is<CodeInsightMissRecord>(miss => !miss.JudgedThreadResolved && !miss.CountsAsMiss),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AThreadJudgedWhileOpen_IsJudgedAgainOnceItResolves()
+    {
+        // Without this the verdict reached while the thread was open stands forever, and a concern the team
+        // later accepted never counts against recall. The crawl observes threads only while the pull request is
+        // open, so first observation is always the provisional case.
+        var harness = new Harness();
+        harness.WithStoredJudgement(threadResolved: false);
+        harness.WithJudgement(substantive: true, actedOn: true, inScope: true);
+
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread(status: "fixed"));
+
+        await harness.Classifier.Received(1).JudgeAsync(
+            Arg.Is<HumanMissJudgementRequest>(request => request.ThreadResolved),
+            Arg.Any<CancellationToken>());
+        await harness.Misses.Received(1).RejudgeMissAsync(
+            Arg.Any<CodeInsightPullRequestKey>(),
+            Arg.Is<CodeInsightMissRecord>(miss => miss.JudgedThreadResolved && miss.CountsAsMiss),
+            Arg.Any<CancellationToken>());
+        await harness.Misses.DidNotReceive().RecordMissAsync(
+            Arg.Any<CodeInsightPullRequestKey>(),
+            Arg.Any<CodeInsightMissRecord>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("Fixed")]
+    [InlineData("Closed")]
+    [InlineData("WontFix")]
+    [InlineData("ByDesign")]
+    public async Task AThreadJudgedWhileOpen_IsJudgedAgainOnEveryTerminalStatus(string status)
+    {
+        // Every status the provider can settle a thread at counts as resolved, not only "Fixed". WontFix and
+        // ByDesign are a human accepting the concern outright, which is the strongest evidence the acted-on
+        // judgement can have, and treating them as still open would strand exactly those threads on a
+        // provisional verdict.
+        var harness = new Harness();
+        harness.WithStoredJudgement(threadResolved: false);
+
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread(status: status));
+
+        await harness.Classifier.Received(1).JudgeAsync(
+            Arg.Is<HumanMissJudgementRequest>(request => request.ThreadResolved),
+            Arg.Any<CancellationToken>());
+        await harness.Misses.Received(1).RejudgeMissAsync(
+            Arg.Any<CodeInsightPullRequestKey>(),
+            Arg.Is<CodeInsightMissRecord>(miss => miss.JudgedThreadResolved),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("Active")]
+    [InlineData("Pending")]
+    [InlineData("Unknown")]
+    [InlineData(null)]
+    public async Task AThreadThatHasNotSettled_IsNotTreatedAsResolved(string? status)
+    {
+        var harness = new Harness();
+        harness.WithStoredJudgement(threadResolved: false);
+
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread(status: status!));
+
+        await harness.Classifier.DidNotReceive()
+            .JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AThreadJudgedWhileOpen_IsNotJudgedAgainWhileItStaysOpen()
+    {
+        // The crawl re-observes it on every pass, and re-judging an unchanged open thread would spend a model
+        // call per pass to reach the same answer.
+        var harness = new Harness();
+        harness.WithStoredJudgement(threadResolved: false);
+
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread(status: "active"));
+
+        await harness.Classifier.DidNotReceive()
+            .JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>());
+        await harness.Misses.DidNotReceive().RejudgeMissAsync(
             Arg.Any<CodeInsightPullRequestKey>(),
             Arg.Any<CodeInsightMissRecord>(),
             Arg.Any<CancellationToken>());
@@ -199,7 +298,7 @@ public sealed class CodeInsightMissHarvesterTests
 
         await harness.Harvester.HandleThreadObservedAsync(HumanThread());
 
-        await harness.Misses.DidNotReceive().HasHarvestedThreadAsync(
+        await harness.Misses.DidNotReceive().GetJudgedThreadResolvedAsync(
             Arg.Any<CodeInsightPullRequestKey>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -405,14 +504,22 @@ public sealed class CodeInsightMissHarvesterTests
             this.Classifier.ClassifierVersion.Returns("test-miss");
             this.WithJudgement(true, true, true);
             this.WithFindings();
+
+            // Null means the thread has not been harvested at all, which is the default starting point.
             this.Misses
-                .HasHarvestedThreadAsync(
+                .GetJudgedThreadResolvedAsync(
                     Arg.Any<CodeInsightPullRequestKey>(),
                     Arg.Any<string>(),
                     Arg.Any<CancellationToken>())
-                .Returns(false);
+                .Returns((bool?)null);
             this.Misses
                 .RecordMissAsync(
+                    Arg.Any<CodeInsightPullRequestKey>(),
+                    Arg.Any<CodeInsightMissRecord>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(true);
+            this.Misses
+                .RejudgeMissAsync(
                     Arg.Any<CodeInsightPullRequestKey>(),
                     Arg.Any<CodeInsightMissRecord>(),
                     Arg.Any<CancellationToken>())
@@ -441,6 +548,17 @@ public sealed class CodeInsightMissHarvesterTests
             this.Classifier
                 .JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>())
                 .Returns(new HumanMissJudgement(substantive, actedOn, inScope, 0.8, "because"));
+        }
+
+        /// <summary>Stands the thread up as already harvested, judged against the given resolved state.</summary>
+        public void WithStoredJudgement(bool threadResolved)
+        {
+            this.Misses
+                .GetJudgedThreadResolvedAsync(
+                    Arg.Any<CodeInsightPullRequestKey>(),
+                    Arg.Any<string>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(threadResolved);
         }
 
         public void WithFindings(params CodeInsightFindingView[] findings)

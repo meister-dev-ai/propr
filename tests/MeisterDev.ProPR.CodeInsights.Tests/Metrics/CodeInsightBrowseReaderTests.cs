@@ -283,7 +283,6 @@ public sealed class CodeInsightBrowseReaderTests : IDisposable
             IsSubstantive: countsAsMiss,
             WasActedOn: true,
             IsInScope: countsAsMiss,
-            CountsAsMiss: countsAsMiss,
             0.9,
             "test");
     }

@@ -34,6 +34,15 @@ public sealed partial class CodeInsightMissHarvester
     private static partial void LogMissHarvested(ILogger logger, string providerThreadId, Guid clientId);
 
     [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Human thread {ProviderThreadId} (client {ClientId}) has resolved since it was judged while "
+                  + "open; judging it again.")]
+    private static partial void LogRejudgingResolvedThread(
+        ILogger logger,
+        string providerThreadId,
+        Guid clientId);
+
+    [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "Harvesting human thread {ProviderThreadId} (client {ClientId}) failed; "
                   + "the crawl continues unaffected.")]

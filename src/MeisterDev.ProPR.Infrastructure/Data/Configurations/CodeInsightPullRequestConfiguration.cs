@@ -52,6 +52,10 @@ internal sealed class CodeInsightPullRequestConfiguration : IEntityTypeConfigura
             .HasColumnName("last_activity_at")
             .IsRequired();
 
+        builder.Property(pr => pr.LastSealAttemptAt)
+            .HasColumnName("last_seal_attempt_at")
+            .IsRequired(false);
+
         builder.Property(pr => pr.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();
@@ -68,6 +72,15 @@ internal sealed class CodeInsightPullRequestConfiguration : IEntityTypeConfigura
         // The retention sweep filters on this column, so index it.
         builder.HasIndex(pr => pr.LastActivityAt)
             .HasDatabaseName("ix_code_insight_pull_requests_last_activity_at");
+
+        // No index backs LastSealAttemptAt, which the seal sweep orders its candidates by. The sweep needs the
+        // nulls first, and LINQ cannot express NULLS FIRST, so the ordering is emitted as a leading CASE over the
+        // column; PostgreSQL cannot serve a sort whose first key is an expression from a plain index on the
+        // column, and adding one would only cost write time on a table the crawl upserts on every pass. The sort
+        // also runs after an anti-join against the metrics and a semi-join against the findings, so it sees the
+        // filtered candidate set and not the table. Should the backlog ever grow enough for that sort to matter,
+        // the fix is to emit ORDER BY last_seal_attempt_at ASC NULLS FIRST through raw SQL and declare a matching
+        // NULLS FIRST index, not to index the column as it stands.
 
         builder.HasMany(pr => pr.Findings)
             .WithOne(finding => finding.CodeInsightPullRequest)

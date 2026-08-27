@@ -26,10 +26,28 @@ public interface ICodeInsightMissStore
         CodeInsightMissRecord miss,
         CancellationToken ct = default);
 
-    /// <summary>Returns whether the given human thread has already been harvested for this pull request.</summary>
-    Task<bool> HasHarvestedThreadAsync(
+    /// <summary>
+    ///     Returns whether the stored judgement for this human thread was made against a resolved thread, or
+    ///     <see langword="null" /> when the thread has not been harvested for this pull request at all.
+    /// </summary>
+    /// <remarks>
+    ///     The three-way answer is what the harvester needs. Not harvested means judge it; harvested while the
+    ///     thread was open means the judgement is provisional and must be replaced once the thread resolves;
+    ///     harvested while resolved means it is settled and costs no further model call.
+    /// </remarks>
+    Task<bool?> GetJudgedThreadResolvedAsync(
         CodeInsightPullRequestKey key,
         string providerThreadId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Replaces the stored judgement and discussion for an already-harvested thread, and returns whether a row
+    ///     was found to replace. The row keeps its identity, its anchor, and the time it was first harvested, so
+    ///     harvest time and judgement time together show that it was revisited.
+    /// </summary>
+    Task<bool> RejudgeMissAsync(
+        CodeInsightPullRequestKey key,
+        CodeInsightMissRecord miss,
         CancellationToken ct = default);
 
     /// <summary>

@@ -302,6 +302,65 @@ public sealed class CodeInsightCatchUpTests : IDisposable
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task TheSweepRotatesItsQueueSoAnUnsealedCandidateIsNotReExaminedForever()
+    {
+        // Ordering by activity alone re-presents the same newest rows on every cycle, so a candidate below the
+        // cap when it went quiet would sink further with every sweep and never be examined.
+        await this.SeedQuietAsync(ClientA, "repo-1", 100, idleDays: 30);
+        await this.SeedQuietAsync(ClientA, "repo-1", 200, idleDays: 8);
+        this.WithProviderStatus(PrStatus.Active);
+
+        Assert.Equal(0, await this._sweeper.SweepAsync(1, TimeSpan.FromDays(7)));
+        Assert.Equal(0, await this._sweeper.SweepAsync(1, TimeSpan.FromDays(7)));
+
+        await this._pullRequests.Received(1).FetchRefAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            200,
+            Arg.Any<Guid?>(),
+            Arg.Any<CancellationToken>());
+        await this._pullRequests.Received(1).FetchRefAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            100,
+            Arg.Any<Guid?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AnAggregateWithNoFindingsDoesNotConsumeARowOfTheCap()
+    {
+        // Without a finding there is no review job to resolve the provider scope from, so the row can never
+        // produce a seal. Counted against the cap it would starve one that can. The unmeasurable row is seeded
+        // as the more recently active of the two, so it wins the ordering and takes the only slot unless it is
+        // excluded before the cap is applied.
+        await this.SeedAggregateWithoutFindingsAsync(ClientA, "repo-1", 300, idleDays: 8);
+        await this.SeedQuietAsync(ClientA, "repo-1", 400, idleDays: 30);
+        this.WithProviderStatus(PrStatus.Completed);
+
+        Assert.Equal(1, await this._sweeper.SweepAsync(1, TimeSpan.FromDays(7)));
+
+        await this._sealer.Received(1).SealAsync(
+            Arg.Is<CodeInsightPullRequestKey>(key => key.PullRequestId == 400),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ASweepStampsItsAttemptEvenWhenNothingIsSealed()
+    {
+        var aggregateId = await this.SeedQuietAsync(ClientA, "repo-1", 7, idleDays: 30);
+        this.WithProviderStatus(PrStatus.Active);
+
+        Assert.Equal(0, await this._sweeper.SweepAsync(10, TimeSpan.FromDays(7)));
+
+        var aggregate = await this._dbContext.CodeInsightPullRequests.SingleAsync(row => row.Id == aggregateId);
+        Assert.NotNull(aggregate.LastSealAttemptAt);
+    }
+
     private void WithProviderStatus(PrStatus status)
     {
         this._pullRequests
@@ -360,6 +419,33 @@ public sealed class CodeInsightCatchUpTests : IDisposable
                                       && candidate.RepositoryId == repositoryId
                                       && candidate.PullRequestId == pullRequestId);
         aggregate.LastActivityAt = DateTimeOffset.UtcNow.AddDays(-idleDays);
+        await this._dbContext.SaveChangesAsync();
+        return aggregate.Id;
+    }
+
+    /// <summary>
+    ///     Seeds a collected pull request that has no findings under it, as a review that produced none leaves
+    ///     behind once a human comment created the aggregate.
+    /// </summary>
+    private async Task<Guid> SeedAggregateWithoutFindingsAsync(
+        Guid clientId,
+        string repositoryId,
+        long pullRequestId,
+        int idleDays)
+    {
+        var aggregate = new CodeInsightPullRequest
+        {
+            Id = Guid.CreateVersion7(),
+            ClientId = clientId,
+            RepositoryId = repositoryId,
+            PullRequestId = pullRequestId,
+            PullRequestState = "Active",
+            LastActivityAt = DateTimeOffset.UtcNow.AddDays(-idleDays),
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-idleDays),
+            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-idleDays),
+        };
+
+        this._dbContext.CodeInsightPullRequests.Add(aggregate);
         await this._dbContext.SaveChangesAsync();
         return aggregate.Id;
     }

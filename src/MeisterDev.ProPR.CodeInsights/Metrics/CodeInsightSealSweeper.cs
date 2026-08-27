@@ -74,6 +74,10 @@ public sealed partial class CodeInsightSealSweeper(
         foreach (var candidate in candidates)
         {
             sealedCount += await this.ExamineAsync(candidate, ct) ? 1 : 0;
+
+            // Stamped whatever the outcome was, so the queue rotates. A sealed aggregate is excluded from the
+            // candidate set by its metric row anyway; the stamp is what keeps the unsealed ones moving.
+            await this.RecordAttemptAsync(candidate.AggregateId, ct);
         }
 
         if (sealedCount > 0)
@@ -168,9 +172,17 @@ public sealed partial class CodeInsightSealSweeper(
             .Where(pullRequest => pullRequest.LastActivityAt < cutoff)
             .Where(pullRequest => !db.CodeInsightPullRequestMetrics
                 .Any(metric => metric.CodeInsightPullRequestId == pullRequest.Id))
-            // Most recently active first: a pull request that closed last week is worth far more to a current
-            // metric than one quiet for a year, and the ancient ones are leaving through retention anyway.
-            .OrderByDescending(pullRequest => pullRequest.LastActivityAt)
+            // An aggregate with no finding has no review job to resolve the provider scope from, so it can never
+            // produce a seal. Excluded here, before the cap, so the cap is spent on rows that can.
+            .Where(pullRequest => db.CodeInsightFindings
+                .Any(finding => finding.CodeInsightPullRequestId == pullRequest.Id))
+            // Least recently attempted first, never-attempted before that. Ordering by activity alone would
+            // re-present the same newest rows on every cycle, so anything below the cap when it went quiet would
+            // sink further with every sweep and never be examined. Activity remains the tiebreaker, which keeps
+            // the original intent that a pull request quiet for a week matters more than one quiet for a year.
+            .OrderBy(pullRequest => pullRequest.LastSealAttemptAt == null ? 0 : 1)
+            .ThenBy(pullRequest => pullRequest.LastSealAttemptAt)
+            .ThenByDescending(pullRequest => pullRequest.LastActivityAt)
             .Select(pullRequest => new
             {
                 pullRequest.Id,
@@ -199,11 +211,53 @@ public sealed partial class CodeInsightSealSweeper(
         return quiet
             .Where(row => jobByAggregate.ContainsKey(row.Id))
             .Select(row => new Candidate(
+                row.Id,
                 row.ClientId,
                 row.RepositoryId,
                 row.PullRequestId,
                 jobByAggregate[row.Id]))
             .ToList();
+    }
+
+    /// <summary>
+    ///     Stamps the attempt on the aggregate so the next sweep orders this candidate behind the ones it has not
+    ///     reached yet.
+    /// </summary>
+    /// <remarks>
+    ///     Written for every examined candidate, including the ones that did not seal. A pull request still open at
+    ///     the provider, one whose review job is gone, and one the provider could not be reached about all leave
+    ///     no measurement behind, and without a stamp they would be indistinguishable from a candidate that has
+    ///     never been examined. Failing to record the attempt is not worth failing the sweep over: the cost is one
+    ///     wasted slot on the next cycle.
+    /// </remarks>
+    private async Task RecordAttemptAsync(Guid aggregateId, CancellationToken ct)
+    {
+        try
+        {
+            await this.WithDbAsync<bool>(
+                async db =>
+                {
+                    var aggregate = await db.CodeInsightPullRequests
+                        .FirstOrDefaultAsync(candidate => candidate.Id == aggregateId, ct);
+                    if (aggregate is null)
+                    {
+                        return false;
+                    }
+
+                    aggregate.LastSealAttemptAt = DateTimeOffset.UtcNow;
+                    await db.SaveChangesAsync(ct);
+                    return true;
+                },
+                ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogAttemptNotRecorded(logger, aggregateId, ex);
+        }
     }
 
     private async Task<T> WithDbAsync<T>(Func<MeisterProPRDbContext, Task<T>> operation, CancellationToken ct)
@@ -218,6 +272,7 @@ public sealed partial class CodeInsightSealSweeper(
     }
 
     private readonly record struct Candidate(
+        Guid AggregateId,
         Guid ClientId,
         string RepositoryId,
         long PullRequestId,

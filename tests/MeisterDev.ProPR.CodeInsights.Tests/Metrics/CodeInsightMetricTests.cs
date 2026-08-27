@@ -866,7 +866,6 @@ public sealed class CodeInsightMetricTests : IDisposable
                     IsSubstantive: counts,
                     WasActedOn: counts,
                     IsInScope: counts,
-                    CountsAsMiss: counts,
                     0.9,
                     "test"));
         }
