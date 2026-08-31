@@ -83,7 +83,7 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
 
         if (judgeClient is null || context?.Tools is null || string.IsNullOrWhiteSpace(claim.AnchorFilePath))
         {
-            return ConservativeWithhold(claim);
+            return ConservativeWithhold(claim, "escalation skipped: no judge client, review tools, or anchor path available");
         }
 
         try
@@ -94,7 +94,7 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
                 .ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(anchorSource))
             {
-                return ConservativeWithhold(claim);
+                return ConservativeWithhold(claim, $"escalation degraded: anchor source empty for {claim.AnchorFilePath}");
             }
 
             var (boundedSource, boundedStartLine) = BoundAnchorChars(anchorSource, windowStart, claim.AnchorLineNumber);
@@ -123,16 +123,21 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
                     false);
             }
 
-            return ConservativeWithhold(claim);
+            return ConservativeWithhold(
+                claim,
+                verdict is null
+                    ? "escalation degraded: judge response was not a parseable verdict"
+                    : $"judge did not confirm: {Truncate(verdict.Reason, 200)}");
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Degraded-safe: any failure preserves the conservative withhold rather than risk a bad publish.
-            return ConservativeWithhold(claim);
+            // Degraded-safe: any failure preserves the conservative withhold rather than risk a bad publish,
+            // but the cause is carried in the outcome so the recorded local decision shows what failed.
+            return ConservativeWithhold(claim, $"escalation degraded: {ex.GetType().Name}: {Truncate(ex.Message, 160)}");
         }
     }
 
@@ -210,8 +215,11 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
         return count;
     }
 
-    private static VerificationOutcome ConservativeWithhold(ClaimDescriptor claim)
+    private static VerificationOutcome ConservativeWithhold(ClaimDescriptor claim, string? cause = null)
     {
+        var summary = string.IsNullOrWhiteSpace(cause)
+            ? "Evidence-backed verification could not confirm this claim from the anchor source."
+            : $"Evidence-backed verification could not confirm this claim from the anchor source ({cause}).";
         return new VerificationOutcome(
             claim.ClaimId,
             claim.FindingId,
@@ -220,7 +228,7 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
             [ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport],
             [],
             VerificationOutcome.NoEvidence,
-            "Evidence-backed verification could not confirm this claim from the anchor source.",
+            summary,
             VerificationOutcome.AiMicroVerifierEvaluator,
             false);
     }
@@ -228,11 +236,16 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
     private static string BuildSystemPrompt()
     {
         return "You are a strict code-review verifier. You are given a CLAIM that a code change introduces a "
-               + "defect, plus the current source of the file the claim concerns. Decide whether the claim is "
-               + "CONFIRMED by the code as written. Confirm ONLY when the cited code clearly exhibits the asserted "
-               + "defect and you can name the concrete line(s)/symbol that prove it. If the code does not support "
-               + "the claim, the concern is hypothetical, or the provided source is insufficient to be sure, do "
-               + "NOT confirm. Respond with ONLY a JSON object and nothing else: "
+               + "defect, plus the current source of the file the claim concerns. Decide whether the claim's "
+               + "MECHANISM is exhibited by the code as written: the structural facts the claim asserts (a lock or "
+               + "guard that is absent, a call order, a value that is overwritten, a resource that is not released) "
+               + "must be visible in the provided source, and you must be able to cite the concrete line(s) or "
+               + "symbol(s) that show them. A defect whose damage only manifests at runtime (a race, a leak, a "
+               + "lifecycle or timing hazard) IS confirmable: confirm it when the code structurally contains the "
+               + "asserted mechanism, even though the failure itself cannot be observed statically. Do NOT confirm "
+               + "when the code contradicts the asserted mechanism, the mechanism is not visible in the provided "
+               + "source, or the claim rests on facts outside this file that you cannot see. Respond with ONLY a "
+               + "JSON object and nothing else: "
                + "{\"verdict\":\"confirmed|not_confirmed\",\"reason\":\"<one sentence; cite the line or symbol>\"}.";
     }
 

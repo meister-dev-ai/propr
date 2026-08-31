@@ -61,18 +61,21 @@ public sealed class CompositeReviewFindingVerifier(
             .VerifyAsync(withheld, invariantFacts, verificationContext, ct)
             .ConfigureAwait(false);
 
-        var promotedByClaimId = escalated
-            .Where(outcome => string.Equals(outcome.RecommendedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
+        // The escalated outcome replaces the deterministic withhold whether or not the judge confirmed:
+        // a non-confirming escalation keeps the same SummaryOnly disposition but carries the AiMicro
+        // evaluator and the judge's reason, so the recorded local decision shows that escalation actually
+        // ran and why it did not promote. Dispositions never regress relative to the deterministic pass.
+        var escalatedByClaimId = escalated
             .GroupBy(outcome => outcome.ClaimId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        if (promotedByClaimId.Count == 0)
+        if (escalatedByClaimId.Count == 0)
         {
             return baseOutcomes;
         }
 
         return baseOutcomes
-            .Select(outcome => IsConservativeWithhold(outcome) && promotedByClaimId.TryGetValue(outcome.ClaimId, out var promoted)
-                ? promoted
+            .Select(outcome => IsConservativeWithhold(outcome) && escalatedByClaimId.TryGetValue(outcome.ClaimId, out var replacement)
+                ? replacement
                 : outcome)
             .ToList();
     }
