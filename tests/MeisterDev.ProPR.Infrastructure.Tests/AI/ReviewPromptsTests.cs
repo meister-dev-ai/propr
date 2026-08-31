@@ -353,6 +353,42 @@ public class ReviewPromptsTests
     }
 
     [Fact]
+    public void BuildPerFileContextPrompt_WithInventoryLens_RendersInventoryTemplate()
+    {
+        // An inventory-lens pass sets ActiveLens; the builder selects the inventory template, which asks for an
+        // exhaustive single-turn defect listing and forbids tool calls — filtering happens downstream.
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ActiveLens = ReviewPassLens.Inventory,
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)]),
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 1);
+
+        Assert.Contains("defect INVENTORY", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not call tools", prompt, StringComparison.Ordinal);
+        Assert.Contains("FIRST response", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPerFileContextPrompt_WithInventoryLens_IgnoresPerFileContextOverride()
+    {
+        // The per-client PerFileContextPrompt override replaces only the ordinary context prompt. A specialist
+        // lens keeps its own template so a client customization cannot silently disable the lens semantics.
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ActiveLens = ReviewPassLens.Inventory,
+            PromptOverrides = new Dictionary<string, string?> { ["PerFileContextPrompt"] = "OVERRIDDEN TEXT" },
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)]),
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 1);
+
+        Assert.DoesNotContain("OVERRIDDEN TEXT", prompt, StringComparison.Ordinal);
+        Assert.Contains("defect INVENTORY", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildPerFileContextPrompt_WithoutLens_RendersOrdinaryTemplate()
     {
         var context = new ReviewSystemContext(null, [], null)
@@ -543,8 +579,9 @@ public class ReviewPromptsTests
 
     // The system-prompt schema is the authority for the comment severity vocabulary. The
     // schema-repair message derives from the shared constant and the quality-filter schema
-    // repeats the same set, so "info" can never reappear as an accepted comment severity —
-    // comments whose severity parses to Info are stripped before publication, not published.
+    // repeats the same set. "info" is the surface-level nit tier: whether info comments are
+    // published is governed solely by the client's minimum-severity-to-post setting, not by
+    // in-pipeline stripping.
     [Fact]
     public void CommentSeverityVocabulary_MatchesSystemPromptAndQualityFilterSchemas()
     {
@@ -552,7 +589,7 @@ public class ReviewPromptsTests
             "\"severity\":" + ToolAwareAiReviewCore.CommentSeverityVocabulary,
             ReviewPrompts.SystemPrompt,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("\"info\"", ReviewPrompts.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("\"info\"", ReviewPrompts.SystemPrompt, StringComparison.Ordinal);
 
         var qualityFilterSystem = PromptTemplateRuntime.RenderStage(
             "quality_filter_system",
@@ -561,7 +598,7 @@ public class ReviewPromptsTests
             "\"severity\": " + ToolAwareAiReviewCore.CommentSeverityVocabulary,
             qualityFilterSystem,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("\"info\"", qualityFilterSystem, StringComparison.Ordinal);
+        Assert.Contains("\"info\"", qualityFilterSystem, StringComparison.Ordinal);
     }
 
     // T005 — Per-file user message includes fallback note about get_file_content
@@ -807,15 +844,16 @@ public class ReviewPromptsTests
 
     // PR64-5467 — SystemPrompt schema must not list 'info' as a valid comment severity
     [Fact]
-    public void SystemPrompt_SchemaExcludesInfoSeverityFromComments()
+    public void SystemPrompt_SchemaIncludesInfoSeverityForNits()
     {
-        // Extract just the schema block so we don't false-positive on explanatory text
+        // Extract just the schema block so we assert on the permitted severity values themselves
         var prompt = ReviewPrompts.SystemPrompt;
         var schemaStart = prompt.IndexOf("Schema:", StringComparison.Ordinal);
         var schemaSection = schemaStart >= 0 ? prompt[schemaStart..] : prompt;
 
-        // 'info' must not appear as a permitted severity value inside the schema
-        Assert.DoesNotContain("\"info\"", schemaSection);
+        // 'info' is a permitted severity: the nit tier, published or withheld purely by the
+        // client's minimum-severity-to-post setting.
+        Assert.Contains("\"info\"", schemaSection, StringComparison.Ordinal);
     }
 
     // PR64-5468 — BuildSynthesisSystemPrompt JSON mode must describe JSON output, not plain text

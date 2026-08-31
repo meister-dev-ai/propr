@@ -897,7 +897,6 @@ public class FileByFileReviewOrchestratorTests
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
                 FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
             ],
             legacyBaseline.PerFileStageIds);
 
@@ -907,7 +906,6 @@ public class FileByFileReviewOrchestratorTests
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
                 FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
             ],
             calm.PerFileStageIds);
 
@@ -917,7 +915,6 @@ public class FileByFileReviewOrchestratorTests
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
                 FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
                 FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
             balanced.PerFileStageIds);
@@ -927,7 +924,6 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(
             [
                 FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
                 FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
             assertive.PerFileStageIds);

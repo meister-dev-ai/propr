@@ -297,7 +297,8 @@ internal sealed partial class FileReviewer(
         int? tierMaxContextTokens,
         string? tierTokenizerName,
         IChatClient effectiveClient,
-        IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance)
+        IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance,
+        bool omitTools = false)
     {
         var changedLinesCount = ReviewDiffProcessor.CountChangedLines(file.UnifiedDiff);
         LogTierAssigned(logger, file.Path, tier, changedLinesCount, job.Id);
@@ -315,10 +316,12 @@ internal sealed partial class FileReviewer(
             LogMaxIterationsOverrideApplied(logger, maxIterationsOverride, file.Path, job.Id);
         }
 
+        // An inventory-lens pass judges the diff text alone, so its context carries no repository tools; every
+        // other caller keeps the base context's tools.
         var fileContext = new ReviewSystemContext(
             baseContext.ClientSystemMessage,
             baseContext.RepositoryInstructions,
-            baseContext.ReviewTools)
+            omitTools ? null : baseContext.ReviewTools)
         {
             ActiveProtocolId = protocolId,
             DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
@@ -380,7 +383,12 @@ internal sealed partial class FileReviewer(
                                    && IsProRvEligible(inputs.File)
                                    && inputs.FileContext.ReviewPasses.Any(pass =>
                                        pass.Lens == ReviewPassLens.ProRV && pass.Scope != ReviewPassScope.PrWide);
-        if (!IsMultiPassUnionTier(inputs.Tier) && !inputs.SecurityFlagged && !hasEligibleProRvPass)
+        // An inventory-lens pass shares the deterministic text-diff eligibility with ProRV but needs no prefilter:
+        // the pass itself is the screen, so any tier with a reviewable diff fans out when one is configured.
+        var hasEligibleInventoryPass = IsProRvEligible(inputs.File)
+                                       && inputs.FileContext.ReviewPasses.Any(pass =>
+                                           pass.Lens == ReviewPassLens.Inventory && pass.Scope != ReviewPassScope.PrWide);
+        if (!IsMultiPassUnionTier(inputs.Tier) && !inputs.SecurityFlagged && !hasEligibleProRvPass && !hasEligibleInventoryPass)
         {
             return inputs.BaselineResult;
         }
@@ -562,6 +570,12 @@ internal sealed partial class FileReviewer(
             else if (pass.Lens == ReviewPassLens.ProRV)
             {
                 inScope = proRvPrefilter is not null && IsProRvEligible(inputs.File);
+            }
+            else if (pass.Lens == ReviewPassLens.Inventory)
+            {
+                // The inventory pass runs on any tier for a text file with a diff: its purpose is candidate
+                // coverage of the changed lines, and the downstream union and verification stages filter it.
+                inScope = IsProRvEligible(inputs.File);
             }
             else
             {
@@ -841,7 +855,8 @@ internal sealed partial class FileReviewer(
                 inputs.PassMaxContextTokens ?? inputs.FileContext.MaxContextTokens,
                 inputs.PassTokenizerName ?? inputs.FileContext.TokenizerName,
                 inputs.EffectiveClient,
-                focusedGuidance);
+                focusedGuidance,
+                omitTools: string.Equals(inputs.PassArm.Lens, ReviewPassLens.Inventory, StringComparison.Ordinal));
 
             // Each resample pass runs at the resampling temperature. The pass model + client + capabilities were
             // already resolved by the caller and threaded in here (an eval-harness arm-model override reusing the
@@ -1235,7 +1250,6 @@ internal sealed partial class FileReviewer(
                 ],
                 [
                     FileByFileConfidenceFloorStage.StageIdConstant,
-                    FileByFileInfoCommentStripStage.StageIdConstant,
                     FileByFileSelfReflectionRankingStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
@@ -1265,7 +1279,6 @@ internal sealed partial class FileReviewer(
                    ],
                    [
                        FileByFileConfidenceFloorStage.StageIdConstant,
-                       FileByFileInfoCommentStripStage.StageIdConstant,
                        FileByFileSelfReflectionRankingStage.StageIdConstant,
                    ],
                    [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
@@ -1456,14 +1469,8 @@ internal sealed partial class FileReviewer(
             LogSeverityDowngraded(logger, confidenceDroppedCount, file.Path, job.Id);
         }
 
-        var beforeInfo = result.Comments.Count;
-        result = ReviewCommentProcessing.StripInfoComments(result);
-        var infoDropped = beforeInfo - result.Comments.Count;
-        if (infoDropped > 0)
-        {
-            LogInfoCommentsDropped(logger, infoDropped, file.Path, job.Id);
-        }
-
+        // Info comments are no longer stripped in-pipeline: the client's minimum-severity-to-post setting
+        // is the single control point for what gets published (ReviewPublicationPolicy applies it at posting).
         return result;
     }
 

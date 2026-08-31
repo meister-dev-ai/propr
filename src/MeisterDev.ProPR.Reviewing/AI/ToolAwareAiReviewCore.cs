@@ -38,10 +38,10 @@ internal sealed partial class ToolAwareAiReviewCore(
     /// <summary>
     ///     Severity vocabulary permitted for review comments. Must stay in lock-step with the
     ///     Schema line of the shared system-prompt template (a test pins the two together).
-    ///     "info" is deliberately absent: informational observations belong in the summary, and
-    ///     comments whose severity parses (or falls back) to Info are stripped before publication.
+    ///     "info" is the surface-level consistency nit tier; whether info comments are published
+    ///     is governed solely by the client's minimum-severity-to-post setting.
     /// </summary>
-    internal const string CommentSeverityVocabulary = "\"warning\"|\"error\"|\"suggestion\"";
+    internal const string CommentSeverityVocabulary = "\"warning\"|\"error\"|\"suggestion\"|\"info\"";
 
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.ReviewLoop");
 

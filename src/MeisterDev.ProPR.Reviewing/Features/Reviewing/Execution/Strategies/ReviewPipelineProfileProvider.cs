@@ -31,7 +31,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
                 FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
             ],
             [FinalizeStageFamilyId],
             false),
@@ -45,7 +44,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
                 FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
             ],
             [FinalizeStageFamilyId],
             false,
@@ -60,7 +58,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
                 FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
                 FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
             [FinalizeStageFamilyId],
@@ -76,7 +73,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             ],
             [
                 FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
                 FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
             [FinalizeStageFamilyId],
