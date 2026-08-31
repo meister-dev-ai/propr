@@ -34,14 +34,17 @@ internal static partial class ReviewPrompts
         int fileIndex,
         int totalFiles)
     {
-        // A security-lens pass renders the dedicated security-specialist template. The per-client PerFileContextPrompt
-        // override applies only to the ordinary per-file context prompt, not to a specialist lens pass.
+        // A lens pass renders its dedicated specialist template. The per-client PerFileContextPrompt override
+        // applies only to the ordinary per-file context prompt, not to a specialist lens pass.
         var isSecurityLens = string.Equals(context?.ActiveLens, ReviewPassLens.Security, StringComparison.Ordinal);
+        var isInventoryLens = string.Equals(context?.ActiveLens, ReviewPassLens.Inventory, StringComparison.Ordinal);
         var stageKey = isSecurityLens
             ? PromptStageKeys.PerFileSecurityLensContextSystem
-            : PromptStageKeys.PerFileContextSystem;
+            : isInventoryLens
+                ? PromptStageKeys.PerFileInventoryLensContextSystem
+                : PromptStageKeys.PerFileContextSystem;
 
-        if (!isSecurityLens && context?.PromptOverrides.TryGetValue("PerFileContextPrompt", out var overrideText) == true)
+        if (!isSecurityLens && !isInventoryLens && context?.PromptOverrides.TryGetValue("PerFileContextPrompt", out var overrideText) == true)
         {
             return ComposePrompt(context, PromptStageKeys.PerFileContextSystem, PromptStageRole.System, overrideText!);
         }

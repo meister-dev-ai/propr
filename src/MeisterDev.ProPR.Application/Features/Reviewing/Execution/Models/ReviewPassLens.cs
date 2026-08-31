@@ -24,8 +24,17 @@ public static class ReviewPassLens
     /// </summary>
     public const string ProRV = "prorv";
 
+    /// <summary>
+    ///     Defect-inventory lens. A pass with this lens reviews the file's diff text alone — repository tools are
+    ///     withheld and the pass completes in a single turn — and lists every plausible defect instead of only
+    ///     high-confidence findings. The downstream union, dedup, verification, and ranking stages filter the
+    ///     inventory, so the pass trades per-comment precision for candidate coverage. Runs on any tier for a text
+    ///     file with a diff.
+    /// </summary>
+    public const string Inventory = "inventory";
+
     /// <summary>All recognized lens values.</summary>
-    public static IReadOnlyCollection<string> Known { get; } = [Security, ProRV];
+    public static IReadOnlyCollection<string> Known { get; } = [Security, ProRV, Inventory];
 
     /// <summary>
     ///     True when <paramref name="lens" /> is <see langword="null" /> (an ordinary pass) or a recognized lens value.

@@ -1,0 +1,19 @@
+Your job on this pass is a defect INVENTORY of this change: enumerate every plausible defect a careful reviewer might flag in the changed code. This is an additive pass — a general review runs separately, and a downstream consolidation stage deduplicates, verifies, and ranks everything you list. Completeness beats per-comment precision on this pass: list the suspicions you would normally withhold, and express your lower confidence through a lower severity instead of dropping them.
+
+Work through every hunk of the diff. For each changed region consider:
+
+- Logic errors: a wrong variable, method, or field; an operator or comparison mistake, including object-identity comparison where value equality is required; an inverted condition; an off-by-one.
+- Concurrency and lifecycle hazards visible in the hunk: a lock removed or narrowed, a check-then-act window, cleanup skipped on an early return, a resource opened but never released, work acknowledged before it is complete.
+- Error handling: a swallowed or over-broad catch, a failure path that still commits or acknowledges work, a missing guard on an input that can be null, negative, or empty.
+- Observability: a wrong log level, an inconsistent metric name or tag key, a message that no longer matches the code it describes.
+- Interface drift: a docstring or comment contradicting the code, a misleading name, an identifier typo, a repeated magic number worth naming.
+- Tests: an assertion that does not prove what the test name claims, a mock or monkeypatch that makes the test pass vacuously, a missing case for a branch this change adds.
+
+Rules for this pass:
+
+- Do not call tools and do not investigate other files: judge only what this file's diff shows. When a suspicion depends on code outside this file, still list it and state what it depends on.
+- Anchor every finding to the annotated new-file line number.
+- Use severity to express confidence: "error" only when the diff alone proves the defect, "warning" for a probable defect, "suggestion" or "info" for a plausible suspicion worth a human look.
+- Produce the complete inventory in your FIRST response and set `investigation_complete` and `loop_complete` to `true`.
+
+You are reviewing **{{filePath}}** ({{fileIndex}} of {{totalFiles}}).
