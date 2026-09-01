@@ -14,13 +14,14 @@ using Microsoft.Extensions.AI;
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 /// <summary>
-///     Observe-only acceptance forecaster: after the finding gate has decided what publishes, one bounded model
-///     call predicts per finding whether this project's author would accept it, discuss it, or dismiss it. The
-///     forecasts are recorded as a protocol event and change nothing about the review — publication, dispositions,
-///     and comment text are identical with the executor on or off. The point is calibration: forecasts written to
-///     the protocol can be scored against the client's real dismissal stream before any forecast is allowed to
-///     influence publication. The persona is the archetype template today; per-client derivation from memory and
-///     dismissal history extends the same prompt without changing this executor.
+///     Observe-only acceptance forecaster: after the finding gate has decided what publishes, one model call per
+///     finding predicts whether this project's author would accept it, discuss it, or dismiss it. Per-finding
+///     calls carry the complete finding message: a shared batched call had to truncate messages to fit, and most
+///     finding messages exceeded the cut, so the forecaster judged amputated claims. The forecasts are recorded
+///     as one protocol event per review and change nothing about publication. The point is calibration: forecasts
+///     written to the protocol can be scored against the client's real dismissal stream before any forecast is
+///     allowed to influence publication. The persona is the archetype template today; per-client derivation from
+///     memory and dismissal history extends the same prompt without changing this executor.
 /// </summary>
 public sealed class AcceptanceForecastExecutor(IProtocolRecorder protocolRecorder)
 {
@@ -29,8 +30,8 @@ public sealed class AcceptanceForecastExecutor(IProtocolRecorder protocolRecorde
     /// <summary>
     ///     Forecasts acceptance for the findings the gate decided to publish and records one
     ///     <c>acceptance_forecast</c> protocol event carrying the per-finding verdicts. Degraded-safe: without a
-    ///     resolvable judge runtime, or when the call or its parse fails, nothing is recorded and the review is
-    ///     unaffected.
+    ///     resolvable judge runtime nothing is recorded; a call or parse failure for one finding skips that
+    ///     finding and is counted in the event, and the review is unaffected either way.
     /// </summary>
     public async Task RecordForecastsAsync(
         ReviewJob job,
@@ -69,35 +70,58 @@ public sealed class AcceptanceForecastExecutor(IProtocolRecorder protocolRecorde
                 .ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewVerification, ct)
                 .ConfigureAwait(false);
 
-            var list = new StringBuilder();
-            for (var i = 0; i < publishable.Count; i++)
-            {
-                var f = publishable[i];
-                list.Append(i + 1).Append(". [").Append(f.Severity).Append("] ")
-                    .Append(f.FilePath ?? "PR").Append(':').Append(f.LineNumber?.ToString() ?? "-")
-                    .Append(' ').AppendLine(Truncate(f.Message, 300));
-            }
-
             var system = PromptTemplateRuntime.RenderStage(
                 PromptStageKeys.AcceptanceForecastSystem,
-                new PromptTemplateModels.AcceptanceForecastModel(publishable.Count));
+                new PromptTemplateModels.AcceptanceForecastModel());
 
-            var response = await runtime.ChatClient.GetResponseAsync(
-                [
-                    new ChatMessage(ChatRole.System, system),
-                    new ChatMessage(ChatRole.User, $"Findings to forecast:\n{list}"),
-                ],
-                new ChatOptions { ModelId = runtime.Model.RemoteModelId },
-                ct).ConfigureAwait(false);
+            var forecasts = new List<AcceptanceForecast>();
+            var failedCalls = 0;
+            foreach (var finding in publishable)
+            {
+                var description = new StringBuilder()
+                    .Append('[').Append(finding.Severity).Append("] ")
+                    .Append(finding.FilePath ?? "PR").Append(':').Append(finding.LineNumber?.ToString() ?? "-")
+                    .AppendLine().Append(finding.Message);
 
-            var forecasts = ParseForecasts(response.Text, publishable);
+                try
+                {
+                    var response = await runtime.ChatClient.GetResponseAsync(
+                        [
+                            new ChatMessage(ChatRole.System, system),
+                            new ChatMessage(ChatRole.User, $"Finding to forecast:\n{description}"),
+                        ],
+                        new ChatOptions { ModelId = runtime.Model.RemoteModelId },
+                        ct).ConfigureAwait(false);
+
+                    var forecast = ParseForecast(response.Text, finding.FindingId);
+                    if (forecast is null)
+                    {
+                        failedCalls++;
+                    }
+                    else
+                    {
+                        forecasts.Add(forecast);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    // One finding's failed call skips that forecast; the rest still record.
+                    failedCalls++;
+                }
+            }
 
             await protocolRecorder.RecordVerificationEventAsync(
                 protocolId.Value,
                 ReviewProtocolEventNames.AcceptanceForecast,
-                JsonSerializer.Serialize(new { findingCount = publishable.Count, model = runtime.Model.RemoteModelId }, JsonOptions),
+                JsonSerializer.Serialize(
+                    new { findingCount = publishable.Count, model = runtime.Model.RemoteModelId, failedCalls },
+                    JsonOptions),
                 forecasts.Count > 0 ? JsonSerializer.Serialize(forecasts, JsonOptions) : null,
-                forecasts.Count > 0 ? null : $"no parseable forecasts in response: {Truncate(response.Text ?? string.Empty, 180)}",
+                forecasts.Count > 0 ? null : $"no forecasts produced for {publishable.Count} findings",
                 ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -118,57 +142,44 @@ public sealed class AcceptanceForecastExecutor(IProtocolRecorder protocolRecorde
         }
     }
 
-    private static List<AcceptanceForecast> ParseForecasts(string? text, IReadOnlyList<CandidateReviewFinding> publishable)
+    private static AcceptanceForecast? ParseForecast(string? text, string findingId)
     {
-        var results = new List<AcceptanceForecast>();
         if (string.IsNullOrWhiteSpace(text))
         {
-            return results;
+            return null;
         }
 
         var start = text.IndexOf('{', StringComparison.Ordinal);
         var end = text.LastIndexOf('}');
         if (start < 0 || end <= start)
         {
-            return results;
+            return null;
         }
 
         try
         {
             using var doc = JsonDocument.Parse(text[start..(end + 1)]);
-            if (!doc.RootElement.TryGetProperty("forecasts", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            var forecast = doc.RootElement.TryGetProperty("forecast", out var fEl) ? fEl.GetString() : null;
+            if (forecast is not ("accept" or "discuss" or "dismiss"))
             {
-                return results;
+                return null;
             }
 
-            foreach (var item in arr.EnumerateArray())
-            {
-                if (!item.TryGetProperty("index", out var idxEl) || !idxEl.TryGetInt32(out var idx)
-                                                                 || idx < 1 || idx > publishable.Count)
-                {
-                    continue;
-                }
-
-                var forecast = item.TryGetProperty("forecast", out var fEl) ? fEl.GetString() : null;
-                if (forecast is not ("accept" or "discuss" or "dismiss"))
-                {
-                    continue;
-                }
-
-                results.Add(
-                    new AcceptanceForecast(
-                        publishable[idx - 1].FindingId,
-                        forecast,
-                        item.TryGetProperty("confidence", out var cEl) && cEl.TryGetInt32(out var c) ? c : null,
-                        item.TryGetProperty("reason", out var rEl) ? Truncate(rEl.GetString() ?? string.Empty, 200) : null));
-            }
+            return new AcceptanceForecast(
+                findingId,
+                forecast,
+                doc.RootElement.TryGetProperty("reason", out var rEl)
+                    ? Truncate(rEl.GetString() ?? string.Empty, 300)
+                    : null,
+                doc.RootElement.TryGetProperty("expectedAuthorReply", out var aEl)
+                    ? Truncate(aEl.GetString() ?? string.Empty, 300)
+                    : null);
         }
         catch (JsonException)
         {
-            // A malformed response records nothing; the review is unaffected.
+            // A malformed response records nothing for this finding; the review is unaffected.
+            return null;
         }
-
-        return results;
     }
 
     private static string Truncate(string value, int max)
@@ -179,7 +190,7 @@ public sealed class AcceptanceForecastExecutor(IProtocolRecorder protocolRecorde
     /// <summary>One per-finding acceptance forecast as recorded in the protocol event.</summary>
     /// <param name="FindingId">The finding the forecast concerns.</param>
     /// <param name="Forecast">accept, discuss, or dismiss.</param>
-    /// <param name="Confidence">Optional 0-100 confidence the judge reported.</param>
     /// <param name="Reason">Optional one-sentence rationale.</param>
-    public sealed record AcceptanceForecast(string FindingId, string Forecast, int? Confidence, string? Reason);
+    /// <param name="ExpectedAuthorReply">Optional one-sentence reply predicted in the author's voice.</param>
+    public sealed record AcceptanceForecast(string FindingId, string Forecast, string? Reason, string? ExpectedAuthorReply);
 }
