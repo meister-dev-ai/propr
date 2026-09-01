@@ -21,6 +21,7 @@ public static class PromptStageKeys
     public const string PerFileSecurityLensContextSystem = "per_file_security_lens_context_system";
 
     public const string PerFileInventoryLensContextSystem = "per_file_inventory_lens_context_system";
+    public const string AcceptanceForecastSystem = "acceptance_forecast_system";
 
     /// <summary>Per-file user prompt stage key.</summary>
     public const string PerFileUser = "per_file_user";

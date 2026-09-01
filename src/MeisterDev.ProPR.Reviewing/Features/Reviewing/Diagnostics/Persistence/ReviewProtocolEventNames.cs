@@ -63,6 +63,7 @@ public static class ReviewProtocolEventNames
     public const string ReviewAgentSessionFallback = "review_agent_session_fallback";
     public const string VerificationClaimsExtracted = "verification_claims_extracted";
     public const string VerificationLocalDecision = "verification_local_decision";
+    public const string AcceptanceForecast = "acceptance_forecast";
     public const string VerificationEvidenceCollected = "verification_evidence_collected";
     public const string VerificationPrDecision = "verification_pr_decision";
     public const string SummaryReconciliation = "summary_reconciliation";

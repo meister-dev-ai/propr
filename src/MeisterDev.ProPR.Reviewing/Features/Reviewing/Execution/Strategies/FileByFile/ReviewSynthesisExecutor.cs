@@ -45,7 +45,8 @@ internal sealed class ReviewSynthesisExecutor(
     IAiRuntimeResolver? aiRuntimeResolver,
     IChatClient? defaultChatClient = null,
     IFindingDeduplicator? findingDeduplicator = null,
-    IReviewFindingFinalizationPipeline? reviewFindingFinalizationPipeline = null)
+    IReviewFindingFinalizationPipeline? reviewFindingFinalizationPipeline = null,
+    AcceptanceForecastExecutor? acceptanceForecastExecutor = null)
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -215,6 +216,15 @@ internal sealed class ReviewSynthesisExecutor(
         if (!skipFinalGate && reviewFindingFinalizationPipeline is not null)
         {
             gateDecisions = await reviewFindingFinalizationPipeline.ApplyAsync(candidateFindings, gateDecisions, protocolId, ct).ConfigureAwait(false);
+        }
+
+        // Observe-only acceptance forecasting: one bounded model call that predicts the author's response per
+        // publishable finding and records it as a protocol event. Runs after the gate and the finalization
+        // checks so it sees the final publish set; changes nothing about the decisions or comments.
+        if (options.EnableAcceptanceForecast && acceptanceForecastExecutor is not null)
+        {
+            await acceptanceForecastExecutor.RecordForecastsAsync(job, candidateFindings, gateDecisions, aiRuntimeResolver, protocolId, ct)
+                .ConfigureAwait(false);
         }
 
         var reconciler = summaryReconciliationService ?? new SummaryReconciliationService();

@@ -34,6 +34,10 @@ internal static class PromptTemplateCatalog
                 PromptStageKeys.PerFileInventoryLensContextSystem,
                 PromptStageRole.System,
                 "file-by-file/per-file-inventory-lens-context-system.hbs"),
+            [PromptStageKeys.AcceptanceForecastSystem] = new(
+                PromptStageKeys.AcceptanceForecastSystem,
+                PromptStageRole.System,
+                "shared/acceptance-forecast-system.hbs"),
             [PromptStageKeys.PerFileUser] = new(PromptStageKeys.PerFileUser, PromptStageRole.User, "file-by-file/per-file-user.hbs"),
             [PromptStageKeys.AgenticFilePlanningSystem] = new(
                 PromptStageKeys.AgenticFilePlanningSystem,

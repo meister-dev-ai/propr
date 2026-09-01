@@ -31,6 +31,8 @@ internal static class PromptTemplateModels
 
     internal sealed record QualityFilterSystemModel(bool assertiveQualityFilter = false);
 
+    internal sealed record AcceptanceForecastModel(int findingCount);
+
     internal sealed record TriageUserModel(string filePath, string blastRadius, string prScope, string diff);
 
     internal sealed record ImportanceRankingSystemModel;

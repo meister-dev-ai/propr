@@ -120,6 +120,14 @@ public sealed class AiReviewOptions
     public bool EnableRetainedToolEvidence { get; set; } = true;
 
     /// <summary>
+    ///     Runs the observe-only acceptance forecaster after the finding gate: one bounded model call per review
+    ///     that predicts accept/discuss/dismiss per publishable finding and records the verdicts as a protocol
+    ///     event. Publication behavior is unchanged either way; the forecasts exist to be scored against the
+    ///     client's dismissal stream. Off by default because it adds a model call per review.
+    /// </summary>
+    public bool EnableAcceptanceForecast { get; set; }
+
+    /// <summary>
     ///     Maximum number of distinct tool-evidence entries retained across compaction when
     ///     <see cref="EnableRetainedToolEvidence" /> is enabled. Older entries beyond this count are not retained.
     /// </summary>

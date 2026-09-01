@@ -135,6 +135,11 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // Post-gate finalization checks compose on top of the deterministic gate without altering it. The
         // reread-before-ERROR floor is the first check; further checks join by being registered here.
         services.AddSingleton<IFindingFinalizationCheck, RereadFinalizationCheck>();
+        // Observe-only acceptance forecasting: the deterministic dismiss-class check joins the finalization
+        // pipeline (annotations only), and the batched model forecaster is invoked from synthesis when the
+        // per-instance option enables it. Neither changes a decision or a comment.
+        services.AddSingleton<IFindingFinalizationCheck, AcceptanceForecastCheck>();
+        services.AddSingleton<AcceptanceForecastExecutor>();
         services.AddScoped<IReviewFindingFinalizationPipeline, ReviewFindingFinalizationPipeline>();
         services.AddSingleton<IReviewInvariantFactProvider, DomainReviewInvariantFactProvider>();
         services.AddSingleton<IReviewInvariantFactProvider, PersistenceReviewInvariantFactProvider>();

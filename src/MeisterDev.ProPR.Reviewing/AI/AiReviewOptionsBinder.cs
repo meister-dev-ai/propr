@@ -63,6 +63,8 @@ public static class AiReviewOptionsBinder
         // Cross-compaction tool-evidence retention (experimental; A/B only).
         opts.EnableRetainedToolEvidence =
             TryGetBool(configuration, "AI_ENABLE_RETAINED_TOOL_EVIDENCE") ?? opts.EnableRetainedToolEvidence;
+        opts.EnableAcceptanceForecast =
+            TryGetBool(configuration, "AI_ACCEPTANCE_FORECAST") ?? opts.EnableAcceptanceForecast;
 
         // Reasoning capture into recorded assistant-turn output (off by default; data-retention gate).
         opts.CaptureReasoningInProtocol =
