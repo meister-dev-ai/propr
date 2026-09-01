@@ -91,27 +91,30 @@ public sealed class AcceptanceForecastExecutor(IProtocolRecorder protocolRecorde
                 ct).ConfigureAwait(false);
 
             var forecasts = ParseForecasts(response.Text, publishable);
-            if (forecasts.Count == 0)
-            {
-                return;
-            }
 
             await protocolRecorder.RecordVerificationEventAsync(
                 protocolId.Value,
                 ReviewProtocolEventNames.AcceptanceForecast,
                 JsonSerializer.Serialize(new { findingCount = publishable.Count, model = runtime.Model.RemoteModelId }, JsonOptions),
-                JsonSerializer.Serialize(forecasts, JsonOptions),
-                null,
+                forecasts.Count > 0 ? JsonSerializer.Serialize(forecasts, JsonOptions) : null,
+                forecasts.Count > 0 ? null : $"no parseable forecasts in response: {Truncate(response.Text ?? string.Empty, 180)}",
                 ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Observe-only: a failed forecast changes nothing about the review, so it is dropped rather than
-            // surfaced as a review problem. The absence of the protocol event is the trace.
+            // Observe-only: a failed forecast changes nothing about the review. The failure is still recorded
+            // as the event's error so a missing forecast is diagnosable from the protocol.
+            await protocolRecorder.RecordVerificationEventAsync(
+                protocolId.Value,
+                ReviewProtocolEventNames.AcceptanceForecast,
+                JsonSerializer.Serialize(new { findingCount = publishable.Count }, JsonOptions),
+                null,
+                $"{ex.GetType().Name}: {Truncate(ex.Message, 220)}",
+                ct).ConfigureAwait(false);
         }
     }
 
