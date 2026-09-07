@@ -37,8 +37,9 @@ where it is defined in full and kept up to date.
 |---|---|---|
 | Review increment | One revision of a pull request as ProPR reviewed it. Reviewing a new revision makes a new increment, which is why budget caps and diff archiving are counted per increment rather than per pull request. | [Reviews](concepts/reviews.md) |
 | Review pass | One sweep of a review model over the change. Every changed file gets one; a client's pass list can add more. | [Review passes](concepts/reviews.md#review-passes) |
-| Lens | The `None`, `Security` or `ProRV` setting on an extra pass: the choice of prompt, and with it the set of files that pass covers. | [Review passes](concepts/reviews.md#review-passes) |
+| Lens | The `None`, `Security`, `ProRV` or `Inventory` setting on an extra pass: the choice of prompt, and with it the set of files that pass covers. | [Review passes](concepts/reviews.md#review-passes) |
 | ProRV | The knowledge lens - the one that consults a catalog of per-language checks bundled with the product instead of working from the diff alone. | [Review passes](concepts/reviews.md#review-passes) |
+| Inventory | The diff-only lens: a single-turn pass with no repository tools that reports every plausible defect it can name, leaving deduplication, verification and the publication gate to filter the list. | [Review passes](concepts/reviews.md#review-passes) |
 | Shadow pass | A pass whose findings never leave the protocol, so a candidate model or lens can be trialled on real pull requests with nothing reaching the team. The tokens are billed anyway. | [Review passes](concepts/reviews.md#review-passes) |
 | Multi-pass union | The per-client switch without which an extra per-file pass does not fan out across the harder files. | [What you can tune](concepts/reviews.md#what-you-can-tune) |
 | Triage | The cheap per-file model call that classifies how complex a changed file is. | [AI purposes](ai/purposes.md#ai-purposes) |

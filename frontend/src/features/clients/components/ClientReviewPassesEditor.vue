@@ -237,6 +237,7 @@ const LENS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'None (resample)' },
   { value: 'security', label: 'Security' },
   { value: 'prorv', label: 'ProRV' },
+  { value: 'inventory', label: 'Inventory' },
 ]
 
 // The closed scope vocabulary offered per pass. '' is the per-file default (persisted as null); a value
@@ -417,7 +418,10 @@ const rawModelLabel = (row: PassRow): string => {
 const reasoningLabel = (value: string): string =>
   REASONING_EFFORT_OPTIONS.find((option) => option.value === value)?.label ?? 'None'
 
-const lensLabel = (value: string): string => LENS_OPTIONS.find((option) => option.value === value)?.label ?? 'None (resample)'
+// An unrecognised lens renders as its own raw value. The backend vocabulary can grow ahead of this list, and
+// a pass carrying a lens this build does not know must not read as an ordinary resample pass — that would
+// misreport the client's configuration instead of showing that the value is unfamiliar.
+const lensLabel = (value: string): string => LENS_OPTIONS.find((option) => option.value === value)?.label ?? value
 
 const scopeLabel = (value: string): string => SCOPE_OPTIONS.find((option) => option.value === value)?.label ?? 'Per-file'
 

@@ -99,13 +99,58 @@ describe('ClientReviewPassesEditor model greying', () => {
 })
 
 describe('ClientReviewPassesEditor lens selector', () => {
-    it('offers None, Security, and ProRV lens options', async () => {
+    it('offers every lens the backend recognises', async () => {
         const wrapper = mount(ClientReviewPassesEditor, {
             props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
         })
 
         await openEdit(wrapper)
-        expect(optionValues(wrapper, 'review-pass-lens')).toEqual(['', 'security', 'prorv'])
+        expect(optionValues(wrapper, 'review-pass-lens')).toEqual(['', 'security', 'prorv', 'inventory'])
+    })
+
+    it('hydrates and re-emits a lens unchanged when the pass is saved untouched', async () => {
+        // A lens the selector can offer must survive an edit that does not touch it. When the option is
+        // missing the select cannot hold the value, and saving silently rewrites the pass to another lens.
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: {
+                modelValue: [{ ordinal: 0, configuredModelId: 'm1', lens: 'inventory' }] as ReviewPassEntry[],
+                connections,
+            },
+        })
+
+        await openEdit(wrapper)
+        expect((wrapper.find('[data-testid="review-pass-lens"]').element as HTMLSelectElement).value).toBe('inventory')
+
+        await save(wrapper)
+        expect(lastEmittedPasses(wrapper)[0].lens).toBe('inventory')
+    })
+
+    it('labels a lens in the pass table instead of reading it as an ordinary pass', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: {
+                modelValue: [
+                    { ordinal: 0, configuredModelId: 'm1', lens: 'inventory' },
+                    { ordinal: 1, configuredModelId: 'm2' },
+                ] as ReviewPassEntry[],
+                connections,
+            },
+        })
+
+        const lensCells = wrapper.findAll('[data-testid="review-pass-row"]').map(row => row.findAll('td')[3].text())
+        expect(lensCells).toEqual(['Inventory', 'None (resample)'])
+    })
+
+    it('shows an unrecognised lens as its own value rather than as an ordinary pass', async () => {
+        // The backend vocabulary can grow ahead of this component. An unknown lens must render as itself so
+        // the table reports that the value is unfamiliar, not that the pass is a plain resample.
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: {
+                modelValue: [{ ordinal: 0, configuredModelId: 'm1', lens: 'not-a-known-lens' }] as ReviewPassEntry[],
+                connections,
+            },
+        })
+
+        expect(wrapper.find('[data-testid="review-pass-row"]').findAll('td')[3].text()).toBe('not-a-known-lens')
     })
 
     it('emits the chosen lens on the entry after saving', async () => {

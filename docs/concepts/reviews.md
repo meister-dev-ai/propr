@@ -171,7 +171,7 @@ Per entry you choose:
 | Field | What it decides |
 |---|---|
 | Model | A [logical model](models.md) by name, which brings its own reasoning effort, or a connection and model chosen directly, with a reasoning effort set on the pass |
-| Lens | `None`, `Security` or `ProRV` - which prompt the pass runs, and which files it applies to |
+| Lens | `None`, `Security`, `ProRV` or `Inventory` - which prompt the pass runs, and which files it applies to |
 | Scope | `Per-file`, or `PR-wide` for one pass over the whole change set |
 | Shadow | Whether the pass runs without publishing anything |
 
@@ -185,6 +185,11 @@ The lens decides both the prompt and the files:
   per-language checks derived from CodeQL plus GitHub Actions attack classes, and hands the reviewer the
   checks that apply as focused guidance. A file the catalog matches nothing for is skipped for that pass.
   Any complexity tier.
+- **Inventory** - the diff-only lens. The pass reads the file's diff text and works from that alone: it
+  gets no repository tools and answers in one turn. It reports every plausible defect it can name, with
+  severity carrying the model's confidence, so what it produces is a candidate list that deduplication,
+  verification and the publication gate then filter. This trades precision per comment for coverage of
+  the changed lines. It runs on any text file with a diff, at any complexity tier, and skips binary files.
 
 Scope decides where the pass runs. A per-file pass runs alongside the baseline on each file it is in
 scope for, and its findings are unioned with the baseline before deduplication; per-file passes only
