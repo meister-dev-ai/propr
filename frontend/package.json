@@ -35,7 +35,7 @@
     "@playwright/test": "^1.61.0",
     "@types/node": "^25.9.3",
     "@vitejs/plugin-vue": "^6.0.7",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.11",
     "@vue/test-utils": "^2.4.11",
     "cross-env": "^10.1.0",
     "jsdom": "^29.1.1",
@@ -46,7 +46,7 @@
     "typescript": "^5.9.3",
     "vite": "^8.0.16",
     "vite-plugin-vuetify": "^2.0.4",
-    "vitest": "^4.1.8",
+    "vitest": "^4.1.11",
     "vue-tsc": "^3.3.5"
   },
   "overrides": {

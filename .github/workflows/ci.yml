@@ -248,3 +248,47 @@ jobs:
         with:
           sarif_file: ${{ steps.scan-frontend.outputs.sarif }}
           category: frontend-image
+
+  # Built and scanned here as well as in the release workflow. A release-tag scan records its alerts
+  # against the tag ref, and those do not appear in the default branch's alert list, so a stale base
+  # image pin in Dockerfile.runner survived a full release without being reported.
+  build-runner-image:
+    name: Build runner image
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.1.0
+
+      - name: Build runner image
+        uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          file: Dockerfile.runner
+          push: false
+          load: true
+          pull: true
+          tags: meisterpropr-runner:ci-${{ github.run_number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan runner image
+        uses: anchore/scan-action@v7.4.0
+        id: scan-runner
+        with:
+          image: meisterpropr-runner:ci-${{ github.run_number }}
+          fail-build: false
+          output-format: sarif
+
+      - name: Upload runner scan results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: ${{ steps.scan-runner.outputs.sarif }}
+          category: runner-image
