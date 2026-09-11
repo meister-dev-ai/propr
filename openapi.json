@@ -27537,12 +27537,27 @@
           },
           "sampleSize": {
             "type": "integer",
-            "description": "What the metric rests on: sealed pull requests for correctness, resolved findings for acceptance.",
+            "description": "On the correctness lens, the sealed pull requests behind the ratios. On the acceptance lens, the\nresolved findings the rate is a proportion of, because acceptance does not wait for a close.",
             "format": "int32"
           },
           "discussed": {
             "type": "integer",
             "description": "Findings a human engaged with and left unresolved: neither accepted nor rejected. Counted here and absent\nfrom every ratio, so a caller can show how many threads ended without a verdict without treating them as\nevidence either way.",
+            "format": "int32"
+          },
+          "coveredSampleSize": {
+            "type": "integer",
+            "description": "Correctness only. Of `SampleSize`, how many pull requests had both sides of the recall ratio\nsettled: every finding carrying a verdict, and every harvested thread that could still become a miss\njudged against a state that answers whether its concern was acted on. `Recall` and `F1` are\ncomputed over these alone; `Precision` rests on the full sample. Zero on the acceptance lens,\nwhich reports no recall.",
+            "format": "int32"
+          },
+          "coveredTruePositives": {
+            "type": "integer",
+            "description": "Correctness only. The true positives of the covered pull requests, which is the numerator of the\nreported `Recall`. The flattened counts above cover the whole sample, so recomputing recall from\nthem would fold in pull requests the ratio excludes.",
+            "format": "int32"
+          },
+          "coveredMisses": {
+            "type": "integer",
+            "description": "Correctness only. The qualifying misses of the covered pull requests. With\n`CoveredTruePositives` this reproduces the reported `Recall` exactly.",
             "format": "int32"
           }
         },

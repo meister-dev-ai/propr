@@ -36,6 +36,7 @@ public sealed partial class CodeInsightSealSweeper(
     IJobRepository jobRepository,
     ILogger<CodeInsightSealSweeper> logger,
     IPullRequestFetcher? pullRequestFetcher = null,
+    ICodeInsightCloseObserver? closeObserver = null,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : ICodeInsightSealSweeper
 {
     public async Task<int> SweepAsync(
@@ -116,6 +117,29 @@ public sealed partial class CodeInsightSealSweeper(
                 // Still open. The provider also reports Active for a transient failure, which is the safe answer
                 // here: a measurement postponed is recoverable, one sealed against a wrong status is not.
                 return false;
+            }
+
+            // This pull request closed without any pass observing it, so its human threads were last judged
+            // while they were open, before the acted-on question could have an answer. Observing now is the one
+            // opportunity to revise those judgements: the seal below counts what is already recorded, and it
+            // never moves once written.
+            if (closeObserver is not null)
+            {
+                try
+                {
+                    await closeObserver.ObserveAsync(
+                        new CodeInsightPullRequestKey(candidate.ClientId, candidate.RepositoryId, candidate.PullRequestId),
+                        job.OrganizationUrl,
+                        job.ProjectId,
+                        ct);
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    // The observer already swallows its own failures. Catching again here keeps a failed
+                    // observation from costing the measurement as well, which the enclosing catch would do by
+                    // returning without sealing.
+                    LogObservationFailed(logger, candidate.PullRequestId, candidate.ClientId, ex);
+                }
             }
 
             return await sealer.SealAsync(

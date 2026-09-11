@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Commands.HandleProviderWebhookDelivery;
@@ -74,6 +75,12 @@ public static class CrawlingModuleServiceCollectionExtensions
 
         services.AddAzureDevOpsCrawlingServices(configuration);
         services.AddScoped<IPullRequestSynchronizationService, PullRequestSynchronizationService>();
+
+        // The close observation both seal paths share. It lives here, not in the code-insight module, because
+        // deciding whether a comment is ProPR's own needs the posted-comment provenance and the
+        // thread-ownership resolver. Registered unconditionally: it observes nothing when the code-insight
+        // harvester is absent, and the sweep and the lifecycle pass both take it as optional.
+        services.AddScoped<ICodeInsightCloseObserver, PullRequestCloseObserver>();
         services.AddScoped<IWebhookReviewActivationService, WebhookReviewActivationService>();
         services.AddScoped<IWebhookReviewLifecycleSyncService, WebhookReviewLifecycleSyncService>();
         services.AddScoped<HandleProviderWebhookDeliveryHandler>();

@@ -208,6 +208,11 @@ public sealed partial class PrCrawlService(
                         RepositoryId = activeJob.RepositoryId,
                         PullRequestId = activeJob.PullRequestId,
                         PullRequestStatus = status,
+
+                        // Carried because synchronization resolves the client's SCM connection by provider
+                        // family. The request's own default is Azure DevOps, so a configuration on any other
+                        // host would resolve against a connection family the client does not have.
+                        Provider = config.Provider,
                         AllowReviewSubmission = false,
                     },
                     cancellationToken);

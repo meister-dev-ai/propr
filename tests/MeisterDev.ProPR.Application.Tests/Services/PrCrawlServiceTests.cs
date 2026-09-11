@@ -1359,4 +1359,60 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<CancellationToken>());
         await this._jobs.DidNotReceive().SetCancelledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task CrawlAsync_OrphanedJobLifecycle_CarriesTheConfiguredProvider()
+    {
+        // The active pass resolves the client's SCM connection by provider family, and the request's own
+        // default is Azure DevOps. A configuration on any other host needs the provider carried explicitly, or
+        // that resolution looks for a connection the client does not have.
+        // The scope path moves with the provider: a configuration that says GitHub while still pointing at an
+        // Azure DevOps organisation URL would not exercise the resolution this guards.
+        var config = DefaultConfig with
+        {
+            Provider = ScmProvider.GitHub,
+            ProviderScopePath = "https://github.com/contoso",
+            ProviderProjectKey = "contoso",
+        };
+        var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
+        var sut = this.CreateSutWithSharedSynchronizationService(synchronizationService);
+        var orphanJob = new ReviewJob(
+            Guid.NewGuid(),
+            config.ClientId,
+            config.ProviderScopePath,
+            config.ProviderProjectKey,
+            "repo-1",
+            99,
+            3);
+
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>()).Returns([]);
+        this._jobs.GetActiveJobsForConfigAsync(
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                Arg.Any<CancellationToken>())
+            .Returns([orphanJob]);
+        this._statusFetcher.GetStatusAsync(
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                orphanJob.RepositoryId,
+                orphanJob.PullRequestId,
+                config.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(PrStatus.Completed);
+
+        await sut.CrawlAsync();
+
+        await synchronizationService.Received(1)
+            .SynchronizeAsync(
+                Arg.Is<PullRequestSynchronizationRequest>(request =>
+                    request.SummaryLabel == "crawl disappearance"
+                    && request.Provider == ScmProvider.GitHub
+                    && request.ProviderScopePath == "https://github.com/contoso"
+                    && request.ProviderProjectKey == "contoso"
+                    && request.ClientId == config.ClientId
+                    && request.RepositoryId == orphanJob.RepositoryId
+                    && request.PullRequestId == orphanJob.PullRequestId),
+                Arg.Any<CancellationToken>());
+    }
 }

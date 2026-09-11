@@ -137,7 +137,7 @@ const BY_SCOPE = [
     repositoryId: 'quiet-service',
     repositoryName: null,
     pullRequestId: null,
-    metric: { ...metricDefaults(), precision: 0.5, recall: 0.31, f1: 0.38, falsePositive: 9, misses: 20, sampleSize: 11 },
+    metric: { ...metricDefaults(), precision: 0.5, recall: 0.31, f1: 0.38, falsePositive: 9, misses: 20, sampleSize: 11, coveredSampleSize: 11 },
     modelId: null,
     logicalModelName: null,
   },
@@ -147,7 +147,7 @@ const BY_SCOPE = [
     repositoryId: '7',
     repositoryName: 'internal-tools',
     pullRequestId: null,
-    metric: { ...metricDefaults(), precision: 1, recall: 1, f1: 1, falsePositive: 0, misses: 0, sampleSize: 3 },
+    metric: { ...metricDefaults(), precision: 1, recall: 1, f1: 1, falsePositive: 0, misses: 0, sampleSize: 3, coveredSampleSize: 3 },
     modelId: null,
     logicalModelName: null,
   },
@@ -166,6 +166,12 @@ function metricDefaults() {
     misses: 0,
     sampleSize: 0,
     discussed: 0,
+
+    // Coverage is a subset of the closed sample. A fixture that reports a measured ratio has to say the
+    // pull requests behind it were measured, or it describes a payload the server cannot produce.
+    coveredSampleSize: 0,
+    coveredTruePositives: 0,
+    coveredMisses: 0,
   }
 }
 
@@ -182,7 +188,13 @@ function metric(overrides: Partial<CodeInsightQuality['correctnessTotal']> = {})
     misses: 3,
     sampleSize: 12,
     discussed: 0,
+    coveredTruePositives: 0,
+    coveredMisses: 0,
     ...overrides,
+    // Coverage is a subset of the closed sample: a fixture that lowers one lowers the other unless it says
+    // otherwise, so no test can assert on a metric that cannot exist.
+    coveredSampleSize:
+      overrides.coveredSampleSize ?? (overrides.sampleSize as number | undefined) ?? 12,
   }
 }
 
@@ -373,6 +385,48 @@ describe('ReviewerPerformanceView', () => {
     const days = (Date.parse(scope.to) - Date.parse(scope.from)) / 86_400_000
 
     expect(days).toBeGreaterThan(30)
+  })
+
+  it('says why the F1 chart is blank when no period was measured completely enough', async () => {
+    // Buckets exist, so the no-measurements empty state does not apply. Without its own note the chart is
+    // simply blank, which reads as an absence of pull requests.
+    qualityMock.mockResolvedValue(
+      quality({
+        correctness: [
+          { bucketStart: '2026-06-01', metric: metric({ sampleSize: 40, coveredSampleSize: 1, f1: 0.5 }) },
+          { bucketStart: '2026-06-08', metric: metric({ sampleSize: 40, coveredSampleSize: 2, f1: 0.6 }) },
+        ],
+        correctnessTotal: metric({ sampleSize: 80, coveredSampleSize: 3 }),
+      }),
+    )
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('measured completely enough to place an F1 against')
+    expect(wrapper.text()).not.toContain('No pull request has been measured in this window')
+  })
+
+  it('withholds recall and F1 while showing precision when too few closes were fully measured', async () => {
+    // Coverage is the narrower sample. Precision rests on every closed pull request and stays readable, while
+    // recall waits for the closes whose findings all carried a verdict and whose threads all settled.
+    qualityMock.mockResolvedValue(
+      quality({
+        correctnessTotal: metric({ sampleSize: 40, coveredSampleSize: 3, precision: 0.9, recall: 0.6, f1: 0.72 }),
+      }),
+    )
+
+    const wrapper = await mountView()
+
+    // Read off the cards, not the page: a percentage anywhere else would otherwise decide this either way.
+    const cards = wrapper.findAll('.metric-card')
+    const valueOf = (heading: string) =>
+      cards.find((card) => card.find('h4').text() === heading)?.find('.metric-value').text()
+
+    expect(valueOf('Precision')).toBe('90.0%')
+    expect(valueOf('Recall')).toBe('—')
+    expect(valueOf('F1')).toBe('—')
+    expect(wrapper.text()).toContain('3 of 40 closed pull requests were measured completely enough')
+    expect(wrapper.text()).toContain('10 are needed')
   })
 
   it('suppresses the correctness ratios below the minimum sample and says why', async () => {

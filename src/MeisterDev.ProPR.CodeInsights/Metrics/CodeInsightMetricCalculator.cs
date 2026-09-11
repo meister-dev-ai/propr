@@ -105,10 +105,19 @@ public readonly record struct CodeInsightMetrics(
 public static class CodeInsightMetricCalculator
 {
     /// <summary>Computes both lenses over <paramref name="inputs" />.</summary>
-    public static CodeInsightMetrics Compute(CodeInsightMetricInputs inputs)
+    /// <param name="inputs">The counted outcomes.</param>
+    /// <param name="recallIsMeasurable">
+    ///     Whether both sides of the recall ratio were settled. When false, recall and F1 come back
+    ///     <see langword="null" />: a numerator counted over the findings that reached an outcome, divided by a
+    ///     denominator that is short by an unknown number of misses, is a number nobody can act on. Precision
+    ///     and acceptance are unaffected, because both are ratios over the resolved findings by definition.
+    /// </param>
+    public static CodeInsightMetrics Compute(CodeInsightMetricInputs inputs, bool recallIsMeasurable = true)
     {
         var precision = Ratio(inputs.TruePositives, inputs.TruePositives + inputs.FalsePositives);
-        var recall = Ratio(inputs.TruePositives, inputs.TruePositives + inputs.FalseNegatives);
+        var recall = recallIsMeasurable
+            ? Ratio(inputs.TruePositives, inputs.TruePositives + inputs.FalseNegatives)
+            : null;
 
         return new CodeInsightMetrics(
             inputs,

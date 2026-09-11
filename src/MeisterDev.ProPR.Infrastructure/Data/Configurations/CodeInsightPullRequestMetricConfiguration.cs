@@ -68,6 +68,9 @@ internal sealed class CodeInsightPullRequestMetricConfiguration
             .HasColumnName("open_at_seal_count")
             .IsRequired();
 
+        builder.Property(metric => metric.UnsettledMissCount)
+            .HasColumnName("unsettled_miss_count");
+
         // Nullable on purpose: an undefined ratio is not zero, and a NOT NULL column with a zero default would
         // make "nothing resolved" indistinguishable from "everything was wrong".
         builder.Property(metric => metric.Precision)

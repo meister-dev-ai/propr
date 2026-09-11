@@ -174,6 +174,9 @@ public static class CodeInsightQueries
             inputs.FalsePositive,
             inputs.Misses,
             result.SampleSize,
-            inputs.Discussed);
+            Discussed: inputs.Discussed,
+            CoveredSampleSize: result.CoveredSampleSize,
+            CoveredTruePositives: result.CoveredInputs.TruePositives,
+            CoveredMisses: result.CoveredInputs.Misses);
     }
 }

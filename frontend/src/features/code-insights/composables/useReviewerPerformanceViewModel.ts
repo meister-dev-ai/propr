@@ -110,6 +110,24 @@ export function useReviewerPerformanceViewModel() {
     return current.correctnessTotal.sampleSize >= current.minimumSampleSize
   })
 
+  /**
+   * Whether recall rests on enough fully measured pull requests to be read as a number. Recall is withheld for
+   * a pull request that left findings undecided or threads unjudged, so its sample is its own and smaller than
+   * the sealed one the panel gates on.
+   */
+  const hasEnoughRecallSample = computed(() => {
+    const current = quality.value
+    if (!current) return false
+    // coveredSampleSize is the canonical recall sample: the server computes recall and F1 over those pull
+    // requests and nothing else. Coverage is a subset of the closed sample, so the second clause normally
+    // implies the first; both are checked so a payload that disagrees withholds the ratio instead of showing
+    // it on evidence it does not have.
+    return (
+      current.correctnessTotal.sampleSize >= current.minimumSampleSize &&
+      current.correctnessTotal.coveredSampleSize >= current.minimumSampleSize
+    )
+  })
+
   async function load(): Promise<void> {
     loading.value = true
     error.value = null
@@ -260,6 +278,7 @@ export function useReviewerPerformanceViewModel() {
     loadRejectionReasons,
     scopeGrain,
     hasEnoughCorrectnessSample,
+    hasEnoughRecallSample,
     drill,
     drillFindings,
     drillLoading,

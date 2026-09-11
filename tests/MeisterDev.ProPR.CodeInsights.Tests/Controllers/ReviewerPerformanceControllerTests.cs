@@ -281,6 +281,24 @@ public sealed class ReviewerPerformanceControllerTests
     }
 
     [Fact]
+    public async Task TheCorrectnessTrendCountsThePullRequestsItsRecallRestsOn()
+    {
+        // Every bucket here has ten sealed pull requests but only one whose recall could be measured. Reading
+        // the floor against the sealed count would draw a trend from those single pull requests and present it
+        // as the period's.
+        var harness = new CodeInsightAudienceHarness(tenantAdmin: true, minimumSampleSize: "2");
+        harness.WithPartlyCoveredCorrectnessSeries(
+            (new DateOnly(2026, 6, 1), 0.40, 10, 1),
+            (new DateOnly(2026, 6, 8), 0.43, 10, 1),
+            (new DateOnly(2026, 6, 15), 0.46, 10, 1),
+            (new DateOnly(2026, 6, 22), 0.49, 10, 1));
+
+        var trend = Quality(await harness.ReviewerPerformance.GetQuality()).CorrectnessTrend;
+
+        Assert.Equal(CodeInsightTrendDirection.Insufficient, trend.Direction);
+    }
+
+    [Fact]
     public async Task ARisingTrendReadsAsImprovingAndAFallingOneAsDeclining()
     {
         var harness = new CodeInsightAudienceHarness(tenantAdmin: true, minimumSampleSize: "2");

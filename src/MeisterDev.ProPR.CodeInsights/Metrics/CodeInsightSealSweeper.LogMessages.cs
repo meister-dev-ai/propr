@@ -28,4 +28,10 @@ public sealed partial class CodeInsightSealSweeper
         Message = "Recording the seal attempt on aggregate {AggregateId} failed; the next sweep may spend a slot "
                   + "on it again.")]
     private static partial void LogAttemptNotRecorded(ILogger logger, Guid aggregateId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Observing the threads of PR {PullRequestId} (client {ClientId}) failed; it is sealed from the "
+                  + "judgements already recorded.")]
+    private static partial void LogObservationFailed(ILogger logger, long pullRequestId, Guid clientId, Exception ex);
 }

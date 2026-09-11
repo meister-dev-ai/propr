@@ -42,6 +42,7 @@ public sealed class PullRequestSynchronizationService(
     ICodeInsightDispositionService? codeInsightDispositionService = null,
     ICodeInsightMissHarvester? codeInsightMissHarvester = null,
     ICodeInsightMetricSealer? codeInsightMetricSealer = null,
+    ICodeInsightCloseObserver? codeInsightCloseObserver = null,
     IThreadPassJobRepository? threadPassJobs = null,
     IScmProviderRegistry? providerRegistry = null,
     IReviewPrScanPendingReviewWriter? prScanPendingReviewWriter = null) : IPullRequestSynchronizationService
@@ -454,6 +455,13 @@ public sealed class PullRequestSynchronizationService(
         // correctness measurement is taken, and it runs before the job reconciliation below because the common
         // case has no active job left to cancel: the review finished long before the pull request did. The
         // sealer decides for itself whether anything is measurable, and never throws back into the crawl.
+        //
+        // The threads are observed once first. A human thread that reached its resolved state as part of this
+        // close has never been seen in that state: every earlier pass ran while the pull request was active,
+        // and there will be no later one. Its harvested judgement was taken while the thread was still open,
+        // before the acted-on question could have an answer, and the seal counts only judgements already
+        // recorded.
+        await this.ObserveThreadsOnCloseAsync(request, ct);
         await this.SealCodeInsightMetricAsync(request, ct);
 
         var activeJobs = await jobs.GetActiveJobsForConfigAsync(
@@ -532,6 +540,44 @@ public sealed class PullRequestSynchronizationService(
                 "Cancelling thread-pass work for closed PR {PullRequestId} failed.",
                 request.PullRequestId);
             return 0;
+        }
+    }
+
+    /// <summary>
+    ///     Observes the pull request's threads one last time as it closes, so a judgement taken while a thread
+    ///     was open can be revised before the measurement is sealed.
+    /// </summary>
+    /// <remarks>
+    ///     The same seam the seal sweep calls, so a close this pass sees and a close only the sweep finds are
+    ///     observed identically. Costs nothing when the observer is not registered. A failed observation is
+    ///     swallowed so the seal and the job reconciliation below still run; a cancelled one is not, and ends
+    ///     the pass.
+    /// </remarks>
+    private async Task ObserveThreadsOnCloseAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct)
+    {
+        if (codeInsightCloseObserver is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await codeInsightCloseObserver.ObserveAsync(
+                new CodeInsightPullRequestKey(request.ClientId, request.RepositoryId, request.PullRequestId),
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // The observer already swallows its own failures. Catching again here means a substitute or a
+            // future implementation that does not cannot cost the measurement or the job cancellation.
+            logger.LogWarning(
+                ex,
+                "Observing the threads of closed PR {PullRequestId} failed; the measurement is sealed from the judgements already recorded.",
+                request.PullRequestId);
         }
     }
 
@@ -1242,26 +1288,10 @@ public sealed class PullRequestSynchronizationService(
         return connections
             .Where(connection => connection.IsActive
                                  && connection.ProviderFamily == host.Provider
-                                 && ConnectionHostMatchesAuthority(connection.HostBaseUrl, host.HostBaseUrl))
+                                 && ScmConnectionHostMatch.MatchesAuthority(connection.HostBaseUrl, host.HostBaseUrl))
             // Prefer the most specific host match when several connections share an authority.
             .OrderByDescending(connection => connection.HostBaseUrl.Length)
             .FirstOrDefault();
-    }
-
-    private static bool ConnectionHostMatchesAuthority(string connectionHostBaseUrl, string hostAuthority)
-    {
-        // The request host is normalized to an authority (scheme://host[:port]); a connection's stored
-        // host base URL may carry a path (e.g. an Azure DevOps organization URL). Match on the authority.
-        if (!Uri.TryCreate(connectionHostBaseUrl.Trim(), UriKind.Absolute, out var connectionUri))
-        {
-            return string.Equals(
-                connectionHostBaseUrl.Trim().TrimEnd('/'),
-                hostAuthority.Trim().TrimEnd('/'),
-                StringComparison.OrdinalIgnoreCase);
-        }
-
-        var connectionAuthority = connectionUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
-        return string.Equals(connectionAuthority, hostAuthority.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
     }
 
     private static ThreadUpdatedEvent BuildThreadUpdatedEvent(
@@ -1270,58 +1300,13 @@ public sealed class PullRequestSynchronizationService(
         PrCommentThread thread,
         ThreadOwnershipResolver ownership)
     {
-        var comments = new List<ThreadUpdatedComment>(thread.Comments.Count);
-        var lastActivityAt = DateTimeOffset.MinValue;
-        var threadId = thread.ThreadId!;
-
-        foreach (var comment in thread.Comments)
-        {
-            var publishedAt = comment.PublishedAt ?? DateTimeOffset.UtcNow;
-            if (publishedAt > lastActivityAt)
-            {
-                lastActivityAt = publishedAt;
-            }
-
-            var commentId = comment.CommentId.ToString(CultureInfo.InvariantCulture);
-            var commentRef = new ThreadCommentRef(threadId, commentId, comment.AuthorId, comment.AuthorName);
-
-            comments.Add(
-                new ThreadUpdatedComment(
-                    commentId,
-                    ResolveAuthorIdentity(comment),
-                    ownership.OwnsComment(commentRef),
-                    publishedAt,
-                    comment.Content,
-                    ownership.ResolveOriginatingJobId(threadId, commentId),
-                    comment.IsSystemGenerated));
-        }
-
-        if (lastActivityAt == DateTimeOffset.MinValue)
-        {
-            lastActivityAt = DateTimeOffset.UtcNow;
-        }
-
-        return new ThreadUpdatedEvent(
+        return ThreadUpdatedEventFactory.Build(
             request.ClientId,
             connectionId,
             request.RepositoryId,
             request.PullRequestId,
-            threadId,
-            thread.FilePath,
-            thread.LineNumber,
-            thread.Status ?? "Active",
-            lastActivityAt,
-            comments);
-    }
-
-    private static string ResolveAuthorIdentity(PrThreadComment comment)
-    {
-        if (comment.AuthorId.HasValue && comment.AuthorId.Value != Guid.Empty)
-        {
-            return comment.AuthorId.Value.ToString("D");
-        }
-
-        return string.IsNullOrWhiteSpace(comment.AuthorName) ? "unknown" : comment.AuthorName;
+            thread,
+            ownership);
     }
 
     /// <summary>

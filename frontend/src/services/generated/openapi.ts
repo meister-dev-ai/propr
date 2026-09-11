@@ -18945,6 +18945,27 @@ export interface components {
              *     evidence either way.
              */
             discussed?: number;
+            /**
+             * Format: int32
+             * @description Of `SampleSize`, how many pull requests had both sides of the recall ratio settled: every finding
+             *     decided, and every harvested thread judged against a state that could answer whether its concern was
+             *     acted on. `Recall` and `F1` are computed over these alone, so this is the count they rest on;
+             *     `Precision` and `AcceptanceRate` rest on the full sample.
+             */
+            coveredSampleSize?: number;
+            /**
+             * Format: int32
+             * @description The true positives of the covered pull requests, which is the numerator of the reported `Recall`.
+             *     The flattened counts above cover the whole sample, so recomputing recall from them would fold in pull
+             *     requests the ratio excludes.
+             */
+            coveredTruePositives?: number;
+            /**
+             * Format: int32
+             * @description The qualifying misses of the covered pull requests. With `CoveredTruePositives` this reproduces the
+             *     reported `Recall` exactly.
+             */
+            coveredMisses?: number;
         };
         /** @description One harvested human thread, with all three judgements, including the threads that did not qualify. */
         CodeInsightMissResponse: {

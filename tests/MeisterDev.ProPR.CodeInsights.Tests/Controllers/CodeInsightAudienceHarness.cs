@@ -270,6 +270,7 @@ internal sealed class CodeInsightAudienceHarness
         Assert.Equal(expected.OrderBy(id => id), query.ClientIds.OrderBy(id => id));
     }
 
+    /// <summary>A correctness series whose buckets were all fully measured.</summary>
     public void WithCorrectnessSeries(params (DateOnly Bucket, double F1, int SampleSize)[] points)
     {
         this.Metrics
@@ -280,6 +281,25 @@ internal sealed class CodeInsightAudienceHarness
             .Returns(
                 points
                     .Select(point => new CodeInsightMetricSeriesPoint(point.Bucket, Result(point.F1, point.SampleSize)))
+                    .ToList());
+    }
+
+    /// <summary>
+    ///     A correctness series whose buckets are sealed but whose recall rests on fewer pull requests than
+    ///     the seal count. That is the shape a period of partly observed closes has.
+    /// </summary>
+    public void WithPartlyCoveredCorrectnessSeries(params (DateOnly Bucket, double F1, int SampleSize, int CoveredSampleSize)[] points)
+    {
+        this.Metrics
+            .GetCorrectnessSeriesAsync(
+                Arg.Do<CodeInsightRollupQuery>(this.RequestedMetricScopes.Add),
+                Arg.Do<CodeInsightBucketSize>(this.RequestedMetricBuckets.Add),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                points
+                    .Select(point => new CodeInsightMetricSeriesPoint(
+                        point.Bucket,
+                        Result(point.F1, point.SampleSize, point.CoveredSampleSize)))
                     .ToList());
     }
 
@@ -303,6 +323,11 @@ internal sealed class CodeInsightAudienceHarness
                                 row.F1,
                                 row.F1,
                                 row.F1),
+                            row.SampleSize,
+
+                            // These rows present a measured recall, so their coverage is the whole sample.
+                            // Leaving it at zero would build a metric that reports a ratio it says rests on
+                            // nothing.
                             row.SampleSize)))
                     .ToList());
     }
@@ -389,11 +414,12 @@ internal sealed class CodeInsightAudienceHarness
     ///     A metric result whose ratios are the requested value. The inputs are deliberately not made consistent
     ///     with it: these tests are about scoping and presentation, and the arithmetic has its own tests.
     /// </summary>
-    private static CodeInsightMetricResult Result(double ratio, int sampleSize)
+    private static CodeInsightMetricResult Result(double ratio, int sampleSize, int? coveredSampleSize = null)
     {
         return new CodeInsightMetricResult(
             new CodeInsightMetrics(new CodeInsightMetricInputs(1, 0, 0, 1, 1), ratio, ratio, ratio, ratio),
-            sampleSize);
+            sampleSize,
+            coveredSampleSize ?? sampleSize);
     }
 
     private static CodeInsightMissRow Miss(bool countsAsMiss)

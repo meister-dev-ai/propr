@@ -19,7 +19,50 @@ namespace MeisterDev.ProPR.CodeInsights.Metrics;
 ///     How much the result rests on: sealed pull requests for a correctness result, resolved findings for an
 ///     acceptance one.
 /// </param>
-public sealed record CodeInsightMetricResult(CodeInsightMetrics Metrics, int SampleSize);
+/// <param name="CoveredSampleSize">
+///     Of <paramref name="SampleSize" />, the pull requests whose recall inputs were fully settled: every
+///     finding carrying a verdict, and every harvested thread judged against a state that could answer whether
+///     its concern was acted on. <c>Recall</c> and <c>F1</c> are computed over these alone; <c>Precision</c>
+///     and <c>AcceptanceRate</c> over the whole sample. Zero on an acceptance result, which reports no recall.
+/// </param>
+/// <param name="CoveredInputs">
+///     The counts <c>Recall</c> and <c>F1</c> were derived from, which are those of the covered pull requests
+///     alone. Carried because reproducing a metric from its inputs is an acceptance criterion here, and
+///     <c>Metrics.Inputs</c> covers the whole sample: recomputing recall from it would fold in the true
+///     positives and misses of pull requests the ratio deliberately excludes.
+/// </param>
+public sealed record CodeInsightMetricResult(
+    CodeInsightMetrics Metrics,
+    int SampleSize,
+    int CoveredSampleSize = 0,
+    CodeInsightMetricInputs CoveredInputs = default)
+{
+    /// <summary>
+    ///     Of <see cref="SampleSize" />, the pull requests whose recall inputs were fully settled.
+    /// </summary>
+    /// <remarks>
+    ///     Coverage is a subset of the sample, so a value above it describes a result no read can produce. A
+    ///     caller that built one would report a recall resting on more evidence than the metric has.
+    /// </remarks>
+    public int CoveredSampleSize { get; } = CoveredSampleSize is >= 0 && CoveredSampleSize <= SampleSize
+        ? CoveredSampleSize
+        : throw new ArgumentOutOfRangeException(
+            nameof(CoveredSampleSize),
+            CoveredSampleSize,
+            $"Covered pull requests must be between 0 and the sample of {SampleSize}.");
+
+    /// <summary>The counts <c>Recall</c> and <c>F1</c> were derived from.</summary>
+    /// <remarks>
+    ///     No covered pull requests means nothing was counted over them. Carrying inputs beside a coverage of
+    ///     zero would offer a caller a recall to re-derive from a population the result says is empty.
+    /// </remarks>
+    public CodeInsightMetricInputs CoveredInputs { get; } =
+        CoveredSampleSize > 0 || CoveredInputs == default
+            ? CoveredInputs
+            : throw new ArgumentException(
+                "Covered inputs must be empty when no pull request was covered.",
+                nameof(CoveredInputs));
+}
 
 /// <summary>One measured result for one time bucket, when a read is a series.</summary>
 /// <param name="BucketStart">Start of the bucket: the day, the week's Monday, or the month's first.</param>

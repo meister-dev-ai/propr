@@ -75,14 +75,20 @@ public sealed class CodeInsightCatchUpTests : IDisposable
             7,
             1));
 
+        this.CloseObserver = Substitute.For<ICodeInsightCloseObserver>();
+
         this._sweeper = new CodeInsightSealSweeper(
             this._dbContext,
             this._sealer,
             this._gate,
             this._jobs,
             NullLogger<CodeInsightSealSweeper>.Instance,
-            this._pullRequests);
+            this._pullRequests,
+            this.CloseObserver);
     }
+
+    /// <summary>The close observation the sweep runs before it seals.</summary>
+    public ICodeInsightCloseObserver CloseObserver { get; }
 
     public void Dispose()
     {
@@ -359,6 +365,141 @@ public sealed class CodeInsightCatchUpTests : IDisposable
 
         var aggregate = await this._dbContext.CodeInsightPullRequests.SingleAsync(row => row.Id == aggregateId);
         Assert.NotNull(aggregate.LastSealAttemptAt);
+    }
+
+    [Fact]
+    public async Task TheSweepObservesThePullRequestsThreadsBeforeItSeals()
+    {
+        // The sweep is the path that seals a pull request nobody watched close, so its human threads were last
+        // judged while they were open. Judging them again after the seal could change nothing.
+        await this.SeedQuietAsync(ClientA, "repo-1", 51, idleDays: 30);
+        this.WithProviderStatus(PrStatus.Completed);
+
+        await this._sweeper.SweepAsync(10, TimeSpan.FromDays(7));
+
+        Received.InOrder(() =>
+        {
+            this.CloseObserver.ObserveAsync(
+                Arg.Any<CodeInsightPullRequestKey>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+            this._sealer.SealAsync(
+                Arg.Any<CodeInsightPullRequestKey>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task TheObservationIsAddressedWithTheProviderScopeOfTheReviewJob()
+    {
+        await this.SeedQuietAsync(ClientA, "repo-1", 52, idleDays: 30);
+        this.WithProviderStatus(PrStatus.Completed);
+
+        await this._sweeper.SweepAsync(10, TimeSpan.FromDays(7));
+
+        await this.CloseObserver.Received(1).ObserveAsync(
+            Arg.Is<CodeInsightPullRequestKey>(key =>
+                key.ClientId == ClientA && key.RepositoryId == "repo-1" && key.PullRequestId == 52),
+            "https://dev.azure.com/org",
+            "project",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task APullRequestStillOpenAtTheProviderIsNotObserved()
+    {
+        // Its threads are still being observed by the active passes, and there is nothing to seal yet.
+        await this.SeedQuietAsync(ClientA, "repo-1", 53, idleDays: 30);
+        this.WithProviderStatus(PrStatus.Active);
+
+        await this._sweeper.SweepAsync(10, TimeSpan.FromDays(7));
+
+        await this.CloseObserver.DidNotReceive().ObserveAsync(
+            Arg.Any<CodeInsightPullRequestKey>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AnAlreadySealedPullRequestIsNeitherObservedNorAskedAbout()
+    {
+        // Its measurement is written and cannot move, so an observation could only spend a provider call and a
+        // model call on a judgement no metric will ever read.
+        var aggregateId = await this.SeedQuietAsync(ClientA, "repo-1", 54, idleDays: 30);
+        await this.WriteSealAsync(aggregateId, ClientA, "repo-1", 54);
+        this.WithProviderStatus(PrStatus.Completed);
+
+        await this._sweeper.SweepAsync(10, TimeSpan.FromDays(7));
+
+        await this.CloseObserver.DidNotReceive().ObserveAsync(
+            Arg.Any<CodeInsightPullRequestKey>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        await this._pullRequests.DidNotReceive().FetchRefAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<int>(),
+            Arg.Any<Guid?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AFailingObservationStillLeavesThePullRequestSealed()
+    {
+        await this.SeedQuietAsync(ClientA, "repo-1", 55, idleDays: 30);
+        this.WithProviderStatus(PrStatus.Completed);
+        this.CloseObserver
+            .ObserveAsync(
+                Arg.Any<CodeInsightPullRequestKey>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("the provider is unreachable"));
+
+        Assert.Equal(1, await this._sweeper.SweepAsync(10, TimeSpan.FromDays(7)));
+
+        // The sweep has to have tried the observation and sealed anyway; a return value alone would also hold
+        // for a sweep that never observed at all.
+        Received.InOrder(() =>
+        {
+            this.CloseObserver.ObserveAsync(
+                Arg.Any<CodeInsightPullRequestKey>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+            this._sealer.SealAsync(
+                Arg.Any<CodeInsightPullRequestKey>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+        });
+        await this._sealer.Received(1).SealAsync(
+            Arg.Is<CodeInsightPullRequestKey>(key => key.PullRequestId == 55),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WithoutACloseObserverTheSweepStillSeals()
+    {
+        // An installation without the observation registered keeps the measurement it had; it simply takes it
+        // from the judgements already recorded.
+        var sweeper = new CodeInsightSealSweeper(
+            this._dbContext,
+            this._sealer,
+            this._gate,
+            this._jobs,
+            NullLogger<CodeInsightSealSweeper>.Instance,
+            this._pullRequests);
+
+        await this.SeedQuietAsync(ClientA, "repo-1", 56, idleDays: 30);
+        this.WithProviderStatus(PrStatus.Completed);
+
+        Assert.Equal(1, await sweeper.SweepAsync(10, TimeSpan.FromDays(7)));
     }
 
     private void WithProviderStatus(PrStatus status)

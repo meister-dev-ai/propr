@@ -206,6 +206,185 @@ public sealed class CodeInsightMetricTests : IDisposable
     }
 
     [Fact]
+    public async Task AHarvestedThreadThatNeverSettledLeavesRecallUndefined()
+    {
+        // A thread judged while it was open has not answered whether its concern was acted on, so the false
+        // negatives are short by an unknown amount. Precision counts the findings that did reach an outcome
+        // and stays meaningful.
+        var key = await this.SeedAsync(ClientA, "repo-1", 11, addressed: 3, acknowledged: 0, dismissed: 0, falsePositive: 1);
+        await this.SeedMissesAsync(key, qualifying: 1, disqualified: 0, settled: false);
+
+        await this._sealer.SealAsync(key, "Completed");
+
+        var seal = await this.LoadSealAsync(key);
+        Assert.Equal(1, seal.UnsettledMissCount);
+        Assert.Null(seal.Recall);
+        Assert.Null(seal.F1);
+        Assert.Equal(3d / 4d, seal.Precision!.Value, 12);
+    }
+
+    [Fact]
+    public async Task ADiscussedFindingLeavesRecallUndefined()
+    {
+        // A discussed finding has a disposition but no verdict, so it counts in neither term of the ratio and
+        // leaves the numerator short by an unknown amount. Treating it as decided because a row exists would
+        // report a recall over an incomplete finding set.
+        var key = await this.SeedAsync(ClientA, "repo-1", 13, addressed: 1, acknowledged: 0, dismissed: 0, falsePositive: 0, discussed: 1);
+        await this.SeedMissesAsync(key, qualifying: 1, disqualified: 0);
+
+        await this._sealer.SealAsync(key, "Completed");
+
+        var seal = await this.LoadSealAsync(key);
+        Assert.Equal(1, seal.DiscussedCount);
+        Assert.Equal(0, seal.OpenAtSealCount);
+        Assert.Null(seal.Recall);
+        Assert.Null(seal.F1);
+
+        // The discussed finding is in neither precision term, so precision is the one addressed finding over
+        // itself. Asserting the value keeps the coverage change from moving it.
+        Assert.Equal(1d, seal.Precision!.Value, 12);
+    }
+
+    [Fact]
+    public async Task AnUnsettledThreadWithheldsRecallEvenWhenItsCurrentVerdictSaysItCannotQualify()
+    {
+        // A re-judgement replaces every answer on the row, over the discussion as it stands by then, so a
+        // thread first read as a question can come back substantive. Reading the provisional substantive and
+        // in-scope answers as settled would seal a recall that omits whatever the thread turns into.
+        var key = await this.SeedAsync(ClientA, "repo-1", 14, addressed: 3, acknowledged: 0, dismissed: 0, falsePositive: 1);
+        await this.SeedMissesAsync(key, qualifying: 0, disqualified: 2, settled: false);
+
+        await this._sealer.SealAsync(key, "Completed");
+
+        var seal = await this.LoadSealAsync(key);
+        Assert.Equal(2, seal.UnsettledMissCount);
+        Assert.Null(seal.Recall);
+    }
+
+    [Fact]
+    public async Task SomeSettledAndSomeNotStillWithholdsRecall()
+    {
+        // One pending answer is enough: the denominator is short by an unknown amount whatever the rest did.
+        // The qualifying count is not reduced by it, because a thread can be judged acted-on from what was
+        // said while it was still open; what is missing is the confirmation that the answer has settled.
+        var key = await this.SeedAsync(ClientA, "repo-1", 15, addressed: 3, acknowledged: 0, dismissed: 0, falsePositive: 0);
+        await this.SeedMissesAsync(key, qualifying: 3, disqualified: 0, unsettledFrom: 2);
+
+        await this._sealer.SealAsync(key, "Completed");
+
+        var seal = await this.LoadSealAsync(key);
+        Assert.Equal(1, seal.UnsettledMissCount);
+        Assert.Equal(3, seal.MissCount);
+        Assert.Null(seal.Recall);
+    }
+
+    [Fact]
+    public async Task AFindingLeftUndecidedAtTheSealLeavesRecallUndefined()
+    {
+        // The true-positive side is short instead, and dividing it by a complete miss count would understate
+        // the reviewer by however many findings nobody decided.
+        var key = await this.SeedAsync(ClientA, "repo-1", 12, addressed: 2, acknowledged: 0, dismissed: 0, falsePositive: 0, open: 2);
+        await this.SeedMissesAsync(key, qualifying: 1, disqualified: 0);
+
+        await this._sealer.SealAsync(key, "Completed");
+
+        var seal = await this.LoadSealAsync(key);
+        Assert.Equal(2, seal.OpenAtSealCount);
+        Assert.Equal(0, seal.UnsettledMissCount);
+        Assert.Null(seal.Recall);
+        Assert.Null(seal.F1);
+    }
+
+    [Fact]
+    public async Task EveryReportedRatioIsReproducibleFromTheCountsBesideIt()
+    {
+        // Reproducing a metric from its inputs is an acceptance criterion of this module. Precision is a ratio
+        // over every sealed pull request and recall over the covered ones alone, so the result carries both
+        // sets of counts and each ratio has to re-derive from the set it belongs to.
+        var covered = await this.SeedAsync(ClientA, "repo-1", 21, addressed: 3, acknowledged: 0, dismissed: 0, falsePositive: 1);
+        await this.SeedMissesAsync(covered, qualifying: 2, disqualified: 0);
+        await this._sealer.SealAsync(covered, "Completed");
+
+        var uncovered = await this.SeedAsync(ClientA, "repo-1", 22, addressed: 5, acknowledged: 0, dismissed: 0, falsePositive: 5);
+        await this.SeedMissesAsync(uncovered, qualifying: 1, disqualified: 0, settled: false);
+        await this._sealer.SealAsync(uncovered, "Completed");
+
+        var result = await this._reader.GetCorrectnessAsync(this.Window(ClientA));
+
+        Assert.Equal(2, result.SampleSize);
+        Assert.Equal(1, result.CoveredSampleSize);
+
+        var all = result.Metrics.Inputs;
+        var onlyCovered = result.CoveredInputs;
+
+        // Pinned before anything is derived from them: self-consistent ratios over misclassified findings
+        // would satisfy every assertion below.
+        Assert.Equal(8, all.TruePositives);
+        Assert.Equal(6, all.FalsePositives);
+        Assert.Equal(3, all.FalseNegatives);
+        Assert.Equal(8, all.Accepted);
+        Assert.Equal(14, all.Resolved);
+        Assert.Equal(3, onlyCovered.TruePositives);
+        Assert.Equal(1, onlyCovered.FalsePositives);
+        Assert.Equal(2, onlyCovered.FalseNegatives);
+
+        Assert.Equal(
+            (double)all.TruePositives / (all.TruePositives + all.FalsePositives),
+            result.Metrics.Precision!.Value,
+            12);
+        var recall = (double)onlyCovered.TruePositives / (onlyCovered.TruePositives + onlyCovered.FalseNegatives);
+        Assert.Equal(recall, result.Metrics.Recall!.Value, 12);
+
+        // F1 is the covered population's harmonic mean, so it re-derives from that population's precision and
+        // not from the full-sample one reported beside it.
+        var coveredPrecision =
+            (double)onlyCovered.TruePositives / (onlyCovered.TruePositives + onlyCovered.FalsePositives);
+        Assert.Equal(2d * coveredPrecision * recall / (coveredPrecision + recall), result.Metrics.F1!.Value, 12);
+
+        Assert.Equal((double)all.Accepted / all.Resolved, result.Metrics.AcceptanceRate!.Value, 12);
+
+        // The two populations really do differ here, so the assertions above are not the same statement twice.
+        Assert.NotEqual(all.TruePositives, onlyCovered.TruePositives);
+    }
+
+    [Fact]
+    public async Task TheAcceptanceLensReportsNoRecallHoweverManyFindingsResolved()
+    {
+        // Acceptance carries no misses, so a recall computed over it divides by a denominator of zero of them
+        // and reads as perfect. Guarded here because one argument at the call site is all that stops it, and
+        // the acceptance tests otherwise assert the rate alone.
+        var key = await this.SeedAsync(ClientA, "repo-1", 31, addressed: 4, acknowledged: 1, dismissed: 0, falsePositive: 2);
+        await this._sealer.SealAsync(key, "Completed");
+
+        var total = await this._reader.GetAcceptanceAsync(this.Window(ClientA));
+        var series = await this._reader.GetAcceptanceSeriesAsync(this.Window(ClientA), CodeInsightBucketSize.Week);
+
+        Assert.True(total.SampleSize > 0);
+        Assert.NotNull(total.Metrics.AcceptanceRate);
+        Assert.Null(total.Metrics.Recall);
+        Assert.Null(total.Metrics.F1);
+        Assert.All(series, point => Assert.Null(point.Result.Metrics.Recall));
+        Assert.All(series, point => Assert.Null(point.Result.Metrics.F1));
+    }
+
+    [Fact]
+    public async Task ADiscussedFindingKeepsThePullRequestOutOfTheCoveredRollUp()
+    {
+        // The sealed row withholds its own recall. This is the roll-up side of the same statement: the pull
+        // request counts toward the sample and not toward the population recall is computed over.
+        var key = await this.SeedAsync(ClientA, "repo-1", 32, addressed: 1, acknowledged: 0, dismissed: 0, falsePositive: 0, discussed: 1);
+        await this.SeedMissesAsync(key, qualifying: 1, disqualified: 0);
+        await this._sealer.SealAsync(key, "Completed");
+
+        var result = await this._reader.GetCorrectnessAsync(this.Window(ClientA));
+
+        Assert.Equal(1, result.SampleSize);
+        Assert.Equal(0, result.CoveredSampleSize);
+        Assert.Equal(default, result.CoveredInputs);
+        Assert.Null(result.Metrics.Recall);
+    }
+
+    [Fact]
     public async Task AggregationSumsTheStoredInputsRatherThanAveragingTheRatios()
     {
         // The single most likely way to get this wrong. One pull request scores a perfect precision on one
@@ -778,7 +957,8 @@ public sealed class CodeInsightMetricTests : IDisposable
         int falsePositive,
         int open = 0,
         string? modelId = null,
-        string? logicalModelName = null)
+        string? logicalModelName = null,
+        int discussed = 0)
     {
         var jobId = Guid.NewGuid();
         var key = new CodeInsightPullRequestKey(clientId, repositoryId, pullRequestId);
@@ -787,6 +967,7 @@ public sealed class CodeInsightMetricTests : IDisposable
         outcomes.AddRange(Enumerable.Repeat((CodeInsightDisposition?)CodeInsightDisposition.Acknowledged, acknowledged));
         outcomes.AddRange(Enumerable.Repeat((CodeInsightDisposition?)CodeInsightDisposition.Dismissed, dismissed));
         outcomes.AddRange(Enumerable.Repeat((CodeInsightDisposition?)CodeInsightDisposition.FalsePositive, falsePositive));
+        outcomes.AddRange(Enumerable.Repeat((CodeInsightDisposition?)CodeInsightDisposition.Discussed, discussed));
         outcomes.AddRange(Enumerable.Repeat((CodeInsightDisposition?)null, open));
 
         var snapshots = outcomes
@@ -851,11 +1032,17 @@ public sealed class CodeInsightMetricTests : IDisposable
         }
     }
 
-    private async Task SeedMissesAsync(CodeInsightPullRequestKey key, int qualifying, int disqualified)
+    private async Task SeedMissesAsync(
+        CodeInsightPullRequestKey key,
+        int qualifying,
+        int disqualified,
+        bool settled = true,
+        int unsettledFrom = int.MaxValue)
     {
         for (var index = 0; index < qualifying + disqualified; index++)
         {
             var counts = index < qualifying;
+            var rowSettled = settled && index < unsettledFrom;
             await this._store.RecordMissAsync(
                 key,
                 new CodeInsightMissRecord(
@@ -867,7 +1054,8 @@ public sealed class CodeInsightMetricTests : IDisposable
                     WasActedOn: counts,
                     IsInScope: counts,
                     0.9,
-                    "test"));
+                    "test",
+                    JudgedThreadResolved: rowSettled));
         }
     }
 

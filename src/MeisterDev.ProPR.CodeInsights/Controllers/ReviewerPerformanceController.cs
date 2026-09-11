@@ -104,7 +104,14 @@ public sealed class ReviewerPerformanceController(
                 acceptance.Select(CodeInsightQueries.ToPoint).ToList(),
                 CodeInsightQueries.ToMetric(correctnessTotal),
                 CodeInsightQueries.ToMetric(acceptanceTotal),
-                ResolveTrend(correctness, point => point.Result.Metrics.F1, minimumSampleSize),
+                // F1 carries recall, so the floor counts the pull requests recall rests on. Measuring it
+                // against the sealed count would present a trend drawn from a handful of covered pull requests
+                // as though the whole sealed sample stood behind it.
+                ResolveTrend(
+                    correctness,
+                    point => point.Result.Metrics.F1,
+                    minimumSampleSize,
+                    point => point.Result.CoveredSampleSize),
                 // Acceptance rests on resolved findings rather than closed pull requests, so the sealed-pull-request
                 // floor would be the wrong bar for it. Its own sample is the count it is a proportion of.
                 ResolveTrend(acceptance, point => point.Result.Metrics.AcceptanceRate, minimumSample: 1),
@@ -537,10 +544,12 @@ public sealed class ReviewerPerformanceController(
     private static CodeInsightTrendResponse ResolveTrend(
         IReadOnlyList<CodeInsightMetricSeriesPoint> series,
         Func<CodeInsightMetricSeriesPoint, double?> select,
-        int minimumSample)
+        int minimumSample,
+        Func<CodeInsightMetricSeriesPoint, int>? sampleOf = null)
     {
+        var sample = sampleOf ?? (point => point.Result.SampleSize);
         var values = series
-            .Where(point => point.Result.SampleSize >= minimumSample && select(point) is not null)
+            .Where(point => sample(point) >= minimumSample && select(point) is not null)
             .OrderBy(point => point.BucketStart)
             .Select(point => select(point)!.Value)
             .ToList();

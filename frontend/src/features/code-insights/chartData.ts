@@ -94,6 +94,7 @@ export function buildMetricChartData(
   label: string,
   colorIndex = 0,
   minimumSample = 0,
+  sampleOf: (metric: CodeInsightMetric) => number = (metric) => metric.sampleSize,
 ): ChartData {
   const ordered = [...points].sort((left, right) => left.bucketStart.localeCompare(right.bucketStart))
   const color = REVIEW_PALETTE[colorIndex % REVIEW_PALETTE.length]
@@ -104,7 +105,7 @@ export function buildMetricChartData(
       {
         label,
         data: ordered.map((point) =>
-          point.metric.sampleSize < minimumSample ? null : select(point.metric),
+          sampleOf(point.metric) < minimumSample ? null : select(point.metric),
         ),
         backgroundColor: `${color}22`,
         borderColor: color,

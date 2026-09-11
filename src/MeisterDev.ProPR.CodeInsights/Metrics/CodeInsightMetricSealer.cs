@@ -112,6 +112,20 @@ public sealed partial class CodeInsightMetricSealer(
         var misses = await db.CodeInsightMisses
             .CountAsync(miss => miss.CodeInsightPullRequestId == aggregateId && miss.CountsAsMiss, ct);
 
+        // Harvested threads still judged against an open state. Every judgement on such a row is provisional,
+        // not just the acted-on one: a re-judgement runs the classifier again over the discussion as it stands
+        // then, and CodeInsightMiss.RecordJudgement replaces all three answers together. A thread first read as
+        // a question can therefore come back substantive once it has been argued out.
+        //
+        // So the count filters on nothing but the settled flag. Filtering on CountsAsMiss would be worse than
+        // useless, because that verdict needs the acted-on answer an open thread cannot give and is false for
+        // every unsettled row by construction; filtering on the substantive and in-scope answers instead reads
+        // provisional values as though they were settled, and seals a recall that omits whatever they become.
+        var unsettledMisses = await db.CodeInsightMisses
+            .CountAsync(
+                miss => miss.CodeInsightPullRequestId == aggregateId && !miss.JudgedThreadResolved,
+                ct);
+
         var inputs = new CodeInsightMetricInputs(
             dispositions.Count(disposition => disposition == CodeInsightDisposition.Addressed),
             dispositions.Count(disposition => disposition == CodeInsightDisposition.Acknowledged),
@@ -130,7 +144,15 @@ public sealed partial class CodeInsightMetricSealer(
             return false;
         }
 
-        var metrics = CodeInsightMetricCalculator.Compute(inputs);
+        var openAtSeal = findingIds.Count - dispositions.Count;
+
+        // Recall needs both sides settled: every finding carrying a verdict, and every harvested thread judged
+        // against a state that could answer the acted-on question. A discussed finding has a disposition but no
+        // verdict, so it counts in neither term of the ratio and leaves the numerator short by an unknown
+        // amount, exactly as an unjudged thread leaves the denominator short. Precision and acceptance are
+        // ratios over the findings that reached a verdict by definition, so they stay meaningful either way.
+        var covered = inputs.Resolved == findingIds.Count && unsettledMisses == 0;
+        var metrics = CodeInsightMetricCalculator.Compute(inputs, covered);
         var sealedAt = DateTimeOffset.UtcNow;
 
         db.CodeInsightPullRequestMetrics.Add(
@@ -148,7 +170,8 @@ public sealed partial class CodeInsightMetricSealer(
                 DiscussedCount = inputs.Discussed,
                 MissCount = inputs.Misses,
                 ResolvedCount = inputs.Resolved,
-                OpenAtSealCount = findingIds.Count - dispositions.Count,
+                OpenAtSealCount = openAtSeal,
+                UnsettledMissCount = unsettledMisses,
                 Precision = metrics.Precision,
                 Recall = metrics.Recall,
                 F1 = metrics.F1,

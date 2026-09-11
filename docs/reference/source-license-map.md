@@ -330,6 +330,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Application/ValueObjects/ReviewPassSignature.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights.Contracts/CodeInsightSnapshots.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights.Contracts/HarvestedThreadEligibility.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.CodeInsights.Contracts/Ports/ICodeInsightCloseObserver.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights.Contracts/Ports/ICodeInsightDispositionService.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights.Contracts/Ports/ICodeInsightFindingIngestionService.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights.Contracts/Ports/ICodeInsightFindingStore.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |

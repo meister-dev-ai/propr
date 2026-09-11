@@ -92,6 +92,19 @@ public sealed class CodeInsightPullRequestMetric
     public int OpenAtSealCount { get; init; }
 
     /// <summary>
+    ///     Harvested human threads that had not settled when the measurement was taken, or
+    ///     <see langword="null" /> for a seal taken before this was recorded.
+    /// </summary>
+    /// <remarks>
+    ///     A thread judged while it was still open cannot answer whether its concern was accepted, so it is
+    ///     neither a false negative nor established as anything else. Recall over a pull request that still had
+    ///     one is a ratio whose denominator is short by an unknown amount, which is why coverage is stored
+    ///     beside the counts and not inferred from them. Null means the seal predates the column: unknown, and
+    ///     treated as not covered, not as zero.
+    /// </remarks>
+    public int? UnsettledMissCount { get; init; }
+
+    /// <summary>
     ///     Of the resolved findings, the share that were right, or <see langword="null" /> when none resolved.
     ///     Null means undefined, never zero.
     /// </summary>

@@ -87,6 +87,7 @@
         v-if="vm.section.value === 'correctness'"
         :quality="vm.quality.value"
         :has-enough-sample="vm.hasEnoughCorrectnessSample.value"
+        :has-enough-recall-sample="vm.hasEnoughRecallSample.value"
         @drill="onDispositionDrill"
       />
 

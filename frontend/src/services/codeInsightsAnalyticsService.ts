@@ -118,6 +118,19 @@ export interface CodeInsightMetric {
   sampleSize: number
   /** Findings a human engaged with and left unresolved. Counted here, and in neither ratio above. */
   discussed: number
+  /**
+   * Of `sampleSize`, the pull requests whose recall could be measured: every finding decided, and every
+   * harvested thread judged against a state that could answer whether its concern was acted on. `recall` and
+   * `f1` rest on these alone; `precision` and `acceptanceRate` rest on the whole sample.
+   */
+  coveredSampleSize: number
+  /**
+   * The true positives of the covered pull requests: the numerator of `recall`. The flattened counts above
+   * cover the whole sample, so recomputing recall from them would fold in pull requests the ratio excludes.
+   */
+  coveredTruePositives: number
+  /** The qualifying misses of the covered pull requests. With `coveredTruePositives` this reproduces `recall`. */
+  coveredMisses: number
 }
 
 export interface CodeInsightMetricPoint {
@@ -312,6 +325,9 @@ const EMPTY_METRIC: CodeInsightMetric = {
   misses: 0,
   sampleSize: 0,
   discussed: 0,
+  coveredSampleSize: 0,
+  coveredTruePositives: 0,
+  coveredMisses: 0,
 }
 
 /** Drops the scope keys the caller left empty, so an absent filter is absent rather than a blank match. */
@@ -339,6 +355,9 @@ function toMetric(raw: Partial<CodeInsightMetric> | null | undefined): CodeInsig
     misses: raw.misses ?? 0,
     sampleSize: raw.sampleSize ?? 0,
     discussed: raw.discussed ?? 0,
+    coveredSampleSize: raw.coveredSampleSize ?? 0,
+    coveredTruePositives: raw.coveredTruePositives ?? 0,
+    coveredMisses: raw.coveredMisses ?? 0,
   }
 }
 

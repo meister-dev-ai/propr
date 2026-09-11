@@ -407,8 +407,12 @@ public sealed class CodeInsightMetricReader(
             Count(byOutcome, CodeInsightDisposition.Discussed));
 
         // The sample is the resolved findings, not the pull requests: this is what an acceptance rate is a
-        // proportion of, and it is what a view needs to decide whether the number is worth drawing.
-        return new CodeInsightMetricResult(CodeInsightMetricCalculator.Compute(inputs), inputs.Resolved);
+        // proportion of, and it is what a view needs to decide whether the number is worth drawing. Recall is
+        // withheld because this lens carries no misses: dividing by a denominator of zero of them would report
+        // a perfect recall drawn from nothing.
+        return new CodeInsightMetricResult(
+            CodeInsightMetricCalculator.Compute(inputs, recallIsMeasurable: false),
+            inputs.Resolved);
     }
 
     private static int Count(IReadOnlyDictionary<string, int> byOutcome, CodeInsightDisposition disposition)
@@ -418,18 +422,42 @@ public sealed class CodeInsightMetricReader(
 
     private static CodeInsightMetricResult Summarise(IReadOnlyList<SealRow> seals)
     {
-        var inputs = CodeInsightMetricInputs.Sum(
-            seals.Select(seal => new CodeInsightMetricInputs(
-                seal.Addressed,
-                seal.Acknowledged,
-                seal.Dismissed,
-                seal.FalsePositive,
-                seal.Misses,
-                seal.Discussed)));
+        var inputs = CodeInsightMetricInputs.Sum(seals.Select(InputsOf));
 
+        // Recall is summed over the pull requests whose two sides both settled. Rolling in a pull request that
+        // left findings undecided or threads unjudged would divide a short numerator by a short denominator
+        // and report the result as though it described the whole period. Precision and acceptance stay over
+        // every sealed pull request, because both are ratios over the findings that reached an outcome.
+        var covered = seals.Where(seal => seal.RecallIsMeasurable).ToList();
+        var coveredInputs = CodeInsightMetricInputs.Sum(covered.Select(InputsOf));
+
+        var overall = CodeInsightMetricCalculator.Compute(inputs, recallIsMeasurable: false);
+        var recallLens = CodeInsightMetricCalculator.Compute(coveredInputs, covered.Count > 0);
+
+        // Recall and F1 both belong to the covered population, and the precision inside F1 is that
+        // population's too: F1 is a statistic of one sample, so mixing a full-sample precision into it would
+        // produce a number that describes neither. The reported precision is the full-sample measurement, so
+        // the harmonic mean of the two reported ratios is deliberately not the reported F1. CoveredSampleSize
+        // is what says which of them rests on what.
+        //
         // The sample is the number of sealed pull requests. A period whose F1 rests on two pull requests must
         // be distinguishable from one that rests on two hundred, whatever the ratio happens to be.
-        return new CodeInsightMetricResult(CodeInsightMetricCalculator.Compute(inputs), seals.Count);
+        return new CodeInsightMetricResult(
+            overall with { Recall = recallLens.Recall, F1 = recallLens.F1 },
+            seals.Count,
+            covered.Count,
+            coveredInputs);
+    }
+
+    private static CodeInsightMetricInputs InputsOf(SealRow seal)
+    {
+        return new CodeInsightMetricInputs(
+            seal.Addressed,
+            seal.Acknowledged,
+            seal.Dismissed,
+            seal.FalsePositive,
+            seal.Misses,
+            seal.Discussed);
     }
 
     private static ScopeKey ScopeOf(CodeInsightGrain grain, SealRow seal)
@@ -489,6 +517,8 @@ public sealed class CodeInsightMetricReader(
                         metric.FalsePositiveCount,
                         metric.MissCount,
                         metric.DiscussedCount,
+                        metric.OpenAtSealCount,
+                        metric.UnsettledMissCount,
                     })
                     .ToListAsync(ct);
 
@@ -503,7 +533,14 @@ public sealed class CodeInsightMetricReader(
                         row.DismissedCount,
                         row.FalsePositiveCount,
                         row.MissCount,
-                        row.DiscussedCount))
+                        row.DiscussedCount,
+                        // The seal's own condition was that every finding carried a verdict and no harvested
+                        // thread was unsettled. Findings split into verdicts, discussed and undecided, so
+                        // "every finding carried a verdict" is the same statement as no undecided ones and no
+                        // discussed ones. These three stored counts therefore reproduce it exactly.
+                        row.OpenAtSealCount == 0
+                        && row.DiscussedCount == 0
+                        && row.UnsettledMissCount == 0))
                     .ToList();
             },
             ct);
@@ -530,7 +567,8 @@ public sealed class CodeInsightMetricReader(
         int Dismissed,
         int FalsePositive,
         int Misses,
-        int Discussed);
+        int Discussed,
+        bool RecallIsMeasurable);
 
     private readonly record struct ScopeKey(Guid ClientId, string? RepositoryId, long? PullRequestId);
 

@@ -98,12 +98,29 @@ public sealed record CodeInsightTypeSeriesResponse(
 /// <param name="FalsePositive">Findings judged wrong.</param>
 /// <param name="Misses">Human-raised issues that qualified as something the reviewer should have caught.</param>
 /// <param name="SampleSize">
-///     What the metric rests on: sealed pull requests for correctness, resolved findings for acceptance.
+///     On the correctness lens, the sealed pull requests behind the ratios. On the acceptance lens, the
+///     resolved findings the rate is a proportion of, because acceptance does not wait for a close.
 /// </param>
 /// <param name="Discussed">
 ///     Findings a human engaged with and left unresolved: neither accepted nor rejected. Counted here and absent
 ///     from every ratio, so a caller can show how many threads ended without a verdict without treating them as
 ///     evidence either way.
+/// </param>
+/// <param name="CoveredSampleSize">
+///     Correctness only. Of <c>SampleSize</c>, how many pull requests had both sides of the recall ratio
+///     settled: every finding carrying a verdict, and every harvested thread that could still become a miss
+///     judged against a state that answers whether its concern was acted on. <c>Recall</c> and <c>F1</c> are
+///     computed over these alone; <c>Precision</c> rests on the full sample. Zero on the acceptance lens,
+///     which reports no recall.
+/// </param>
+/// <param name="CoveredTruePositives">
+///     Correctness only. The true positives of the covered pull requests, which is the numerator of the
+///     reported <c>Recall</c>. The flattened counts above cover the whole sample, so recomputing recall from
+///     them would fold in pull requests the ratio excludes.
+/// </param>
+/// <param name="CoveredMisses">
+///     Correctness only. The qualifying misses of the covered pull requests. With
+///     <c>CoveredTruePositives</c> this reproduces the reported <c>Recall</c> exactly.
 /// </param>
 public sealed record CodeInsightMetricResponse(
     double? Precision,
@@ -116,7 +133,10 @@ public sealed record CodeInsightMetricResponse(
     int FalsePositive,
     int Misses,
     int SampleSize,
-    int Discussed = 0);
+    int Discussed = 0,
+    int CoveredSampleSize = 0,
+    int CoveredTruePositives = 0,
+    int CoveredMisses = 0);
 
 /// <summary>One bucket of a metric series.</summary>
 /// <param name="BucketStart">Start of the bucket.</param>

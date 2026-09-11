@@ -28,7 +28,7 @@
     <div class="metric-cards">
       <article class="metric-card">
         <h4>F1</h4>
-        <p class="metric-value">{{ hasEnoughSample ? formatRatio(quality.correctnessTotal.f1) : '—' }}</p>
+        <p class="metric-value">{{ hasEnoughRecallSample ? formatRatio(quality.correctnessTotal.f1) : '—' }}</p>
         <p class="metric-sub">{{ sampleCopy }}</p>
       </article>
       <article class="metric-card">
@@ -38,8 +38,8 @@
       </article>
       <article class="metric-card">
         <h4>Recall</h4>
-        <p class="metric-value">{{ hasEnoughSample ? formatRatio(quality.correctnessTotal.recall) : '—' }}</p>
-        <p class="metric-sub">{{ quality.correctnessTotal.misses }} miss(es) harvested</p>
+        <p class="metric-value">{{ hasEnoughRecallSample ? formatRatio(quality.correctnessTotal.recall) : '—' }}</p>
+        <p class="metric-sub">{{ recallSubCopy }}</p>
       </article>
       <article class="metric-card metric-card--early">
         <h4>Acceptance rate</h4>
@@ -52,6 +52,18 @@
 
     <!-- Suppression, not decoration. Below the threshold the ratios above are withheld and this says why,
          because a confident line through two closed pull requests is worse than no line. -->
+    <!-- Recall rests on the pull requests whose findings all carried a verdict and whose harvested threads all
+         settled. That is a smaller set than the closed ones, so it clears the bar later and says so on its own. -->
+    <p v-if="hasEnoughSample && !hasEnoughRecallSample" class="insufficient-note" role="note">
+      <i class="fi fi-rr-triangle-warning" aria-hidden="true"></i>
+      <span>
+        Recall and F1 are withheld: {{ quality.correctnessTotal.coveredSampleSize }} of
+        {{ quality.correctnessTotal.sampleSize }} closed pull requests were measured completely enough to count
+        a miss against, and {{ quality.minimumSampleSize }} are needed. Precision beside them rests on all
+        {{ quality.correctnessTotal.sampleSize }} and is shown.
+      </span>
+    </p>
+
     <p v-if="!hasEnoughSample" class="insufficient-note" role="note">
       <i class="fi fi-rr-triangle-warning" aria-hidden="true"></i>
       <span>
@@ -68,11 +80,18 @@
       :options="options"
       value-kind="ratio"
       bucket-label="Period"
-      chart-label="Correctness F1 per period, over the pull requests sealed in each"
+      chart-label="Correctness F1 per period, over the pull requests measured completely enough in each"
     />
     <p v-else class="panel-empty">
       No pull request has been measured in this window. Correctness is sealed once, when a pull request
       finishes, so an active window shows nothing until something closes.
+    </p>
+
+    <!-- Buckets exist but every one of them was gated out. Without this the chart is simply blank, which
+         reads as an absence of pull requests instead of an absence of complete enough measurements. -->
+    <p v-if="quality.correctness.length > 0 && !chartHasAnyPoint" class="panel-empty">
+      No period yet has {{ quality.minimumSampleSize }} pull requests measured completely enough to place an
+      F1 against. Precision above does not wait for that and is shown.
     </p>
 
     <EstimateNotice />
@@ -95,7 +114,11 @@ import EstimateNotice from '@/features/code-insights/components/EstimateNotice.v
 import { buildMetricChartData, createRatioOptions, formatRatio } from '@/features/code-insights/chartData'
 import type { CodeInsightDisposition, CodeInsightQuality } from '@/services/codeInsightsAnalyticsService'
 
-const props = defineProps<{ quality: CodeInsightQuality; hasEnoughSample: boolean }>()
+const props = defineProps<{
+  quality: CodeInsightQuality
+  hasEnoughSample: boolean
+  hasEnoughRecallSample: boolean
+}>()
 const emit = defineEmits<{ drill: [disposition: CodeInsightDisposition] }>()
 
 const options = createRatioOptions()
@@ -108,7 +131,17 @@ const chartData = computed(() =>
     0,
     // Per bucket, not only for the window total: a week resting on two closed pull requests contributes a gap.
     props.quality.minimumSampleSize,
+
+    // F1 is computed from the covered pull requests, so a bucket qualifies on those and not on every close.
+    // Gating on the closed count would plot a value the card beside it withholds. The smaller of the two is
+    // taken for the same reason the card checks both: a payload where coverage exceeds the closed sample
+    // describes nothing a read can produce, so the chart withholds it instead of drawing it.
+    (metric) => Math.min(metric.sampleSize, metric.coveredSampleSize),
   ),
+)
+
+const chartHasAnyPoint = computed(() =>
+  chartData.value.datasets.some((dataset) => dataset.data.some((value) => value !== null)),
 )
 
 const DIRECTION_LABELS: Record<string, string> = {
@@ -166,11 +199,26 @@ function formatPValue(value: number): string {
   return value < 0.001 ? 'p < 0.001' : `p = ${value.toFixed(3)}`
 }
 
-const sampleCopy = computed(() =>
-  props.hasEnoughSample
-    ? `from ${props.quality.correctnessTotal.sampleSize} closed pull request(s)`
-    : `needs ${props.quality.minimumSampleSize} closed pull requests`,
-)
+const sampleCopy = computed(() => {
+  const total = props.quality.correctnessTotal
+  if (!props.hasEnoughSample) return `needs ${props.quality.minimumSampleSize} closed pull requests`
+
+  // F1 is computed from the covered pull requests, so it rests on those and not on every closed one. Naming a
+  // single number for both lenses would credit precision's evidence to recall.
+  const covered = total.coveredSampleSize
+  return covered === total.sampleSize
+    ? `from ${total.sampleSize} closed pull request(s)`
+    : `from ${covered} fully measured of ${total.sampleSize} closed`
+})
+
+const recallSubCopy = computed(() => {
+  const total = props.quality.correctnessTotal
+  return props.hasEnoughRecallSample
+    // The misses behind the number shown, not every miss harvested in the window: the two differ whenever a
+    // closed pull request was measured too incompletely to count one against.
+    ? `${total.coveredMisses} miss(es) behind it`
+    : `${total.coveredSampleSize} of ${total.sampleSize} closed pull requests fully measured`
+})
 </script>
 
 <style scoped>

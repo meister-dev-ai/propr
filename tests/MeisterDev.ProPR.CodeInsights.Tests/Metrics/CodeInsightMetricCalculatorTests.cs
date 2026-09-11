@@ -252,4 +252,39 @@ public sealed class CodeInsightMetricCalculatorTests
         Assert.Equal(4d / 6d, metrics.AcceptanceRate!.Value, 12);
         Assert.NotNull(metrics.Precision);
     }
+
+    [Fact]
+    public void ACoverageLargerThanTheSampleIsNotConstructible()
+    {
+        // Coverage is a subset of the sample. A result claiming otherwise would report a recall resting on
+        // more evidence than the metric has.
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new CodeInsightMetricResult(default, SampleSize: 2, CoveredSampleSize: 3));
+    }
+
+    [Fact]
+    public void CoveredInputsBesideNoCoveredPullRequestsAreNotConstructible()
+    {
+        // Nothing was counted over an empty population, so inputs carried beside it would offer a recall to
+        // re-derive from pull requests the result says it has none of.
+        Assert.Throws<ArgumentException>(() =>
+            new CodeInsightMetricResult(
+                default,
+                SampleSize: 5,
+                CoveredSampleSize: 0,
+                CoveredInputs: new CodeInsightMetricInputs(3, 0, 0, 0, 1)));
+    }
+
+    [Fact]
+    public void ACoverageWithinTheSampleIsAccepted()
+    {
+        var result = new CodeInsightMetricResult(
+            default,
+            SampleSize: 5,
+            CoveredSampleSize: 2,
+            CoveredInputs: new CodeInsightMetricInputs(3, 0, 0, 0, 1));
+
+        Assert.Equal(2, result.CoveredSampleSize);
+        Assert.Equal(3, result.CoveredInputs.TruePositives);
+    }
 }
