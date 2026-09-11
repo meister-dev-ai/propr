@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 /// </remarks>
 public sealed class AiConnectionScopeGuard(
     IClientRegistry clients,
-    ITenantProviderPolicyProvider? providerPolicies = null) : IAiConnectionScopeGuard
+    ITenantProviderPolicyProvider providerPolicies) : IAiConnectionScopeGuard
 {
     public async Task<string?> ValidateAsync(
         AiConnectionDto connection,
@@ -41,18 +41,15 @@ public sealed class AiConnectionScopeGuard(
             return $"connection '{connection.Id}' belongs to a different tenant and cannot be referenced.";
         }
 
-        if (providerPolicies is not null)
+        var policy = await providerPolicies.GetForTenantAsync(referencingTenantId, ct).ConfigureAwait(false);
+        if (policy.DescribeRefusal(connection.ProviderKind) is { } kindRefusal)
         {
-            var policy = await providerPolicies.GetForTenantAsync(referencingTenantId, ct).ConfigureAwait(false);
-            if (policy.DescribeRefusal(connection.ProviderKind) is { } kindRefusal)
-            {
-                return $"connection '{connection.DisplayName}' cannot be used because {kindRefusal}.";
-            }
+            return $"connection '{connection.DisplayName}' cannot be used because {kindRefusal}.";
+        }
 
-            if (policy.DescribeEndpointRefusal(connection.BaseUrl) is { } endpointRefusal)
-            {
-                return $"connection '{connection.DisplayName}' cannot be used because {endpointRefusal}.";
-            }
+        if (policy.DescribeEndpointRefusal(connection.BaseUrl) is { } endpointRefusal)
+        {
+            return $"connection '{connection.DisplayName}' cannot be used because {endpointRefusal}.";
         }
 
         return null;

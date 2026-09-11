@@ -12,6 +12,7 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -1360,6 +1361,15 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                     .AddScoped<MeisterDev.ProPR.Application.Interfaces.IClientTokenUsageRepository,
                         MeisterDev.ProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
+                // Both the repository and the scope guard enforce the tenant's provider policy and require it.
+                // The real provider reads the tenant row through a context factory this host does not compose, so
+                // the policy is stated here: these tests are about the client surface, not about the allow-list.
+                var providerPolicies = Substitute.For<ITenantProviderPolicyProvider>();
+                providerPolicies.GetForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(TenantProviderPolicy.Unrestricted);
+                providerPolicies.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(TenantProviderPolicy.Unrestricted);
+                services.AddSingleton(providerPolicies);
                 services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
                 services.AddScoped<IAiConnectionScopeGuard, AiConnectionScopeGuard>();
                 services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();

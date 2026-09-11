@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -36,7 +37,7 @@ public sealed class AiProviderConfigAuditTests
         await using var db = CreateContext(databaseName);
         var clientId = SeedClient(db);
         var actorId = Guid.NewGuid();
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, null, Writer(databaseName, actorId));
+        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName, actorId));
 
         await repo.AddAsync(clientId, WriteRequest(Secret));
 
@@ -56,7 +57,7 @@ public sealed class AiProviderConfigAuditTests
         var databaseName = Guid.NewGuid().ToString();
         await using var db = CreateContext(databaseName);
         var clientId = SeedClient(db);
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, null, Writer(databaseName));
+        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName));
 
         await repo.AddAsync(clientId, WriteRequest(Secret));
 
@@ -72,7 +73,7 @@ public sealed class AiProviderConfigAuditTests
         var databaseName = Guid.NewGuid().ToString();
         await using var db = CreateContext(databaseName);
         var clientId = SeedClient(db);
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, null, Writer(databaseName));
+        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName));
 
         await repo.AddAsync(clientId, WriteRequest(null));
 
@@ -86,7 +87,7 @@ public sealed class AiProviderConfigAuditTests
         var databaseName = Guid.NewGuid().ToString();
         await using var db = CreateContext(databaseName);
         var clientId = SeedClient(db);
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, null, Writer(databaseName));
+        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName));
         var created = await repo.AddAsync(clientId, WriteRequest(Secret));
 
         await repo.DeleteAsync(created.Id);
@@ -103,7 +104,7 @@ public sealed class AiProviderConfigAuditTests
     {
         var databaseName = Guid.NewGuid().ToString();
         await using var db = CreateContext(databaseName);
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, null, Writer(databaseName));
+        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName));
 
         var created = await repo.AddAsync(Guid.NewGuid(), WriteRequest(Secret));
 
@@ -158,6 +159,18 @@ public sealed class AiProviderConfigAuditTests
             });
         db.SaveChanges();
         return clientId;
+    }
+
+    // The audited client sits in the system tenant, which has no allow-list surface and is answered as
+    // unrestricted in production. Stating that here keeps the audit assertions about the audit trail.
+    private static ITenantProviderPolicyProvider UnrestrictedPolicies()
+    {
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(TenantProviderPolicy.Unrestricted);
+        policies.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(TenantProviderPolicy.Unrestricted);
+        return policies;
     }
 
     private static ISecretProtectionCodec CreateCodec()

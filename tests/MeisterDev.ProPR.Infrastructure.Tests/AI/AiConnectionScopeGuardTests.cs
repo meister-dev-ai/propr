@@ -127,12 +127,29 @@ public sealed class AiConnectionScopeGuardTests
         Assert.Null(await guard.ValidateAsync(connection, TenantA));
     }
 
-    // A host composed without the policy provider keeps working: the tenant boundary is still enforced, and the
-    // allow-list simply has nothing to say.
+    // The endpoint leg of the same policy. A profile inside the right tenant, on a permitted family, is still
+    // refused when its host is not on the tenant's endpoint list.
     [Fact]
-    public async Task WithNoPolicyProvider_TheTenantBoundaryIsStillEnforced()
+    public async Task ConnectionWhoseEndpointHostTheTenantForbids_IsRefused()
     {
-        var guard = new AiConnectionScopeGuard(this._clients);
+        var connection = Connection(tenantId: TenantA);
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([], ["opencode.ai"]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies);
+
+        var reason = await guard.ValidateAsync(connection, TenantA);
+
+        Assert.NotNull(reason);
+        Assert.Contains("test.openai.azure.com", reason, StringComparison.Ordinal);
+        Assert.Contains("permitted endpoint list", reason, StringComparison.Ordinal);
+    }
+
+    // The two rules are independent: a tenant that has stated no policy still cannot reference a profile owned by
+    // another tenant, and the allow-list has nothing to say about one it owns.
+    [Fact]
+    public async Task WithAnUnrestrictedPolicy_TheTenantBoundaryIsStillEnforced()
+    {
+        var guard = this.Sut();
 
         Assert.Null(await guard.ValidateAsync(Connection(tenantId: TenantA), TenantA));
         Assert.NotNull(await guard.ValidateAsync(Connection(tenantId: TenantA), TenantB));

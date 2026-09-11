@@ -24,7 +24,7 @@ public sealed partial class ClientAiConnectionsController(
     IAiConnectionRepository aiConnections,
     IAiProviderDriverRegistry providerDrivers,
     ILogger<ClientAiConnectionsController> logger,
-    ITenantProviderPolicyProvider? providerPolicies = null,
+    ITenantProviderPolicyProvider providerPolicies,
     IModelCatalogRepository? modelCatalog = null) : ControllerBase
 {
     private const string RequestModelsPropertyName = "requestModels";
@@ -400,20 +400,17 @@ public sealed partial class ClientAiConnectionsController(
 
         // The tenant's provider policy is answered before anything is dialled: probing a forbidden provider would
         // reach it with a credential the tenant has decided it does not want used.
-        if (providerPolicies is not null)
+        var policy = await providerPolicies.GetForClientAsync(clientId, ct);
+        if (policy.DescribeRefusal(request.ProviderKind) is { } refusal)
         {
-            var policy = await providerPolicies.GetForClientAsync(clientId, ct);
-            if (policy.DescribeRefusal(request.ProviderKind) is { } refusal)
-            {
-                this.ModelState.AddModelError("providerKind", $"This profile cannot be probed because {refusal}.");
-                return this.ValidationProblem();
-            }
+            this.ModelState.AddModelError("providerKind", $"This profile cannot be probed because {refusal}.");
+            return this.ValidationProblem();
+        }
 
-            if (policy.DescribeEndpointRefusal(request.BaseUrl) is { } endpointRefusal)
-            {
-                this.ModelState.AddModelError("baseUrl", $"This profile cannot be probed because {endpointRefusal}.");
-                return this.ValidationProblem();
-            }
+        if (policy.DescribeEndpointRefusal(request.BaseUrl) is { } endpointRefusal)
+        {
+            this.ModelState.AddModelError("baseUrl", $"This profile cannot be probed because {endpointRefusal}.");
+            return this.ValidationProblem();
         }
 
         var probeOptions = this.TryBuildProbeOptions(

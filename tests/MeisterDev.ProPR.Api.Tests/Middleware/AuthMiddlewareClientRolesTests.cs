@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -202,6 +203,13 @@ public sealed class AuthMiddlewareClientRolesTests(AuthMiddlewareClientRolesTest
                         Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<AiConnectionDto>>([]));
                 services.AddSingleton(aiRepo);
+
+                // The AI-connections controller enforces the tenant's provider policy, so it needs the provider
+                // to be constructed at all. These tests exercise authorization, so the policy permits everything.
+                var providerPolicies = Substitute.For<ITenantProviderPolicyProvider>();
+                providerPolicies.GetForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(TenantProviderPolicy.Unrestricted));
+                services.AddSingleton(providerPolicies);
 
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 

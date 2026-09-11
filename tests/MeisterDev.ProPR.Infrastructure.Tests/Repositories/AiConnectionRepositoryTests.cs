@@ -41,12 +41,29 @@ public sealed class AiConnectionRepositoryTests
         return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
     }
 
+    // A tenant that has stated no policy is unrestricted, and every repository built for a test that is not about
+    // the policy states that assumption instead of leaving it to a default.
+    private static ITenantProviderPolicyProvider UnrestrictedPolicies()
+    {
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(TenantProviderPolicy.Unrestricted);
+        policies.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(TenantProviderPolicy.Unrestricted);
+        return policies;
+    }
+
     private static AiConnectionRepository CreateRepository(
         MeisterProPRDbContext db,
         IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
-        ISecretProtectionCodec? codec = null)
+        ISecretProtectionCodec? codec = null,
+        ITenantProviderPolicyProvider? providerPolicies = null)
     {
-        return new AiConnectionRepository(db, codec ?? CreateCodec(), contextFactory);
+        return new AiConnectionRepository(
+            db,
+            codec ?? CreateCodec(),
+            providerPolicies ?? UnrestrictedPolicies(),
+            contextFactory);
     }
 
     private static MeisterProPRDbContext CreateContext()
@@ -967,7 +984,7 @@ public sealed class AiConnectionRepositoryTests
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(new TenantProviderPolicy([AiProviderKind.OpenAiCompatible]));
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
 
         // CreateWriteRequest builds an AzureOpenAi profile, which this tenant does not permit.
         var failure = await Assert.ThrowsAsync<ProviderKindNotPermittedException>(() => repo.AddAsync(clientId, CreateWriteRequest()));
@@ -985,7 +1002,7 @@ public sealed class AiConnectionRepositoryTests
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(new TenantProviderPolicy([AiProviderKind.AzureOpenAi]));
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
 
         var created = await repo.AddAsync(clientId, CreateWriteRequest());
 
@@ -1001,7 +1018,7 @@ public sealed class AiConnectionRepositoryTests
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(TenantProviderPolicy.Unrestricted);
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
 
         Assert.NotNull(await repo.AddAsync(clientId, CreateWriteRequest()));
     }
@@ -1016,7 +1033,7 @@ public sealed class AiConnectionRepositoryTests
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(new TenantProviderPolicy([], ["opencode.ai"]));
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
 
         // CreateWriteRequest points at an Azure host, which this tenant has not permitted.
         var failure = await Assert.ThrowsAsync<ProviderKindNotPermittedException>(() => repo.AddAsync(clientId, CreateWriteRequest()));
@@ -1033,7 +1050,7 @@ public sealed class AiConnectionRepositoryTests
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(new TenantProviderPolicy([], [".openai.azure.com"]));
-        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
 
         Assert.NotNull(await repo.AddAsync(clientId, CreateWriteRequest()));
     }

@@ -199,6 +199,99 @@ public sealed class AiRuntimeResolverTests
         Assert.Same(expected, runtime);
     }
 
+    // The destination half of the same policy, on the same path. A provider family says how the traffic is
+    // shaped and not who receives it, so a profile pointed at a host the tenant has not permitted is refused
+    // here as well; otherwise a permitted family reaches a forbidden endpoint.
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_RefusesAnEndpointHostTheTenantDoesNotPermit()
+    {
+        var (connection, model, binding) = Chat("gpt-4.1");
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            this.Sut(providerPolicies: Policies(new TenantProviderPolicy([], ["opencode.ai"])))
+                .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None));
+
+        Assert.Contains("api.test.com", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("permitted endpoint list", exception.Message, StringComparison.Ordinal);
+        // Refused before the runtime is built, so no credential is used.
+        this._runtimeFactory.DidNotReceive().CreateChatRuntime(
+            Arg.Any<AiConnectionDto>(),
+            Arg.Any<AiConfiguredModelDto>(),
+            Arg.Any<AiPurposeBindingDto>(),
+            Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_PermittedEndpointHostStillResolves()
+    {
+        var (connection, model, binding) = Chat("gpt-4.1");
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+        var expected = Substitute.For<IResolvedAiChatRuntime>();
+        this._runtimeFactory.CreateChatRuntime(connection, model, binding, Arg.Any<string?>()).Returns(expected);
+
+        var runtime = await this.Sut(providerPolicies: Policies(new TenantProviderPolicy([], ["api.test.com"])))
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None);
+
+        Assert.Same(expected, runtime);
+    }
+
+    // The other two entry points share the same refusal, so a forbidden host is refused whichever one resolves
+    // the connection.
+    [Fact]
+    public async Task ResolveChatRuntimeForModelAsync_RefusesAnEndpointHostTheTenantDoesNotPermit()
+    {
+        var (connection, model, binding) = Chat("gpt-4.1");
+        this._repository.GetModelBindingAsync(ClientId, model.Id, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            this.Sut(providerPolicies: Policies(new TenantProviderPolicy([], ["opencode.ai"])))
+                .ResolveChatRuntimeForModelAsync(ClientId, model.Id, CancellationToken.None));
+
+        Assert.Contains("permitted endpoint list", exception.Message, StringComparison.Ordinal);
+        this._runtimeFactory.DidNotReceiveWithAnyArgs().CreateChatRuntime(null!, null!, null!);
+    }
+
+    [Fact]
+    public async Task ResolveEmbeddingRuntimeAsync_RefusesAnEndpointHostTheTenantDoesNotPermit()
+    {
+        var model = AiConnectionTestFactory.CreateEmbeddingModel("text-embedding-3-small");
+        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.EmbeddingDefault, model);
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding]);
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.EmbeddingDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            this.Sut(providerPolicies: Policies(new TenantProviderPolicy([], ["opencode.ai"])))
+                .ResolveEmbeddingRuntimeAsync(ClientId, AiPurpose.EmbeddingDefault, 1536, CancellationToken.None));
+
+        Assert.Contains("permitted endpoint list", exception.Message, StringComparison.Ordinal);
+        this._runtimeFactory.DidNotReceiveWithAnyArgs().CreateEmbeddingRuntime(null!, null!, null!, null!, 0);
+    }
+
+    // The endpoint restriction reads the profile's base URL, and a profile that carries none is not refused for
+    // that alone: under a family-only policy it resolves exactly as before. What a host restriction does with a
+    // base URL it cannot read is the policy's own rule, asserted where the policy is tested.
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_ConnectionWithNoBaseUrl_IsNotRefusedByTheEndpointLeg()
+    {
+        var model = AiConnectionTestFactory.CreateChatModel("gpt-4.1");
+        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model);
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding], baseUrl: string.Empty);
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+        var expected = Substitute.For<IResolvedAiChatRuntime>();
+        this._runtimeFactory.CreateChatRuntime(connection, model, binding, Arg.Any<string?>()).Returns(expected);
+
+        var runtime = await this.Sut(providerPolicies: Policies(new TenantProviderPolicy([connection.ProviderKind])))
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None);
+
+        Assert.Same(expected, runtime);
+    }
+
     [Fact]
     public async Task ResolveChatRuntimeAsync_WithNoBindingAnywhere_FallsBackToARelatedPurposesLogicalModel()
     {
@@ -265,6 +358,16 @@ public sealed class AiRuntimeResolverTests
             .ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, CancellationToken.None));
     }
 
+    private static ITenantProviderPolicyProvider Policies(TenantProviderPolicy? policy = null)
+    {
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(policy ?? TenantProviderPolicy.Unrestricted);
+        return policies;
+    }
+
+    // Every resolver is built against a stated policy. A test that is not about the policy states an unrestricted
+    // one, so nothing here depends on what an absent policy provider would have done.
     private AiRuntimeResolver Sut(
         ILogicalModelResolver? logicalModelResolver = null,
         ILogicalModelCatalogRepository? logicalModelCatalog = null,
@@ -273,8 +376,8 @@ public sealed class AiRuntimeResolverTests
         return new AiRuntimeResolver(
             this._repository,
             this._runtimeFactory,
+            providerPolicies ?? Policies(),
             logicalModelResolver,
-            logicalModelCatalog,
-            providerPolicies);
+            logicalModelCatalog);
     }
 }

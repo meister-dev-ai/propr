@@ -19,8 +19,8 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 public sealed class AiConnectionRepository(
     MeisterProPRDbContext dbContext,
     ISecretProtectionCodec secretProtectionCodec,
+    ITenantProviderPolicyProvider providerPolicies,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
-    ITenantProviderPolicyProvider? providerPolicies = null,
     IAiProviderConfigAuditWriter? configAudit = null) : IAiConnectionRepository
 {
     private const string SecretPurpose = "AiConnectionApiKey";
@@ -510,7 +510,7 @@ public sealed class AiConnectionRepository(
         string baseUrl,
         CancellationToken ct)
     {
-        if (providerPolicies is null || clientId == Guid.Empty)
+        if (clientId == Guid.Empty)
         {
             return;
         }
@@ -524,7 +524,7 @@ public sealed class AiConnectionRepository(
         string baseUrl,
         CancellationToken ct)
     {
-        if (providerPolicies is null || tenantId == Guid.Empty)
+        if (tenantId == Guid.Empty)
         {
             return;
         }

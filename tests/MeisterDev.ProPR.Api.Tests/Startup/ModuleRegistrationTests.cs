@@ -29,6 +29,7 @@ using MeisterDev.ProPR.Infrastructure.Features.UsageStatistics;
 using MeisterDev.ProPR.ProCursor.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
@@ -420,6 +421,7 @@ public sealed class ModuleRegistrationTests
         services.AddInfrastructureSupport(configuration);
         services.AddProCursorRemoteMode(configuration);
         services.AddSingleton(Substitute.For<IAiConnectionRepository>());
+        services.AddSingleton(Substitute.For<ITenantProviderPolicyProvider>());
         services.AddSingleton(Substitute.For<IProCursorKnowledgeSourceRepository>());
         services.AddScoped<ManagedRemoteProCursorGateway>();
         services.AddScoped<IProCursorGateway>(sp => sp.GetRequiredService<ManagedRemoteProCursorGateway>());
@@ -502,6 +504,7 @@ public sealed class ModuleRegistrationTests
         services.AddInfrastructureSupport(configuration);
         services.AddProCursorRemoteMode(configuration);
         services.AddSingleton(Substitute.For<IAiConnectionRepository>());
+        services.AddSingleton(Substitute.For<ITenantProviderPolicyProvider>());
         services.AddSingleton(Substitute.For<IProCursorKnowledgeSourceRepository>());
         services.AddScoped<ManagedRemoteProCursorGateway>();
         services.AddScoped<IProCursorGateway>(sp => sp.GetRequiredService<DisabledProCursorGateway>());
@@ -539,6 +542,7 @@ public sealed class ModuleRegistrationTests
         // Shared support registers services whose own dependencies come from the modules this test leaves out,
         // and build-time validation covers every descriptor in the collection, so those are substituted.
         services.AddSingleton(Substitute.For<IAiConnectionRepository>());
+        services.AddSingleton(Substitute.For<ITenantProviderPolicyProvider>());
 
         using var provider = services.BuildServiceProvider(
             new ServiceProviderOptions
@@ -597,6 +601,7 @@ public sealed class ModuleRegistrationTests
         // Shared support registers services whose own dependencies come from the modules this test leaves out,
         // and build-time validation covers every descriptor in the collection, so those are substituted.
         services.AddSingleton(Substitute.For<IAiConnectionRepository>());
+        services.AddSingleton(Substitute.For<ITenantProviderPolicyProvider>());
 
         using var provider = services.BuildServiceProvider(
             new ServiceProviderOptions
@@ -612,6 +617,64 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ILicensingIdentityStore>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISystemProfileStore>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ILicensedResourceCountSource>());
+    }
+
+    // The three places that enforce a tenant's provider policy take the policy provider as a required
+    // dependency, so a composition that stops registering it cannot construct any of them: every review and
+    // every write through them fails immediately, and in an environment where the container validates on build
+    // the host does not come up at all. While the parameter was optional the same missing registration produced
+    // a host that started, served reviews, and enforced no policy anywhere. Asserted both ways round, because a
+    // resolution that failed for some unrelated reason would prove nothing.
+    [Fact]
+    public void ComposedModules_WithoutTheTenantProviderPolicyProvider_CannotConstructTheEnforcementPoints()
+    {
+        using (var composed = ComposeHostModules().BuildServiceProvider())
+        {
+            using var scope = composed.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<ITenantProviderPolicyProvider>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAiConnectionRepository>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAiConnectionScopeGuard>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAiRuntimeResolver>());
+        }
+
+        var withoutThePolicyProvider = ComposeHostModules();
+        withoutThePolicyProvider.RemoveAll<ITenantProviderPolicyProvider>();
+
+        using var provider = withoutThePolicyProvider.BuildServiceProvider();
+        using var brokenScope = provider.CreateScope();
+
+        foreach (var enforcementPoint in new[]
+                 {
+                     typeof(IAiConnectionRepository),
+                     typeof(IAiConnectionScopeGuard),
+                     typeof(IAiRuntimeResolver),
+                 })
+        {
+            var failure = Assert.Throws<InvalidOperationException>(() => brokenScope.ServiceProvider.GetRequiredService(enforcementPoint));
+
+            Assert.Contains(nameof(ITenantProviderPolicyProvider), failure.Message, StringComparison.Ordinal);
+        }
+    }
+
+    private static IServiceCollection ComposeHostModules()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddDataProtection();
+        services.AddSingleton(new VssConnectionFactory(Substitute.For<TokenCredential>()));
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration);
+        services.AddCrawlingModule(configuration);
+        services.AddClientsModule(configuration);
+        services.AddIdentityAndAccessModule(configuration);
+        services.AddMentionsModule(configuration);
+        services.AddPromptCustomizationModule(configuration);
+        services.AddUsageReportingModule(configuration);
+        services.AddProCursorModule(configuration);
+
+        return services;
     }
 
     [Fact]

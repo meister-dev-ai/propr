@@ -21,9 +21,9 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 public sealed class AiRuntimeResolver(
     IAiConnectionRepository aiConnectionRepository,
     IAiRuntimeFactory runtimeFactory,
+    ITenantProviderPolicyProvider providerPolicies,
     ILogicalModelResolver? logicalModelResolver = null,
-    ILogicalModelCatalogRepository? logicalModelCatalog = null,
-    ITenantProviderPolicyProvider? providerPolicies = null) : IAiRuntimeResolver
+    ILogicalModelCatalogRepository? logicalModelCatalog = null) : IAiRuntimeResolver
 {
     public async Task<IResolvedAiChatRuntime> ResolveChatRuntimeAsync(
         Guid clientId,
@@ -129,20 +129,23 @@ public sealed class AiRuntimeResolver(
             resolved.Model.EmbeddingDimensions.Value);
     }
 
-    // The tenant's provider policy is enforced again here, on the legacy purpose-binding path. The logical-model
-    // path gets it from the connection scope guard; this path consults no guard, so a profile bound before the
-    // policy changed would otherwise still run. Refusing before the runtime is built means no credential is used.
+    // The tenant's provider policy — which families, and which endpoint hosts — is enforced again here, on the
+    // legacy purpose-binding path. The logical-model path gets it from the connection scope guard; this path
+    // consults no guard, so a profile bound before the policy changed would otherwise still run. Refusing before
+    // the runtime is built means no credential is used.
     private async Task RefuseForbiddenProviderAsync(Guid clientId, AiConnectionDto connection, CancellationToken ct)
     {
-        if (providerPolicies is null)
+        var policy = await providerPolicies.GetForClientAsync(clientId, ct);
+        if (policy.DescribeRefusal(connection.ProviderKind) is { } kindRefusal)
         {
-            return;
+            throw new InvalidOperationException($"The AI connection '{connection.DisplayName}' cannot be used because {kindRefusal}.");
         }
 
-        var policy = await providerPolicies.GetForClientAsync(clientId, ct);
-        if (policy.DescribeRefusal(connection.ProviderKind) is { } refusal)
+        // The endpoint host is checked as well as the family. A profile on a permitted family can still be
+        // configured against a base URL the tenant's endpoint list does not permit.
+        if (policy.DescribeEndpointRefusal(connection.BaseUrl) is { } endpointRefusal)
         {
-            throw new InvalidOperationException($"The AI connection '{connection.DisplayName}' cannot be used because {refusal}.");
+            throw new InvalidOperationException($"The AI connection '{connection.DisplayName}' cannot be used because {endpointRefusal}.");
         }
     }
 
