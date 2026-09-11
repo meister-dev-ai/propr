@@ -1,6 +1,6 @@
 # Build stage
 # mcr.microsoft.com/dotnet/sdk:10.0
-FROM mcr.microsoft.com/dotnet/sdk@sha256:72dd743782f2ae7e5476fd64f6a460045e3998dc862218b80e6944cba79a01b0 AS build
+FROM mcr.microsoft.com/dotnet/sdk@sha256:4ea6fe75dd36706bb6d8c3c293d4c4315840f5d76ea28ac97def77e3ec487fa5 AS build
 WORKDIR /source
 
 COPY src/ src/
@@ -15,7 +15,7 @@ RUN mkdir -p /app/.data-protection-keys
 
 # Minimal Kerberos runtime slice for Azure DevOps client auth support.
 # ubuntu:24.04
-FROM ubuntu@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254 AS kerberos
+FROM ubuntu@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d AS kerberos
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
@@ -33,7 +33,7 @@ RUN mkdir -p /kerberos-root/usr/lib/x86_64-linux-gnu \
 
 # Runtime stage
 # mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra
-FROM mcr.microsoft.com/dotnet/aspnet@sha256:6385dc0eaef704fad88d3f65c334e791a371bbe448f52ca39d83d2df49251e28 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet@sha256:1fe86375600b62e6566b465da9553eef0621f13c67f40fe764cd8dbb1dee1497 AS runtime
 WORKDIR /app
 
 COPY --from=kerberos /kerberos-root/usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
