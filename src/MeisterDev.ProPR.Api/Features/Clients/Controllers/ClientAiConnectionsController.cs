@@ -350,6 +350,11 @@ public sealed partial class ClientAiConnectionsController(
             return unimplemented;
         }
 
+        if (await this.RefuseByTenantPolicyAsync(clientId, request.ProviderKind, request.BaseUrl, "used to discover models", ct) is { } refused)
+        {
+            return refused;
+        }
+
         var probeOptions = this.TryBuildProbeOptions(request.ProviderKind, request.BaseUrl, request.Auth, request.DefaultHeaders, request.DefaultQueryParams);
         if (probeOptions is null)
         {
@@ -398,19 +403,9 @@ public sealed partial class ClientAiConnectionsController(
             return unimplemented;
         }
 
-        // The tenant's provider policy is answered before anything is dialled: probing a forbidden provider would
-        // reach it with a credential the tenant has decided it does not want used.
-        var policy = await providerPolicies.GetForClientAsync(clientId, ct);
-        if (policy.DescribeRefusal(request.ProviderKind) is { } refusal)
+        if (await this.RefuseByTenantPolicyAsync(clientId, request.ProviderKind, request.BaseUrl, "probed", ct) is { } refused)
         {
-            this.ModelState.AddModelError("providerKind", $"This profile cannot be probed because {refusal}.");
-            return this.ValidationProblem();
-        }
-
-        if (policy.DescribeEndpointRefusal(request.BaseUrl) is { } endpointRefusal)
-        {
-            this.ModelState.AddModelError("baseUrl", $"This profile cannot be probed because {endpointRefusal}.");
-            return this.ValidationProblem();
+            return refused;
         }
 
         var probeOptions = this.TryBuildProbeOptions(
@@ -426,6 +421,33 @@ public sealed partial class ClientAiConnectionsController(
 
         var driver = providerDrivers.GetRequired(request.ProviderKind);
         return this.Ok((await driver.VerifyAsync(probeOptions.ToProviderEndpoint(), ct)).ToDto());
+    }
+
+    // The tenant's provider policy is answered before anything is dialled: reaching a forbidden provider or a
+    // forbidden endpoint would use a credential the tenant has decided it does not want used. Both routes that
+    // dial an operator-supplied target call this, so the two restrictions are enforced the same way on each.
+    private async Task<IActionResult?> RefuseByTenantPolicyAsync(
+        Guid clientId,
+        AiProviderKind providerKind,
+        string? baseUrl,
+        string refusedAction,
+        CancellationToken ct)
+    {
+        var policy = await providerPolicies.GetForClientAsync(clientId, ct);
+
+        if (policy.DescribeRefusal(providerKind) is { } refusal)
+        {
+            this.ModelState.AddModelError("providerKind", $"This profile cannot be {refusedAction} because {refusal}.");
+            return this.ValidationProblem();
+        }
+
+        if (policy.DescribeEndpointRefusal(baseUrl) is { } endpointRefusal)
+        {
+            this.ModelState.AddModelError("baseUrl", $"This profile cannot be {refusedAction} because {endpointRefusal}.");
+            return this.ValidationProblem();
+        }
+
+        return null;
     }
 
     // A provider family this build cannot call is refused where the operator can see it, naming what is

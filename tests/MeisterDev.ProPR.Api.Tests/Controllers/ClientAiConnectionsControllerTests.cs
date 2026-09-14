@@ -28,6 +28,49 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         return client;
     }
 
+    // A tenant administrator writes the allow-lists through the tenant API, so the tests state them the same
+    // way. Empty lists clear the restriction; a test restores the fixture by passing two of them.
+    private async Task SetTenantAiPolicyAsync(string[] allowedProviderKinds, string[] allowedEndpointHosts)
+    {
+        var client = this.CreateAuthorizedClient();
+        var response = await client.PatchAsJsonAsync(
+            $"/admin/tenants/{factory.TenantId}",
+            new
+            {
+                allowedAiProviderKinds = allowedProviderKinds,
+                allowedAiEndpointHosts = allowedEndpointHosts,
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // Posts an unsaved profile to one of the two routes that dial a provider and returns the model errors of the
+    // 400 it answers with, one joined message per field.
+    private async Task<IReadOnlyDictionary<string, string>> PostForModelErrorsAsync(
+        string route,
+        string providerKind,
+        string baseUrl)
+    {
+        var client = this.CreateAuthorizedClient();
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{factory.ClientId}/ai-connections/{route}",
+            new
+            {
+                providerKind,
+                baseUrl,
+                auth = new { mode = "apiKey", apiKey = "secret-api-key" },
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(ApiJsonOptions);
+        return problem.GetProperty("errors")
+            .EnumerateObject()
+            .ToDictionary(
+                field => field.Name,
+                field => string.Join(" ", field.Value.EnumerateArray().Select(message => message.GetString())),
+                StringComparer.Ordinal);
+    }
+
     private static object BuildConfiguredModel(string remoteModelId, bool embedding = false)
     {
         return embedding
@@ -304,6 +347,124 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("Azure AI host", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Discovery dials an operator-supplied provider with an operator-supplied credential, so the tenant's
+    // permitted-provider list decides before the request is built. The driver refuses this request's target as
+    // well, so a refusal naming providerKind means the policy was consulted first.
+    [Fact]
+    public async Task DiscoverModels_WithAProviderFamilyTheTenantForbids_IsRefusedBeforeTheTargetIsValidated()
+    {
+        await this.SetTenantAiPolicyAsync(["openAi"], []);
+        try
+        {
+            var errors = await this.PostForModelErrorsAsync(
+                "discover-models",
+                providerKind: "azureOpenAi",
+                baseUrl: "https://internal.corp.example/");
+
+            Assert.Equal(
+                "This profile cannot be used to discover models because the 'AzureOpenAi' provider is not on this "
+                + "tenant's permitted provider list (permitted: OpenAi).",
+                Assert.Contains("providerKind", errors));
+            Assert.DoesNotContain("baseUrl", errors.Keys);
+        }
+        finally
+        {
+            await this.SetTenantAiPolicyAsync([], []);
+        }
+    }
+
+    // The counterpart to the refusal above: with the family permitted the same request reaches the driver's
+    // target validation, which is where its non-Azure host is refused.
+    [Fact]
+    public async Task DiscoverModels_WithAProviderFamilyTheTenantPermits_ReachesTheTargetValidation()
+    {
+        await this.SetTenantAiPolicyAsync(["azureOpenAi"], []);
+        try
+        {
+            var errors = await this.PostForModelErrorsAsync(
+                "discover-models",
+                providerKind: "azureOpenAi",
+                baseUrl: "https://internal.corp.example/");
+
+            Assert.DoesNotContain("providerKind", errors.Keys);
+            Assert.Contains("Azure AI host", Assert.Contains("baseUrl", errors), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await this.SetTenantAiPolicyAsync([], []);
+        }
+    }
+
+    // The second leg of the policy: the permitted-endpoint list says which hosts may be reached. A family the
+    // first leg permits can still be pointed at a host the tenant forbids, so discovery answers to both.
+    [Fact]
+    public async Task DiscoverModels_WithAnEndpointHostTheTenantForbids_Returns400WithABaseUrlError()
+    {
+        await this.SetTenantAiPolicyAsync([], ["api.openai.com"]);
+        try
+        {
+            var errors = await this.PostForModelErrorsAsync(
+                "discover-models",
+                providerKind: "azureOpenAi",
+                baseUrl: "https://my-openai.openai.azure.com/");
+
+            Assert.Equal(
+                "This profile cannot be used to discover models because "
+                + "'https://my-openai.openai.azure.com/' is not on this tenant's permitted endpoint list "
+                + "(permitted: api.openai.com).",
+                Assert.Contains("baseUrl", errors));
+        }
+        finally
+        {
+            await this.SetTenantAiPolicyAsync([], []);
+        }
+    }
+
+    // Probing refuses on the same two legs and says "probed" where discovery says "used to discover models".
+    [Fact]
+    public async Task ProbeAiConnection_WithAProviderFamilyTheTenantForbids_Returns400WithAProviderKindError()
+    {
+        await this.SetTenantAiPolicyAsync(["openAi"], []);
+        try
+        {
+            var errors = await this.PostForModelErrorsAsync(
+                "probe",
+                providerKind: "azureOpenAi",
+                baseUrl: "https://my-openai.openai.azure.com/");
+
+            Assert.Equal(
+                "This profile cannot be probed because the 'AzureOpenAi' provider is not on this tenant's "
+                + "permitted provider list (permitted: OpenAi).",
+                Assert.Contains("providerKind", errors));
+        }
+        finally
+        {
+            await this.SetTenantAiPolicyAsync([], []);
+        }
+    }
+
+    [Fact]
+    public async Task ProbeAiConnection_WithAnEndpointHostTheTenantForbids_Returns400WithABaseUrlError()
+    {
+        await this.SetTenantAiPolicyAsync([], ["api.openai.com"]);
+        try
+        {
+            var errors = await this.PostForModelErrorsAsync(
+                "probe",
+                providerKind: "azureOpenAi",
+                baseUrl: "https://my-openai.openai.azure.com/");
+
+            Assert.Equal(
+                "This profile cannot be probed because 'https://my-openai.openai.azure.com/' is not on this "
+                + "tenant's permitted endpoint list (permitted: api.openai.com).",
+                Assert.Contains("baseUrl", errors));
+        }
+        finally
+        {
+            await this.SetTenantAiPolicyAsync([], []);
+        }
     }
 
     // Every pricing and capability field the model editor collects has to survive the round trip. The request
