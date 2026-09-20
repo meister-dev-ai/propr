@@ -41,9 +41,9 @@
         add-in's output is a second copy of the same kind.
     -->
     <ItemGroup>
-        <ProviderAddInSharedAssembly Include="MeisterDev.Ai.Providers.Abstractions"/>
-        <ProviderAddInSharedAssembly Include="MeisterDev.Ai.Providers.Conformance"/>
-        <ProviderAddInSharedAssembly Include="Microsoft.Extensions.AI.Abstractions"/>
+        <ProviderAddInSharedAssembly Include="MeisterDev.Ai.Providers.Abstractions" />
+        <ProviderAddInSharedAssembly Include="MeisterDev.Ai.Providers.Conformance" />
+        <ProviderAddInSharedAssembly Include="Microsoft.Extensions.AI.Abstractions" />
     </ItemGroup>
 
 </Project>

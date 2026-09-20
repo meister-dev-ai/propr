@@ -19,7 +19,8 @@
             BeforeTargets="AssignProjectConfiguration"
             Condition="'$(ProviderAddInPackaging)' == 'true'">
         <ItemGroup>
-            <ProjectReference Condition="'%(Filename)' == 'MeisterDev.Ai.Providers.Abstractions' OR '%(Filename)' == 'MeisterDev.Ai.Providers.Conformance'">
+            <ProjectReference
+                Condition="'%(Filename)' == 'MeisterDev.Ai.Providers.Abstractions' OR '%(Filename)' == 'MeisterDev.Ai.Providers.Conformance'">
                 <Private>false</Private>
             </ProjectReference>
         </ItemGroup>
@@ -45,7 +46,7 @@
         <ItemGroup>
             <ReferenceCopyLocalPaths
                 Remove="@(ReferenceCopyLocalPaths)"
-                Condition="$(_ProviderAddInSharedNames.Contains(';%(Filename);'))"/>
+                Condition="$(_ProviderAddInSharedNames.Contains(';%(Filename);'))" />
         </ItemGroup>
     </Target>
 
@@ -63,7 +64,7 @@
         <ItemGroup>
             <ResolvedFileToPublish
                 Remove="@(ResolvedFileToPublish)"
-                Condition="$(_ProviderAddInSharedNames.Contains(';%(Filename);'))"/>
+                Condition="$(_ProviderAddInSharedNames.Contains(';%(Filename);'))" />
         </ItemGroup>
     </Target>
 
@@ -78,11 +79,11 @@
             Condition="'$(ProviderAddInPackaging)' == 'true' AND '$(ProviderAddInPackagingCheck)' != 'false'">
         <ItemGroup>
             <_ProviderAddInShadowed Include="@(ProviderAddInSharedAssembly)"
-                                    Condition="Exists('$(OutDir)%(Identity).dll')"/>
+                                    Condition="Exists('$(OutDir)%(Identity).dll')" />
         </ItemGroup>
         <Error Condition="'@(_ProviderAddInShadowed)' != ''"
                Code="PROPRADDIN001"
-               Text="This add-in's output folder contains a copy of @(_ProviderAddInShadowed, ', '). The host resolves those from its own load context, so a copy here is loaded instead and the add-in's driver ends up implementing a different interface than the host's, with nothing reporting a failure. Import the shared add-in build configuration, or set EnableDynamicLoading, Private=false on the project reference and ExcludeAssets=runtime on the package reference by hand. A project that references the contract without being an add-in sets ProviderAddInPackaging to false instead."/>
+               Text="This add-in's output folder contains a copy of @(_ProviderAddInShadowed, ', '). The host resolves those from its own load context, so a copy here is loaded instead and the add-in's driver ends up implementing a different interface than the host's, with nothing reporting a failure. Import the shared add-in build configuration, or set EnableDynamicLoading, Private=false on the project reference and ExcludeAssets=runtime on the package reference by hand. A project that references the contract without being an add-in sets ProviderAddInPackaging to false instead." />
     </Target>
 
     <Target Name="VerifyPublishedProviderAddInDoesNotShadowSharedAssemblies"
@@ -90,11 +91,11 @@
             Condition="'$(ProviderAddInPackaging)' == 'true' AND '$(ProviderAddInPackagingCheck)' != 'false'">
         <ItemGroup>
             <_ProviderAddInPublishedShadowed Include="@(ProviderAddInSharedAssembly)"
-                                             Condition="Exists('$(PublishDir)%(Identity).dll')"/>
+                                             Condition="Exists('$(PublishDir)%(Identity).dll')" />
         </ItemGroup>
         <Error Condition="'@(_ProviderAddInPublishedShadowed)' != ''"
                Code="PROPRADDIN001"
-               Text="This add-in's publish folder contains a copy of @(_ProviderAddInPublishedShadowed, ', '). The host resolves those from its own load context, so a copy here is loaded instead and the add-in's driver ends up implementing a different interface than the host's, with nothing reporting a failure. Import the shared add-in build configuration, or set EnableDynamicLoading, Private=false on the project reference and ExcludeAssets=runtime on the package reference by hand. A project that references the contract without being an add-in sets ProviderAddInPackaging to false instead."/>
+               Text="This add-in's publish folder contains a copy of @(_ProviderAddInPublishedShadowed, ', '). The host resolves those from its own load context, so a copy here is loaded instead and the add-in's driver ends up implementing a different interface than the host's, with nothing reporting a failure. Import the shared add-in build configuration, or set EnableDynamicLoading, Private=false on the project reference and ExcludeAssets=runtime on the package reference by hand. A project that references the contract without being an add-in sets ProviderAddInPackaging to false instead." />
     </Target>
 
 </Project>
