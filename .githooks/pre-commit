@@ -7,20 +7,29 @@
 set -eu
 
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
-STAGED_CS_FILES=$(printf '%s\n' "$STAGED_FILES" | grep '\.cs$' || true)
 STAGED_FRONTEND_FILES=$(printf '%s\n' "$STAGED_FILES" | grep '^frontend/' || true)
+
+# CI runs cleanupcode over the whole solution, so it reformats every file type ReSharper
+# handles, not only C#. An MSBuild fragment a project pulls in as an item is one of them,
+# and a diff in one fails the CI format gate the same way a C# file does. Cleaning only
+# the staged .cs files therefore let a reformat of such a file reach main unnoticed.
+STAGED_FORMAT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -v '^frontend/' | grep -E '\.(cs|props|targets|resx|xaml|xml|config|json)$' || true)
+
+# Build and test are gated on the narrower set that can change what the solution compiles
+# to, so a reformat-only file type does not pull a full build and test run behind it.
+STAGED_BACKEND_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(cs|props|targets|csproj|slnx)$' || true)
 
 # Nothing that affects backend or frontend is staged (e.g. a docs-only commit):
 # skip the heavy checks entirely.
-if [ -z "$STAGED_CS_FILES" ] && [ -z "$STAGED_FRONTEND_FILES" ]; then
+if [ -z "$STAGED_FORMAT_FILES" ] && [ -z "$STAGED_BACKEND_FILES" ] && [ -z "$STAGED_FRONTEND_FILES" ]; then
     exit 0
 fi
 
-# ── 1. Backend: format, build, test (only when C# files are staged) ───────────
-if [ -n "$STAGED_CS_FILES" ]; then
+# ── 1. Backend: format ───────────────────────────────────────────────────────
+if [ -n "$STAGED_FORMAT_FILES" ]; then
     # --- JetBrains Cleanup Block ---
     if command -v jb > /dev/null 2>&1; then
-        JB_FILES=$(printf '%s\n' "$STAGED_CS_FILES" | tr '\n' ';')
+        JB_FILES=$(printf '%s\n' "$STAGED_FORMAT_FILES" | tr '\n' ';')
 
         echo "Running 'jb cleanupcode'..."
 
@@ -29,7 +38,7 @@ if [ -n "$STAGED_CS_FILES" ]; then
         # If it is installed but broken, keep build/test enforcement active.
         if jb cleanupcode "MeisterDev.ProPR.slnx" --profile="Built-in: Reformat Code" --include="$JB_FILES"; then
             # Stage ONLY the files that were in our list.
-            printf '%s\n' "$STAGED_CS_FILES" | xargs git add
+            printf '%s\n' "$STAGED_FORMAT_FILES" | xargs git add
             echo "Cleanup complete and specific files staged."
         else
             echo "JetBrains 'jb cleanupcode' failed. Skipping cleanup and continuing with build/test checks."
@@ -39,7 +48,10 @@ if [ -n "$STAGED_CS_FILES" ]; then
     fi
 
     echo "pre-commit: format check passed."
+fi
 
+# ── 2. Backend: build and test ───────────────────────────────────────────────
+if [ -n "$STAGED_BACKEND_FILES" ]; then
     echo "pre-commit: running dotnet build..."
     if ! dotnet build ./MeisterDev.ProPR.slnx --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
         echo ""
@@ -61,7 +73,7 @@ if [ -n "$STAGED_CS_FILES" ]; then
     echo "pre-commit: all backend tests passed."
 fi
 
-# ── 2. Frontend: type-check + tests (only when frontend files are staged) ─────
+# ── 3. Frontend: type-check and tests ────────────────────────────────────────
 if [ -n "$STAGED_FRONTEND_FILES" ]; then
     echo "pre-commit: running frontend type-check..."
     if ! (cd frontend && npm run type-check); then
