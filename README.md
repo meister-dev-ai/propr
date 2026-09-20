@@ -31,11 +31,6 @@ requests come in or on demand from CI.
   stored, and the management UI shows them.
 - **Tuned for cost and relevance.** Token-aware reviews, per-file passes and relevance filtering limit
   what a review sends to the model and what it posts back.
-- **Usage statistics, documented field by field.** An installation sends one report a day: a random
-  installation id, the version, the edition, and counters reported as ranges. A community installation's
-  report is anonymous. A commercial installation also sends its license identifier and what it holds against
-  the limits that license states. [Usage statistics](docs/reference/usage-statistics.md) lists every field,
-  the admin UI shows the request body before it is sent, and a community installation can switch it off.
 
 ## Get started
 
