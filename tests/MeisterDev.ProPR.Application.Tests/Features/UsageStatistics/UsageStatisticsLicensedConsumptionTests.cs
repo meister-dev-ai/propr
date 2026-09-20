@@ -36,7 +36,7 @@ public sealed class UsageStatisticsLicensedConsumptionTests : IDisposable
     private static readonly LicensedResourceCounts Counts = new(12, 4, 2);
 
     /// <summary>
-    ///     The highest number of reviews that executed at the same time on the previous UTC day, which is what
+    ///     The highest number of reviews that executed at the same time on the previous UTC day, which 
     ///     the report carries for that dimension rather than the two executing right now.
     /// </summary>
     private const long PreviousDayPeak = 6;

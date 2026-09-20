@@ -226,7 +226,7 @@ public sealed partial class RatchetedLicensingClock : ILicensingClock
     /// <remarks>
     ///     A caller that finds the gate taken waits rather than skipping the advance, so it returns only once
     ///     an advance has persisted. Once through the gate it checks what the last successful advance in this
-    ///     process recorded, and takes that value when it is younger than the interval, which is what keeps a
+    ///     process recorded, and takes that value when it is younger than the interval, and that keeps a
     ///     burst to one write. A caller that found no record skips that check, because the value this process
     ///     remembers says nothing about a row that is no longer there. The value is set only after the write succeeds, so a failure leaves the next
     ///     caller to advance rather than suppressing it for an interval.

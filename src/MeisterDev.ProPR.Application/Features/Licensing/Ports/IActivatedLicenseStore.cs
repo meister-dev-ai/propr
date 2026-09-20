@@ -52,7 +52,7 @@ public interface IActivatedLicenseStore
     /// <summary>
     ///     Stores a license document, replacing whatever was activated before. An installation holds one
     ///     license, so this is a single-row write. On PostgreSQL it is an upsert under the same lock
-    ///     <see cref="ReplaceAsync" /> takes, which is what lets two replicas run it at the same time without
+    ///     <see cref="ReplaceAsync" /> takes, and that lets two replicas run it at the same time without
     ///     either failing; the in-memory test host writes without that lock.
     /// </summary>
     /// <param name="compactLicense">The compact license document.</param>

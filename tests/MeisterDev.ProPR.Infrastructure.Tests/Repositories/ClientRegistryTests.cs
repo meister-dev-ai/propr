@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text.Json;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -717,9 +718,9 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
                 Id = profileId,
                 ClientId = clientId,
                 DisplayName = $"Connection {profileId:N}",
-                ProviderKind = AiProviderKind.AzureOpenAi.ToString(),
+                ProviderKind = "AzureOpenAi",
                 BaseUrl = "https://x.openai.azure.com/",
-                AuthMode = AiAuthMode.AzureIdentity.ToString(),
+                AuthMode = "AzureIdentity",
                 DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
                 DefaultHeaders = [],
                 DefaultQueryParams = [],
@@ -736,7 +737,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
                         RemoteModelId = $"gpt-4o-{modelId:N}",
                         DisplayName = "gpt-4o",
                         OperationKinds = [AiOperationKind.Chat.ToString()],
-                        SupportedProtocolModes = [AiProtocolMode.Auto.ToString()],
+                        SupportedProtocolModes = [ProviderDeclaredProtocolModes.Auto.ToString()],
                         SupportsStructuredOutput = true,
                         SupportsToolUse = true,
                         Source = AiConfiguredModelSource.Manual.ToString(),

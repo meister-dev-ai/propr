@@ -4,7 +4,8 @@
 using System.Collections.Concurrent;
 using MeisterDev.Ai.Providers.Catalog;
 using MeisterDev.Ai.Providers.Contracts;
-using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.Ai.Providers.Runtime;
@@ -29,12 +30,15 @@ namespace MeisterDev.Ai.Providers.Runtime;
 ///         rejection, because the parameter is dropped before the call is made.
 ///     </para>
 ///     <para>
-///         Scoped to the OpenAI family on purpose. Other vendors accept a temperature from a reasoning-capable
-///         model and object only once thinking is actually switched on, which their own clients already handle,
-///         so pre-emptively clearing it for them would discard a setting the operator chose.
+///         Which families this applies to comes from what each one declares, not from a list here. A family
+///         declares the wire name its endpoint refuses a sampling temperature under, and only a family that
+///         declares one is decorated. Other vendors accept a temperature from a reasoning-capable model and object
+///         only once thinking is actually switched on, which their own clients already handle, so pre-emptively
+///         clearing it for them would discard a setting the operator chose.
 ///     </para>
 /// </remarks>
-public sealed class ReasoningModelSamplingDecorator : IProviderChatClientDecorator
+/// <param name="driver">The family whose declared request shape says whether, and under what name, a temperature is refused.</param>
+public sealed class ReasoningModelSamplingDecorator(IAiProviderDriver driver) : IProviderChatClientDecorator
 {
     /// <summary>
     ///     Models the bundled snapshot says reason, so a first call is not spent discovering what is already
@@ -58,17 +62,38 @@ public sealed class ReasoningModelSamplingDecorator : IProviderChatClientDecorat
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(model);
 
-        if (!IsOpenAiFamily(endpoint.ProviderKind))
+        if (RefusedTemperatureName(driver.Declaration.RequestShapeDefaults) is not { } parameterName)
         {
             return inner;
         }
 
         var key = $"{endpoint.ProviderKind}|{model.RemoteModelId}";
+
+        // A family that declares its endpoint accepts no temperature starts with the refusal already known, so a
+        // model whose catalog entry says nothing does not pay the first rejection to find out.
         var known = model.SupportsReasoning
+                    || driver.Declaration.RequestShapeDefaults.AcceptsTemperature == false
                     || KnownReasoningModels.Value.Contains(model.RemoteModelId)
                     || RefusedModels.ContainsKey(key);
 
-        return new TemperatureAdaptiveChatClient(inner, known, key);
+        return new TemperatureAdaptiveChatClient(inner, known, key, parameterName);
+    }
+
+    /// <summary>
+    ///     The wire name this family's endpoint refuses a sampling temperature under, or null where it refuses
+    ///     none.
+    /// </summary>
+    private static string? RefusedTemperatureName(ProviderRequestShapeDefaults defaults)
+    {
+        foreach (var refused in defaults.RefusedParameters)
+        {
+            if (refused.Value == ProviderRequestShapeConstraint.Temperature)
+            {
+                return refused.Key;
+            }
+        }
+
+        return null;
     }
 
     private static HashSet<string> LoadKnownReasoningModels()
@@ -90,27 +115,25 @@ public sealed class ReasoningModelSamplingDecorator : IProviderChatClientDecorat
         }
     }
 
-    private static bool IsOpenAiFamily(AiProviderKind providerKind)
-    {
-        return providerKind is AiProviderKind.OpenAi
-            or AiProviderKind.AzureOpenAi
-            or AiProviderKind.OpenAiCompatible
-            or AiProviderKind.LiteLlm;
-    }
-
-    /// <summary>Determines whether <paramref name="exception" /> is the provider refusing a temperature.</summary>
+    /// <summary>
+    ///     Determines whether <paramref name="exception" /> is the provider refusing the parameter
+    ///     <paramref name="parameterName" /> names.
+    /// </summary>
     /// <remarks>
     ///     Matched on the message because the refusal is a plain bad request: the status alone cannot distinguish
     ///     it from the many other reasons a request is rejected, and re-sending those without a temperature would
-    ///     turn one clear failure into two. Both words must appear, so a message that merely mentions a
-    ///     temperature is not mistaken for this.
+    ///     turn one clear failure into two. Both the parameter name and a refusal phrase must appear, so a message
+    ///     that merely mentions the parameter is not mistaken for this. The name is the vendor's, declared by the
+    ///     family; the phrases are the host's rule.
     /// </remarks>
-    public static bool IsTemperatureRefusal(Exception exception)
+    /// <param name="exception">The exception the call threw.</param>
+    /// <param name="parameterName">The wire name the family declared the refusal keys on.</param>
+    public static bool IsTemperatureRefusal(Exception exception, string parameterName)
     {
         for (var current = exception; current is not null; current = current.InnerException)
         {
             var message = current.Message;
-            if (message.Contains("temperature", StringComparison.OrdinalIgnoreCase)
+            if (message.Contains(parameterName, StringComparison.OrdinalIgnoreCase)
                 && (message.Contains("not supported", StringComparison.OrdinalIgnoreCase)
                     || message.Contains("unsupported", StringComparison.OrdinalIgnoreCase)))
             {
@@ -121,7 +144,11 @@ public sealed class ReasoningModelSamplingDecorator : IProviderChatClientDecorat
         return false;
     }
 
-    private sealed class TemperatureAdaptiveChatClient(IChatClient inner, bool knownToReason, string modelKey)
+    private sealed class TemperatureAdaptiveChatClient(
+        IChatClient inner,
+        bool knownToReason,
+        string modelKey,
+        string parameterName)
         : DelegatingChatClient(inner)
     {
         private volatile bool _refused = knownToReason;
@@ -140,7 +167,7 @@ public sealed class ReasoningModelSamplingDecorator : IProviderChatClientDecorat
             {
                 return await base.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (options?.Temperature is not null && IsTemperatureRefusal(ex))
+            catch (Exception ex) when (options?.Temperature is not null && IsTemperatureRefusal(ex, parameterName))
             {
                 // Remembered for the process, not just this client, so a model is probed once rather than once
                 // per runtime the resolver hands out.

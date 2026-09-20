@@ -1,6 +1,11 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -17,6 +22,8 @@ namespace MeisterDev.ProPR.Application.Tests.IdentityAndAccess;
 
 public sealed class TenantPersistenceServiceTests
 {
+    private const string LoadedFamilyKey = "meisterdev/azureOpenAi";
+
     [Fact]
     public async Task TenantAdminService_CreateAndPatchAsync_PersistsTenantState()
     {
@@ -33,6 +40,26 @@ public sealed class TenantPersistenceServiceTests
         Assert.Equal(created.Id, bySlug!.Id);
         Assert.Contains(db.TenantAuditEntries, entry => entry.EventType == "tenant.created");
         Assert.Contains(db.TenantAuditEntries, entry => entry.EventType == "tenant.policy.updated");
+    }
+
+    // The admin read is what an operator consults after a tenant starts refusing every provider, so it has to
+    // report the entry that caused it and not quietly leave it out.
+    [Fact]
+    public async Task TenantAdminService_GetByIdAsync_ReportsAnAllowListEntryNoFamilyClaims()
+    {
+        await using var db = CreateContext();
+        var sut = new TenantAdminService(db, providerDrivers: Families());
+        var created = await sut.CreateAsync("acme", "Acme Corp");
+
+        var tenant = await db.Tenants.FindAsync(created.Id);
+        tenant!.AllowedAiProviderKinds = [LoadedFamilyKey, "Acme.Llm"];
+        await db.SaveChangesAsync();
+
+        var read = await sut.GetByIdAsync(created.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal([LoadedFamilyKey], read!.AllowedAiProviderKinds);
+        Assert.Equal(["Acme.Llm"], read.UnresolvedAiProviderKinds);
     }
 
     [Fact]
@@ -209,7 +236,7 @@ public sealed class TenantPersistenceServiceTests
         Assert.Empty(db.Tenants);
     }
 
-    // No licensing service means no installation state to read, which is what a deployment without a database
+    // No licensing service means no installation state to read, which a deployment without a database
     // configured looks like. Tenancy stays unrestricted there rather than collapsing to the System tenant.
     [Fact]
     public async Task TenantAdminService_WithoutTheLicensingModule_LeavesTenancyUnrestricted()
@@ -366,5 +393,123 @@ public sealed class TenantPersistenceServiceTests
             .Options;
 
         return new MeisterProPRDbContext(options);
+    }
+
+    // Saving a provider policy keeps an entry this build cannot name. The field is typed as the closed family
+    // enum, so a caller cannot send one back, and dropping what it could not express would lift the restriction
+    // that entry carries — turning a save of something else into a silent removal.
+    [Fact]
+    public async Task TenantAdminService_PatchAsync_KeepsAnAllowListEntryNoFamilyClaims()
+    {
+        await using var db = CreateContext();
+        var sut = new TenantAdminService(db, providerDrivers: Families());
+        var created = await sut.CreateAsync("acme", "Acme Corp");
+
+        var tenant = await db.Tenants.FindAsync(created.Id);
+        tenant!.AllowedAiProviderKinds = [LoadedFamilyKey, "Acme.Llm"];
+        await db.SaveChangesAsync();
+
+        await sut.PatchAsync(created.Id, allowedAiProviderKinds: [LoadedFamilyKey]);
+
+        var read = await sut.GetByIdAsync(created.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal([LoadedFamilyKey], read!.AllowedAiProviderKinds);
+        Assert.Equal(["Acme.Llm"], read.UnresolvedAiProviderKinds);
+    }
+
+    // Keeping such an entry across every save would leave a tenant whose only entry stopped resolving refusing
+    // every provider with no way back, so removing one is its own input. It names the entry, and that keeps
+    // the removal deliberate.
+    [Fact]
+    public async Task TenantAdminService_PatchAsync_RemovesTheAllowListEntryItIsGiven()
+    {
+        await using var db = CreateContext();
+        var sut = new TenantAdminService(db, providerDrivers: Families());
+        var created = await sut.CreateAsync("acme", "Acme Corp");
+
+        var tenant = await db.Tenants.FindAsync(created.Id);
+        tenant!.AllowedAiProviderKinds = ["Acme.Llm", "Acme.Other"];
+        await db.SaveChangesAsync();
+
+        await sut.PatchAsync(created.Id, removedUnresolvedAiProviderKinds: ["Acme.Llm"]);
+
+        var read = await sut.GetByIdAsync(created.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(["Acme.Other"], read!.UnresolvedAiProviderKinds);
+        Assert.Empty(read.AllowedAiProviderKinds!);
+    }
+
+    // Removing the last one lifts the restriction, which is how a tenant whose policy this build can no longer
+    // read gets back to a usable state without being able to name the entry as a family.
+    [Fact]
+    public async Task TenantAdminService_PatchAsync_RemovingTheLastUnclaimedEntryLiftsTheRestriction()
+    {
+        await using var db = CreateContext();
+        var sut = new TenantAdminService(db, providerDrivers: Families());
+        var created = await sut.CreateAsync("acme", "Acme Corp");
+
+        var tenant = await db.Tenants.FindAsync(created.Id);
+        tenant!.AllowedAiProviderKinds = ["Acme.Llm"];
+        await db.SaveChangesAsync();
+
+        await sut.PatchAsync(created.Id, removedUnresolvedAiProviderKinds: ["Acme.Llm"]);
+
+        // Read through the translation the enforcement path uses, because "no longer restricted" is the property
+        // that matters and the stored columns are what it is decided from.
+        var policy = TenantProviderPolicy.FromStored(
+            tenant.AllowedAiProviderKinds,
+            tenant.AllowedAiEndpointHosts,
+            Families());
+
+        Assert.False(policy.IsRestricted);
+        Assert.True(policy.IsAllowed(LoadedFamilyKey));
+    }
+
+    // The families are not restated when an entry is removed, so they are carried rather than cleared: a removal
+    // that also lifted the family restriction would be the silent side effect this input exists to avoid.
+    [Fact]
+    public async Task TenantAdminService_PatchAsync_RemovingAnEntryLeavesThePermittedFamiliesAlone()
+    {
+        await using var db = CreateContext();
+        var sut = new TenantAdminService(db, providerDrivers: Families());
+        var created = await sut.CreateAsync("acme", "Acme Corp");
+
+        var tenant = await db.Tenants.FindAsync(created.Id);
+        tenant!.AllowedAiProviderKinds = [LoadedFamilyKey, "Acme.Llm"];
+        await db.SaveChangesAsync();
+
+        await sut.PatchAsync(created.Id, removedUnresolvedAiProviderKinds: ["Acme.Llm"]);
+
+        var read = await sut.GetByIdAsync(created.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal([LoadedFamilyKey], read!.AllowedAiProviderKinds);
+        Assert.Empty(read.UnresolvedAiProviderKinds!);
+    }
+
+    // One loaded family, so an allow-list entry has something to resolve against and everything else is an
+    // entry no family claims.
+    private static IAiProviderDriverRegistry Families()
+    {
+        var declaration = new ProviderDeclaration
+        {
+            Key = LoadedFamilyKey,
+            Label = "Loaded family",
+            Version = "1.0",
+            ContractVersion = ProviderContract.Version,
+            AuthModes = [new ProviderDeclaredAuthMode(LoadedFamilyKey + ":ApiKey", [AiCredentialFieldSupport.ApiKey])],
+            ProtocolModes = new ProviderDeclaredProtocolModes([ProviderDeclaredProtocolModes.Auto]),
+            ConformanceInputs = new ProviderConformanceInputs(LoadedFamilyKey + ":ApiKey"),
+        };
+
+        var driver = Substitute.For<IAiProviderDriver>();
+        driver.Declaration.Returns(declaration);
+        driver.SupportedAuthModes.Returns(declaration.SupportedAuthModes);
+        driver.SupportedProtocolModes.Returns(declaration.ProtocolModes.Supported);
+        driver.CredentialFields.Returns(declaration.CredentialFields);
+
+        return new AiProviderRegistry([driver]);
     }
 }

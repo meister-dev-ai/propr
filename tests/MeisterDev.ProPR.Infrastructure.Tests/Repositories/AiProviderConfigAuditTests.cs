@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
@@ -37,7 +38,8 @@ public sealed class AiProviderConfigAuditTests
         await using var db = CreateContext(databaseName);
         var clientId = SeedClient(db);
         var actorId = Guid.NewGuid();
-        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName, actorId));
+        var repo = new AiConnectionRepository(
+            db, CreateCodec(), UnrestrictedPolicies(), DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked, null, Writer(databaseName, actorId));
 
         await repo.AddAsync(clientId, WriteRequest(Secret));
 
@@ -46,7 +48,7 @@ public sealed class AiProviderConfigAuditTests
         Assert.Equal(TenantCatalog.SystemTenantId, entry.TenantId);
         Assert.Equal(actorId, entry.ActorUserId);
         Assert.Contains("Primary", entry.Summary, StringComparison.Ordinal);
-        Assert.Contains("OpenAiCompatible", entry.Summary, StringComparison.Ordinal);
+        Assert.Contains("meisterdev/openAiCompatible", entry.Summary, StringComparison.Ordinal);
     }
 
     // The whole point of recording a credential change is to know one happened. Recording the credential itself
@@ -57,7 +59,8 @@ public sealed class AiProviderConfigAuditTests
         var databaseName = Guid.NewGuid().ToString();
         await using var db = CreateContext(databaseName);
         var clientId = SeedClient(db);
-        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName));
+        var repo = new AiConnectionRepository(
+            db, CreateCodec(), UnrestrictedPolicies(), DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked, null, Writer(databaseName));
 
         await repo.AddAsync(clientId, WriteRequest(Secret));
 
@@ -73,7 +76,8 @@ public sealed class AiProviderConfigAuditTests
         var databaseName = Guid.NewGuid().ToString();
         await using var db = CreateContext(databaseName);
         var clientId = SeedClient(db);
-        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName));
+        var repo = new AiConnectionRepository(
+            db, CreateCodec(), UnrestrictedPolicies(), DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked, null, Writer(databaseName));
 
         await repo.AddAsync(clientId, WriteRequest(null));
 
@@ -87,7 +91,8 @@ public sealed class AiProviderConfigAuditTests
         var databaseName = Guid.NewGuid().ToString();
         await using var db = CreateContext(databaseName);
         var clientId = SeedClient(db);
-        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName));
+        var repo = new AiConnectionRepository(
+            db, CreateCodec(), UnrestrictedPolicies(), DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked, null, Writer(databaseName));
         var created = await repo.AddAsync(clientId, WriteRequest(Secret));
 
         await repo.DeleteAsync(created.Id);
@@ -97,6 +102,32 @@ public sealed class AiProviderConfigAuditTests
         Assert.Contains("ai.connection.deleted", actions);
     }
 
+    // A profile can be stored against a family this build has no name for, and the entry has to say which one it
+    // was. Naming a provider the change did not happen on would be worse than naming one the reader has to look
+    // up.
+    [Fact]
+    public async Task AProfileStoredAgainstAnUnnameableFamilyIsAuditedUnderTheIdentityItHas()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        await using var db = CreateContext(databaseName);
+        var clientId = SeedClient(db);
+        var repo = new AiConnectionRepository(
+            db, CreateCodec(), UnrestrictedPolicies(), DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked, null, Writer(databaseName));
+        var created = await repo.AddAsync(clientId, WriteRequest(Secret));
+
+        var record = await db.AiConnectionProfiles.SingleAsync(profile => profile.Id == created.Id);
+        record.ProviderKind = "Acme.Llm";
+        await db.SaveChangesAsync();
+
+        await repo.DeleteAsync(created.Id);
+
+        var entry = await db.TenantAuditEntries.SingleAsync(audit => audit.EventType == "ai.connection.deleted");
+        Assert.Contains("Acme.Llm", entry.Summary, StringComparison.Ordinal);
+        Assert.Contains("providerKind=Acme.Llm", entry.Detail!, StringComparison.Ordinal);
+        Assert.DoesNotContain("AzureOpenAi", entry.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("AzureOpenAi", entry.Detail!, StringComparison.Ordinal);
+    }
+
     // An entry that cannot be attributed to a tenant is dropped rather than written against a guess: an audit
     // trail that is wrong is worse than one with a gap. The configuration change itself still stands.
     [Fact]
@@ -104,7 +135,8 @@ public sealed class AiProviderConfigAuditTests
     {
         var databaseName = Guid.NewGuid().ToString();
         await using var db = CreateContext(databaseName);
-        var repo = new AiConnectionRepository(db, CreateCodec(), UnrestrictedPolicies(), null, Writer(databaseName));
+        var repo = new AiConnectionRepository(
+            db, CreateCodec(), UnrestrictedPolicies(), DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked, null, Writer(databaseName));
 
         var created = await repo.AddAsync(Guid.NewGuid(), WriteRequest(Secret));
 
@@ -117,9 +149,9 @@ public sealed class AiProviderConfigAuditTests
         var chatModel = AiConnectionTestFactory.CreateChatModel("deepseek-reasoner");
         return new AiConnectionWriteRequestDto(
             "Primary DeepSeek",
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            AiAuthMode.ApiKey,
+            "meisterdev/openAiCompatible:ApiKey",
             AiDiscoveryMode.ManualOnly,
             [chatModel],
             [AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, chatModel)],

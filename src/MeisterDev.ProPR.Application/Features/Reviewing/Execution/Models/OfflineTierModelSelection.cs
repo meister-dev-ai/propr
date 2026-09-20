@@ -13,4 +13,5 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 public sealed record OfflineTierModelSelection(
     IChatClient ChatClient,
     EvaluationTieredModels Tiers,
-    string? PrimaryModelId);
+    string? PrimaryModelId,
+    string ProviderKind);

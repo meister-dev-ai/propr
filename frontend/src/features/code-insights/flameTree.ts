@@ -22,7 +22,7 @@ export interface FlameRow {
 export interface FlameNode {
   /** The last segment: what the frame is labelled with. */
   name: string
-  /** The whole key up to and including this segment, which is what a leaf drills through on. */
+  /** The whole key up to and including this segment, which a leaf drills through on. */
   key: string
   value: number
   depth: number

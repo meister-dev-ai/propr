@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.DTOs;
@@ -21,6 +22,15 @@ public sealed record ClientScmConnectionCredentialDto(
     long? GitHubAppInstallationId = null,
     string? UserName = null)
 {
+    /// <summary>Renders the connection without the secret; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(ClientScmConnectionCredentialDto)} {{ Id = {this.Id}, ClientId = {this.ClientId}, "
+               + $"ProviderFamily = {this.ProviderFamily}, HostBaseUrl = {SecretSafeRendering.Address(this.HostBaseUrl)}, "
+               + $"AuthenticationKind = {this.AuthenticationKind}, DisplayName = {this.DisplayName}, "
+               + $"Secret = {SecretSafeRendering.Elide(this.Secret)}, IsActive = {this.IsActive} }}";
+    }
+
     /// <summary>
     ///     Convenience constructor for non-OAuth credentials where tenant and client ID are not applicable.
     /// </summary>

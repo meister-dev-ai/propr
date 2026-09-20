@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
@@ -8,6 +9,7 @@ using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
+using MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 using NSubstitute;
 using MeisterDev.ProPR.TestSupport;
 
@@ -167,13 +169,38 @@ public sealed class AiRuntimeResolverTests
             .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(ClientId, Arg.Any<CancellationToken>())
-            .Returns(new TenantProviderPolicy([AiProviderKind.OpenAiCompatible]));
+            .Returns(new TenantProviderPolicy(["meisterdev/openAiCompatible"]));
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => this.Sut(providerPolicies: policies)
             .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None));
 
         Assert.Contains("permitted provider list", exception.Message, StringComparison.Ordinal);
         // Refused before the runtime is built, so no credential is used.
+        this._runtimeFactory.DidNotReceive().CreateChatRuntime(
+            Arg.Any<AiConnectionDto>(),
+            Arg.Any<AiConfiguredModelDto>(),
+            Arg.Any<AiPurposeBindingDto>(),
+            Arg.Any<string?>());
+    }
+
+    // A tenant whose allow-list entries this build cannot name permits nothing, so the runtime path refuses every
+    // profile. The refusal has to name the entry, or the operator sees a review stop with no way to find out why.
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_RefusesWhenTheAllowListNamesNoFamilyThisBuildKnows()
+    {
+        var (connection, model, binding) = Chat("gpt-4.1");
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+
+        // The policy is read before the substitute policy provider is configured: building one inside
+        // Returns() would attach the return value to the substitute registry's own call.
+        var unreadable = TenantProviderPolicy.FromStored(["Acme.Llm"], [], DeclaringProviderFamilies.None());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => this
+            .Sut(providerPolicies: Policies(unreadable))
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None));
+
+        Assert.Contains("Acme.Llm", exception.Message, StringComparison.Ordinal);
         this._runtimeFactory.DidNotReceive().CreateChatRuntime(
             Arg.Any<AiConnectionDto>(),
             Arg.Any<AiConfiguredModelDto>(),
@@ -233,6 +260,46 @@ public sealed class AiRuntimeResolverTests
         this._runtimeFactory.CreateChatRuntime(connection, model, binding, Arg.Any<string?>()).Returns(expected);
 
         var runtime = await this.Sut(providerPolicies: Policies(new TenantProviderPolicy([], ["api.test.com"])))
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None);
+
+        Assert.Same(expected, runtime);
+    }
+
+    // Every host the family reaches has to be permitted, not just the one the connection was pointed at. A
+    // permitted base URL carrying the family's other hosts in with it would leave the restriction naming one
+    // destination and admitting several.
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_RefusesADeclaredHostTheTenantDoesNotPermit()
+    {
+        var (connection, model, binding) = Chat("gpt-4.1");
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            this.Sut(
+                    providerPolicies: Policies(new TenantProviderPolicy([], ["api.test.com"])),
+                    providerDrivers: Reaching(connection.ProviderKind, "auth.vendor.example"))
+                .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None));
+
+        Assert.Contains("auth.vendor.example", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("permitted endpoint list", exception.Message, StringComparison.Ordinal);
+
+        // Refused before the runtime is built, so no credential is used.
+        this._runtimeFactory.DidNotReceiveWithAnyArgs().CreateChatRuntime(null!, null!, null!);
+    }
+
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_ADeclaredHostTheTenantPermitsStillResolves()
+    {
+        var (connection, model, binding) = Chat("gpt-4.1");
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+        var expected = Substitute.For<IResolvedAiChatRuntime>();
+        this._runtimeFactory.CreateChatRuntime(connection, model, binding, Arg.Any<string?>()).Returns(expected);
+
+        var runtime = await this.Sut(
+                providerPolicies: Policies(new TenantProviderPolicy([], ["api.test.com", "auth.vendor.example"])),
+                providerDrivers: Reaching(connection.ProviderKind, "auth.vendor.example"))
             .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None);
 
         Assert.Same(expected, runtime);
@@ -358,6 +425,16 @@ public sealed class AiRuntimeResolverTests
             .ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, CancellationToken.None));
     }
 
+    /// <summary>A registry whose one family declares <paramref name="hostPatterns" /> as what it reaches.</summary>
+    /// <param name="providerKind">The family the declaration belongs to.</param>
+    /// <param name="hostPatterns">The hosts it declares.</param>
+    private static IAiProviderDriverRegistry Reaching(string providerKind, params string[] hostPatterns)
+    {
+        return DeclaringProviderFamilies.Declaring(
+            providerKind,
+            DeclaringProviderFamilies.DeclarationWith(providerKind) with { ReachedHostPatterns = hostPatterns });
+    }
+
     private static ITenantProviderPolicyProvider Policies(TenantProviderPolicy? policy = null)
     {
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
@@ -367,16 +444,19 @@ public sealed class AiRuntimeResolverTests
     }
 
     // Every resolver is built against a stated policy. A test that is not about the policy states an unrestricted
-    // one, so nothing here depends on what an absent policy provider would have done.
+    // one, so nothing here depends on what an absent policy provider would have done. The registry defaults to
+    // one that serves no family, so a test about the base URL is not also a test about a declaration.
     private AiRuntimeResolver Sut(
         ILogicalModelResolver? logicalModelResolver = null,
         ILogicalModelCatalogRepository? logicalModelCatalog = null,
-        ITenantProviderPolicyProvider? providerPolicies = null)
+        ITenantProviderPolicyProvider? providerPolicies = null,
+        IAiProviderDriverRegistry? providerDrivers = null)
     {
         return new AiRuntimeResolver(
             this._repository,
             this._runtimeFactory,
             providerPolicies ?? Policies(),
+            providerDrivers ?? DeclaringProviderFamilies.None(),
             logicalModelResolver,
             logicalModelCatalog);
     }

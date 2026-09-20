@@ -34,7 +34,6 @@ public sealed partial class RunnerRelayModelResolver(
             // is charged; a client without its pricing would charge nothing per call.
             return new RunnerRelayModel(
                 runtime.ChatClient,
-                runtime.Connection.ProviderKind,
                 new ModelPricing(
                     runtime.Model.InputCostPer1MUsd,
                     runtime.Model.OutputCostPer1MUsd,

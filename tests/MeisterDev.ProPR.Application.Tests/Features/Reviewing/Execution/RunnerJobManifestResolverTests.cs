@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
@@ -70,7 +71,7 @@ public sealed class RunnerJobManifestResolverTests
             "gpt-5-mini",
             "Reviewer",
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto],
+            [ProviderDeclaredProtocolModes.Auto],
             TokenizerName: "o200k_base",
             MaxInputTokens: 200_000,
             MaxContextTokens: 400_000,
@@ -83,9 +84,9 @@ public sealed class RunnerJobManifestResolverTests
                 Guid.NewGuid(),
                 null,
                 "Primary",
-                AiProviderKind.OpenAi,
+                "meisterdev/openAi",
                 "https://api.invalid",
-                AiAuthMode.ApiKey,
+                "meisterdev/openAi:ApiKey",
                 AiDiscoveryMode.ManualOnly,
                 true,
                 [model],
@@ -594,7 +595,7 @@ public sealed class RunnerJobManifestResolverTests
         Assert.Equal("gpt-5-mini", manifest.DefaultModel.RemoteModelId);
         Assert.Equal("o200k_base", manifest.DefaultModel.TokenizerName);
         Assert.Equal(400_000, manifest.DefaultModel.MaxContextTokens);
-        Assert.Equal("OpenAi", manifest.DefaultModel.ProviderKind);
+        Assert.Equal("meisterdev/openAi", manifest.DefaultModel.ProviderKind);
 
         var pass = Assert.Single(manifest.Passes);
         Assert.Equal("reviewer-medium", pass.Model.LogicalModelName);

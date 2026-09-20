@@ -111,8 +111,16 @@ services:
       - AI_MEMORY_EMBEDDING_DIMENSIONS=${AI_MEMORY_EMBEDDING_DIMENSIONS:-}
       - LOKI_URL=http://loki:3100
       - ASPNETCORE_ENVIRONMENT=Production
+      # Where privately built AI provider add-ins are read from, one folder per family. The families the image
+      # ships load from a directory inside the image whatever this says. Uncomment together with the mount
+      # below; the directory defaults to /app/plugins when this is not set.
+      # - AI_PLUGIN_DIRECTORY=/provider-add-ins
     volumes:
       - meisterpropr_data_protection_keys:/app/.data-protection-keys
+      # Read-only, so the process that loads the code cannot change it, and owned on the host by a principal
+      # other than the container's app user. Neither is a security boundary: an add-in runs with the host's
+      # full authority, and what these give is an operator's own record of what the host was given to load.
+      # - ./provider-add-ins:/provider-add-ins:ro
     healthcheck:
       test: [ "CMD", "dotnet", "MeisterDev.ProPR.Api.dll", "--healthcheck", "http://127.0.0.1:8080/healthz" ]
       interval: 30s

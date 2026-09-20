@@ -142,10 +142,6 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewExclusionRules.Empty));
 
-        var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid());
-        aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<AiConnectionDto?>(connDto));
         var providerRegistry = CreateProviderRegistry(commentPoster);
 
         return new ReviewOrchestrationService(
@@ -161,8 +157,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
             instructionEvaluator,
             Substitute.For<IOptions<AiReviewOptions>>(),
             Substitute.For<ILogger<ReviewOrchestrationService>>(),
-            aiRepo,
-            Substitute.For<IAiChatClientFactory>(),
+            AiConnectionTestFactory.CreateChatRuntimeResolver(),
             orchestrator,
             workspaceManager: CreateDefaultWorkspaceManager());
     }

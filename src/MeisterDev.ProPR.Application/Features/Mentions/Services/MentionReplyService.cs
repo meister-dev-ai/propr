@@ -70,7 +70,7 @@ public sealed partial class MentionReplyService(
         }
 
         // Held outside the try so the handlers below can read the breach off it. The enforcing chat client
-        // records a reached hard cap on the scope before it throws, which is what lets a budget cut still be
+        // records a reached hard cap on the scope before it throws, and that lets a budget cut still be
         // recognized as one when an intervening layer wraps the exception.
         BudgetScope? budgetScope = null;
 

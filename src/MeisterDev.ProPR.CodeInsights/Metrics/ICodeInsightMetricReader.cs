@@ -40,7 +40,7 @@ public interface ICodeInsightMetricReader
     /// <summary>
     ///     Returns the correctness lens as a series over the window, one point per bucket, so a trend and its
     ///     direction can be read. A bucket holds the pull requests sealed inside it, and carries its own sample
-    ///     size, which is what lets a view refuse to draw a confident line through two closed pull requests.
+    ///     size, and that lets a view refuse to draw a confident line through two closed pull requests.
     /// </summary>
     Task<IReadOnlyList<CodeInsightMetricSeriesPoint>> GetCorrectnessSeriesAsync(
         CodeInsightRollupQuery query,

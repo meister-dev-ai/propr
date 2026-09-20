@@ -579,7 +579,7 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
 
         // Clearing the filter does not by itself bring down what the filtered fetch omitted, so the file
         // contents have to be present and the promisor remote gone. While it is set, reads can still reach
-        // the server for objects, which is what the full policy says they no longer do.
+        // the server for objects, which the full policy says they no longer do.
         Assert.Equal(string.Empty, await GitConfigValueAsync(mirrorPath, "remote.origin.promisor"));
         Assert.True(await CountBlobsAsync(mirrorPath) > 0, "the mirror still holds no file contents");
 

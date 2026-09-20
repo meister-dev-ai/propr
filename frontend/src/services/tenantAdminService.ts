@@ -18,6 +18,11 @@ export interface TenantDto {
   allowedAiProviderKinds?: AiProviderKind[]
   /** Endpoint hosts this tenant's clients may reach; empty or absent means unrestricted. */
   allowedAiEndpointHosts?: string[]
+  /**
+   * Allow-list entries no installed provider claims. They restrict like any other entry, and they are reported
+   * apart from `allowedAiProviderKinds`, which carries only the entries a loaded family claims.
+   */
+  unresolvedAiProviderKinds?: string[]
 }
 
 export interface CreateTenantRequest {
@@ -33,6 +38,12 @@ export interface UpdateTenantRequest {
   allowedAiProviderKinds?: AiProviderKind[]
   /** Endpoint hosts to permit; an empty array clears the restriction rather than forbidding everything. */
   allowedAiEndpointHosts?: string[]
+  /**
+   * Entries from `unresolvedAiProviderKinds` to remove. The server refuses an `allowedAiProviderKinds` entry no
+   * installed provider claims, so naming one here is how it leaves the policy; anything not named survives the
+   * save.
+   */
+  removedUnresolvedAiProviderKinds?: string[]
 }
 
 function buildTenantsPath(): string {

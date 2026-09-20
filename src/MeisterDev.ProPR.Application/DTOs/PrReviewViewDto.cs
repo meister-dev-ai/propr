@@ -39,7 +39,7 @@ public sealed record PrReviewViewDto(
 ///     the client reviews only a pull request's first increment.
 /// </summary>
 /// <remarks>
-///     Present only while that is true. Absent covers every other case with one answer, which is what a
+///     Present only while that is true. Absent covers every other case with one answer, which a
 ///     surface deciding whether to offer the action needs: never reviewed, up to date, or reviewed at the
 ///     revision that was once pending. A caller that renders this must not re-derive it from the two revision
 ///     keys, because the rule for what counts as ahead lives here.

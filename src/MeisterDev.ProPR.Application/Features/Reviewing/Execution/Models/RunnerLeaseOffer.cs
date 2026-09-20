@@ -10,7 +10,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 /// <param name="RunnerId">The authenticated runner. Never taken from the request body.</param>
 /// <param name="FreeSlots">
 ///     How many more jobs this runner can take. The asking side owns capacity: a busy runner simply does not
-///     ask, which is what makes pull-based dispatch work without a central view of who is free.
+///     ask, and that makes pull-based dispatch work without a central view of who is free.
 /// </param>
 /// <param name="ContractVersion">The contract version the runner speaks.</param>
 public sealed record RunnerLeaseRequest(Guid RunnerId, int FreeSlots, int ContractVersion);

@@ -453,7 +453,7 @@ export async function unblockPr(clientId: string, identity: PullRequestIdentity)
 /**
  * Asks for a review of the pull request as it stands now.
  *
- * ProPR reads the current commits from the provider itself, which is what makes this the way to review a
+ * ProPR reads the current commits from the provider itself, and that makes this the way to review a
  * branch that has moved on: the caller knows which pull request it means, not what revision it is at.
  *
  * Every well-formed request answers with a named outcome rather than throwing, because each one is

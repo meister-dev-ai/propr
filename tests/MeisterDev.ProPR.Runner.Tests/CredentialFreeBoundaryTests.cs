@@ -35,6 +35,7 @@ public sealed class CredentialFreeBoundaryTests
         ["MeisterDev.ProPR.Domain"] = "the review model the pipeline operates on",
         ["MeisterDev.ProPR.Observability"] = "traces, without which the host is not operable",
         ["MeisterDev.Ai.Providers"] = "reached through Application; the runner constructs no provider client",
+        ["MeisterDev.Ai.Providers.Abstractions"] = "the provider contract's own types, named by the shapes the pipeline passes around",
         ["MeisterDev.ProPR.CodeAnalysis"] = "structural analysis of the working copy",
         ["MeisterDev.ProPR.CodeAnalysis.Roslyn"] = "structural analysis of the working copy",
         ["MeisterDev.ProPR.CodeAnalysis.TreeSitter"] = "structural analysis of the working copy",

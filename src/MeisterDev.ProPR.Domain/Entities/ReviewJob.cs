@@ -330,8 +330,8 @@ public sealed class ReviewJob
     /// <remarks>
     ///     The rule that stops a revision being reviewed twice is applied both when a job is queued and again
     ///     when it executes, and the two have to agree. Intake alone cannot decide it: a job that passes
-    ///     intake is still dropped at execution unless the request that created it travels with it, which is
-    ///     what this flag is for.
+    ///     intake is still dropped at execution unless the request that created it travels with it, which
+    ///     this flag is for.
     /// </remarks>
     public bool AllowUnchangedResubmission { get; private set; }
 

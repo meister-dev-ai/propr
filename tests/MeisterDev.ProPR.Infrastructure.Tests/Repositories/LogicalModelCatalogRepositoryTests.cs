@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
@@ -76,7 +77,8 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             this._dbContext,
             Substitute.For<ILogicalModelCapabilityValidator>(),
             Substitute.For<IAiConnectionRepository>(),
-            Substitute.For<IAiConnectionScopeGuard>());
+            Substitute.For<IAiConnectionScopeGuard>(),
+            DeclaringProviderFamilies.None());
     }
 
     public async Task DisposeAsync()
@@ -138,7 +140,7 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             connectionId,
             modelId,
             ReviewReasoningEffort.High,
-            AiProtocolMode.Embeddings);
+            ProviderDeclaredProtocolModes.Embeddings);
 
         await this._repo.AddClientOverrideAsync(this._clientA, entry, default);
 
@@ -150,7 +152,7 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
         Assert.Equal(connectionId, read.ConnectionId);
         Assert.Equal(modelId, read.ConfiguredModelId);
         Assert.Equal(ReviewReasoningEffort.High, read.ReasoningEffort);
-        Assert.Equal(AiProtocolMode.Embeddings, read.ProtocolMode);
+        Assert.Equal(ProviderDeclaredProtocolModes.Embeddings, read.ProtocolMode);
     }
 
     // AC #3: a duplicate name within the same tenant is rejected.
@@ -251,7 +253,8 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             this._dbContext,
             rejectingValidator,
             Substitute.For<IAiConnectionRepository>(),
-            Substitute.For<IAiConnectionScopeGuard>());
+            Substitute.For<IAiConnectionScopeGuard>(),
+            DeclaringProviderFamilies.None());
 
         await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => repo.AddTenantEntryAsync(this._tenantId, Entry("deep"), default));
 
@@ -292,7 +295,8 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             this._dbContext,
             rejectingValidator,
             Substitute.For<IAiConnectionRepository>(),
-            Substitute.For<IAiConnectionScopeGuard>());
+            Substitute.For<IAiConnectionScopeGuard>(),
+            DeclaringProviderFamilies.None());
 
         await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => repo.AddClientOverrideAsync(this._clientA, Entry("fast"), default));
 
@@ -387,7 +391,7 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             Guid.NewGuid(),
             Guid.NewGuid(),
             ReviewReasoningEffort.None,
-            AiProtocolMode.Auto);
+            ProviderDeclaredProtocolModes.Auto);
     }
 
     // A repository whose referenced connection resolves but is refused by the scope guard, so the write paths'
@@ -406,7 +410,8 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             this._dbContext,
             Substitute.For<ILogicalModelCapabilityValidator>(),
             connections,
-            scopeGuard);
+            scopeGuard,
+            DeclaringProviderFamilies.None());
     }
 
     private static TenantRecord NewTenant(Guid id, DateTimeOffset now)
@@ -451,6 +456,7 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             Substitute.For<ILogicalModelCapabilityValidator>(),
             Substitute.For<IAiConnectionRepository>(),
             Substitute.For<IAiConnectionScopeGuard>(),
+            DeclaringProviderFamilies.None(),
             new TestDbContextFactory(options));
 
         var reads = Enumerable.Range(0, 24)
@@ -475,6 +481,7 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             Substitute.For<ILogicalModelCapabilityValidator>(),
             Substitute.For<IAiConnectionRepository>(),
             Substitute.For<IAiConnectionScopeGuard>(),
+            DeclaringProviderFamilies.None(),
             new TestDbContextFactory(options));
 
         var reads = Enumerable.Range(0, 24)

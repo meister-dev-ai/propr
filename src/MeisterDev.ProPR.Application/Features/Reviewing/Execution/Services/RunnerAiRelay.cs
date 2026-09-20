@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Collections.Concurrent;
+using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -50,7 +51,11 @@ public sealed class RunnerAiRelay(
         // on the first attempt; charging again would make the cap trip on spend that never happened.
         if (replays.TryGet(call.JobId, request.IdempotencyKey, out var alreadyServed))
         {
-            return RunnerRelayResult.Completed(alreadyServed, budget.IsIncrementSoftCapReached(), replayed: true);
+            return RunnerRelayResult.Completed(
+                alreadyServed,
+                budget.IsIncrementSoftCapReached(),
+                ProviderTokenUsage.FromUsageDetails(alreadyServed.Usage),
+                replayed: true);
         }
 
         // Checked before the call, not after: refusing to spend is the only enforcement that works, since
@@ -74,6 +79,10 @@ public sealed class RunnerAiRelay(
 
         var response = await model.Client.GetResponseAsync(request.Messages, request.Options, ct);
 
+        // The counters the family's driver mapped, which the runtime pipeline has already put on the response.
+        // This side prices them and the executor is handed them, so both sides meter one set of numbers.
+        var counters = ProviderTokenUsage.FromUsageDetails(response.Usage);
+
         // Recorded once per physical call and attributed to the logical model, keyed so a replay of the
         // record itself cannot double-count either.
         await usage.RecordAsync(
@@ -88,14 +97,14 @@ public sealed class RunnerAiRelay(
         // spend without limit through a runner.
         budget.RecordCall(
             AiCostCalculator.Calculate(
-                AiTokenUsageExtractor.FromResponse(response, model.ProviderKind),
+                AiTokenUsageExtractor.FromResponse(response),
                 model.Pricing).Usd);
 
         replays.Store(call.JobId, request.IdempotencyKey, response);
 
         // The soft cap is reported, never enforced here. It means wind down to a synthesis rather than
         // stop, and synthesis still needs completions to happen.
-        return RunnerRelayResult.Completed(response, budget.IsIncrementSoftCapReached());
+        return RunnerRelayResult.Completed(response, budget.IsIncrementSoftCapReached(), counters);
     }
 }
 

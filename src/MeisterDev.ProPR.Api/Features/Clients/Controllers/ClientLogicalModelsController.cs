@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.AI;
@@ -251,7 +252,7 @@ public sealed record LogicalModelWriteRequest(
     Guid ConnectionId,
     Guid ConfiguredModelId,
     ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None,
-    AiProtocolMode ProtocolMode = AiProtocolMode.Auto)
+    string ProtocolMode = ProviderDeclaredProtocolModes.Auto)
 {
     /// <summary>Maps to the application DTO, minting a fresh id (the repository assigns one when empty).</summary>
     public LogicalModelDto ToDto()
@@ -271,7 +272,7 @@ public sealed record LogicalModelResponse(
     Guid ConnectionId,
     Guid ConfiguredModelId,
     ReviewReasoningEffort ReasoningEffort,
-    AiProtocolMode ProtocolMode,
+    string ProtocolMode,
     string Scope)
 {
     /// <summary>Projects an application DTO into the response, tagging its scope (<c>client</c> or <c>tenant</c>).</summary>

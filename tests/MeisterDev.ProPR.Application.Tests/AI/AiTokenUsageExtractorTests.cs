@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Application.AI;
 using Microsoft.Extensions.AI;
 
@@ -77,11 +77,33 @@ public sealed class AiTokenUsageExtractorTests
         Assert.Equal(0L, usage.ReasoningTokens);
     }
 
-    [Theory]
-    [InlineData(AiProviderKind.AzureOpenAi)]
-    [InlineData(AiProviderKind.OpenAi)]
-    [InlineData(AiProviderKind.LiteLlm)]
-    public void FromResponse_ReadsCacheWriteFromAdditionalCounts_ForAllProviderKinds(AiProviderKind providerKind)
+    // Cache-write reaches the domain under the name the host owns, whichever family produced the call. The
+    // family's own spelling stopped at its driver, so nothing here has to know which one answered.
+    [Fact]
+    public void FromResponse_ReadsCacheWriteUnderTheHostOwnedName()
+    {
+        var response = new ChatResponse
+        {
+            Usage = new UsageDetails
+            {
+                InputTokenCount = 500,
+                OutputTokenCount = 100,
+                AdditionalCounts = new AdditionalPropertiesDictionary<long>
+                {
+                    [ProviderTokenUsage.CacheWriteCountName] = 80,
+                },
+            },
+        };
+
+        var usage = AiTokenUsageExtractor.FromResponse(response);
+
+        Assert.Equal(80L, usage.CacheWriteTokens);
+    }
+
+    // A vendor's own spelling is not read here. Reading one would put a family's vocabulary back into the host
+    // and meter a second family that happened to use the same word by a rule nobody wrote for it.
+    [Fact]
+    public void FromResponse_DoesNotReadAVendorsOwnCounterName()
     {
         var response = new ChatResponse
         {
@@ -92,26 +114,6 @@ public sealed class AiTokenUsageExtractorTests
                 AdditionalCounts = new AdditionalPropertiesDictionary<long>
                 {
                     ["cache_creation_input_tokens"] = 80,
-                },
-            },
-        };
-
-        var usage = AiTokenUsageExtractor.FromResponse(response, providerKind);
-
-        Assert.Equal(80L, usage.CacheWriteTokens);
-    }
-
-    [Fact]
-    public void FromResponse_UnknownAdditionalCountsKey_YieldsZeroCacheWrite()
-    {
-        var response = new ChatResponse
-        {
-            Usage = new UsageDetails
-            {
-                InputTokenCount = 500,
-                OutputTokenCount = 100,
-                AdditionalCounts = new AdditionalPropertiesDictionary<long>
-                {
                     ["OutputTokenDetails.AudioTokenCount"] = 10,
                 },
             },

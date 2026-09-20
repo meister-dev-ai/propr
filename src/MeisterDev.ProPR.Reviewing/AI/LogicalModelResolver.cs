@@ -101,7 +101,7 @@ public sealed class LogicalModelResolver(
         return new ResolvedLogicalModelEmbeddingRuntime(runtime, roleName, layer);
     }
 
-    private static AiPurposeBindingDto SynthesizeBinding(AiPurpose purpose, AiConfiguredModelDto model, AiProtocolMode protocolMode)
+    private static AiPurposeBindingDto SynthesizeBinding(AiPurpose purpose, AiConfiguredModelDto model, string protocolMode)
     {
         // The logical-model layer replaces purpose-based selection; the binding is a lightweight carrier so the
         // provider driver receives the mapping's protocol mode. The purpose value is informational only here.

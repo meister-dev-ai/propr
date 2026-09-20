@@ -12,7 +12,7 @@ namespace MeisterDev.ProPR.Domain.Entities;
 ///     Core and custom assignments are modelled in one table but stay distinguishable through
 ///     <see cref="IsCore" />, so a cross-client roll-up can exclude custom tags with a single predicate
 ///     rather than a join. Exactly one of <see cref="CoreSlug" /> and <see cref="CustomTagId" /> is set.
-///     A custom assignment points at the tag's identity, never at its name, which is what lets a tag be
+///     A custom assignment points at the tag's identity, never at its name, and that lets a tag be
 ///     renamed without relabelling history.
 /// </remarks>
 public sealed class CodeInsightFindingTag

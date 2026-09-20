@@ -37,7 +37,7 @@ public static class UsageReportingModuleServiceCollectionExtensions
             services.AddScoped<IClientTokenUsageRepository, ClientTokenUsageRepository>();
 
             // Model calls that happen outside a review job have no protocol to count their tokens. This records
-            // them onto the same daily per-client usage row the review path writes, which is what a cost report
+            // them onto the same daily per-client usage row the review path writes, which a cost report
             // reads and what a client budget cap is measured against. Registered here because that row is this
             // module's, and because more than one feature now needs it.
             services.AddScoped<IModelUsageRecorder, ModelUsageRecorder>();

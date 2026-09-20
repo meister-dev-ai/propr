@@ -13,7 +13,13 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.6"/>
+        <!--
+            The client library the OpenAI-shaped families use. It is taken here, and nowhere in the library these
+            tests cover, because two of the host's delegating handlers exist to repair what that library cannot
+            read or cannot write, and the only way to show that is to send through it.
+        -->
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="$(MicrosoftExtensionsAIVersion)"/>
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0"/>
         <PackageReference Include="NSubstitute" Version="5.3.0"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
@@ -30,6 +36,59 @@
     <!-- The library's only project reference is the library itself; it must stay free of MeisterDev.ProPR.* -->
     <ItemGroup>
         <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers\MeisterDev.Ai.Providers.csproj"/>
+        <!--
+            The example add-in, so the contract can be asserted from the position an add-in author is in: what
+            its assembly references, and that the driver type it declares is the host's interface rather than a
+            copy of it.
+        -->
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.ExampleAddIn\MeisterDev.Ai.Providers.ExampleAddIn.csproj"/>
+        <!--
+            The second add-in, referenced only so it is built before these tests run. Its assembly is never
+            compiled against: it declares a contract version the host does not carry, so the only thing that
+            reads it is the loader, from a staged folder on disk.
+        -->
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.StaleAddIn\MeisterDev.Ai.Providers.StaleAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+        <!--
+            The third add-in, referenced only so it is built before these tests run. It loads without error and
+            then fails a driver check, which is the condition the conformance gate exists for.
+        -->
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.NonConformingAddIn\MeisterDev.Ai.Providers.NonConformingAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+        <!--
+            The fourth add-in, referenced only so it is built before these tests run. Its assembly exposes two
+            provider families, which is the shape the loader refuses.
+        -->
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.TwoFamilyAddIn\MeisterDev.Ai.Providers.TwoFamilyAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
     </ItemGroup>
+
+    <!--
+        Stages each add-in's own build output as a folder these tests can point the loader at. The loader reads
+        an add-in the way a deployment holds one, a folder per family named after the assembly in it, so a test
+        that loaded the assembly out of this project's own output would be exercising a layout no deployment
+        has and a folder that holds the shared assemblies. The item groups sit inside the target so they are
+        expanded after the referenced projects have been built.
+    -->
+    <Target Name="StageProviderAddInsForTests" AfterTargets="Build">
+        <ItemGroup>
+            <_ExampleAddInFile Include="$(MSBuildThisFileDirectory)..\MeisterDev.Ai.Providers.ExampleAddIn\bin\$(Configuration)\$(TargetFramework)\*.*"/>
+            <_StaleAddInFile Include="$(MSBuildThisFileDirectory)..\MeisterDev.Ai.Providers.StaleAddIn\bin\$(Configuration)\$(TargetFramework)\*.*"/>
+            <_NonConformingAddInFile Include="$(MSBuildThisFileDirectory)..\MeisterDev.Ai.Providers.NonConformingAddIn\bin\$(Configuration)\$(TargetFramework)\*.*"/>
+            <_TwoFamilyAddInFile Include="$(MSBuildThisFileDirectory)..\MeisterDev.Ai.Providers.TwoFamilyAddIn\bin\$(Configuration)\$(TargetFramework)\*.*"/>
+        </ItemGroup>
+        <Copy SourceFiles="@(_ExampleAddInFile)"
+              DestinationFolder="$(OutDir)add-in-builds\MeisterDev.Ai.Providers.ExampleAddIn"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_StaleAddInFile)"
+              DestinationFolder="$(OutDir)add-in-builds\MeisterDev.Ai.Providers.StaleAddIn"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_NonConformingAddInFile)"
+              DestinationFolder="$(OutDir)add-in-builds\MeisterDev.Ai.Providers.NonConformingAddIn"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_TwoFamilyAddInFile)"
+              DestinationFolder="$(OutDir)add-in-builds\MeisterDev.Ai.Providers.TwoFamilyAddIn"
+              SkipUnchangedFiles="true"/>
+    </Target>
 
 </Project>

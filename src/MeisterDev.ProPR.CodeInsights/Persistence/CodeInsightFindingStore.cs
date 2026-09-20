@@ -162,7 +162,7 @@ public sealed class CodeInsightFindingStore(
 
                 await db.SaveChangesAsync(ct);
 
-                // The newest increment collected, which is what a chain's fate is judged against. Derived from the
+                // The newest increment collected, which a chain's fate is judged against. Derived from the
                 // rows rather than assumed to be the one just written: increments can be re-processed out of
                 // order, and letting an older one claim to be newest would make every persisting chain look
                 // abandoned.

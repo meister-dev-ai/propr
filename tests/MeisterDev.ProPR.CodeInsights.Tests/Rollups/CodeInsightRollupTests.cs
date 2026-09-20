@@ -122,7 +122,7 @@ public sealed class CodeInsightRollupTests : IDisposable
             CodeInsightCountDimension.CoreType,
             CodeInsightBucketSize.Day);
 
-        // The finding is still one finding, but it touches two types, which is what a type series measures.
+        // The finding is still one finding, but it touches two types, which a type series measures.
         Assert.Equal(1, await this._reader.GetTotalAsync(window));
         Assert.Equal(2, types.Count);
         Assert.All(types, point => Assert.Equal(1, point.Count));

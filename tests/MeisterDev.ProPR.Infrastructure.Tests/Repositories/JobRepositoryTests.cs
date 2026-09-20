@@ -260,7 +260,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         Assert.True(recorded.Excluded);
     }
 
-    // No flag on this row, which is what three of the four providers send. The login is what identifies the
+    // No flag on this row, which three of the four providers send. The login is what identifies the
     // account as automation.
     [Fact]
     public async Task SetResultAsync_AnAuthorWhoseLoginNamesAutomation_IsRecordedExcluded()

@@ -196,7 +196,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
     ///     Maps each of the pull request's review comments to the node id of the thread it belongs to.
     ///     GitHub's review threads exist only in GraphQL: the create-review response names the review, and the
     ///     REST comment payload names neither its thread nor anything a thread can be derived from, so the
-    ///     mapping has to be read back. A comment's REST id is its GraphQL databaseId, which is what joins the
+    ///     mapping has to be read back. A comment's REST id is its GraphQL databaseId, and that joins the
     ///     two reads.
     /// </summary>
     private async Task<IReadOnlyDictionary<long, string>> TryResolveReviewThreadIdsAsync(

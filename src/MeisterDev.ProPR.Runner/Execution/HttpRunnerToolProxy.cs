@@ -16,7 +16,7 @@ namespace MeisterDev.ProPR.Runner.Execution;
 ///     <para>
 ///         Everything here needs a credential the runner does not hold: source-control metadata, the
 ///         code-knowledge service, and the work-item provider. The other twelve tools read the local
-///         working copy and never leave the host, which is what keeps a review from becoming network
+///         working copy and never leave the host, and that keeps a review from becoming network
 ///         traffic.
 ///     </para>
 ///     <para>

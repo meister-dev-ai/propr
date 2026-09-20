@@ -165,13 +165,19 @@ public sealed class ReviewWorkflowRunner(
             // Activate per-purpose model selection for this run when the configuration defines tiered models,
             // so the offline runtime resolver routes each tier/triage to its configured model. Left null
             // otherwise, which keeps single-model behavior.
+            // The connection names the provider each tier is routed through, and it is optional on the
+            // configuration, so a tiered run without one has nothing to route by. That keeps the single-model
+            // behaviour the comment above describes, which is the same answer as configuring no tiers at all.
             var tieredModels = request.Configuration?.ModelSelection.TieredModels;
-            if (tierModelAccessor is not null && tieredModels is not null)
+            if (tierModelAccessor is not null
+                && tieredModels is not null
+                && request.Configuration?.AiConnection is { } tieredConnection)
             {
                 tierModelAccessor.Selection = new OfflineTierModelSelection(
                     request.ChatClient,
                     tieredModels,
-                    request.Configuration?.ModelSelection.ModelId);
+                    request.Configuration.ModelSelection.ModelId,
+                    tieredConnection.Provider);
             }
 
             if (!string.IsNullOrWhiteSpace(request.PipelineProfileId))

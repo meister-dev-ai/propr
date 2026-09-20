@@ -142,7 +142,7 @@ public sealed class InstallationLicenseRepositoryTests
     }
 
     /// <summary>
-    ///     Changes one character inside the protected envelope, which is what an edit to the stored value
+    ///     Changes one character inside the protected envelope, which an edit to the stored value
     ///     amounts to. The envelope is authenticated, so any change to it stops it opening.
     /// </summary>
     internal static string AlterProtectedPayload(string protectedValue)

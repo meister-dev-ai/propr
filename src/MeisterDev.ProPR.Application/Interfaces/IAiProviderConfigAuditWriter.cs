@@ -2,8 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-using MeisterDev.Ai.Providers.Enums;
-
 namespace MeisterDev.ProPR.Application.Interfaces;
 
 /// <summary>
@@ -34,7 +32,12 @@ public interface IAiProviderConfigAuditWriter
 /// <param name="Action">What happened: <c>created</c>, <c>updated</c>, <c>deleted</c>, <c>activated</c> or <c>deactivated</c>.</param>
 /// <param name="ConnectionId">The connection profile that changed.</param>
 /// <param name="DisplayName">The profile's operator-visible name.</param>
-/// <param name="ProviderKind">The provider family the profile uses.</param>
+/// <param name="ProviderKind">
+///     The provider identity the profile is stored against, as stored. Carried as the stored string so a profile
+///     whose family this build cannot name is audited under the identity it has, and not under whichever family
+///     an enum conversion would have fallen back to — an audit line naming the wrong provider is worse than one
+///     naming a provider the reader has to look up.
+/// </param>
 /// <param name="BaseUrl">The profile's configured base URL.</param>
 /// <param name="ClientId">Owning client for a client-scoped profile.</param>
 /// <param name="TenantId">Owning tenant for a tenant-scoped profile.</param>
@@ -43,7 +46,7 @@ public sealed record AiProviderConfigAuditEntry(
     string Action,
     Guid ConnectionId,
     string DisplayName,
-    AiProviderKind ProviderKind,
+    string ProviderKind,
     string BaseUrl,
     Guid? ClientId = null,
     Guid? TenantId = null,

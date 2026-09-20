@@ -1,8 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.Ai.Providers.Enums;
 
 namespace MeisterDev.ProPR.Application.DTOs;
 
@@ -14,7 +14,7 @@ public sealed record AiConfiguredModelDto(
     string RemoteModelId,
     string DisplayName,
     IReadOnlyList<AiOperationKind> OperationKinds,
-    IReadOnlyList<AiProtocolMode> SupportedProtocolModes,
+    IReadOnlyList<string> SupportedProtocolModes,
     string? TokenizerName = null,
     int? MaxInputTokens = null,
     int? EmbeddingDimensions = null,

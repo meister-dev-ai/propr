@@ -31,8 +31,6 @@ internal sealed partial class FileReviewer(
     AiReviewOptions options,
     ILogger<FileByFileReviewOrchestrator> logger,
     IReviewPipeline<PerFileReviewContext>? perFilePipeline,
-    IAiConnectionRepository? aiConnectionRepository,
-    IAiChatClientFactory? aiClientFactory,
     IThreadMemoryService? memoryService,
     IAiRuntimeResolver? aiRuntimeResolver,
     CommentRelevanceFilterExecutor? commentRelevanceFilterExecutor,
@@ -131,7 +129,7 @@ internal sealed partial class FileReviewer(
         var tierPurpose = GetTierPurpose(tier);
 
         var (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName, tierLogicalModelName) =
-            await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
+            await this.ResolveTierClientAsync(job, tierPurpose, ct);
 
         var protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, tierLogicalModelName, ct);
 
@@ -670,8 +668,8 @@ internal sealed partial class FileReviewer(
     ///     </para>
     ///     <para>
     ///         Best-effort throughout. No analyzer, an unsupported language, no content, a parse that comes back
-    ///         empty, or a line that falls outside every definition all leave the finding unattributed, which is
-    ///         what a later reading must show as "not resolved" rather than inventing a symbol for it.
+    ///         empty, or a line that falls outside every definition all leave the finding unattributed, which
+    ///         a later reading must show as "not resolved" rather than inventing a symbol for it.
     ///     </para>
     /// </remarks>
     private async Task<ReviewResult> ApplySymbolAttributionStageAsync(
@@ -1717,7 +1715,6 @@ internal sealed partial class FileReviewer(
     private async Task<(IChatClient? tierClient, string? tierModelId, AgentReviewRuntimeCapabilities? tierCapabilities, int? tierMaxContextTokens, string?
         tierTokenizerName, string? tierLogicalModelName)> ResolveTierClientAsync(
         ReviewJob job,
-        AiConnectionModelCategory tierCategory,
         AiPurpose tierPurpose,
         CancellationToken ct)
     {
@@ -1728,6 +1725,9 @@ internal sealed partial class FileReviewer(
         string? tierTokenizerName = null;
         string? tierLogicalModelName = null;
 
+        // The tier runtime is resolved, never constructed here. Two cases produce a null client: a host composed
+        // without a runtime resolver, and a resolver with no binding for this tier. The caller treats a null
+        // client as an instruction to review the file on the default client.
         if (aiRuntimeResolver is not null)
         {
             try
@@ -1748,23 +1748,6 @@ internal sealed partial class FileReviewer(
                 tierMaxContextTokens = null;
                 tierTokenizerName = null;
                 tierLogicalModelName = null;
-            }
-        }
-        else if (aiConnectionRepository is not null && aiClientFactory is not null)
-        {
-            var tierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, tierCategory, ct);
-            if (tierDto is not null)
-            {
-                tierClient = aiClientFactory.CreateClient(tierDto.BaseUrl, tierDto.Secret);
-                var boundModelId = tierDto.GetBoundModelId(tierPurpose);
-                var tierModel = (boundModelId is not null
-                                    ? tierDto.ConfiguredModels.FirstOrDefault(model => string.Equals(
-                                        model.RemoteModelId, boundModelId, StringComparison.OrdinalIgnoreCase))
-                                    : null)
-                                ?? tierDto.ConfiguredModels.FirstOrDefault(model => model.SupportsChat);
-                tierModelId = boundModelId ?? tierModel?.RemoteModelId;
-                tierMaxContextTokens = tierModel?.MaxContextTokens;
-                tierTokenizerName = tierModel?.TokenizerName;
             }
         }
 

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
 using Microsoft.Extensions.AI;
 
@@ -58,21 +59,38 @@ public enum RunnerRelayRefusal
 ///     means wind down to a synthesis, not stop, so the executor needs to see it without being refused.
 /// </param>
 /// <param name="Replayed">True when this answer came from an earlier attempt carrying the same key.</param>
+/// <param name="Usage">
+///     What the completion consumed, in the counters the provider's driver produced. Only this side resolves a
+///     driver, so only this side can read a vendor's counter names; an executor deriving its own would meter a
+///     remote review differently from a local one.
+/// </param>
 public sealed record RunnerRelayResult(
     ChatResponse? Response,
     RunnerRelayRefusal Refusal,
     RunnerCallRefusal CallRefusal,
     BudgetBreach? Breach,
     bool SoftCapReached,
-    bool Replayed)
+    bool Replayed,
+    ProviderTokenUsage? Usage = null)
 {
     /// <summary>Whether a response was produced.</summary>
     public bool IsCompleted => this.Refusal == RunnerRelayRefusal.None && this.Response is not null;
 
     /// <summary>A completion that was performed.</summary>
-    public static RunnerRelayResult Completed(ChatResponse response, bool softCapReached, bool replayed = false)
+    public static RunnerRelayResult Completed(
+        ChatResponse response,
+        bool softCapReached,
+        ProviderTokenUsage usage,
+        bool replayed = false)
     {
-        return new RunnerRelayResult(response, RunnerRelayRefusal.None, RunnerCallRefusal.None, null, softCapReached, replayed);
+        return new RunnerRelayResult(
+            response,
+            RunnerRelayRefusal.None,
+            RunnerCallRefusal.None,
+            null,
+            softCapReached,
+            replayed,
+            usage);
     }
 
     /// <summary>A completion refused because the caller may not act on the job.</summary>

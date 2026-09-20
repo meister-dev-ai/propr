@@ -36,7 +36,7 @@ describe('ClientLogicalModelsSection', () => {
   it('renders effective logical models tagged by scope', async () => {
     mocks.listEffectiveForClient.mockResolvedValue([
       { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'high', protocolMode: 'responses', scope: 'client' },
-      { id: '2', name: 'wide', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'none', protocolMode: 'auto', scope: 'tenant' },
+      { id: '2', name: 'wide', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'none', protocolMode: 'Auto', scope: 'tenant' },
     ])
 
     const wrapper = mountSection()
@@ -72,7 +72,7 @@ describe('ClientLogicalModelsSection', () => {
 
   it('shows the connection and model for each logical model', async () => {
     mocks.listEffectiveForClient.mockResolvedValue([
-      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'high', protocolMode: 'auto', scope: 'client' },
+      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'high', protocolMode: 'Auto', scope: 'client' },
     ])
 
     const wrapper = mountSection()
@@ -85,7 +85,7 @@ describe('ClientLogicalModelsSection', () => {
 
   it('edits an override through the update endpoint', async () => {
     mocks.listEffectiveForClient.mockResolvedValue([
-      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'high', protocolMode: 'auto', scope: 'client' },
+      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'high', protocolMode: 'Auto', scope: 'client' },
     ])
     mocks.updateClientOverride.mockResolvedValue(undefined)
 
@@ -107,7 +107,7 @@ describe('ClientLogicalModelsSection', () => {
 
   it('deletes a client-scoped override', async () => {
     mocks.listEffectiveForClient.mockResolvedValue([
-      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'none', protocolMode: 'auto', scope: 'client' },
+      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'm1', reasoningEffort: 'none', protocolMode: 'Auto', scope: 'client' },
     ])
     mocks.deleteClientOverride.mockResolvedValue(undefined)
 

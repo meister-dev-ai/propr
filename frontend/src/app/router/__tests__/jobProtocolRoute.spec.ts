@@ -55,7 +55,7 @@ describe('job protocol route access', () => {
 
     await router.push(`/jobs/${JOB_ID}/protocol`)
 
-    // A link that names no client, which is what the browser extension's Trace control opens, is answered
+    // A link that names no client, which the browser extension's Trace control opens, is answered
     // by the caller holding client access somewhere, not by asking whether a job id is a client they see.
     expect(router.currentRoute.value.name).toBe('job-protocol')
     expect(hasClientRole).not.toHaveBeenCalledWith(JOB_ID, expect.anything())

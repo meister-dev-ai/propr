@@ -4,6 +4,66 @@
  */
 
 export interface paths {
+    "/admin/ai-provider-add-ins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns every assembly the loader saw, loaded and rejected. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The loaded families and the rejected assemblies. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProviderAddInInventoryDto"];
+                        "application/json": components["schemas"]["ProviderAddInInventoryDto"];
+                        "text/json": components["schemas"]["ProviderAddInInventoryDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/crawl-configurations": {
         parameters: {
             query?: never;
@@ -3603,6 +3663,296 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai-provider-actions/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts one declared action against one connection. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The connection, the provider family and the action. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["DispatchProviderActionRequest"];
+                    "text/json": components["schemas"]["DispatchProviderActionRequest"];
+                    "application/*+json": components["schemas"]["DispatchProviderActionRequest"];
+                };
+            };
+            responses: {
+                /** @description The run that was opened, with the family's answer where one arrived in time. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiProviderActionDispatchDto"];
+                        "application/json": components["schemas"]["AiProviderActionDispatchDto"];
+                        "text/json": components["schemas"]["AiProviderActionDispatchDto"];
+                    };
+                };
+                /** @description The family declares no such action, or this build cannot resolve the family. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not hold the role the connection's owner requires. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description There is no such connection. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation is not licensed for the capability the family declared. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-provider-actions/{invocationId}/values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submits the values an action asked for, continuing the run that asked rather than opening a second
+         *     one.
+         * @description The submitted values are inputs to the run and reach no column, which keeps a pasted callback address
+         *     carrying a live authorization code out of the database. The administrator recorded on the run is the
+         *     one who started it and is unchanged by a submission, whoever makes it: any administrator holding the
+         *     owner role can submit another administrator's callback value, and recording the submitter would point
+         *     a later revocation at the wrong person.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The run the form came from. */
+                    invocationId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The values, by declared input name. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SubmitProviderActionValuesRequest"];
+                    "text/json": components["schemas"]["SubmitProviderActionValuesRequest"];
+                    "application/*+json": components["schemas"]["SubmitProviderActionValuesRequest"];
+                };
+            };
+            responses: {
+                /** @description The run, with the family's answer where one arrived in time. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiProviderActionDispatchDto"];
+                        "application/json": components["schemas"]["AiProviderActionDispatchDto"];
+                        "text/json": components["schemas"]["AiProviderActionDispatchDto"];
+                    };
+                };
+                /** @description The run has already finished or expired, or its action is no longer declared. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not hold the role the connection's owner requires. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description There is no such run, or its connection is gone. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation is not licensed for the capability the family declared. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-provider-actions/{invocationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reports where one run stands.
+         * @description Read by whoever holds the role the dispatch required, which is the connection's owner role and not
+         *     being the administrator who started the run: a run is state on a connection, and an administrator of
+         *     that connection can see what is happening to it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The run to read. */
+                    invocationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The run. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiProviderActionInvocationDto"];
+                        "application/json": components["schemas"]["AiProviderActionInvocationDto"];
+                        "text/json": components["schemas"]["AiProviderActionInvocationDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not hold the role the connection's owner requires. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description There is no such run, or its connection is gone. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -4534,6 +4884,17 @@ export interface paths {
                         "text/plain": components["schemas"]["AiVerificationResultDto"];
                         "application/json": components["schemas"]["AiVerificationResultDto"];
                         "text/json": components["schemas"]["AiVerificationResultDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Unauthorized */
@@ -14380,6 +14741,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/{tenantId}/ai-connections/permitted-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lists the provider families this build has a driver for, each flagged with whether this tenant's own
+         *     policy permits it, and described well enough to configure one: its name, the shapes it speaks and
+         *     authenticates with, the fields each authentication mode needs, and what it declares about the connection
+         *     form.
+         * @description The same answer the client-scoped endpoint gives, read against the tenant's policy directly. It is
+         *     served here so the tenant screens — the connection editor and the provider allow-list — describe
+         *     families from the installation rather than from a table of their own, which would name only the
+         *     families that existed when the console shipped.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PermittedProvidersResponse"];
+                        "application/json": components["schemas"]["PermittedProvidersResponse"];
+                        "text/json": components["schemas"]["PermittedProvidersResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/{tenantId}/ai-connections/{connectionId}": {
         parameters: {
             query?: never;
@@ -14459,6 +14891,17 @@ export interface paths {
                         "text/plain": components["schemas"]["AiVerificationResultDto"];
                         "application/json": components["schemas"]["AiVerificationResultDto"];
                         "text/json": components["schemas"]["AiVerificationResultDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Not Found */
@@ -17419,11 +17862,29 @@ export interface components {
             displayName?: string | null;
             defaultBranch?: string | null;
         };
-        /**
-         * @description Authentication modes supported by AI providers.
-         * @enum {string}
-         */
-        AiAuthMode: "apiKey" | "azureIdentity" | "xApiKey" | "sigV4" | "gcpAdc";
+        /** @description One authentication mode a provider family authenticates with, with what an operator sees where it is offered. */
+        AiAuthModeOptionDto: {
+            /** @description The shape, as it is submitted and stored. */
+            value?: string | null;
+            /** @description What an operator sees where the shape is offered. */
+            label?: string | null;
+            /**
+             * @description Whether the family still reads this shape but no longer offers it for a new connection. Every shape the
+             *     family declares is reported, flagged, rather than the superseded ones being dropped here: a console
+             *     showing a profile saved under one needs its name, and the server accepts it on save so that profile can
+             *     be edited without its credential being re-entered in another shape.
+             */
+            isSuperseded?: boolean;
+        };
+        /** @description The current value of one read-only computed field, as of this read. */
+        AiComputedFieldDto: {
+            /** @description The declared field the value belongs to. */
+            name?: string | null;
+            /** @description The value as the family computed it, capped and scrubbed. */
+            value?: string | null;
+            /** @description Why this installation would refuse the value, or null when it permits it. */
+            refusal?: string | null;
+        };
         /** @description One configured or discovered model that belongs to an AI connection profile. */
         AiConfiguredModelDto: {
             /** Format: uuid */
@@ -17431,7 +17892,7 @@ export interface components {
             remoteModelId?: string | null;
             displayName?: string | null;
             operationKinds?: components["schemas"]["AiOperationKind"][] | null;
-            supportedProtocolModes?: components["schemas"]["AiProtocolMode"][] | null;
+            supportedProtocolModes?: string[] | null;
             tokenizerName?: string | null;
             /** Format: int32 */
             maxInputTokens?: number | null;
@@ -17467,7 +17928,7 @@ export interface components {
             remoteModelId?: string | null;
             displayName?: string | null;
             operationKinds?: components["schemas"]["AiOperationKind"][] | null;
-            supportedProtocolModes?: components["schemas"]["AiProtocolMode"][] | null;
+            supportedProtocolModes?: string[] | null;
             tokenizerName?: string | null;
             /** Format: int32 */
             maxInputTokens?: number | null;
@@ -17499,9 +17960,45 @@ export interface components {
         AiConfiguredModelSource: "discovered" | "manual" | "knownCatalog";
         /** @description Authentication settings for one AI connection profile request. */
         AiConnectionAuthRequest: {
-            mode: components["schemas"]["AiAuthMode"];
+            /** @description The authentication mode the credential belongs to. */
+            mode: string | null;
+            /**
+             * @description The credential of a mode whose credential is one key. It means the `apiKey` field of
+             *     Fields and is kept so a caller that only ever sent a key needs no change.
+             */
             apiKey?: string | null;
+            /**
+             * @description The credential fields the selected family declares for the selected mode, by name. This is how the modes
+             *     whose credential is more than one value — an access key id and a secret access key, for instance — are
+             *     supplied. Which names are accepted comes from the family's own declaration, reported alongside the
+             *     authentication modes on the permitted-providers endpoint.
+             */
+            fields?: {
+                [key: string]: string;
+            } | null;
         };
+        /** @description Whether a connection profile can be used, and what stands in the way when it cannot. */
+        AiConnectionAvailabilityDto: {
+            state?: components["schemas"]["AiConnectionAvailabilityState"];
+            reason?: components["schemas"]["AiConnectionUnavailableReason"];
+            /**
+             * @description The provider identity the reason is about, or null when the reason is not about the
+             *     provider family. Carried separately because a family this build does not have cannot be reported in
+             *     MeisterDev.ProPR.Application.DTOs.AiConnectionDto.ProviderKind, and an operator installing or permitting one needs the key
+             *     as it is stored.
+             */
+            providerIdentity?: string | null;
+            /**
+             * @description The stored values this build could not resolve, all of them rather than the first, because each is a
+             *     separate thing to correct.
+             */
+            unresolvedValues?: components["schemas"]["AiUnresolvedValueDto"][] | null;
+        };
+        /**
+         * @description Whether a connection profile can be used as it is stored.
+         * @enum {string}
+         */
+        AiConnectionAvailabilityState: "available" | "unavailable";
         /** @description Data transfer object for a provider-neutral AI connection profile. */
         AiConnectionDto: {
             /**
@@ -17516,10 +18013,18 @@ export interface components {
             clientId?: string | null;
             /** @description Human-readable display name. */
             displayName?: string | null;
-            providerKind?: components["schemas"]["AiProviderKind"];
+            /**
+             * @description Provider family, by identity key. A key no loaded family claims is carried as it is stored, so a profile
+             *     whose add-in is absent is still listed and can be corrected.
+             */
+            providerKind?: string | null;
             /** @description Exact configured provider base URL. */
             baseUrl?: string | null;
-            authMode?: components["schemas"]["AiAuthMode"];
+            /**
+             * @description Authentication mode used for the provider, by the name it persists under. A name no loaded family claims
+             *     is carried as it is stored, for the same reason ProviderKind is.
+             */
+            authMode?: string | null;
             discoveryMode?: components["schemas"]["AiDiscoveryMode"];
             /** @description Whether this is the active profile for the client. */
             isActive?: boolean;
@@ -17551,6 +18056,39 @@ export interface components {
              * @description Owning tenant ID for a tenant-scoped connection (inherited by the tenant's clients); null for a client-scoped one.
              */
             tenantId?: string | null;
+            availability?: components["schemas"]["AiConnectionAvailabilityDto"];
+            /**
+             * @description The non-secret configuration values this connection's provider family declared, by declared field name,
+             *     or null for a family that declares none.
+             */
+            providerSettings?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * @description Which secret-marked declared fields hold a stored value. A console renders a field as set or not set
+             *     from this and offers to replace it, which is what the credential fields already do.
+             */
+            readonly declaredSecretNames?: string[] | null;
+            /**
+             * @description The configuration fields this connection's provider family declares, so a console can render the form
+             *     for a family it has never seen. Empty for a family that declares none.
+             */
+            declaredFields?: components["schemas"]["AiDeclaredFieldDto"][] | null;
+            /**
+             * @description The current value of each read-only computed field, recomputed for this read. Empty for a family that
+             *     declares none.
+             */
+            computedFields?: components["schemas"]["AiComputedFieldDto"][] | null;
+            /**
+             * @description The operations this connection's provider family declares, so a console can offer them without
+             *     knowing which family it is looking at. Empty for a family that declares none.
+             */
+            declaredActions?: components["schemas"]["AiDeclaredActionDto"][] | null;
+            /**
+             * @description Which of the declared actions this connection is offered, by action id, as the family decided from the
+             *     connection's own state.
+             */
+            offeredActionIds?: string[] | null;
         };
         /**
          * @description Model category tag for an `AiConnection`.
@@ -17560,6 +18098,79 @@ export interface components {
          * @enum {string}
          */
         AiConnectionModelCategory: "lowEffort" | "mediumEffort" | "highEffort" | "embedding" | "memoryReconsideration" | "default";
+        /**
+         * @description Why a connection profile cannot be used as it is stored.
+         * @enum {string}
+         */
+        AiConnectionUnavailableReason: "providerFamilyAbsent" | "providerFamilyNotPermitted" | "storedValueUnresolved" | "endpointNotPermitted";
+        /**
+         * @description A position on a connection profile that holds a stored vocabulary value.
+         * @enum {string}
+         */
+        AiConnectionVocabularyField: "authMode" | "discoveryMode" | "operationKind" | "protocolMode" | "configuredModelSource" | "purpose" | "verificationStatus" | "verificationFailureCategory";
+        /**
+         * @description One operation an operator can start against a connection, described so a console can offer it without
+         *     knowing anything about the provider family that declared it.
+         */
+        AiDeclaredActionDto: {
+            /**
+             * @description The provider family that declared it. Carried beside the action so a console sends back the key the
+             *     server reported for this connection rather than composing one, which it could not: a key is the family's
+             *     own declared constant.
+             */
+            addInKey?: string | null;
+            /** @description What a dispatch request names the action by. */
+            id?: string | null;
+            /** @description What an operator sees on the affordance that starts it. */
+            label?: string | null;
+            /**
+             * @description The values the action collects from the operator. They belong to one run and reach no column, so a pasted
+             *     address carrying a live authorization code is never stored.
+             */
+            inputs?: components["schemas"]["AiDeclaredFieldDto"][] | null;
+            /**
+             * @description What an operator has to know before starting it, composed by the host from what the family declared and
+             *     how the connection is configured, or null when the family states no requirement the deployment has to
+             *     meet.
+             */
+            coLocationNotice?: string | null;
+        };
+        /**
+         * @description One configuration value a provider family asks an operator for, described well enough for a console to
+         *     render it without knowing anything about the family.
+         */
+        AiDeclaredFieldDto: {
+            /** @description The key the value is submitted, stored and read back under. */
+            name?: string | null;
+            /** @description What an operator sees where the value is entered. */
+            label?: string | null;
+            kind?: components["schemas"]["ProviderFieldKind"];
+            /** @description Whether the connection can be saved without it. */
+            isRequired?: boolean;
+            /** @description Whether the value is credential material, which a console masks and never shows. */
+            isSecret?: boolean;
+            /**
+             * @description Whether the host computes the value and shows it read-only. A computed value is recomputed wherever it is
+             *     shown and is never submitted or stored.
+             */
+            isComputed?: boolean;
+            /** @description Guidance shown under the input, for a field whose label is not enough on its own. */
+            hint?: string | null;
+            /** @description Example text shown in the empty input. */
+            placeholder?: string | null;
+            /** @description The value a new connection starts with. */
+            defaultValue?: string | null;
+            visibleWhen?: components["schemas"]["AiDeclaredFieldVisibilityDto"];
+            /** @description The values a Choice field offers, empty for every other shape. */
+            choices?: string[] | null;
+        };
+        /** @description What has to hold for a declared field to be shown. */
+        AiDeclaredFieldVisibilityDto: {
+            /** @description The field whose value decides. */
+            fieldName?: string | null;
+            /** @description The value that makes the dependent field visible. */
+            equalsValue?: string | null;
+        };
         /**
          * @description Controls whether operators rely on provider discovery or manual model entry.
          * @enum {string}
@@ -17730,16 +18341,99 @@ export interface components {
          * @enum {string}
          */
         AiOperationKind: "chat" | "embedding";
+        /** @description One protocol mode a provider family speaks, with what an operator sees where it is offered. */
+        AiProtocolModeOptionDto: {
+            /** @description The shape, as it is submitted and stored. */
+            value?: string | null;
+            /** @description What an operator sees where the shape is offered. */
+            label?: string | null;
+        };
         /**
-         * @description Provider protocol mode used for a configured model binding.
+         * @description What a dispatch answered with: the run it opened or continued, and the family's result where one arrived
+         *     in time.
+         */
+        AiProviderActionDispatchDto: {
+            invocation?: components["schemas"]["AiProviderActionInvocationDto"];
+            result?: components["schemas"]["AiProviderActionResultDto"];
+        };
+        /** @description One run of a declared action, as an operator's view reads it. */
+        AiProviderActionInvocationDto: {
+            /**
+             * Format: uuid
+             * @description The run.
+             */
+            id?: string;
+            /**
+             * Format: uuid
+             * @description The connection it acts on, or null once that connection has been deleted.
+             */
+            connectionId?: string | null;
+            /** @description The connection's name as it stood when the run was opened. */
+            connectionName?: string | null;
+            /** @description The provider family whose action it is. */
+            addInKey?: string | null;
+            /** @description The action, as that family declared it. */
+            actionId?: string | null;
+            /** @description Pending, completed, failed or expired. */
+            state?: string | null;
+            /**
+             * @description What the family said when it finished, capped and scrubbed by the host. For a run that expired, this is
+             *     what the host recorded it was waiting for.
+             */
+            message?: string | null;
+            /** @description What the run is waiting for, recorded by the host when it opened the run. */
+            waitingFor?: string | null;
+            /**
+             * Format: date-time
+             * @description When the window closes on it.
+             */
+            expiresAt?: string;
+        };
+        /**
+         * @description What a provider family answered a dispatch with, after the host capped and scrubbed its strings and
+         *     checked any address it asked to have opened.
+         */
+        AiProviderActionResultDto: {
+            kind?: components["schemas"]["AiProviderActionResultKind"];
+            /** @description What to show the operator, for an answer that carries one. */
+            message?: string | null;
+            /**
+             * @description Where to send the operator, for an answer that carries one. Already checked against the scheme and the
+             *     family's declared hosts, so an address that reaches here is one the host permits.
+             */
+            url?: string | null;
+            /**
+             * @description Whether the run stays open after the operator has been sent, because the family reports its own terminal
+             *     state later.
+             */
+            awaitCompletion?: boolean;
+            /** @description The values to ask the operator for, for an answer that asks for some. */
+            fields?: components["schemas"]["AiDeclaredFieldDto"][] | null;
+        };
+        /**
+         * @description Which of the four answers an action gave.
          * @enum {string}
          */
-        AiProtocolMode: "auto" | "responses" | "chatCompletions" | "embeddings" | "anthropicMessages" | "bedrockConverse" | "googleGenerateContent";
+        AiProviderActionResultKind: "completed" | "openUrl" | "showForm" | "failed";
         /**
-         * @description AI provider families the system can describe.
-         * @enum {string}
+         * @description What a provider family says about the connection values the host collects for every family: the display
+         *     name, the base URL and the default query parameters.
          */
-        AiProviderKind: "azureOpenAi" | "openAi" | "liteLlm" | "openAiCompatible" | "anthropic" | "awsBedrock" | "googleVertex";
+        AiProviderConnectionFormDto: {
+            /** @description Example text for the display-name box, or null when the family states none. */
+            namePlaceholder?: string | null;
+            /** @description Example text for the base-URL box, or null when the family states none. */
+            baseUrlPlaceholder?: string | null;
+            /** @description Guidance under the base-URL box, saying what the address has to name, or null when the family states none. */
+            baseUrlHint?: string | null;
+            /**
+             * @description A query parameter this family cannot work without, so a console stops presenting the parameter box as
+             *     optional. Null for a family that needs none.
+             */
+            requiredQueryParam?: string | null;
+            /** @description Example text for the default-query-parameter box, or null when the family states none. */
+            queryParamPlaceholder?: string | null;
+        };
         /**
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
@@ -17753,7 +18447,7 @@ export interface components {
             /** Format: uuid */
             configuredModelId?: string | null;
             remoteModelId?: string | null;
-            protocolMode?: components["schemas"]["AiProtocolMode"];
+            protocolMode?: string | null;
             isEnabled?: boolean;
             /** Format: date-time */
             createdAt?: string | null;
@@ -17768,14 +18462,20 @@ export interface components {
             /** Format: uuid */
             configuredModelId?: string | null;
             remoteModelId?: string | null;
-            protocolMode?: components["schemas"]["AiProtocolMode"];
+            protocolMode?: string | null;
             isEnabled?: boolean;
+        };
+        /** @description One stored value on a connection profile that names nothing this build recognises. */
+        AiUnresolvedValueDto: {
+            field?: components["schemas"]["AiConnectionVocabularyField"];
+            /** @description The value as it is stored. */
+            value?: string | null;
         };
         /**
          * @description Normalized failure categories for provider verification and runtime diagnostics.
          * @enum {string}
          */
-        AiVerificationFailureCategory: "credentials" | "endpointReachability" | "authorization" | "providerRejected" | "capabilityMismatch" | "unknown";
+        AiVerificationFailureCategory: "unknown" | "credentials" | "endpointReachability" | "authorization" | "providerRejected" | "capabilityMismatch";
         /** @description Normalized verification result for one AI connection profile. */
         AiVerificationResultDto: {
             status?: components["schemas"]["AiVerificationStatus"];
@@ -18935,7 +19635,8 @@ export interface components {
             misses?: number;
             /**
              * Format: int32
-             * @description What the metric rests on: sealed pull requests for correctness, resolved findings for acceptance.
+             * @description On the correctness lens, the sealed pull requests behind the ratios. On the acceptance lens, the
+             *     resolved findings the rate is a proportion of, because acceptance does not wait for a close.
              */
             sampleSize?: number;
             /**
@@ -18947,23 +19648,24 @@ export interface components {
             discussed?: number;
             /**
              * Format: int32
-             * @description Of `SampleSize`, how many pull requests had both sides of the recall ratio settled: every finding
-             *     decided, and every harvested thread judged against a state that could answer whether its concern was
-             *     acted on. `Recall` and `F1` are computed over these alone, so this is the count they rest on;
-             *     `Precision` and `AcceptanceRate` rest on the full sample.
+             * @description Correctness only. Of `SampleSize`, how many pull requests had both sides of the recall ratio
+             *     settled: every finding carrying a verdict, and every harvested thread that could still become a miss
+             *     judged against a state that answers whether its concern was acted on. `Recall` and `F1` are
+             *     computed over these alone; `Precision` rests on the full sample. Zero on the acceptance lens,
+             *     which reports no recall.
              */
             coveredSampleSize?: number;
             /**
              * Format: int32
-             * @description The true positives of the covered pull requests, which is the numerator of the reported `Recall`.
-             *     The flattened counts above cover the whole sample, so recomputing recall from them would fold in pull
-             *     requests the ratio excludes.
+             * @description Correctness only. The true positives of the covered pull requests, which is the numerator of the
+             *     reported `Recall`. The flattened counts above cover the whole sample, so recomputing recall from
+             *     them would fold in pull requests the ratio excludes.
              */
             coveredTruePositives?: number;
             /**
              * Format: int32
-             * @description The qualifying misses of the covered pull requests. With `CoveredTruePositives` this reproduces the
-             *     reported `Recall` exactly.
+             * @description Correctness only. The qualifying misses of the covered pull requests. With
+             *     `CoveredTruePositives` this reproduces the reported `Recall` exactly.
              */
             coveredMisses?: number;
         };
@@ -19393,7 +20095,7 @@ export interface components {
         /** @description Request body for creating a provider-neutral AI connection profile. */
         CreateAiConnectionRequest: {
             displayName?: string | null;
-            providerKind: components["schemas"]["AiProviderKind"];
+            providerKind: string | null;
             baseUrl?: string | null;
             auth?: components["schemas"]["AiConnectionAuthRequest"];
             discoveryMode?: components["schemas"]["AiDiscoveryMode"];
@@ -19405,6 +20107,9 @@ export interface components {
             } | null;
             configuredModels?: components["schemas"]["AiConfiguredModelRequest"][] | null;
             purposeBindings?: components["schemas"]["AiPurposeBindingRequest"][] | null;
+            providerSettings?: {
+                [key: string]: string;
+            } | null;
         };
         /** @description Request body for creating a client-scoped provider connection. */
         CreateClientProviderConnectionRequest: {
@@ -19506,13 +20211,16 @@ export interface components {
         };
         /** @description Request body for model discovery against a provider without persisting a profile. */
         DiscoverModelsRequest: {
-            providerKind: components["schemas"]["AiProviderKind"];
+            providerKind: string | null;
             baseUrl?: string | null;
             auth?: components["schemas"]["AiConnectionAuthRequest"];
             defaultHeaders?: {
                 [key: string]: string;
             } | null;
             defaultQueryParams?: {
+                [key: string]: string;
+            } | null;
+            providerSettings?: {
                 [key: string]: string;
             } | null;
         };
@@ -19524,6 +20232,21 @@ export interface components {
             filePath?: string | null;
             /** @description Optional human-readable label for the dismissal. */
             label?: string | null;
+        };
+        /** @description Starts one declared action against one connection. */
+        DispatchProviderActionRequest: {
+            /**
+             * Format: uuid
+             * @description The connection the action acts on.
+             */
+            connectionId?: string;
+            /**
+             * @description The provider family whose action it is. Carried as a field rather than a path segment because an identity
+             *     key contains a separator character.
+             */
+            addInKey?: string | null;
+            /** @description The action, as that family declared it. */
+            actionId?: string | null;
         };
         /**
          * @description Carries the unified diff for a single file that was reviewed in a review job.
@@ -19863,6 +20586,27 @@ export interface components {
             authorOverage?: components["schemas"]["AuthorOverageDto"] | null;
             authorPeakMonth?: components["schemas"]["AuthorPeakMonthDto"] | null;
         };
+        /** @description One provider family the host loaded from an add-in directory. */
+        LoadedProviderAddInDto: {
+            /** @description The family's identity key, which is what a connection is stored against. */
+            key?: string | null;
+            /** @description The family's human-readable name. Two families may share one, so the key is shown beside it. */
+            label?: string | null;
+            /** @description The family's own version. */
+            version?: string | null;
+            /** @description The contract version the family declared it was built against. */
+            contractVersion?: string | null;
+            /** @description The hosts the family declared it contacts. */
+            reachedHostPatterns?: string[] | null;
+            /** @description The premium capability the family declared it needs, or null for none. */
+            requiredCapabilityKey?: string | null;
+            /** @description The assembly the family came from. */
+            filePath?: string | null;
+            /** @description The SHA-256 of that file when the host read it, or null when it could not be read. */
+            contentHash?: string | null;
+            /** @description Which directory it came from: `built-in` or `external`. */
+            origin?: string | null;
+        };
         /** @description One logical model as returned to the client, tagged by the scope it came from (client override or tenant). */
         LogicalModelResponse: {
             /** Format: uuid */
@@ -19874,7 +20618,7 @@ export interface components {
             /** Format: uuid */
             configuredModelId?: string;
             reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
-            protocolMode?: components["schemas"]["AiProtocolMode"];
+            protocolMode?: string | null;
             scope?: string | null;
         };
         /** @description Create/update payload for a logical model (the name is the business key within its scope). */
@@ -19886,7 +20630,7 @@ export interface components {
             /** Format: uuid */
             configuredModelId?: string;
             reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
-            protocolMode?: components["schemas"]["AiProtocolMode"];
+            protocolMode?: string | null;
         };
         /** @description Login request payload. */
         LoginRequest: {
@@ -20177,14 +20921,44 @@ export interface components {
         };
         /** @description One provider family this build can call, and what a given client may do with it. */
         PermittedProviderDescriptor: {
-            providerKind?: components["schemas"]["AiProviderKind"];
+            /** @description The provider family. */
+            providerKind?: string | null;
             /** @description Whether the client's tenant permits it. */
             isPermitted?: boolean;
             /**
-             * @description The wire shapes this provider's driver can speak. Sent so the configuration UI offers only shapes that can
-             *     actually be called, rather than keeping a second copy of the drivers' knowledge.
+             * @description What an operator sees where the family is offered. Sent because the family declares it: a console holding
+             *     its own catalogue of names shows a key instead of a name for every family installed after it shipped.
              */
-            protocolModes?: components["schemas"]["AiProtocolMode"][] | null;
+            label?: string | null;
+            /**
+             * @description The protocol modes this provider's driver can speak, each with the name an operator sees. Sent so the
+             *     configuration UI offers only shapes that can actually be called, rather than keeping a second copy of the
+             *     drivers' knowledge.
+             */
+            protocolModes?: components["schemas"]["AiProtocolModeOptionDto"][] | null;
+            /**
+             * @description The authentication modes this provider's driver can authenticate with, each with the name an operator sees.
+             *     Sent for the same reason as the protocol modes. Families differ here — an Azure resource takes a managed
+             *     identity, Bedrock signs with an access key, Anthropic reads an `x-api-key` header — and a UI holding
+             *     its own copy of that offers modes the family cannot read.
+             */
+            authModes?: components["schemas"]["AiAuthModeOptionDto"][] | null;
+            /**
+             * @description The fields each of those authentication modes needs, keyed by mode. A credential is one key for most
+             *     families and several values for some — an access key id and a secret access key, a service-account
+             *     document — so a form that assumed one input could not configure them at all. Sent with the modes because
+             *     the two are answered together: choosing a mode is choosing which of these to fill in.
+             */
+            credentialFields?: {
+                [key: string]: components["schemas"]["ProviderCredentialField"][];
+            } | null;
+            /**
+             * @description The configuration fields this family declares, so the form for it can be rendered before a connection
+             *     exists. Empty for a family that declares none, which is every family compiled into this build: their
+             *     address, credential and verification state are columns of their own.
+             */
+            declaredFields?: components["schemas"]["AiDeclaredFieldDto"][] | null;
+            connectionForm?: components["schemas"]["AiProviderConnectionFormDto"];
         };
         /** @description What a client may configure, and enough to explain anything it may not. */
         PermittedProvidersResponse: {
@@ -20747,7 +21521,8 @@ export interface components {
         };
         /** @description Request body for probing a profile that has not been saved yet. */
         ProbeAiConnectionRequest: {
-            providerKind: components["schemas"]["AiProviderKind"];
+            /** @description The provider family to probe. */
+            providerKind: string | null;
             /** @description The base URL to probe. */
             baseUrl?: string | null;
             auth?: components["schemas"]["AiConnectionAuthRequest"];
@@ -20757,6 +21532,13 @@ export interface components {
             } | null;
             /** @description Optional query parameters the profile would send. */
             defaultQueryParams?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * @description The family's declared settings as the form holds them. Carried so a family whose verification reads one of
+             *     them is probed against the configuration the saved connection would have.
+             */
+            providerSettings?: {
                 [key: string]: string;
             } | null;
         };
@@ -21077,6 +21859,13 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        /** @description Every assembly the add-in loader saw when the host started. */
+        ProviderAddInInventoryDto: {
+            /** @description The families that were taken. */
+            loaded?: components["schemas"]["LoadedProviderAddInDto"][] | null;
+            /** @description The assemblies that were skipped, each with why. */
+            rejected?: components["schemas"]["RejectedProviderAddInDto"][] | null;
+        };
         /** @description Append-only operational audit entry for one provider connection change or verification result. */
         ProviderConnectionAuditEntryDto: {
             /** Format: uuid */
@@ -21120,6 +21909,33 @@ export interface components {
          * @enum {string}
          */
         ProviderConnectionReadinessLevel: "unknown" | "configured" | "degraded" | "onboardingReady" | "workflowComplete";
+        /**
+         * @description One named value a credential is made of, described so a host can collect, check and store it without
+         *     knowing what it is for.
+         */
+        ProviderCredentialField: {
+            /**
+             * @description Stable field name. It is the key the value is stored under in the credential envelope the host writes
+             *     and the key the driver reads it back by, so renaming one orphans the stored credentials. A blank name
+             *     is refused wherever it is set: it would store a value under a key nothing reads, and a refusal meant
+             *     to name the field would name nothing.
+             */
+            name?: string | null;
+            /**
+             * @description Human-readable name for the field, shown where an operator enters it. Blank is refused for the same
+             *     reason: a form would render an unlabelled box, and so would the refusals that name the field.
+             */
+            label?: string | null;
+            /**
+             * @description Whether the value is credential material. A console uses this to decide whether to mask the input; it
+             *     does not affect storage, because every field is stored inside the same protected envelope.
+             */
+            isSecret?: boolean;
+            /** @description Whether a profile can be saved without it. */
+            isRequired?: boolean;
+            /** @description Optional guidance on what to enter, for a field whose label is not enough on its own. */
+            hint?: string | null;
+        };
         /** @description Operator-facing readiness summary for one provider family. */
         ProviderFamilyOperationalStatusDto: {
             providerFamily?: components["schemas"]["ScmProvider"];
@@ -21138,6 +21954,12 @@ export interface components {
             degradedCount?: number;
             hostVariants?: components["schemas"]["ProviderHostVariantOperationalStatusDto"][] | null;
         };
+        /**
+         * @description The value shapes a declared field can take. Closed on purpose: a host renders and validates what a family
+         *     declares, and an open vocabulary would make it a form engine before the first family needs one.
+         * @enum {string}
+         */
+        ProviderFieldKind: "string" | "secret" | "url" | "bool" | "int" | "choice" | "stringList";
         /** @description Operator-facing readiness summary for one provider family host variant. */
         ProviderHostVariantOperationalStatusDto: {
             hostVariant?: string | null;
@@ -21265,6 +22087,24 @@ export interface components {
         /** @description Refresh token request payload. */
         RefreshRequest: {
             refreshToken?: string | null;
+        };
+        /** @description One assembly the host found in an add-in directory and did not load. */
+        RejectedProviderAddInDto: {
+            /**
+             * @description Which kind of failure this was: `failed`, `duplicate`, `mis-packaged`,
+             *     `version-mismatch` or `non-conforming`.
+             */
+            category?: string | null;
+            /** @description What went wrong, in terms an operator can act on. */
+            reason?: string | null;
+            /** @description The assembly that was skipped. */
+            filePath?: string | null;
+            /** @description The SHA-256 of that file, or null when it could not be read. */
+            contentHash?: string | null;
+            /** @description The family's identity key, where the host got far enough to read one. */
+            key?: string | null;
+            /** @description Which directory it came from: `built-in` or `external`. */
+            origin?: string | null;
         };
         /** @description Rename payload. */
         RenameLogicalModelRequest: {
@@ -22729,12 +23569,12 @@ export interface components {
             logicalModelName?: string | null;
             /**
              * Format: int64
-             * @description Input tokens consumed.
+             * @description Input tokens consumed, inclusive of the cached and cache-write portions.
              */
             inputTokens?: number;
             /**
              * Format: int64
-             * @description Output tokens produced.
+             * @description Output tokens produced, inclusive of the reasoning portion.
              */
             outputTokens?: number;
             /**
@@ -22742,6 +23582,21 @@ export interface components {
              * @description Estimated cost, or null when the model has no configured pricing.
              */
             estimatedCostUsd?: number | null;
+            /**
+             * Format: int64
+             * @description Portion of the input served from the provider's cache.
+             */
+            cachedInputTokens?: number;
+            /**
+             * Format: int64
+             * @description Portion of the input written to the provider's cache.
+             */
+            cacheWriteTokens?: number;
+            /**
+             * Format: int64
+             * @description Portion of the output spent on model reasoning.
+             */
+            reasoningTokens?: number;
         };
         /** @description A symbol-insight question for the code-knowledge service. */
         RunnerSymbolInsightRequest: {
@@ -22835,6 +23690,13 @@ export interface components {
         /** @description Enable/disable request for a user. */
         SetUserActiveRequest: {
             isActive: boolean;
+        };
+        /** @description Submits the values an action asked for, continuing the run that asked. */
+        SubmitProviderActionValuesRequest: {
+            /** @description The values by declared input name. They belong to the run and reach no column. */
+            values?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * @description Why a coordinate-addressed review request did or did not produce a review job.
@@ -23068,15 +23930,22 @@ export interface components {
              */
             updatedAt?: string;
             /**
-             * @description Provider families this tenant's clients may use. Empty means unrestricted, which is what a tenant that has
-             *     never stated a policy looks like.
+             * @description Provider families this tenant's clients may use, by identity key, out of the entries a loaded family
+             *     claims. Empty together with an empty UnresolvedAiProviderKinds means unrestricted; a
+             *     tenant that has never stated a policy reads that way.
              */
-            allowedAiProviderKinds?: components["schemas"]["AiProviderKind"][] | null;
+            allowedAiProviderKinds?: string[] | null;
             /**
              * @description Endpoint hosts this tenant's clients may send AI traffic to. Empty means unrestricted. An entry matches a
              *     host exactly, or any subdomain of it when written with a leading dot.
              */
             allowedAiEndpointHosts?: string[] | null;
+            /**
+             * @description Permitted-family entries no loaded family claims, as they are stored. They permit no family, so a tenant
+             *     with entries here and none in AllowedAiProviderKinds refuses every provider. Reported
+             *     so an operator can see which entry has to be corrected, and named on a write to remove one.
+             */
+            unresolvedAiProviderKinds?: string[] | null;
         };
         /** @description Tenant-local login request payload. */
         TenantLocalLoginRequest: {
@@ -23401,7 +24270,7 @@ export interface components {
         /** @description Request body for updating an existing provider-neutral AI connection profile. */
         UpdateAiConnectionRequest: {
             displayName?: string | null;
-            providerKind?: components["schemas"]["AiProviderKind"];
+            providerKind?: string | null;
             baseUrl?: string | null;
             auth?: components["schemas"]["AiConnectionAuthRequest"];
             discoveryMode?: components["schemas"]["AiDiscoveryMode"];
@@ -23413,6 +24282,9 @@ export interface components {
             } | null;
             configuredModels?: components["schemas"]["AiConfiguredModelRequest"][] | null;
             purposeBindings?: components["schemas"]["AiPurposeBindingRequest"][] | null;
+            providerSettings?: {
+                [key: string]: string;
+            } | null;
         };
         /** @description Request to replace the override text of an existing prompt override. */
         UpdatePromptOverrideRequest: {
@@ -23432,15 +24304,24 @@ export interface components {
             /** @description New local-login policy, or null to leave unchanged. */
             localLoginEnabled?: boolean | null;
             /**
-             * @description Provider families this tenant's clients may use, or null to leave unchanged. An empty list clears the
-             *     restriction back to unrestricted.
+             * @description Provider families this tenant's clients may use, by identity key, or null to leave unchanged. An empty
+             *     list clears the restriction back to unrestricted. An entry no loaded family claims is refused, so a
+             *     mistyped key is reported on the form instead of leaving the tenant permitting nothing.
              */
-            allowedAiProviderKinds?: components["schemas"]["AiProviderKind"][] | null;
+            allowedAiProviderKinds?: string[] | null;
             /**
              * @description Endpoint hosts this tenant's clients may reach, or null to leave unchanged. An empty list clears the
              *     restriction. An entry matches a host exactly, or any subdomain when written with a leading dot.
              */
             allowedAiEndpointHosts?: string[] | null;
+            /**
+             * @description Permitted-family entries no loaded family claims, to remove from the policy. They are reported on the
+             *     tenant as `unresolvedAiProviderKinds`, and AllowedAiProviderKinds carries only
+             *     entries a loaded family claims, so naming one here is how it is removed. Anything not named here survives
+             *     the write, so a removal cannot happen as a side effect of saving the families. An entry the tenant does
+             *     not hold is ignored.
+             */
+            removedUnresolvedAiProviderKinds?: string[] | null;
         };
         /** @description Replace-tenant-provider request payload. */
         UpdateTenantSsoProviderRequest: {

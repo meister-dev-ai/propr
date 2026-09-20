@@ -47,7 +47,7 @@ public sealed record SubmitReviewRequest(
 /// <summary>Request payload identifying a pull request by the coordinates ProPR already stores.</summary>
 /// <remarks>
 ///     These are the values pull-request resolution returns. No commit identity appears here: the revision is
-///     read from the provider when the request arrives, which is what lets the same request start a first
+///     read from the provider when the request arrives, and that lets the same request start a first
 ///     review or a re-review after new commits.
 ///     <para>
 ///         All four are needed and none is marked required, so an incomplete request reaches the action's own

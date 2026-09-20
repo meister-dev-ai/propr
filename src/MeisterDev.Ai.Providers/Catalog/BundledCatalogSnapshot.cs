@@ -8,7 +8,7 @@ namespace MeisterDev.Ai.Providers.Catalog;
 /// <summary>
 ///     The catalog snapshot shipped inside this assembly, so a fresh installation has a populated catalog
 ///     without the application making any network request of its own. It is a starting point rather than a
-///     living feed: a newer snapshot reaches a running installation by being uploaded, which is what keeps the
+///     living feed: a newer snapshot reaches a running installation by being uploaded, and that keeps the
 ///     "no outbound fetch" property intact.
 /// </summary>
 /// <remarks>

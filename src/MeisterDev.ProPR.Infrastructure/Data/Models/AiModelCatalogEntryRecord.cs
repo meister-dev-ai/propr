@@ -12,7 +12,7 @@ namespace MeisterDev.ProPR.Infrastructure.Data.Models;
 ///     Scope is carried by the two nullable owner columns, and the combination distinguishes the three kinds of
 ///     row that share this table: both null is a global snapshot fact, a tenant id is that tenant's override
 ///     (above all its negotiated pricing), and a client id is that client's narrower override. Import touches
-///     global rows only, which is what lets a refresh land without disturbing an override.
+///     global rows only, and that lets a refresh land without disturbing an override.
 /// </remarks>
 public sealed class AiModelCatalogEntryRecord
 {

@@ -7,6 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { listAiConnections, listPermittedProviders, probeAiConnection } from '@/services/aiConnectionsService'
 import { useClientAiConnectionsTab } from '../useClientAiConnectionsTab'
 
+// What each family's driver declares its credential is made of, as the permitted-providers endpoint reports it.
+// The form renders these, so a fixture that omitted them would describe a family whose credential cannot be
+// entered at all.
+const apiKeyField = { name: 'apiKey', label: 'API key', isSecret: true, isRequired: true }
+const accessKeyIdField = { name: 'accessKeyId', label: 'Access key ID', isSecret: false, isRequired: true }
+const secretAccessKeyField = { name: 'secretAccessKey', label: 'Secret access key', isSecret: true, isRequired: true }
+
 vi.mock('@/services/aiConnectionsService', () => ({
   listAiConnections: vi.fn(),
   createAiConnection: vi.fn(),
@@ -39,8 +46,33 @@ describe('probing a connection before saving it', () => {
     vi.mocked(listAiConnections).mockResolvedValue([])
     vi.mocked(listPermittedProviders).mockResolvedValue({
       providers: [
-        { providerKind: 'azureOpenAi', isPermitted: true, protocolModes: ['auto', 'responses', 'chatCompletions', 'embeddings'] },
-        { providerKind: 'openAiCompatible', isPermitted: true, protocolModes: ['auto', 'chatCompletions', 'embeddings'] },
+        {
+          providerKind: 'azureOpenAi',
+          label: 'Azure OpenAI / AI Foundry',
+          declaredFields: [],
+          isPermitted: true,
+          protocolModes: [
+            { value: 'Auto', label: 'Auto' },
+            { value: 'azureOpenAi:Responses', label: 'Responses' },
+            { value: 'azureOpenAi:ChatCompletions', label: 'Chat Completions' },
+            { value: 'Embeddings', label: 'Embeddings' },
+          ],
+          authModes: [{ value: 'azureOpenAi:ApiKey', label: 'API Key' }, { value: 'azureOpenAi:AzureIdentity', label: 'Azure Identity' }],
+          credentialFields: { 'azureOpenAi:ApiKey': [apiKeyField], 'azureOpenAi:AzureIdentity': [] },
+        },
+        {
+          providerKind: 'openAiCompatible',
+          label: 'OpenAI-compatible (custom base URL)',
+          declaredFields: [],
+          isPermitted: true,
+          protocolModes: [
+            { value: 'Auto', label: 'Auto' },
+            { value: 'openAiCompatible:ChatCompletions', label: 'Chat Completions' },
+            { value: 'Embeddings', label: 'Embeddings' },
+          ],
+          authModes: [{ value: 'openAiCompatible:ApiKey', label: 'API Key' }],
+          credentialFields: { 'openAiCompatible:ApiKey': [apiKeyField] },
+        },
       ],
       isRestricted: false,
     })
@@ -95,33 +127,41 @@ describe('offering the probe only when there is something to probe with', () => 
     vi.mocked(listAiConnections).mockResolvedValue([])
     vi.mocked(listPermittedProviders).mockResolvedValue({
       providers: [
-        { providerKind: 'azureOpenAi', isPermitted: true, protocolModes: ['auto', 'responses'] },
+        {
+          providerKind: 'azureOpenAi',
+          label: 'Azure OpenAI / AI Foundry',
+          declaredFields: [],
+          isPermitted: true,
+          protocolModes: [{ value: 'Auto', label: 'Auto' }, { value: 'azureOpenAi:Responses', label: 'Responses' }],
+          authModes: [{ value: 'azureOpenAi:ApiKey', label: 'API Key' }, { value: 'azureOpenAi:AzureIdentity', label: 'Azure Identity' }],
+          credentialFields: { 'azureOpenAi:ApiKey': [apiKeyField], 'azureOpenAi:AzureIdentity': [] },
+        },
       ],
       isRestricted: false,
     })
     vi.mocked(probeAiConnection).mockReset()
   })
 
-  it('is unavailable while the api-key field is empty', async () => {
+  it('is unavailable while a required credential field is empty', async () => {
     await mountComposable()
-    api.editor.authMode = 'apiKey'
-    api.editor.apiKey = ''
+    api.editor.authMode = 'azureOpenAi:ApiKey'
+    api.editor.credentials = {}
 
     expect(api.canProbe.value).toBe(false)
   })
 
-  it('becomes available once a key is typed', async () => {
+  it('becomes available once every required field is filled', async () => {
     await mountComposable()
-    api.editor.authMode = 'apiKey'
-    api.editor.apiKey = 'sk-test'
+    api.editor.authMode = 'azureOpenAi:ApiKey'
+    api.editor.credentials = { apiKey: 'sk-test' }
 
     expect(api.canProbe.value).toBe(true)
   })
 
-  it('stays available for azure identity, which carries no key at all', async () => {
+  it('stays available for azure identity, which carries no credential at all', async () => {
     await mountComposable()
-    api.editor.authMode = 'azureIdentity'
-    api.editor.apiKey = ''
+    api.editor.authMode = 'azureOpenAi:AzureIdentity'
+    api.editor.credentials = {}
 
     expect(api.canProbe.value).toBe(true)
   })
@@ -141,8 +181,9 @@ describe('offering the probe only when there is something to probe with', () => 
       id: 'other-profile',
       displayName: 'Another provider',
       providerKind: 'azureOpenAi',
+      declaredFields: [],
       baseUrl: 'https://other.openai.azure.com/',
-      authMode: 'apiKey',
+      authMode: 'azureOpenAi:ApiKey',
     } as never)
 
     expect(api.probeMessage.value).toBe('')

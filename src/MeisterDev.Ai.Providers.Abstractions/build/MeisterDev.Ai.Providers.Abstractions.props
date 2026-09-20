@@ -1,0 +1,49 @@
+<Project>
+
+    <!--
+        Shared build configuration for a provider add-in. NuGet imports this file into every project that
+        references the contract package, and an add-in built inside this repository imports it by path, so
+        both routes get the same settings.
+
+        The settings are split across two files by the point at which MSBuild has to read them. The property
+        below is read while the project is still being evaluated, so it belongs here. The two settings that
+        act on references the project declares after this point are in the .targets beside this file.
+
+        What the settings are for, and what happens without them, is in the README beside the contract
+        assembly.
+    -->
+
+    <!--
+        A project that references the contract is not always an add-in. An author's own test project, or a
+        library they factor out of one, takes the same package and is built and run as an ordinary project.
+        Such a project needs the shared assemblies in its output folder, and these settings exist to keep
+        them out, so it would break. The settings are therefore on by default and a project that is not an
+        add-in turns them off once.
+    -->
+    <PropertyGroup>
+        <ProviderAddInPackaging Condition="'$(ProviderAddInPackaging)' == ''">true</ProviderAddInPackaging>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(ProviderAddInPackaging)' == 'true'">
+        <!--
+            Produces the .deps.json the host's loader reads to resolve the add-in's own dependencies from
+            the add-in's folder. Without it the loader has no dependency list for the folder and resolves the
+            add-in's vendor SDK from wherever the host happens to have one, or not at all.
+        -->
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+    </PropertyGroup>
+
+    <!--
+        The assemblies both the host and every add-in have to resolve from one place. The contract carries the
+        types that cross the boundary by name, and the model abstractions carry IChatClient and ChatMessage,
+        which the contract's own signatures use. The conformance kit is listed with them because an add-in
+        references it to run the driver checks in its own build, and a build-time reference that reaches the
+        add-in's output is a second copy of the same kind.
+    -->
+    <ItemGroup>
+        <ProviderAddInSharedAssembly Include="MeisterDev.Ai.Providers.Abstractions"/>
+        <ProviderAddInSharedAssembly Include="MeisterDev.Ai.Providers.Conformance"/>
+        <ProviderAddInSharedAssembly Include="Microsoft.Extensions.AI.Abstractions"/>
+    </ItemGroup>
+
+</Project>

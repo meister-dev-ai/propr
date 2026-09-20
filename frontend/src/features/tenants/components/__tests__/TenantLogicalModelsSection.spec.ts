@@ -41,8 +41,8 @@ describe('TenantLogicalModelsSection', () => {
 
   it('renders a row per tenant-catalog entry', async () => {
     mocks.listTenantCatalog.mockResolvedValue([
-      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'high', protocolMode: 'auto', scope: 'tenant' },
-      { id: '2', name: 'wide', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'none', protocolMode: 'auto', scope: 'tenant' },
+      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'high', protocolMode: 'Auto', scope: 'tenant' },
+      { id: '2', name: 'wide', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'none', protocolMode: 'Auto', scope: 'tenant' },
     ])
 
     const wrapper = mountSection()
@@ -104,7 +104,7 @@ describe('TenantLogicalModelsSection', () => {
 
   it('deletes a tenant-catalog entry', async () => {
     mocks.listTenantCatalog.mockResolvedValue([
-      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'none', protocolMode: 'auto', scope: 'tenant' },
+      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'none', protocolMode: 'Auto', scope: 'tenant' },
     ])
     mocks.deleteTenantEntry.mockResolvedValue(undefined)
 
@@ -119,7 +119,7 @@ describe('TenantLogicalModelsSection', () => {
 
   it('shows the connection and model for each entry', async () => {
     mocks.listTenantCatalog.mockResolvedValue([
-      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'high', protocolMode: 'auto', scope: 'tenant' },
+      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'high', protocolMode: 'Auto', scope: 'tenant' },
     ])
 
     const wrapper = mountSection()
@@ -132,7 +132,7 @@ describe('TenantLogicalModelsSection', () => {
 
   it('edits an entry through the update endpoint', async () => {
     mocks.listTenantCatalog.mockResolvedValue([
-      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'high', protocolMode: 'auto', scope: 'tenant' },
+      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c1', configuredModelId: 'chat1', reasoningEffort: 'high', protocolMode: 'Auto', scope: 'tenant' },
     ])
     mocks.updateTenantEntry.mockResolvedValue(undefined)
 

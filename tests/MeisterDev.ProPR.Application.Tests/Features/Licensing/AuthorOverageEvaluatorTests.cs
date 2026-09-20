@@ -359,7 +359,7 @@ public sealed class AuthorOverageEvaluatorTests
         }
     }
 
-    /// <summary>Keeps what was logged, which is what the once-per-month rule is asserted against.</summary>
+    /// <summary>Keeps what was logged, which the once-per-month rule is asserted against.</summary>
     private sealed class ListLogger : ILogger<AuthorOverageEvaluator>
     {
         public List<LogEntry> Entries { get; } = [];

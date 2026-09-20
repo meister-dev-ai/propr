@@ -23,6 +23,12 @@ public static class RunnerRelayedChatOptions
 {
     private static readonly JsonElement EmptyObjectSchema = JsonDocument.Parse("""{"type":"object"}""").RootElement;
 
+    /// <summary>
+    ///     The largest output ceiling a relayed call may ask for. Matches the ceiling AiReviewOptions accepts for
+    ///     the host's own tiers, so a runner cannot ask for more than a local review can.
+    /// </summary>
+    public const int MaximumRelayedOutputTokens = 32768;
+
     /// <summary>The options to hand the resolved client, or null when the runner sent none.</summary>
     /// <param name="wire">The options as they came off the wire.</param>
     public static ChatOptions? ToChatOptions(RunnerChatOptions? wire)
@@ -35,13 +41,28 @@ public static class RunnerRelayedChatOptions
         var options = new ChatOptions
         {
             Temperature = wire.Temperature,
-            MaxOutputTokens = wire.MaxOutputTokens,
+            MaxOutputTokens = AcceptedMaxOutputTokens(wire.MaxOutputTokens),
             Tools = wire.Tools is { Count: > 0 } tools
                 ? [.. tools.Select(AITool (tool) => new RelayedToolDeclaration(tool))]
                 : null,
         };
 
         return options.ApplyReasoning(wire.CaptureReasoning, ParseEffort(wire.ReasoningEffort));
+    }
+
+    /// <summary>
+    ///     The output ceiling to honour, or null when the relayed one is not a ceiling a request can carry.
+    /// </summary>
+    /// <remarks>
+    ///     The host's own ceilings are validated where they are configured. A relayed one arrives over the wire
+    ///     from another process and is validated here instead, which is the only point this build sees it. A
+    ///     family that adds a thinking budget to it would otherwise emit a negative or overflowing cap, and the
+    ///     provider's refusal names the arithmetic rather than the runner that sent it.
+    /// </remarks>
+    /// <param name="relayed">The ceiling as it came off the wire.</param>
+    private static int? AcceptedMaxOutputTokens(int? relayed)
+    {
+        return relayed is > 0 and <= MaximumRelayedOutputTokens ? relayed : null;
     }
 
     private static ReviewReasoningEffort ParseEffort(string? effort)

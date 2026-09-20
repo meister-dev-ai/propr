@@ -81,6 +81,17 @@ export interface CreateAdminClientOptions {
   baseUrl?: string
 }
 
+/**
+ * The admin API's base URL, for a caller building a request by hand.
+ *
+ * The generated client covers every path in the committed `openapi.json`. A path added since that document was
+ * last regenerated is not in it, so a caller reaching one builds the URL itself and sends it through
+ * {@link authedFetch}, which is the same session handling the generated client gets.
+ */
+export function adminApiBaseUrl(): string {
+  return resolveAdminClientBaseUrl()
+}
+
 function resolveAdminClientBaseUrl(explicitBaseUrl?: string): string {
   const baseUrl = explicitBaseUrl && explicitBaseUrl.length > 0
     ? explicitBaseUrl

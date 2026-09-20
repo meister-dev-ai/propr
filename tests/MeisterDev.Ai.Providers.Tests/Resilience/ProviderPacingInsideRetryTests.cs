@@ -20,7 +20,7 @@ public sealed class ProviderPacingInsideRetryTests
     private const string Connection = "11111111-1111-1111-1111-111111111111";
 
     private static readonly ProviderCallTarget Target =
-        new(AiProviderKind.OpenAiCompatible, "gpt-5.6-luna", "Primary OpenAI");
+        new("meisterdev/openAiCompatible", "gpt-5.6-luna", "Primary OpenAI");
 
     /// <summary>The delay the provider states, long enough that paying it twice would be unmistakable.</summary>
     private static readonly TimeSpan Stated = TimeSpan.FromSeconds(7);

@@ -34,7 +34,7 @@ public interface IThreadPassJobRepository
     /// <summary>
     ///     Claims the pass for execution, moving it from pending to processing and spending one attempt.
     ///     Returns <c>false</c> when another executor got there first, or when the pass is still inside the
-    ///     delay a failed attempt imposed, which is what stops a duplicate offer spending an attempt early.
+    ///     delay a failed attempt imposed, and that stops a duplicate offer spending an attempt early.
     /// </summary>
     /// <param name="jobId">The pass identifier.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>

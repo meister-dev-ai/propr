@@ -5,6 +5,76 @@
     "version": "v1"
   },
   "paths": {
+    "/admin/ai-provider-add-ins": {
+      "get": {
+        "tags": [
+          "AdminAiProviderAddIns"
+        ],
+        "summary": "Returns every assembly the loader saw, loaded and rejected.",
+        "responses": {
+          "200": {
+            "description": "The loaded families and the rejected assemblies.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderAddInInventoryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderAddInInventoryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderAddInInventoryDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/crawl-configurations": {
       "get": {
         "tags": [
@@ -4710,6 +4780,422 @@
         }
       }
     },
+    "/ai-provider-actions/dispatch": {
+      "post": {
+        "tags": [
+          "AiProviderActions"
+        ],
+        "summary": "Starts one declared action against one connection.",
+        "requestBody": {
+          "description": "The connection, the provider family and the action.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchProviderActionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchProviderActionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchProviderActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The run that was opened, with the family's answer where one arrived in time.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionDispatchDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionDispatchDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionDispatchDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The family declares no such action, or this build cannot resolve the family.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not hold the role the connection's owner requires.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such connection.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The installation is not licensed for the capability the family declared.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai-provider-actions/{invocationId}/values": {
+      "post": {
+        "tags": [
+          "AiProviderActions"
+        ],
+        "summary": "Submits the values an action asked for, continuing the run that asked rather than opening a second\none.",
+        "description": "The submitted values are inputs to the run and reach no column, which keeps a pasted callback address\ncarrying a live authorization code out of the database. The administrator recorded on the run is the\none who started it and is unchanged by a submission, whoever makes it: any administrator holding the\nowner role can submit another administrator's callback value, and recording the submitter would point\na later revocation at the wrong person.",
+        "parameters": [
+          {
+            "name": "invocationId",
+            "in": "path",
+            "description": "The run the form came from.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The values, by declared input name.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitProviderActionValuesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitProviderActionValuesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitProviderActionValuesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The run, with the family's answer where one arrived in time.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionDispatchDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionDispatchDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionDispatchDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The run has already finished or expired, or its action is no longer declared.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not hold the role the connection's owner requires.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such run, or its connection is gone.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The installation is not licensed for the capability the family declared.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai-provider-actions/{invocationId}": {
+      "get": {
+        "tags": [
+          "AiProviderActions"
+        ],
+        "summary": "Reports where one run stands.",
+        "description": "Read by whoever holds the role the dispatch required, which is the connection's owner role and not\nbeing the administrator who started the run: a run is state on a connection, and an administrator of\nthat connection can see what is happening to it.",
+        "parameters": [
+          {
+            "name": "invocationId",
+            "in": "path",
+            "description": "The run to read.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The run.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionInvocationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionInvocationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderActionInvocationDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not hold the role the connection's owner requires.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such run, or its connection is gone.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/login": {
       "post": {
         "tags": [
@@ -5979,6 +6465,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AiVerificationResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -20273,6 +20779,88 @@
         }
       }
     },
+    "/tenants/{tenantId}/ai-connections/permitted-providers": {
+      "get": {
+        "tags": [
+          "TenantAiConnections"
+        ],
+        "summary": "Lists the provider families this build has a driver for, each flagged with whether this tenant's own\npolicy permits it, and described well enough to configure one: its name, the shapes it speaks and\nauthenticates with, the fields each credential shape needs, and what it declares about the connection\nform.",
+        "description": "The same answer the client-scoped endpoint gives, read against the tenant's policy directly. It is\nserved here so the tenant screens — the connection editor and the provider allow-list — describe\nfamilies from the installation rather than from a table of their own, which would name only the\nfamilies that existed when the console shipped.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermittedProvidersResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermittedProvidersResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermittedProvidersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tenants/{tenantId}/ai-connections/{connectionId}": {
       "delete": {
         "tags": [
@@ -20369,6 +20957,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AiVerificationResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -24884,16 +25492,48 @@
         "additionalProperties": false,
         "description": "A repository or wiki option discovered for one project."
       },
-      "AiAuthMode": {
-        "enum": [
-          "apiKey",
-          "azureIdentity",
-          "xApiKey",
-          "sigV4",
-          "gcpAdc"
-        ],
-        "type": "string",
-        "description": "Authentication modes supported by AI providers."
+      "AiAuthModeOptionDto": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The shape, as it is submitted and stored.",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "What an operator sees where the shape is offered.",
+            "nullable": true
+          },
+          "isSuperseded": {
+            "type": "boolean",
+            "description": "Whether the family still reads this shape but no longer offers it for a new connection. Every shape the\nfamily declares is reported, flagged, rather than the superseded ones being dropped here: a console\nshowing a profile saved under one needs its name, and the server accepts it on save so that profile can\nbe edited without its credential being re-entered in another shape."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One credential shape a provider family authenticates with, with what an operator sees where it is offered."
+      },
+      "AiComputedFieldDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The declared field the value belongs to.",
+            "nullable": true
+          },
+          "value": {
+            "type": "string",
+            "description": "The value as the family computed it, capped and scrubbed.",
+            "nullable": true
+          },
+          "refusal": {
+            "type": "string",
+            "description": "Why this installation would refuse the value, or null when it permits it.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The current value of one read-only computed field, as of this read."
       },
       "AiConfiguredModelDto": {
         "type": "object",
@@ -24920,7 +25560,7 @@
           "supportedProtocolModes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AiProtocolMode"
+              "type": "string"
             },
             "nullable": true
           },
@@ -25027,7 +25667,7 @@
           "supportedProtocolModes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AiProtocolMode"
+              "type": "string"
             },
             "nullable": true
           },
@@ -25114,15 +25754,60 @@
         "type": "object",
         "properties": {
           "mode": {
-            "$ref": "#/components/schemas/AiAuthMode"
+            "type": "string",
+            "description": "The authentication mode the credential belongs to.",
+            "nullable": true
           },
           "apiKey": {
             "type": "string",
+            "description": "The credential of a mode whose credential is one key. It means the `apiKey` field of\nFields and is kept so a caller that only ever sent a key needs no change.",
+            "nullable": true
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The credential fields the selected family declares for the selected mode, by name. This is how the modes\nwhose credential is more than one value — an access key id and a secret access key, for instance — are\nsupplied. Which names are accepted comes from the family's own declaration, reported alongside the\nauthentication modes on the permitted-providers endpoint.",
             "nullable": true
           }
         },
         "additionalProperties": false,
         "description": "Authentication settings for one AI connection profile request."
+      },
+      "AiConnectionAvailabilityDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/AiConnectionAvailabilityState"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/AiConnectionUnavailableReason"
+          },
+          "providerIdentity": {
+            "type": "string",
+            "description": "The provider identity the reason is about, or null when the reason is not about the\nprovider family. Carried separately because a family this build does not have cannot be reported in\nMeisterDev.ProPR.Application.DTOs.AiConnectionDto.ProviderKind, and an operator installing or permitting one needs the key\nas it is stored.",
+            "nullable": true
+          },
+          "unresolvedValues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiUnresolvedValueDto"
+            },
+            "description": "The stored values this build could not resolve, all of them rather than the first, because each is a\nseparate thing to correct.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Whether a connection profile can be used, and what stands in the way when it cannot."
+      },
+      "AiConnectionAvailabilityState": {
+        "enum": [
+          "available",
+          "unavailable"
+        ],
+        "type": "string",
+        "description": "Whether a connection profile can be used as it is stored."
       },
       "AiConnectionDto": {
         "type": "object",
@@ -25144,7 +25829,9 @@
             "nullable": true
           },
           "providerKind": {
-            "$ref": "#/components/schemas/AiProviderKind"
+            "type": "string",
+            "description": "Provider family, by identity key. A key no loaded family claims is carried as it is stored, so a profile\nwhose add-in is absent is still listed and can be corrected.",
+            "nullable": true
           },
           "baseUrl": {
             "type": "string",
@@ -25152,7 +25839,9 @@
             "nullable": true
           },
           "authMode": {
-            "$ref": "#/components/schemas/AiAuthMode"
+            "type": "string",
+            "description": "Authentication mode used for the provider, by the name it persists under. A name no loaded family claims\nis carried as it is stored, for the same reason ProviderKind is.",
+            "nullable": true
           },
           "discoveryMode": {
             "$ref": "#/components/schemas/AiDiscoveryMode"
@@ -25211,6 +25900,58 @@
             "description": "Owning tenant ID for a tenant-scoped connection (inherited by the tenant's clients); null for a client-scoped one.",
             "format": "uuid",
             "nullable": true
+          },
+          "availability": {
+            "$ref": "#/components/schemas/AiConnectionAvailabilityDto"
+          },
+          "providerSettings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The non-secret configuration values this connection's provider family declared, by declared field name,\nor null for a family that declares none.",
+            "nullable": true
+          },
+          "declaredSecretNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Which secret-marked declared fields hold a stored value. A console renders a field as set or not set\nfrom this and offers to replace it, which is what the credential fields already do.",
+            "nullable": true,
+            "readOnly": true
+          },
+          "declaredFields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiDeclaredFieldDto"
+            },
+            "description": "The configuration fields this connection's provider family declares, so a console can render the form\nfor a family it has never seen. Empty for a family that declares none.",
+            "nullable": true
+          },
+          "computedFields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiComputedFieldDto"
+            },
+            "description": "The current value of each read-only computed field, recomputed for this read. Empty for a family that\ndeclares none.",
+            "nullable": true
+          },
+          "declaredActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiDeclaredActionDto"
+            },
+            "description": "The operations this connection's provider family declares, so a console can offer them without\nknowing which family it is looking at. Empty for a family that declares none.",
+            "nullable": true
+          },
+          "offeredActionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Which of the declared actions this connection is offered, by action id, as the family decided from the\nconnection's own state.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -25227,6 +25968,140 @@
         ],
         "type": "string",
         "description": "Model category tag for an `AiConnection`.\nAllows clients to configure a dedicated AI endpoint per file complexity tier.\nWhen a connection with a matching category is present, the orchestrator uses it\ninstead of the default active connection for that tier."
+      },
+      "AiConnectionUnavailableReason": {
+        "enum": [
+          "providerFamilyAbsent",
+          "providerFamilyNotPermitted",
+          "storedValueUnresolved",
+          "endpointNotPermitted"
+        ],
+        "type": "string",
+        "description": "Why a connection profile cannot be used as it is stored."
+      },
+      "AiConnectionVocabularyField": {
+        "enum": [
+          "authMode",
+          "discoveryMode",
+          "operationKind",
+          "protocolMode",
+          "configuredModelSource",
+          "purpose",
+          "verificationStatus",
+          "verificationFailureCategory"
+        ],
+        "type": "string",
+        "description": "A position on a connection profile that holds a stored vocabulary value."
+      },
+      "AiDeclaredActionDto": {
+        "type": "object",
+        "properties": {
+          "addInKey": {
+            "type": "string",
+            "description": "The provider family that declared it. Carried beside the action so a console sends back the key the\nserver reported for this connection rather than composing one, which it could not: a key is the family's\nown declared constant.",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "description": "What a dispatch request names the action by.",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "What an operator sees on the affordance that starts it.",
+            "nullable": true
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiDeclaredFieldDto"
+            },
+            "description": "The values the action collects from the operator. They belong to one run and reach no column, so a pasted\naddress carrying a live authorization code is never stored.",
+            "nullable": true
+          },
+          "coLocationNotice": {
+            "type": "string",
+            "description": "What an operator has to know before starting it, composed by the host from what the family declared and\nhow the connection is configured, or null when the family states no requirement the deployment has to\nmeet.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One operation an operator can start against a connection, described so a console can offer it without\nknowing anything about the provider family that declared it."
+      },
+      "AiDeclaredFieldDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The key the value is submitted, stored and read back under.",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "What an operator sees where the value is entered.",
+            "nullable": true
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ProviderFieldKind"
+          },
+          "isRequired": {
+            "type": "boolean",
+            "description": "Whether the connection can be saved without it."
+          },
+          "isSecret": {
+            "type": "boolean",
+            "description": "Whether the value is credential material, which a console masks and never shows."
+          },
+          "isComputed": {
+            "type": "boolean",
+            "description": "Whether the host computes the value and shows it read-only. A computed value is recomputed wherever it is\nshown and is never submitted or stored."
+          },
+          "hint": {
+            "type": "string",
+            "description": "Guidance shown under the input, for a field whose label is not enough on its own.",
+            "nullable": true
+          },
+          "placeholder": {
+            "type": "string",
+            "description": "Example text shown in the empty input.",
+            "nullable": true
+          },
+          "defaultValue": {
+            "type": "string",
+            "description": "The value a new connection starts with.",
+            "nullable": true
+          },
+          "visibleWhen": {
+            "$ref": "#/components/schemas/AiDeclaredFieldVisibilityDto"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The values a Choice field offers, empty for every other shape.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One configuration value a provider family asks an operator for, described well enough for a console to\nrender it without knowing anything about the family."
+      },
+      "AiDeclaredFieldVisibilityDto": {
+        "type": "object",
+        "properties": {
+          "fieldName": {
+            "type": "string",
+            "description": "The field whose value decides.",
+            "nullable": true
+          },
+          "equalsValue": {
+            "type": "string",
+            "description": "The value that makes the dependent field visible.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What has to hold for a declared field to be shown."
       },
       "AiDiscoveryMode": {
         "enum": [
@@ -25513,31 +26388,162 @@
         "type": "string",
         "description": "Supported AI operation categories."
       },
-      "AiProtocolMode": {
-        "enum": [
-          "auto",
-          "responses",
-          "chatCompletions",
-          "embeddings",
-          "anthropicMessages",
-          "bedrockConverse",
-          "googleGenerateContent"
-        ],
-        "type": "string",
-        "description": "Provider protocol mode used for a configured model binding."
+      "AiProtocolModeOptionDto": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The shape, as it is submitted and stored.",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "What an operator sees where the shape is offered.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One wire shape a provider family speaks, with what an operator sees where it is offered."
       },
-      "AiProviderKind": {
+      "AiProviderActionDispatchDto": {
+        "type": "object",
+        "properties": {
+          "invocation": {
+            "$ref": "#/components/schemas/AiProviderActionInvocationDto"
+          },
+          "result": {
+            "$ref": "#/components/schemas/AiProviderActionResultDto"
+          }
+        },
+        "additionalProperties": false,
+        "description": "What a dispatch answered with: the run it opened or continued, and the family's result where one arrived\nin time."
+      },
+      "AiProviderActionInvocationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The run.",
+            "format": "uuid"
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "The connection it acts on, or null once that connection has been deleted.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "connectionName": {
+            "type": "string",
+            "description": "The connection's name as it stood when the run was opened.",
+            "nullable": true
+          },
+          "addInKey": {
+            "type": "string",
+            "description": "The provider family whose action it is.",
+            "nullable": true
+          },
+          "actionId": {
+            "type": "string",
+            "description": "The action, as that family declared it.",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "description": "Pending, completed, failed or expired.",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "description": "What the family said when it finished, capped and scrubbed by the host. For a run that expired, this is\nwhat the host recorded it was waiting for.",
+            "nullable": true
+          },
+          "waitingFor": {
+            "type": "string",
+            "description": "What the run is waiting for, recorded by the host when it opened the run.",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the window closes on it.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One run of a declared action, as an operator's view reads it."
+      },
+      "AiProviderActionResultDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AiProviderActionResultKind"
+          },
+          "message": {
+            "type": "string",
+            "description": "What to show the operator, for an answer that carries one.",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "description": "Where to send the operator, for an answer that carries one. Already checked against the scheme and the\nfamily's declared hosts, so an address that reaches here is one the host permits.",
+            "nullable": true
+          },
+          "awaitCompletion": {
+            "type": "boolean",
+            "description": "Whether the run stays open after the operator has been sent, because the family reports its own terminal\nstate later."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiDeclaredFieldDto"
+            },
+            "description": "The values to ask the operator for, for an answer that asks for some.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What a provider family answered a dispatch with, after the host capped and scrubbed its strings and\nchecked any address it asked to have opened."
+      },
+      "AiProviderActionResultKind": {
         "enum": [
-          "azureOpenAi",
-          "openAi",
-          "liteLlm",
-          "openAiCompatible",
-          "anthropic",
-          "awsBedrock",
-          "googleVertex"
+          "completed",
+          "openUrl",
+          "showForm",
+          "failed"
         ],
         "type": "string",
-        "description": "AI provider families the system can describe."
+        "description": "Which of the four answers an action gave."
+      },
+      "AiProviderConnectionFormDto": {
+        "type": "object",
+        "properties": {
+          "namePlaceholder": {
+            "type": "string",
+            "description": "Example text for the display-name box, or null when the family states none.",
+            "nullable": true
+          },
+          "baseUrlPlaceholder": {
+            "type": "string",
+            "description": "Example text for the base-URL box, or null when the family states none.",
+            "nullable": true
+          },
+          "baseUrlHint": {
+            "type": "string",
+            "description": "Guidance under the base-URL box, saying what the address has to name, or null when the family states none.",
+            "nullable": true
+          },
+          "requiredQueryParam": {
+            "type": "string",
+            "description": "A query parameter this family cannot work without, so a console stops presenting the parameter box as\noptional. Null for a family that needs none.",
+            "nullable": true
+          },
+          "queryParamPlaceholder": {
+            "type": "string",
+            "description": "Example text for the default-query-parameter box, or null when the family states none.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What a provider family says about the connection values the host collects for every family: the display\nname, the base URL and the default query parameters."
       },
       "AiPurpose": {
         "enum": [
@@ -25575,7 +26581,8 @@
             "nullable": true
           },
           "protocolMode": {
-            "$ref": "#/components/schemas/AiProtocolMode"
+            "type": "string",
+            "nullable": true
           },
           "isEnabled": {
             "type": "boolean"
@@ -25618,7 +26625,8 @@
             "nullable": true
           },
           "protocolMode": {
-            "$ref": "#/components/schemas/AiProtocolMode"
+            "type": "string",
+            "nullable": true
           },
           "isEnabled": {
             "type": "boolean"
@@ -25627,14 +26635,29 @@
         "additionalProperties": false,
         "description": "Purpose binding payload item for create and update flows."
       },
+      "AiUnresolvedValueDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "$ref": "#/components/schemas/AiConnectionVocabularyField"
+          },
+          "value": {
+            "type": "string",
+            "description": "The value as it is stored.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One stored value on a connection profile that names nothing this build recognises."
+      },
       "AiVerificationFailureCategory": {
         "enum": [
+          "unknown",
           "credentials",
           "endpointReachability",
           "authorization",
           "providerRejected",
-          "capabilityMismatch",
-          "unknown"
+          "capabilityMismatch"
         ],
         "type": "string",
         "description": "Normalized failure categories for provider verification and runtime diagnostics."
@@ -28376,7 +29399,8 @@
             "nullable": true
           },
           "providerKind": {
-            "$ref": "#/components/schemas/AiProviderKind"
+            "type": "string",
+            "nullable": true
           },
           "baseUrl": {
             "type": "string",
@@ -28413,6 +29437,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AiPurposeBindingRequest"
+            },
+            "nullable": true
+          },
+          "providerSettings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
             },
             "nullable": true
           }
@@ -28707,7 +29738,8 @@
         "type": "object",
         "properties": {
           "providerKind": {
-            "$ref": "#/components/schemas/AiProviderKind"
+            "type": "string",
+            "nullable": true
           },
           "baseUrl": {
             "type": "string",
@@ -28724,6 +29756,13 @@
             "nullable": true
           },
           "defaultQueryParams": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "providerSettings": {
             "type": "object",
             "additionalProperties": {
               "type": "string"
@@ -28755,6 +29794,28 @@
         },
         "additionalProperties": false,
         "description": "Request to dismiss a finding and store it as an admin-dismissed memory record."
+      },
+      "DispatchProviderActionRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "The connection the action acts on.",
+            "format": "uuid"
+          },
+          "addInKey": {
+            "type": "string",
+            "description": "The provider family whose action it is. Carried as a field rather than a path segment because an identity\nkey contains a separator character.",
+            "nullable": true
+          },
+          "actionId": {
+            "type": "string",
+            "description": "The action, as that family declared it.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Starts one declared action against one connection."
       },
       "FileDiffDto": {
         "type": "object",
@@ -29348,6 +30409,61 @@
         "additionalProperties": false,
         "description": "Installation-wide licensing summary for administration and session hydration."
       },
+      "LoadedProviderAddInDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The family's identity key, which is what a connection is stored against.",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "The family's human-readable name. Two families may share one, so the key is shown beside it.",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "description": "The family's own version.",
+            "nullable": true
+          },
+          "contractVersion": {
+            "type": "string",
+            "description": "The contract version the family declared it was built against.",
+            "nullable": true
+          },
+          "reachedHostPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The hosts the family declared it contacts.",
+            "nullable": true
+          },
+          "requiredCapabilityKey": {
+            "type": "string",
+            "description": "The premium capability the family declared it needs, or null for none.",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "description": "The assembly the family came from.",
+            "nullable": true
+          },
+          "contentHash": {
+            "type": "string",
+            "description": "The SHA-256 of that file when the host read it, or null when it could not be read.",
+            "nullable": true
+          },
+          "origin": {
+            "type": "string",
+            "description": "Which directory it came from: `built-in` or `external`.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One provider family the host loaded from an add-in directory."
+      },
       "LogicalModelResponse": {
         "type": "object",
         "properties": {
@@ -29374,7 +30490,8 @@
             "$ref": "#/components/schemas/ReviewReasoningEffort"
           },
           "protocolMode": {
-            "$ref": "#/components/schemas/AiProtocolMode"
+            "type": "string",
+            "nullable": true
           },
           "scope": {
             "type": "string",
@@ -29406,7 +30523,8 @@
             "$ref": "#/components/schemas/ReviewReasoningEffort"
           },
           "protocolMode": {
-            "$ref": "#/components/schemas/AiProtocolMode"
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -30016,19 +31134,56 @@
         "type": "object",
         "properties": {
           "providerKind": {
-            "$ref": "#/components/schemas/AiProviderKind"
+            "type": "string",
+            "description": "The provider family.",
+            "nullable": true
           },
           "isPermitted": {
             "type": "boolean",
             "description": "Whether the client's tenant permits it."
           },
+          "label": {
+            "type": "string",
+            "description": "What an operator sees where the family is offered. Sent because the family declares it: a console holding\nits own catalogue of names shows a key instead of a name for every family installed after it shipped.",
+            "nullable": true
+          },
           "protocolModes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AiProtocolMode"
+              "$ref": "#/components/schemas/AiProtocolModeOptionDto"
             },
-            "description": "The wire shapes this provider's driver can speak. Sent so the configuration UI offers only shapes that can\nactually be called, rather than keeping a second copy of the drivers' knowledge.",
+            "description": "The wire shapes this provider's driver can speak, each with the name an operator sees. Sent so the\nconfiguration UI offers only shapes that can actually be called, rather than keeping a second copy of the\ndrivers' knowledge.",
             "nullable": true
+          },
+          "authModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiAuthModeOptionDto"
+            },
+            "description": "The credential shapes this provider's driver can authenticate with, each with the name an operator sees.\nSent for the same reason as the wire shapes. Families differ here — an Azure resource takes a managed\nidentity, Bedrock signs with an access key, Anthropic reads an `x-api-key` header — and a UI holding\nits own copy of that offers modes the family cannot read.",
+            "nullable": true
+          },
+          "credentialFields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ProviderCredentialField"
+              }
+            },
+            "description": "The fields each of those credential shapes needs, keyed by mode. A credential is one key for most\nfamilies and several values for some — an access key id and a secret access key, a service-account\ndocument — so a form that assumed one input could not configure them at all. Sent with the modes because\nthe two are answered together: choosing a mode is choosing which of these to fill in.",
+            "nullable": true
+          },
+          "declaredFields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiDeclaredFieldDto"
+            },
+            "description": "The configuration fields this family declares, so the form for it can be rendered before a connection\nexists. Empty for a family that declares none, which is every family compiled into this build: their\naddress, credential and verification state are columns of their own.",
+            "nullable": true
+          },
+          "connectionForm": {
+            "$ref": "#/components/schemas/AiProviderConnectionFormDto"
           }
         },
         "additionalProperties": false,
@@ -31417,7 +32572,9 @@
         "type": "object",
         "properties": {
           "providerKind": {
-            "$ref": "#/components/schemas/AiProviderKind"
+            "type": "string",
+            "description": "The provider family to probe.",
+            "nullable": true
           },
           "baseUrl": {
             "type": "string",
@@ -31441,6 +32598,14 @@
               "type": "string"
             },
             "description": "Optional query parameters the profile would send.",
+            "nullable": true
+          },
+          "providerSettings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The family's declared settings as the form holds them. Carried so a family whose verification reads one of\nthem is probed against the configuration the saved connection would have.",
             "nullable": true
           }
         },
@@ -32143,6 +33308,29 @@
         "additionalProperties": false,
         "description": "Global provider-family activation status for installation-wide administration."
       },
+      "ProviderAddInInventoryDto": {
+        "type": "object",
+        "properties": {
+          "loaded": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoadedProviderAddInDto"
+            },
+            "description": "The families that were taken.",
+            "nullable": true
+          },
+          "rejected": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RejectedProviderAddInDto"
+            },
+            "description": "The assemblies that were skipped, each with why.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Every assembly the add-in loader saw when the host started."
+      },
       "ProviderConnectionAuditEntryDto": {
         "type": "object",
         "properties": {
@@ -32272,6 +33460,36 @@
         "type": "string",
         "description": "Represents the current readiness level of a provider connection or provider family."
       },
+      "ProviderCredentialField": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Stable field name. It is the key the value is stored under in the credential envelope the host writes\nand the key the driver reads it back by, so renaming one orphans the stored credentials. A blank name\nis refused wherever it is set: it would store a value under a key nothing reads, and a refusal meant\nto name the field would name nothing.",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable name for the field, shown where an operator enters it. Blank is refused for the same\nreason: a form would render an unlabelled box, and so would the refusals that name the field.",
+            "nullable": true
+          },
+          "isSecret": {
+            "type": "boolean",
+            "description": "Whether the value is credential material. A console uses this to decide whether to mask the input; it\ndoes not affect storage, because every field is stored inside the same protected envelope."
+          },
+          "isRequired": {
+            "type": "boolean",
+            "description": "Whether a profile can be saved without it."
+          },
+          "hint": {
+            "type": "string",
+            "description": "Optional guidance on what to enter, for a field whose label is not enough on its own.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One named value a credential is made of, described so a host can collect, check and store it without\nknowing what it is for."
+      },
       "ProviderFamilyOperationalStatusDto": {
         "type": "object",
         "properties": {
@@ -32318,6 +33536,19 @@
         },
         "additionalProperties": false,
         "description": "Operator-facing readiness summary for one provider family."
+      },
+      "ProviderFieldKind": {
+        "enum": [
+          "string",
+          "secret",
+          "url",
+          "bool",
+          "int",
+          "choice",
+          "stringList"
+        ],
+        "type": "string",
+        "description": "The value shapes a declared field can take. Closed on purpose: a host renders and validates what a family\ndeclares, and an open vocabulary would make it a form engine before the first family needs one."
       },
       "ProviderHostVariantOperationalStatusDto": {
         "type": "object",
@@ -32585,6 +33816,43 @@
         },
         "additionalProperties": false,
         "description": "Refresh token request payload."
+      },
+      "RejectedProviderAddInDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Which kind of failure this was: `failed`, `duplicate`, `mis-packaged`,\n`version-mismatch` or `non-conforming`.",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "description": "What went wrong, in terms an operator can act on.",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "description": "The assembly that was skipped.",
+            "nullable": true
+          },
+          "contentHash": {
+            "type": "string",
+            "description": "The SHA-256 of that file, or null when it could not be read.",
+            "nullable": true
+          },
+          "key": {
+            "type": "string",
+            "description": "The family's identity key, where the host got far enough to read one.",
+            "nullable": true
+          },
+          "origin": {
+            "type": "string",
+            "description": "Which directory it came from: `built-in` or `external`.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One assembly the host found in an add-in directory and did not load."
       },
       "RenameLogicalModelRequest": {
         "type": "object",
@@ -35021,12 +36289,12 @@
           },
           "inputTokens": {
             "type": "integer",
-            "description": "Input tokens consumed.",
+            "description": "Input tokens consumed, inclusive of the cached and cache-write portions.",
             "format": "int64"
           },
           "outputTokens": {
             "type": "integer",
-            "description": "Output tokens produced.",
+            "description": "Output tokens produced, inclusive of the reasoning portion.",
             "format": "int64"
           },
           "estimatedCostUsd": {
@@ -35034,6 +36302,21 @@
             "description": "Estimated cost, or null when the model has no configured pricing.",
             "format": "double",
             "nullable": true
+          },
+          "cachedInputTokens": {
+            "type": "integer",
+            "description": "Portion of the input served from the provider's cache.",
+            "format": "int64"
+          },
+          "cacheWriteTokens": {
+            "type": "integer",
+            "description": "Portion of the input written to the provider's cache.",
+            "format": "int64"
+          },
+          "reasoningTokens": {
+            "type": "integer",
+            "description": "Portion of the output spent on model reasoning.",
+            "format": "int64"
           }
         },
         "additionalProperties": false,
@@ -35211,6 +36494,21 @@
         },
         "additionalProperties": false,
         "description": "Enable/disable request for a user."
+      },
+      "SubmitProviderActionValuesRequest": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The values by declared input name. They belong to the run and reach no column.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Submits the values an action asked for, continuing the run that asked."
       },
       "SubmitReviewByCoordinatesOutcome": {
         "enum": [
@@ -35608,9 +36906,9 @@
           "allowedAiProviderKinds": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AiProviderKind"
+              "type": "string"
             },
-            "description": "Provider families this tenant's clients may use. Empty means unrestricted, which is what a tenant that has\nnever stated a policy looks like.",
+            "description": "Provider families this tenant's clients may use, by identity key, out of the entries a loaded family\nclaims. Empty together with an empty UnresolvedAiProviderKinds means unrestricted; a\ntenant that has never stated a policy reads that way.",
             "nullable": true
           },
           "allowedAiEndpointHosts": {
@@ -35619,6 +36917,14 @@
               "type": "string"
             },
             "description": "Endpoint hosts this tenant's clients may send AI traffic to. Empty means unrestricted. An entry matches a\nhost exactly, or any subdomain of it when written with a leading dot.",
+            "nullable": true
+          },
+          "unresolvedAiProviderKinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permitted-family entries no loaded family claims, as they are stored. They permit no family, so a tenant\nwith entries here and none in AllowedAiProviderKinds refuses every provider. Reported\nso an operator can see which entry has to be corrected, and named on a write to remove one.",
             "nullable": true
           }
         },
@@ -36189,7 +37495,8 @@
             "nullable": true
           },
           "providerKind": {
-            "$ref": "#/components/schemas/AiProviderKind"
+            "type": "string",
+            "nullable": true
           },
           "baseUrl": {
             "type": "string",
@@ -36226,6 +37533,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AiPurposeBindingRequest"
+            },
+            "nullable": true
+          },
+          "providerSettings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
             },
             "nullable": true
           }
@@ -36277,9 +37591,9 @@
           "allowedAiProviderKinds": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AiProviderKind"
+              "type": "string"
             },
-            "description": "Provider families this tenant's clients may use, or null to leave unchanged. An empty list clears the\nrestriction back to unrestricted.",
+            "description": "Provider families this tenant's clients may use, by identity key, or null to leave unchanged. An empty\nlist clears the restriction back to unrestricted. An entry no loaded family claims is refused, so a\nmistyped key is reported on the form instead of leaving the tenant permitting nothing.",
             "nullable": true
           },
           "allowedAiEndpointHosts": {
@@ -36288,6 +37602,14 @@
               "type": "string"
             },
             "description": "Endpoint hosts this tenant's clients may reach, or null to leave unchanged. An empty list clears the\nrestriction. An entry matches a host exactly, or any subdomain when written with a leading dot.",
+            "nullable": true
+          },
+          "removedUnresolvedAiProviderKinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permitted-family entries no loaded family claims, to remove from the policy. They are reported on the\ntenant as `unresolvedAiProviderKinds`, and AllowedAiProviderKinds carries only\nentries a loaded family claims, so naming one here is how it is removed. Anything not named here survives\nthe write, so a removal cannot happen as a side effect of saving the families. An entry the tenant does\nnot hold is ignored.",
             "nullable": true
           }
         },
@@ -36751,6 +38073,9 @@
   },
   "tags": [
     {
+      "name": "AdminAiProviderAddIns"
+    },
+    {
       "name": "AdminCrawlConfigs"
     },
     {
@@ -36782,6 +38107,9 @@
     },
     {
       "name": "AdoDiscovery"
+    },
+    {
+      "name": "AiProviderActions"
     },
     {
       "name": "Auth"

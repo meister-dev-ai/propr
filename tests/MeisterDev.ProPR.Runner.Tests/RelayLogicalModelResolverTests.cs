@@ -96,6 +96,39 @@ public sealed class RelayLogicalModelResolverTests
         await Assert.ThrowsAsync<NotSupportedException>(() => resolver.ResolveEmbeddingRuntimeAsync(Guid.NewGuid(), "embedder"));
     }
 
+    // The control plane resolved the family before it wrote the manifest, and the relay calls back through that
+    // same connection, so the identity travels through as it was written — including one this side has no
+    // add-in for. Resolving it again here could only disagree with the side that made the call.
+    [Fact]
+    public async Task AModelNamingAFamilyThisSideHasNoAddInFor_IsCarriedThroughAsWritten()
+    {
+        var manifest = RunnerManifests.Sample() with
+        {
+            DefaultModel = RunnerManifests.Model("reviewer-default", "None") with { ProviderKind = "contoso/llm" },
+        };
+        var resolver = CreateResolver(manifest, _ => Substitute.For<IChatClient>());
+
+        var runtime = await resolver.ResolveChatRuntimeAsync(Guid.NewGuid(), "reviewer-default");
+
+        Assert.Equal("contoso/llm", runtime.Runtime.Connection.ProviderKind);
+    }
+
+    // A manifest naming no family at all leaves every call of the review priced and reported against nothing,
+    // so it is refused rather than substituted.
+    [Fact]
+    public async Task AModelNamingNoFamily_FailsNamingTheModel()
+    {
+        var manifest = RunnerManifests.Sample() with
+        {
+            DefaultModel = RunnerManifests.Model("reviewer-default", "None") with { ProviderKind = "  " },
+        };
+        var resolver = CreateResolver(manifest, _ => Substitute.For<IChatClient>());
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveChatRuntimeAsync(Guid.NewGuid(), "reviewer-default"));
+
+        Assert.Contains("reviewer-default", failure.Message, StringComparison.Ordinal);
+    }
+
     private static RelayLogicalModelResolver CreateResolver(RunnerJobManifest manifest, Func<string, IChatClient> relay)
     {
         return new RelayLogicalModelResolver(manifest, relay);

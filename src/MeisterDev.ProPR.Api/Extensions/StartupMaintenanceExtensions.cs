@@ -5,6 +5,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;
 using MeisterDev.ProPR.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -100,6 +101,32 @@ public static class StartupMaintenanceExtensions
         if (bootstrapService is not null)
         {
             await bootstrapService.SeedAsync();
+        }
+
+        // Loads the add-ins an administrator has already activated. It runs here and not with the discovery
+        // pass, because the pass reads no database on purpose: a composition error has to be reported before a
+        // live installation's schema is touched, and reading a table that a pending migration creates would
+        // report nothing at all. Every external add-in is described by then and this is what loads the approved
+        // ones.
+        var addInActivations = scope.ServiceProvider.GetService<ProviderAddInActivationService>();
+        if (addInActivations is not null)
+        {
+            try
+            {
+                var loaded = await addInActivations.LoadActivatedAsync();
+                if (loaded > 0)
+                {
+                    Log.Information("Loaded {Count} activated provider add-in(s)", loaded);
+                }
+            }
+            catch (Exception failure)
+            {
+                // Nothing external loads and the host starts. The built-in directory serves as it always did,
+                // and the add-ins page reports each activation as approved and not running.
+                Log.Error(
+                    failure,
+                    "The activated provider add-ins could not be read, so none of them is loaded on this start");
+            }
         }
     }
 }

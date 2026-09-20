@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Runtime;
 using Microsoft.Extensions.AI;
@@ -12,10 +13,10 @@ namespace MeisterDev.Ai.Providers.Tests.Runtime;
 public sealed class ProviderRuntimePipelineTests
 {
     private static readonly ProviderEndpoint Endpoint =
-        new(AiProviderKind.OpenAi, "https://api.openai.com/v1", AiAuthMode.ApiKey, "secret");
+        new("meisterdev/openAi", "https://api.openai.com/v1", "meisterdev/openAi:ApiKey", "secret");
 
     private static readonly ProviderModelDescriptor Model =
-        new(Guid.NewGuid(), "gpt-x", [AiProtocolMode.Auto]);
+        new(Guid.NewGuid(), "gpt-x", [ProviderDeclaredProtocolModes.Auto]);
 
     // The whole point of the stage enum is that registration order must not decide call order. Registering
     // deliberately backwards has to yield the same chain as registering in order.

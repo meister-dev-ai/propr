@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Domain.Services;
@@ -43,7 +44,7 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 /// <param name="logicalModelName">The logical-model role the call was resolved under, when there was one.</param>
 /// <param name="classifyFailure">
 ///     The driver's classification of a failure, used only to tell a throttle from a fault. Omitting it reports
-///     every failure as a fault, which is what a caller with no driver to hand can honestly say.
+///     every failure as a fault, which a caller with no driver to hand can honestly say.
 /// </param>
 public sealed partial class ProviderTelemetryChatClient(
     IChatClient innerClient,
@@ -143,7 +144,7 @@ public sealed partial class ProviderTelemetryChatClient(
             return null;
         }
 
-        activity.SetTag("ai_provider", target.ProviderKind.ToString());
+        activity.SetTag("ai_provider", target.ProviderKind);
         activity.SetTag("ai_model", target.ModelId);
         if (target.ProfileLabel is { Length: > 0 } label)
         {
@@ -166,7 +167,7 @@ public sealed partial class ProviderTelemetryChatClient(
     private void RecordSuccess(Activity? activity, long started, UsageDetails? usageDetails)
     {
         var elapsed = ElapsedSeconds(started);
-        var usage = AiTokenUsageExtractor.FromUsage(usageDetails, target.ProviderKind);
+        var usage = AiTokenUsageExtractor.FromUsage(usageDetails);
         var cost = AiCostCalculator.Calculate(usage, pricing);
 
         metrics.RecordCall(target.ProviderKind, target.ModelId, "ok", elapsed);

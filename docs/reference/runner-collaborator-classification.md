@@ -48,7 +48,7 @@ tokenizers. That is a stated cost, not an accident.
 | `IReviewContextTools` (six of eighteen operations) | See the split below |
 | `IProCursorGateway` | Code-knowledge lookups, kept behind the existing gateway boundary |
 | `IThreadMemoryService` | Per-file memory retrieval and reconsideration |
-| `IAiReviewCore` / `IChatClient` / `IAiChatClientFactory` | Chat completions, through the relay |
+| `IAiReviewCore` / `IChatClient` | Chat completions, through the relay |
 | `IAiRuntimeResolver`, `ILogicalModelResolver`, `IAiConnectionRepository` | Not proxied as such: the manifest names a logical model and the relay resolves it centrally |
 | `IProtocolRecorder` | Trace events, buffered locally and shipped in batches |
 | `IJobRepository` (per-file result writes only) | Through the batched ingest operation |

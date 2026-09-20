@@ -7,10 +7,6 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <ServerGarbageCollection>true</ServerGarbageCollection>
         <RootNamespace>MeisterDev.Ai.Providers</RootNamespace>
-        <!-- OPENAI001: the Responses API is still marked for evaluation only, and is used deliberately for
-             reasoning and tool use. Without this the four call sites are errors, not warnings. Revisit when the
-             API stabilises. -->
-        <NoWarn>$(NoWarn);OPENAI001</NoWarn>
     </PropertyGroup>
 
     <!--
@@ -27,18 +23,32 @@
         <EmbeddedResource Include="Catalog\Snapshot\models.dev.json"/>
     </ItemGroup>
 
+    <!--
+        The contract every driver is written against. It is a separate assembly so a provider family built
+        outside this repository can reference the driver contract without taking the decorator stages, the
+        guarded egress handler, the secret envelope, the catalog or any vendor SDK with it.
+    -->
+    <!--
+        The driver checks. The loader runs them against every add-in it takes, so a family that cannot satisfy
+        them is skipped with the check named instead of serving reviews. The kit references the contract and
+        nothing else, so taking it here adds nothing to what this library already carries.
+    -->
     <ItemGroup>
-        <PackageReference Include="AWSSDK.Bedrock" Version="4.0.100.6"/>
-        <PackageReference Include="AWSSDK.BedrockRuntime" Version="4.0.100.6"/>
-        <PackageReference Include="AWSSDK.Extensions.Bedrock.MEAI" Version="4.0.101.6"/>
-        <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1"/>
-        <PackageReference Include="Azure.Identity" Version="1.19.0"/>
-        <PackageReference Include="Google.Apis.Auth" Version="1.75.0"/>
-        <PackageReference Include="Microsoft.Extensions.AI" Version="10.5.1"/>
-        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.1"/>
-        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.5.1"/>
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.6"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.6"/>
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.Abstractions\MeisterDev.Ai.Providers.Abstractions.csproj"/>
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.Conformance\MeisterDev.Ai.Providers.Conformance.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)"/>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIVersion)"/>
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12"/>
+
+        <!--
+            Reads an add-in's assembly attributes without executing any of it. A discovery pass runs before an
+            administrator has activated anything, so it maps the file for reflection rather than loading it.
+        -->
+        <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.0"/>
     </ItemGroup>
 
 </Project>

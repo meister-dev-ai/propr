@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -85,8 +86,6 @@ public sealed class FileReviewerProRvLensTests
             NullLogger<FileByFileReviewOrchestrator>.Instance,
             null,
             null,
-            null,
-            null,
             aiRuntimeResolver,
             null,
             null,
@@ -111,7 +110,8 @@ public sealed class FileReviewerProRvLensTests
     {
         var runtime = Substitute.For<IResolvedAiChatRuntime>();
         runtime.ChatClient.Returns(Substitute.For<IChatClient>());
-        runtime.Model.Returns(new AiConfiguredModelDto(Guid.NewGuid(), remoteModelId, remoteModelId, [AiOperationKind.Chat], [AiProtocolMode.Auto]));
+        runtime.Model.Returns(
+            new AiConfiguredModelDto(Guid.NewGuid(), remoteModelId, remoteModelId, [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));
         var resolver = Substitute.For<IAiRuntimeResolver>();
         resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(runtime);
         return resolver;
@@ -275,7 +275,8 @@ public sealed class FileReviewerProRvLensTests
                 var configuredId = ci.ArgAt<Guid>(1).ToString();
                 var runtime = Substitute.For<IResolvedAiChatRuntime>();
                 runtime.ChatClient.Returns(Substitute.For<IChatClient>());
-                runtime.Model.Returns(new AiConfiguredModelDto(Guid.NewGuid(), configuredId, configuredId, [AiOperationKind.Chat], [AiProtocolMode.Auto]));
+                runtime.Model.Returns(
+                    new AiConfiguredModelDto(Guid.NewGuid(), configuredId, configuredId, [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));
                 return runtime;
             });
 

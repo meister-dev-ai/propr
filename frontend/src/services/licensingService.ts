@@ -47,7 +47,7 @@ export interface LicenseLimit {
    */
   informationalCount: number | null
   /**
-   * What kind of ceiling the installation is held to, which is what an enforcement refusal quotes. It differs
+   * What kind of ceiling the installation is held to, which an enforcement refusal quotes. It differs
    * from the stated allowance when the license leaves the limit out and when the license term and its grace
    * window have both ended. Null on a payload that carries no effective ceiling.
    */
@@ -275,7 +275,7 @@ export async function activateLicense(token: string): Promise<LicensingSummary> 
   // 204 is the answer when the license was stored but the summary could not be read back, so the body is
   // empty. Normalizing that into a summary would report the installation as Community with no license in
   // force immediately after an activation that succeeded, so the state is read again instead. A read that
-  // fails leaves nothing true to return, which is what the typed error states.
+  // fails leaves nothing true to return, which the typed error states.
   if (response.status === 204) {
     try {
       return await getLicensingSummary()

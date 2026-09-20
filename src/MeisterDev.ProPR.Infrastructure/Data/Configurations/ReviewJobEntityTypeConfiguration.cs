@@ -343,7 +343,7 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasDatabaseName("ix_review_jobs_client_submitted_at")
             .IsDescending(false, true);
 
-        // The same ordering without a client filter, which is what an administrator or a user holding more
+        // The same ordering without a client filter, which an administrator or a user holding more
         // than one client role reads. That path has no client predicate to narrow it, so it would otherwise
         // scan and sort every job in the installation on each request.
         builder.HasIndex(j => j.SubmittedAt)

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
@@ -31,9 +32,9 @@ public sealed class EfModelPricingResolverTests
             Id = ConnectionId,
             ClientId = ClientId,
             DisplayName = "OpenCode Zen",
-            ProviderKind = AiProviderKind.OpenAiCompatible.ToString(),
+            ProviderKind = "OpenAiCompatible",
             BaseUrl = "https://opencode.ai/zen/v1",
-            AuthMode = AiAuthMode.ApiKey.ToString(),
+            AuthMode = "ApiKey",
             DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
             IsActive = true,
         };
@@ -82,7 +83,7 @@ public sealed class EfModelPricingResolverTests
             RemoteModelId = remoteModelId,
             DisplayName = displayName,
             OperationKinds = [AiOperationKind.Chat.ToString()],
-            SupportedProtocolModes = [AiProtocolMode.Auto.ToString()],
+            SupportedProtocolModes = [ProviderDeclaredProtocolModes.Auto.ToString()],
             Source = AiConfiguredModelSource.Manual.ToString(),
             InputCostPer1MUsd = input,
             OutputCostPer1MUsd = output,
@@ -145,7 +146,7 @@ public sealed class EfModelPricingResolverTests
                     ConnectionProfileId = ConnectionId,
                     ConfiguredModelId = boundModelId,
                     Purpose = AiPurpose.ReviewLowEffort.ToString(),
-                    ProtocolMode = AiProtocolMode.Auto.ToString(),
+                    ProtocolMode = ProviderDeclaredProtocolModes.Auto.ToString(),
                     IsEnabled = true,
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow,

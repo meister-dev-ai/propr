@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -148,7 +149,7 @@ public sealed class AiFindingMergeJudgeTests
                 "test-model",
                 "Test Model",
                 [AiOperationKind.Chat],
-                [AiProtocolMode.Auto]));
+                [ProviderDeclaredProtocolModes.Auto]));
 
         var resolver = Substitute.For<IAiRuntimeResolver>();
         resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewVerification, Arg.Any<CancellationToken>())

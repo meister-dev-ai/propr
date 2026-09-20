@@ -3370,8 +3370,8 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.Property<string>("AuthMode")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
+                        .HasMaxLength(129)
+                        .HasColumnType("character varying(129)")
                         .HasColumnName("auth_mode");
 
                     b.Property<string>("BaseUrl")
@@ -3387,6 +3387,33 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("CredentialAuthorizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("credential_authorized_at");
+
+                    b.Property<string>("CredentialHealth")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("credential_health");
+
+                    b.Property<string>("CredentialHealthCause")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("credential_health_cause");
+
+                    b.Property<DateTimeOffset?>("CredentialHealthChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("credential_health_changed_at");
+
+                    b.Property<Guid?>("CredentialOwnerAdminId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("credential_owner_admin_id");
+
+                    b.Property<string>("CredentialOwnerDisplayName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("credential_owner_display_name");
 
                     b.Property<string>("DefaultHeaders")
                         .IsRequired()
@@ -3417,15 +3444,18 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnName("is_active");
 
                     b.Property<string>("ProtectedSecret")
-                        .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("text")
                         .HasColumnName("protected_secret");
 
                     b.Property<string>("ProviderKind")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("provider_kind");
+
+                    b.Property<string>("ProviderSettings")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("provider_settings");
 
                     b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid")
@@ -3681,8 +3711,8 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.Property<string>("ProtocolMode")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
+                        .HasMaxLength(129)
+                        .HasColumnType("character varying(129)")
                         .HasColumnName("protocol_mode");
 
                     b.Property<string>("Purpose")
@@ -4858,8 +4888,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
-                    b.Property<int>("ProtocolMode")
-                        .HasColumnType("integer")
+                    b.Property<string>("ProtocolMode")
+                        .IsRequired()
+                        .HasMaxLength(129)
+                        .HasColumnType("character varying(129)")
                         .HasColumnName("protocol_mode");
 
                     b.Property<int>("ReasoningEffort")
@@ -4876,7 +4908,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_ai_logical_model_overrides_client_name");
 
-                    b.ToTable("ai_logical_model_overrides", (string)null);
+                    b.ToTable("ai_logical_model_overrides", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ai_logical_model_overrides_protocol_mode_is_a_name", "protocol_mode !~ '^[0-9]+$'");
+                        });
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.LogicalModelRecord", b =>
@@ -4907,8 +4942,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
-                    b.Property<int>("ProtocolMode")
-                        .HasColumnType("integer")
+                    b.Property<string>("ProtocolMode")
+                        .IsRequired()
+                        .HasMaxLength(129)
+                        .HasColumnType("character varying(129)")
                         .HasColumnName("protocol_mode");
 
                     b.Property<int>("ReasoningEffort")
@@ -4929,7 +4966,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_ai_logical_models_tenant_name");
 
-                    b.ToTable("ai_logical_models", (string)null);
+                    b.ToTable("ai_logical_models", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ai_logical_models_protocol_mode_is_a_name", "protocol_mode !~ '^[0-9]+$'");
+                        });
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.MentionConfigurationRecord", b =>
@@ -5110,6 +5150,80 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("prompt_overrides", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderActionInvocationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActionId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("action_id");
+
+                    b.Property<string>("AddInKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("add_in_key");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<string>("ConnectionDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("connection_display_name");
+
+                    b.Property<Guid?>("ConnectionProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_profile_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid?>("InitiatingAdminId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("initiating_admin_id");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("state");
+
+                    b.Property<string>("TerminalMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("terminal_message");
+
+                    b.Property<string>("WaitingFor")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("waiting_for");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectionProfileId");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_ai_provider_action_invocations_pending_expires_at")
+                        .HasFilter("state = 'Pending'");
+
+                    b.ToTable("ai_provider_action_invocations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ai_provider_action_invocations_state_is_known", "state IN ('Completed', 'Expired', 'Failed', 'Pending')");
+                        });
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderActivationRecord", b =>
                 {
                     b.Property<int>("Provider")
@@ -5129,6 +5243,68 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasKey("Provider");
 
                     b.ToTable("provider_activations", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderAddInActivationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActivatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("activated_at");
+
+                    b.Property<Guid?>("ActivatedByAdminId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("activated_by_admin_id");
+
+                    b.Property<string>("ActivatedByDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("activated_by_display_name");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<string>("FamilyKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("family_key");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("file_path");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("label");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_provider_add_in_activations_content_hash");
+
+                    b.HasIndex("FamilyKey")
+                        .HasDatabaseName("ix_ai_provider_add_in_activations_family_key");
+
+                    b.ToTable("ai_provider_add_in_activations", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderConnectionAuditEntryRecord", b =>
@@ -5204,6 +5380,98 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_provider_connection_audit_entries_connection_occurred_at");
 
                     b.ToTable("provider_connection_audit_entries", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderKeyedEntryRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActingPrincipalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("acting_principal_id");
+
+                    b.Property<string>("AddInKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("add_in_key");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EntryKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("entry_key");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("ProtectedValue")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_value");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_ai_provider_keyed_entries_expires_at");
+
+                    b.HasIndex("AddInKey", "EntryKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_provider_keyed_entries_add_in_key_entry_key");
+
+                    b.ToTable("ai_provider_keyed_entries", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderResourceLeaseRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AcquiredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acquired_at");
+
+                    b.Property<string>("AddInKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("add_in_key");
+
+                    b.Property<Guid>("ConnectionProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_profile_id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("ResourceName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("resource_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectionProfileId");
+
+                    b.HasIndex("AddInKey", "ResourceName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_provider_resource_leases_add_in_key_resource_name");
+
+                    b.ToTable("ai_provider_resource_leases", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.RefreshTokenRecord", b =>
@@ -6526,6 +6794,14 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Navigation("CrawlConfig");
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderActionInvocationRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.AiConnectionProfileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionProfileId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderConnectionAuditEntryRecord", b =>
                 {
                     b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.ClientRecord", "Client")
@@ -6535,6 +6811,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProviderResourceLeaseRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.AiConnectionProfileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.RefreshTokenRecord", b =>

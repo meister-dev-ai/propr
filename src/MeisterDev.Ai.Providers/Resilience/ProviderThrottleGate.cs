@@ -31,7 +31,7 @@ namespace MeisterDev.Ai.Providers.Resilience;
 /// <param name="timeProvider">Clock used for the window; <see langword="null" /> uses the system clock.</param>
 /// <param name="maxReleaseJitter">
 ///     Upper bound on the random spread added to each waiter's release; <see langword="null" /> uses 250ms and
-///     <see cref="TimeSpan.Zero" /> makes the release exactly reproducible, which is what tests want.
+///     <see cref="TimeSpan.Zero" /> makes the release exactly reproducible, which tests want.
 /// </param>
 public sealed class ProviderThrottleGate(TimeProvider? timeProvider = null, TimeSpan? maxReleaseJitter = null)
 {

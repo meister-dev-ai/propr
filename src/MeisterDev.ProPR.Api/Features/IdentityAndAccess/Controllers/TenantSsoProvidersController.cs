@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
@@ -307,7 +308,31 @@ public record CreateTenantSsoProviderRequest(
     IEnumerable<string>? Scopes,
     IEnumerable<string>? AllowedEmailDomains,
     [property: JsonRequired] bool IsEnabled,
-    [property: JsonRequired] bool AutoCreateUsers);
+    [property: JsonRequired] bool AutoCreateUsers)
+{
+    /// <summary>Renders the request without the client secret; see <see cref="SecretSafeRendering" />.</summary>
+    /// <remarks>
+    ///     Declared on this record and again on the one deriving from it. A derived record synthesizes its own
+    ///     rendering whatever its base declares, so an override here does not travel down.
+    /// </remarks>
+    public override string ToString()
+    {
+        return Describe(nameof(CreateTenantSsoProviderRequest), this);
+    }
+
+    /// <summary>The shared rendering, so the two records cannot drift apart.</summary>
+    /// <param name="name">Which record is being rendered.</param>
+    /// <param name="request">The values to render.</param>
+    protected static string Describe(string name, CreateTenantSsoProviderRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return $"{name} {{ DisplayName = {request.DisplayName}, ProviderKind = {request.ProviderKind}, "
+               + $"ProtocolKind = {request.ProtocolKind}, IssuerOrAuthorityUrl = {request.IssuerOrAuthorityUrl}, "
+               + $"ClientId = {request.ClientId}, ClientSecret = {SecretSafeRendering.Elide(request.ClientSecret)}, "
+               + $"IsEnabled = {request.IsEnabled}, AutoCreateUsers = {request.AutoCreateUsers} }}";
+    }
+}
 
 /// <summary>Replace-tenant-provider request payload.</summary>
 public sealed record UpdateTenantSsoProviderRequest(
@@ -331,4 +356,11 @@ public sealed record UpdateTenantSsoProviderRequest(
         Scopes,
         AllowedEmailDomains,
         IsEnabled,
-        AutoCreateUsers);
+        AutoCreateUsers)
+{
+    /// <summary>Renders the request without the client secret; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return Describe(nameof(UpdateTenantSsoProviderRequest), this);
+    }
+}

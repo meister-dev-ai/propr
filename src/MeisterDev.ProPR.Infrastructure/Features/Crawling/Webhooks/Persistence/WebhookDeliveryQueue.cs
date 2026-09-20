@@ -82,7 +82,7 @@ public sealed class WebhookDeliveryQueue(MeisterProPRDbContext dbContext) : IWeb
                   && !string.IsNullOrWhiteSpace(submission.DeliveryKey))
         {
             // Two deliveries of the same key arriving together: the index settles it and the loser reports
-            // the delivery as already accepted, which is what it is.
+            // the delivery as already accepted, which it is.
             return false;
         }
     }

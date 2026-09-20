@@ -32,7 +32,7 @@ namespace MeisterDev.Ai.Providers.Catalog;
 /// <param name="OutputCostPer1MUsd">USD per million output tokens.</param>
 /// <param name="CachedInputCostPer1MUsd">USD per million input tokens served from the provider cache.</param>
 /// <param name="CacheWriteCostPer1MUsd">USD per million tokens written to the provider cache.</param>
-/// <param name="OpenWeights">Whether the model's weights are openly available, which is what makes it self-hostable.</param>
+/// <param name="OpenWeights">Whether the model's weights are openly available, and that makes it self-hostable.</param>
 /// <param name="ReleaseDate">Release date as the source states it.</param>
 public sealed record ProviderCatalogEntry(
     string ProviderId,

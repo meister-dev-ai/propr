@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 
@@ -37,11 +36,9 @@ public interface IRunnerRelayModelResolver
 ///     </para>
 /// </summary>
 /// <param name="Client">The chat client bound to the resolved connection.</param>
-/// <param name="ProviderKind">The provider family, used to read cache-write token counts correctly.</param>
 /// <param name="Pricing">The resolved model's rates. Unknown rates price to null, never to zero.</param>
 public sealed record RunnerRelayModel(
     IChatClient Client,
-    AiProviderKind ProviderKind,
     ModelPricing Pricing);
 
 /// <summary>

@@ -42,7 +42,7 @@ public sealed class GitHubActivePrFetcherTests
 
         Assert.Equal([7, 6], result.Select(pullRequest => pullRequest.PullRequestId));
 
-        // A tick that read everything it was asked about, which is what lets the caller close its window.
+        // A tick that read everything it was asked about, and that lets the caller close its window.
         Assert.True(discovery.IsComplete);
 
         // Sorted newest first and stopped at the first entry past the watermark: one request, not a walk
@@ -92,7 +92,7 @@ public sealed class GitHubActivePrFetcherTests
 
         Assert.Equal("acme/platform", Assert.Single(discovery.PullRequests).RepositoryId);
 
-        // Reported as partial, which is what holds the caller's watermark open over the repository that could
+        // Reported as partial, which holds the caller's watermark open over the repository that could
         // not be read. A question waiting in it is waiting whether or not the others were fine.
         Assert.False(discovery.IsComplete);
     }

@@ -104,7 +104,7 @@ public interface IFindingTypeClassifier
 
     /// <summary>
     ///     Classifies one finding. Never throws except for cancellation; the result says whether a model was
-    ///     asked, which is what lets the caller decide between spending an attempt and waiting for configuration.
+    ///     asked, and that lets the caller decide between spending an attempt and waiting for configuration.
     /// </summary>
     Task<FindingClassificationResult> ClassifyAsync(
         FindingClassificationRequest request,

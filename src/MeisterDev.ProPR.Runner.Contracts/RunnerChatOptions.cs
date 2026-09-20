@@ -14,7 +14,7 @@ namespace MeisterDev.ProPR.Runner.Contracts;
 ///         because the tools carry their implementations. This record therefore carries the parts the
 ///         provider needs to see: each tool as a declaration (name, description, parameter schema) and the
 ///         reasoning settings in neutral terms. A relay that dropped any of this would turn a tool-using
-///         review into a single-turn review, which is what happened before the options were sent.
+///         review into a single-turn review, which happened before the options were sent.
 ///     </para>
 /// </summary>
 /// <param name="Temperature">The sampling temperature, when the job pins one.</param>

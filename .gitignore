@@ -89,6 +89,12 @@ sonar-project.properties
 # MSBuild targets file the TreeSitter project <Import>s and must be committed (CI needs it).
 !src/MeisterDev.ProPR.CodeAnalysis.TreeSitter/build/
 !src/MeisterDev.ProPR.CodeAnalysis.TreeSitter/build/*.targets
+
+# Exception, same reason: the shared build configuration every provider add-in imports, which also ships
+# inside the contract package.
+!src/MeisterDev.Ai.Providers.Abstractions/build/
+!src/MeisterDev.Ai.Providers.Abstractions/build/*.props
+!src/MeisterDev.Ai.Providers.Abstractions/build/*.targets
 frontend/dist/
 frontend/build/
 frontend/coverage/

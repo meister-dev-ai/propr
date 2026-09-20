@@ -14,7 +14,7 @@ namespace MeisterDev.ProPR.Api.Features.Licensing;
 ///     <para>
 ///         The mode exists so a released image can be checked from outside itself. Running it with a license the
 ///         publisher issued establishes that the image carries the publisher's anchor and verifies a license
-///         signed under it end to end, which is what no test in this repository can establish: the suites sign
+///         signed under it end to end, which no test in this repository can establish: the suites sign
 ///         with chains they generate, so they can only cover the refusal paths. The release workflow runs this
 ///         mode inside the built image, and that run is the proof of the accepting path.
 ///     </para>

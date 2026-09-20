@@ -81,8 +81,6 @@ public class FileByFileReviewOrchestratorTests
         IJobRepository jobRepository,
         IChatClient chatClient,
         IOptions<AiReviewOptions>? options = null,
-        IAiConnectionRepository? aiConnectionRepository = null,
-        IAiChatClientFactory? aiClientFactory = null,
         IAiRuntimeResolver? aiRuntimeResolver = null,
         IReviewPipelineProfileProvider? pipelineProfileProvider = null,
         IProRVPrefilter? proRvPrefilter = null)
@@ -94,8 +92,6 @@ public class FileByFileReviewOrchestratorTests
             chatClient,
             options ?? DefaultOptions(),
             Substitute.For<ILogger<FileByFileReviewOrchestrator>>(),
-            aiConnectionRepository,
-            aiClientFactory,
             null,
             aiRuntimeResolver,
             null,
@@ -759,7 +755,7 @@ public class FileByFileReviewOrchestratorTests
     // ─── T043: tier client resolution ────────────────────────────────────────────
 
     [Fact]
-    public async Task ReviewAsync_TierConnectionExists_UsesTierClientViaContext()
+    public async Task ReviewAsync_TierRuntimeResolves_UsesTierClientViaContext()
     {
         // Arrange
         var job = CreateJob();
@@ -781,20 +777,7 @@ public class FileByFileReviewOrchestratorTests
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
 
         var tierClient = Substitute.For<IChatClient>();
-        var aiClientFactory = Substitute.For<IAiChatClientFactory>();
-        aiClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>()).Returns(tierClient);
-
-        var tierDto = AiConnectionTestFactory.CreateChatConnection(
-            job.ClientId,
-            "gpt-4o-high",
-            AiPurpose.ReviewHighEffort,
-            baseUrl: "https://high.openai.azure.com/");
-        var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
-        aiConnectionRepo.GetForTierAsync(
-                job.ClientId,
-                AiConnectionModelCategory.HighEffort,
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<AiConnectionDto?>(tierDto));
+        var resolver = ResolverForHighEffort(job.ClientId, tierClient, "gpt-4o-high");
 
         var jobRepo = CreateJobRepo();
         jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
@@ -804,15 +787,14 @@ public class FileByFileReviewOrchestratorTests
             CreateProtocolRecorder(),
             jobRepo,
             defaultChatClient,
-            aiConnectionRepository: aiConnectionRepo,
-            aiClientFactory: aiClientFactory);
+            aiRuntimeResolver: resolver);
 
         // Act
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
-        // Assert: GetForTierAsync was called for the High tier (once per-file and once for synthesis)
-        await aiConnectionRepo.Received(2)
-            .GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>());
+        // Assert: the high-effort runtime was resolved twice (once per-file and once for synthesis)
+        await resolver.Received(2)
+            .ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewHighEffort, Arg.Any<CancellationToken>());
 
         // Assert: aiCore.ReviewAsync received a context with TierChatClient set to the tier client
         await aiCore.Received(1)
@@ -823,9 +805,9 @@ public class FileByFileReviewOrchestratorTests
     }
 
     [Fact]
-    public async Task ReviewAsync_NoTierConnection_FallsBackToEffectiveClient()
+    public async Task ReviewAsync_NoTierRuntime_FallsBackToEffectiveClient()
     {
-        // Arrange — repo returns null for tier lookup
+        // Arrange — the resolver has no binding for the tier's purpose
         var job = CreateJob();
         var pr = CreatePr(
             new ChangedFile(
@@ -844,12 +826,9 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
 
-        var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
-        aiConnectionRepo.GetForTierAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<AiConnectionModelCategory>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<AiConnectionDto?>(null));
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>())
+            .Throws(new AiPurposeBindingNotConfiguredException(AiPurpose.ReviewLowEffort));
 
         var jobRepo = CreateJobRepo();
         jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
@@ -859,13 +838,49 @@ public class FileByFileReviewOrchestratorTests
             CreateProtocolRecorder(),
             jobRepo,
             defaultChatClient,
-            aiConnectionRepository: aiConnectionRepo,
-            aiClientFactory: Substitute.For<IAiChatClientFactory>());
+            aiRuntimeResolver: resolver);
 
         // Act
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
         // Assert: context TierChatClient is set to the injected default (no tier → falls back to effectiveClient)
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == defaultChatClient),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithoutARuntimeResolver_ReviewsEveryFileOnTheDefaultClient()
+    {
+        // A host composed without a runtime resolver has no second construction path to fall back to: every tier
+        // runs on the client the orchestrator was built with.
+        var job = CreateJob();
+        var pr = CreatePr(
+            new ChangedFile(
+                "src/BigService.cs",
+                ChangeType.Edit,
+                "content",
+                string.Concat(Enumerable.Repeat("+line\n", 200)))); // >150 lines → High tier
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var defaultChatClient = Substitute.For<IChatClient>();
+        defaultChatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), jobRepo, defaultChatClient);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
         await aiCore.Received(1)
             .ReviewAsync(
                 Arg.Any<PullRequest>(),
@@ -1770,7 +1785,7 @@ public class FileByFileReviewOrchestratorTests
     {
         // Synthesis binds its own model. The context it is handed is shared with every later stage, so the
         // selection must not survive on it.
-        var (job, pr, aiCore, defaultChatClient, aiConnectionRepo, aiClientFactory) = ArrangeSynthesisTier();
+        var (job, pr, aiCore, defaultChatClient, tierClient, resolver) = ArrangeSynthesisTier();
         var context = CreateContext();
         context.ModelId = "review-model";
 
@@ -1780,8 +1795,7 @@ public class FileByFileReviewOrchestratorTests
             CreateJobRepoFor(job),
             defaultChatClient,
             options: SingleCommentQualityFilterOptions(),
-            aiConnectionRepository: aiConnectionRepo,
-            aiClientFactory: aiClientFactory);
+            aiRuntimeResolver: resolver);
 
         await sut.ReviewAsync(job, pr, context, CancellationToken.None);
 
@@ -1791,7 +1805,7 @@ public class FileByFileReviewOrchestratorTests
     [Fact]
     public async Task ReviewAsync_RunsTheQualityFilterOnItsOwnModelNotTheSynthesisModel()
     {
-        var (job, pr, aiCore, defaultChatClient, aiConnectionRepo, aiClientFactory) = ArrangeSynthesisTier();
+        var (job, pr, aiCore, defaultChatClient, tierClient, resolver) = ArrangeSynthesisTier();
         var context = CreateContext();
         context.ModelId = "review-model";
 
@@ -1801,8 +1815,7 @@ public class FileByFileReviewOrchestratorTests
             CreateJobRepoFor(job),
             defaultChatClient,
             options: SingleCommentQualityFilterOptions(),
-            aiConnectionRepository: aiConnectionRepo,
-            aiClientFactory: aiClientFactory);
+            aiRuntimeResolver: resolver);
 
         await sut.ReviewAsync(job, pr, context, CancellationToken.None);
 
@@ -1823,8 +1836,7 @@ public class FileByFileReviewOrchestratorTests
     [Fact]
     public async Task ReviewAsync_RunsSynthesisOnTheSynthesisModel()
     {
-        var (job, pr, aiCore, defaultChatClient, aiConnectionRepo, aiClientFactory) = ArrangeSynthesisTier();
-        var tierClient = aiClientFactory.CreateClient("https://high.openai.azure.com/", null);
+        var (job, pr, aiCore, defaultChatClient, tierClient, resolver) = ArrangeSynthesisTier();
         var context = CreateContext();
         context.ModelId = "review-model";
 
@@ -1834,8 +1846,7 @@ public class FileByFileReviewOrchestratorTests
             CreateJobRepoFor(job),
             defaultChatClient,
             options: SingleCommentQualityFilterOptions(),
-            aiConnectionRepository: aiConnectionRepo,
-            aiClientFactory: aiClientFactory);
+            aiRuntimeResolver: resolver);
 
         await sut.ReviewAsync(job, pr, context, CancellationToken.None);
 
@@ -1846,15 +1857,15 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<CancellationToken>());
     }
 
-    // A high-effort tier connection bound to its own model, plus a per-file review that yields one comment so the
+    // A high-effort tier runtime bound to its own model, plus a per-file review that yields one comment so the
     // quality filter has something to screen.
     private static (
         ReviewJob Job,
         PullRequest Pr,
         IAiReviewCore AiCore,
         IChatClient DefaultChatClient,
-        IAiConnectionRepository AiConnectionRepository,
-        IAiChatClientFactory AiClientFactory) ArrangeSynthesisTier()
+        IChatClient TierChatClient,
+        IAiRuntimeResolver AiRuntimeResolver) ArrangeSynthesisTier()
     {
         var job = CreateJob();
         var pr = CreatePr(CreateFile("src/Foo.cs"));
@@ -1880,22 +1891,24 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis narrative")));
 
-        var aiClientFactory = Substitute.For<IAiChatClientFactory>();
-        aiClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>()).Returns(tierClient);
+        return (job, pr, aiCore, defaultChatClient, tierClient, ResolverForHighEffort(job.ClientId, tierClient, "gpt-4o-high"));
+    }
 
-        var tierDto = AiConnectionTestFactory.CreateChatConnection(
-            job.ClientId,
-            "gpt-4o-high",
-            AiPurpose.ReviewHighEffort,
-            baseUrl: "https://high.openai.azure.com/");
-        var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
-        aiConnectionRepo.GetForTierAsync(
-                job.ClientId,
-                AiConnectionModelCategory.HighEffort,
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<AiConnectionDto?>(tierDto));
+    // Answers the high-effort purpose with the given client and model, and reports no binding for any other
+    // purpose, so a low or medium tier degrades to the caller's own client.
+    private static IAiRuntimeResolver ResolverForHighEffort(Guid clientId, IChatClient tierClient, string remoteModelId)
+    {
+        var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        runtime.ChatClient.Returns(tierClient);
+        runtime.Model.Returns(AiConnectionTestFactory.CreateChatModel(remoteModelId));
+        runtime.Connection.Returns(AiConnectionTestFactory.CreateConnection(clientId));
 
-        return (job, pr, aiCore, defaultChatClient, aiConnectionRepo, aiClientFactory);
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>())
+            .Throws(callInfo => new AiPurposeBindingNotConfiguredException(callInfo.ArgAt<AiPurpose>(1)));
+        resolver.ResolveChatRuntimeAsync(clientId, AiPurpose.ReviewHighEffort, Arg.Any<CancellationToken>())
+            .Returns(runtime);
+        return resolver;
     }
 
     private static IOptions<AiReviewOptions> SingleCommentQualityFilterOptions()

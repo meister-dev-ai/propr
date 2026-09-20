@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.DTOs;
@@ -17,6 +18,14 @@ public sealed record AdoConnectionCredentials(
     string? OAuthClientId = null,
     string? UserName = null)
 {
+    /// <summary>Renders the credentials without the secret; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(AdoConnectionCredentials)} {{ AuthenticationKind = {this.AuthenticationKind}, "
+               + $"Secret = {SecretSafeRendering.Elide(this.Secret)}, OAuthTenantId = {this.OAuthTenantId}, "
+               + $"OAuthClientId = {this.OAuthClientId}, UserName = {this.UserName} }}";
+    }
+
     public static AdoConnectionCredentials ForOAuthClientCredentials(string tenantId, string clientId, string secret)
     {
         return new AdoConnectionCredentials(

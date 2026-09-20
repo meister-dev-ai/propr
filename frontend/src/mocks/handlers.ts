@@ -1765,17 +1765,182 @@ let promptOverrides = [
   }
 ]
 
-// The wire shapes each driver speaks, as the server reports them. Kept in one place so the mock cannot drift
-// into offering a shape no driver can serve — which is the whole point of the endpoint that returns it.
-const mockDriverProtocolModes: Array<[string, string[]]> = [
-  ['azureOpenAi', ['auto', 'responses', 'chatCompletions', 'embeddings']],
-  ['openAi', ['auto', 'responses', 'chatCompletions', 'embeddings']],
-  ['liteLlm', ['auto', 'responses', 'chatCompletions', 'embeddings']],
-  ['openAiCompatible', ['auto', 'chatCompletions', 'embeddings']],
-  ['anthropic', ['auto', 'anthropicMessages']],
-  ['awsBedrock', ['auto', 'bedrockConverse', 'embeddings']],
-  ['googleVertex', ['auto', 'googleGenerateContent', 'embeddings']],
+// The protocol modes, authentication modes and credential fields each driver declares, as the server reports them.
+// Kept in one place so the mock cannot drift into offering a shape no driver can serve — which is the whole
+// point of the endpoint that returns it.
+const mockApiKeyField = { name: 'apiKey', label: 'API key', isSecret: true, isRequired: true }
+
+type MockCredentialField = { name: string; label: string; isSecret: boolean; isRequired: boolean; hint?: string }
+
+type MockModeOption = { value: string; label: string; isSuperseded?: boolean }
+
+// A credential or protocol mode a family owns persists qualified by that family's key, so each family names its
+// own even where two of them spell the mode the same way. The two shapes the host reserves — Auto and
+// Embeddings — belong to no family and carry no qualifier.
+const mockApiKeyMode = (providerKind: string): MockModeOption => ({
+  value: `${providerKind}:ApiKey`,
+  label: 'API Key',
+})
+
+// The shapes an OpenAI-shaped endpoint that implements the Responses API serves, stated once so the families
+// that speak it do not drift apart on which shapes they offer.
+const mockOpenAiFamilyShapes = (providerKind: string): MockModeOption[] => [
+  { value: 'Auto', label: 'Auto' },
+  { value: `${providerKind}:Responses`, label: 'Responses' },
+  { value: `${providerKind}:ChatCompletions`, label: 'Chat Completions' },
+  { value: 'Embeddings', label: 'Embeddings' },
 ]
+
+type MockConnectionForm = {
+  namePlaceholder?: string
+  baseUrlPlaceholder?: string
+  baseUrlHint?: string
+  requiredQueryParam?: string
+  queryParamPlaceholder?: string
+}
+
+// Each family as its own add-in declares it: what it is called, the shapes it speaks and authenticates with
+// with the names an operator sees, the fields each authentication mode needs, and what it says about the
+// connection boxes. The console holds none of this, so the mock has to serve all of it.
+const mockDriverDeclarations: Array<{
+  providerKind: string
+  label: string
+  protocolModes: MockModeOption[]
+  authModes: MockModeOption[]
+  credentialFields: Record<string, MockCredentialField[]>
+  connectionForm?: MockConnectionForm
+}> = [
+  {
+    providerKind: 'meisterdev/azureOpenAi',
+    label: 'Azure OpenAI / AI Foundry',
+    protocolModes: mockOpenAiFamilyShapes('meisterdev/azureOpenAi'),
+    authModes: [mockApiKeyMode('meisterdev/azureOpenAi'), { value: 'meisterdev/azureOpenAi:AzureIdentity', label: 'Azure Identity' }],
+    credentialFields: { 'meisterdev/azureOpenAi:ApiKey': [mockApiKeyField], 'meisterdev/azureOpenAi:AzureIdentity': [] },
+    connectionForm: {
+      namePlaceholder: 'Azure OpenAI (prod)',
+      baseUrlPlaceholder: 'https://your-resource.openai.azure.com/',
+      baseUrlHint: 'The Azure AI resource endpoint, not a deployment URL.',
+      queryParamPlaceholder: 'api-version=2024-10-21',
+    },
+  },
+  {
+    providerKind: 'meisterdev/openAi',
+    label: 'OpenAI (non-Azure)',
+    protocolModes: mockOpenAiFamilyShapes('meisterdev/openAi'),
+    authModes: [mockApiKeyMode('meisterdev/openAi')],
+    credentialFields: { 'meisterdev/openAi:ApiKey': [mockApiKeyField] },
+    connectionForm: {
+      namePlaceholder: 'OpenAI (prod)',
+      baseUrlPlaceholder: 'https://api.openai.com/v1',
+      baseUrlHint: 'Azure-hosted endpoints, including Azure AI Foundry OpenAI endpoints, belong under '
+        + 'Azure OpenAI / AI Foundry.',
+    },
+  },
+  {
+    providerKind: 'meisterdev/liteLlm',
+    label: 'LiteLLM',
+    protocolModes: mockOpenAiFamilyShapes('meisterdev/liteLlm'),
+    authModes: [mockApiKeyMode('meisterdev/liteLlm')],
+    credentialFields: { 'meisterdev/liteLlm:ApiKey': [mockApiKeyField] },
+    connectionForm: {
+      namePlaceholder: 'LiteLLM gateway',
+      baseUrlPlaceholder: 'https://gateway.example.com/v1',
+      baseUrlHint: 'The gateway URL; models are named as the gateway exposes them.',
+    },
+  },
+  {
+    providerKind: 'meisterdev/openAiCompatible',
+    label: 'OpenAI-compatible (custom base URL)',
+    protocolModes: [
+      { value: 'Auto', label: 'Auto' },
+      { value: 'meisterdev/openAiCompatible:ChatCompletions', label: 'Chat Completions' },
+      { value: 'Embeddings', label: 'Embeddings' },
+    ],
+    authModes: [mockApiKeyMode('meisterdev/openAiCompatible')],
+    credentialFields: { 'meisterdev/openAiCompatible:ApiKey': [mockApiKeyField] },
+    connectionForm: {
+      namePlaceholder: 'DeepSeek via opencode Zen',
+      baseUrlPlaceholder: 'https://opencode.ai/zen/v1',
+      baseUrlHint: 'Whatever serves an OpenAI-compatible /chat/completions at this URL, vendor or self-hosted.',
+    },
+  },
+  {
+    providerKind: 'meisterdev/anthropic',
+    label: 'Anthropic (native)',
+    protocolModes: [{ value: 'Auto', label: 'Auto' }, { value: 'meisterdev/anthropic:AnthropicMessages', label: 'Anthropic Messages' }],
+    authModes: [mockApiKeyMode('meisterdev/anthropic'), { value: 'meisterdev/anthropic:XApiKey', label: 'API Key (x-api-key header)' }],
+    credentialFields: { 'meisterdev/anthropic:ApiKey': [mockApiKeyField], 'meisterdev/anthropic:XApiKey': [mockApiKeyField] },
+    connectionForm: {
+      namePlaceholder: 'Claude (native)',
+      baseUrlPlaceholder: 'https://api.anthropic.com/v1',
+      baseUrlHint: 'Any host that speaks the Messages API works, including a gateway in front of it.',
+    },
+  },
+  {
+    providerKind: 'meisterdev/awsBedrock',
+    label: 'AWS Bedrock',
+    protocolModes: [
+      { value: 'Auto', label: 'Auto' },
+      { value: 'meisterdev/awsBedrock:BedrockConverse', label: 'Bedrock Converse' },
+      { value: 'Embeddings', label: 'Embeddings' },
+    ],
+    authModes: [{ value: 'meisterdev/awsBedrock:ApiKey', label: 'API Key' }],
+    credentialFields: {
+      'meisterdev/awsBedrock:ApiKey': [mockApiKeyField],
+    },
+    connectionForm: {
+      namePlaceholder: 'Bedrock (eu-central-1)',
+      baseUrlPlaceholder: 'https://bedrock-runtime.eu-central-1.amazonaws.com',
+      baseUrlHint: 'The host names the region inference runs in, and that pins where the data goes.',
+      queryParamPlaceholder: 'region=eu-central-1',
+    },
+  },
+  {
+    providerKind: 'meisterdev/googleVertex',
+    label: 'Google Gemini / Vertex AI',
+    protocolModes: [
+      { value: 'Auto', label: 'Auto' },
+      { value: 'meisterdev/googleVertex:GoogleGenerateContent', label: 'Google generateContent' },
+      { value: 'Embeddings', label: 'Embeddings' },
+    ],
+    authModes: [mockApiKeyMode('meisterdev/googleVertex'), { value: 'meisterdev/googleVertex:GcpAdc', label: 'Google Application Default Credentials' }],
+    credentialFields: {
+      'meisterdev/googleVertex:ApiKey': [mockApiKeyField],
+      'meisterdev/googleVertex:GcpAdc': [
+        {
+          name: 'serviceAccountJson',
+          label: 'Service account key (JSON)',
+          isSecret: true,
+          isRequired: true,
+          hint: 'The whole JSON document of a service account that may call the Vertex AI API, or a '
+            + 'workload-identity configuration.',
+        },
+      ],
+    },
+    connectionForm: {
+      namePlaceholder: 'Gemini on Vertex (europe-west4)',
+      baseUrlPlaceholder: 'https://europe-west4-aiplatform.googleapis.com',
+      baseUrlHint: 'A Vertex host names the location it serves. For the Gemini API use '
+        + 'https://generativelanguage.googleapis.com instead.',
+      requiredQueryParam: 'project',
+      queryParamPlaceholder: 'project=your-gcp-project',
+    },
+  },
+]
+
+// What a client or a tenant may configure, described entirely from the declarations above. Both endpoints
+// answer with the same shape, because the console renders the two from the same descriptor.
+function mockPermittedProviders() {
+  const allowed = mockTenants[0]?.allowedAiProviderKinds ?? []
+
+  return {
+    isRestricted: allowed.length > 0,
+    providers: mockDriverDeclarations.map(declaration => ({
+      ...declaration,
+      isPermitted: allowed.length === 0 || allowed.includes(declaration.providerKind),
+    })),
+  }
+}
 
 function mockDiscoveredModel(remoteModelId: string, displayName: string, protocolMode: string, embedding = false) {
   return {
@@ -1783,7 +1948,7 @@ function mockDiscoveredModel(remoteModelId: string, displayName: string, protoco
     remoteModelId,
     displayName,
     operationKinds: [embedding ? 'embedding' : 'chat'],
-    supportedProtocolModes: ['auto', protocolMode],
+    supportedProtocolModes: ['Auto', protocolMode],
     supportsChat: !embedding,
     supportsEmbedding: embedding,
     supportsToolUse: !embedding,
@@ -1796,37 +1961,37 @@ function mockDiscoveredModel(remoteModelId: string, displayName: string, protoco
 // What each provider's discovery returns. The native families deliberately return their own id shapes —
 // a Bedrock id is not a vendor id, and that is what an operator has to recognise in the picker.
 const mockDiscoveredModels: Record<string, any[]> = {
-  azureOpenAi: [
-    mockDiscoveredModel('gpt-4o', 'GPT-4o', 'responses'),
-    mockDiscoveredModel('text-embedding-3-large', 'text-embedding-3-large', 'embeddings', true),
+  'meisterdev/azureOpenAi': [
+    mockDiscoveredModel('gpt-4o', 'GPT-4o', 'meisterdev/azureOpenAi:Responses'),
+    mockDiscoveredModel('text-embedding-3-large', 'text-embedding-3-large', 'Embeddings', true),
   ],
-  openAi: [mockDiscoveredModel('gpt-4o', 'GPT-4o', 'responses')],
-  liteLlm: [mockDiscoveredModel('claude-opus-4-5', 'claude-opus-4-5', 'chatCompletions')],
-  openAiCompatible: [
-    mockDiscoveredModel('deepseek-v4-flash', 'deepseek-v4-flash', 'chatCompletions'),
-    mockDiscoveredModel('kimi-k2.7-code', 'kimi-k2.7-code', 'chatCompletions'),
+  'meisterdev/openAi': [mockDiscoveredModel('gpt-4o', 'GPT-4o', 'meisterdev/openAi:Responses')],
+  'meisterdev/liteLlm': [mockDiscoveredModel('claude-opus-4-5', 'claude-opus-4-5', 'meisterdev/liteLlm:ChatCompletions')],
+  'meisterdev/openAiCompatible': [
+    mockDiscoveredModel('deepseek-v4-flash', 'deepseek-v4-flash', 'meisterdev/openAiCompatible:ChatCompletions'),
+    mockDiscoveredModel('kimi-k2.7-code', 'kimi-k2.7-code', 'meisterdev/openAiCompatible:ChatCompletions'),
   ],
-  anthropic: [
-    mockDiscoveredModel('claude-opus-4-5', 'claude-opus-4-5', 'anthropicMessages'),
-    mockDiscoveredModel('claude-sonnet-4-5', 'claude-sonnet-4-5', 'anthropicMessages'),
+  'meisterdev/anthropic': [
+    mockDiscoveredModel('claude-opus-4-5', 'claude-opus-4-5', 'meisterdev/anthropic:AnthropicMessages'),
+    mockDiscoveredModel('claude-sonnet-4-5', 'claude-sonnet-4-5', 'meisterdev/anthropic:AnthropicMessages'),
   ],
-  awsBedrock: [
-    mockDiscoveredModel('anthropic.claude-opus-4-5', 'Anthropic Claude Opus 4.5', 'bedrockConverse'),
-    mockDiscoveredModel('amazon.titan-embed-text-v2:0', 'Amazon Titan Text Embeddings V2', 'embeddings', true),
+  'meisterdev/awsBedrock': [
+    mockDiscoveredModel('anthropic.claude-opus-4-5', 'Anthropic Claude Opus 4.5', 'meisterdev/awsBedrock:BedrockConverse'),
+    mockDiscoveredModel('amazon.titan-embed-text-v2:0', 'Amazon Titan Text Embeddings V2', 'Embeddings', true),
   ],
-  googleVertex: [
-    mockDiscoveredModel('gemini-3-pro', 'Gemini 3 Pro', 'googleGenerateContent'),
-    mockDiscoveredModel('text-embedding-005', 'Text Embedding 005', 'embeddings', true),
+  'meisterdev/googleVertex': [
+    mockDiscoveredModel('gemini-3-pro', 'Gemini 3 Pro', 'meisterdev/googleVertex:GoogleGenerateContent'),
+    mockDiscoveredModel('text-embedding-005', 'Text Embedding 005', 'Embeddings', true),
   ],
 }
 
 // The notices a driver attaches to discovery, which are load-bearing for the two cloud families: without them an
 // operator hits an inference-profile rejection, or waits for a model list Vertex never publishes.
 const mockDiscoveryWarnings: Record<string, string[]> = {
-  awsBedrock: [
+  'meisterdev/awsBedrock': [
     'Some Bedrock models can only be called through an inference profile. Where the account requires one, use the profile ID as the model ID.',
   ],
-  googleVertex: [
+  'meisterdev/googleVertex': [
     "Vertex AI does not list its models on this endpoint; enter the model IDs to use, for example 'gemini-3-pro'.",
   ],
 }
@@ -1898,15 +2063,15 @@ let aiConnectionsByClient: Record<string, any[]> = {
       id: 'ai-1',
       clientId: '1',
       displayName: 'Azure OpenAI Prod',
-      providerKind: 'azureOpenAi',
+      providerKind: 'meisterdev/azureOpenAi',
       baseUrl: 'https://acme-prod.openai.azure.com/',
-      authMode: 'apiKey',
+      authMode: 'meisterdev/azureOpenAi:ApiKey',
       discoveryMode: 'providerCatalog',
       isActive: true,
       configuredModels: [
-        { id: 'm-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['auto', 'responses'] },
-        { id: 'm-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['auto', 'responses'] },
-        { id: 'm-embed3', displayName: 'text-embedding-3-large', remoteModelId: 'text-embedding-3-large', supportsChat: false, supportsEmbedding: true, supportedProtocolModes: ['auto', 'embeddings'], tokenizerName: 'cl100k_base', maxInputTokens: 8192, embeddingDimensions: 3072 },
+        { id: 'm-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/azureOpenAi:Responses'] },
+        { id: 'm-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/azureOpenAi:Responses'] },
+        { id: 'm-embed3', displayName: 'text-embedding-3-large', remoteModelId: 'text-embedding-3-large', supportsChat: false, supportsEmbedding: true, supportedProtocolModes: ['Auto', 'Embeddings'], tokenizerName: 'cl100k_base', maxInputTokens: 8192, embeddingDimensions: 3072 },
       ],
       purposeBindings: [],
       verification: { status: 'verified', summary: 'Verified connectivity for the Azure AI resource.' },
@@ -1917,13 +2082,13 @@ let aiConnectionsByClient: Record<string, any[]> = {
       id: 'ai-2',
       clientId: '1',
       displayName: 'Claude (native)',
-      providerKind: 'anthropic',
+      providerKind: 'meisterdev/anthropic',
       baseUrl: 'https://api.anthropic.com/v1',
-      authMode: 'apiKey',
+      authMode: 'meisterdev/anthropic:ApiKey',
       discoveryMode: 'providerCatalog',
       isActive: true,
       configuredModels: [
-        { id: 'm-opus', displayName: 'claude-opus-4-5', remoteModelId: 'claude-opus-4-5', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['auto', 'anthropicMessages'], supportsPromptCaching: true, supportsReasoning: true, inputCostPer1MUsd: 5, outputCostPer1MUsd: 25 },
+        { id: 'm-opus', displayName: 'claude-opus-4-5', remoteModelId: 'claude-opus-4-5', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/anthropic:AnthropicMessages'], supportsPromptCaching: true, supportsReasoning: true, inputCostPer1MUsd: 5, outputCostPer1MUsd: 25 },
       ],
       purposeBindings: [],
       verification: { status: 'verified', summary: "Verified Anthropic connectivity for 'https://api.anthropic.com/v1'." },
@@ -1934,14 +2099,14 @@ let aiConnectionsByClient: Record<string, any[]> = {
       id: 'ai-3',
       clientId: '1',
       displayName: 'Bedrock (eu-central-1)',
-      providerKind: 'awsBedrock',
+      providerKind: 'meisterdev/awsBedrock',
       baseUrl: 'https://bedrock-runtime.eu-central-1.amazonaws.com',
-      authMode: 'apiKey',
+      authMode: 'meisterdev/awsBedrock:ApiKey',
       discoveryMode: 'providerCatalog',
       isActive: false,
       configuredModels: [
-        { id: 'm-bedrock-opus', displayName: 'Anthropic Claude Opus 4.5', remoteModelId: 'anthropic.claude-opus-4-5', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['auto', 'bedrockConverse'] },
-        { id: 'm-titan-embed', displayName: 'Amazon Titan Text Embeddings V2', remoteModelId: 'amazon.titan-embed-text-v2:0', supportsChat: false, supportsEmbedding: true, supportedProtocolModes: ['auto', 'embeddings'], tokenizerName: 'cl100k_base', maxInputTokens: 8192, embeddingDimensions: 1024 },
+        { id: 'm-bedrock-opus', displayName: 'Anthropic Claude Opus 4.5', remoteModelId: 'anthropic.claude-opus-4-5', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/awsBedrock:BedrockConverse'] },
+        { id: 'm-titan-embed', displayName: 'Amazon Titan Text Embeddings V2', remoteModelId: 'amazon.titan-embed-text-v2:0', supportsChat: false, supportsEmbedding: true, supportedProtocolModes: ['Auto', 'Embeddings'], tokenizerName: 'cl100k_base', maxInputTokens: 8192, embeddingDimensions: 1024 },
       ],
       purposeBindings: [],
       verification: { status: 'verified', summary: "Verified AWS Bedrock access in 'eu-central-1' (2 models)." },
@@ -2430,9 +2595,9 @@ let mockTenantConnections: any[] = [
     tenantId: 'tenant-1',
     clientId: null,
     displayName: 'Tenant Azure OpenAI',
-    providerKind: 'azureOpenAi',
+    providerKind: 'meisterdev/azureOpenAi',
     baseUrl: 'https://tenant-shared.openai.azure.com/',
-    authMode: 'apiKey',
+    authMode: 'meisterdev/azureOpenAi:ApiKey',
     discoveryMode: 'manualOnly',
     isActive: false,
     configuredModels: [
@@ -2449,14 +2614,14 @@ let mockTenantConnections: any[] = [
 
 // The tenant-catalog logical models a tenant's clients inherit — each points at a tenant connection above.
 let mockTenantLogicalModels = [
-  { id: 'lm-deep', name: 'deep-review', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o', reasoningEffort: 'high', protocolMode: 'auto', scope: 'tenant' },
-  { id: 'lm-fast', name: 'fast-triage', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o-mini', reasoningEffort: 'low', protocolMode: 'auto', scope: 'tenant' },
-  { id: 'lm-embed', name: 'embed-default', capability: 'embedding', connectionId: 'tc-azure', configuredModelId: 'tc-embed3', reasoningEffort: 'none', protocolMode: 'embeddings', scope: 'tenant' },
+  { id: 'lm-deep', name: 'deep-review', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o', reasoningEffort: 'high', protocolMode: 'Auto', scope: 'tenant' },
+  { id: 'lm-fast', name: 'fast-triage', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o-mini', reasoningEffort: 'low', protocolMode: 'Auto', scope: 'tenant' },
+  { id: 'lm-embed', name: 'embed-default', capability: 'embedding', connectionId: 'tc-azure', configuredModelId: 'tc-embed3', reasoningEffort: 'none', protocolMode: 'Embeddings', scope: 'tenant' },
 ]
 
 // A per-client override that shadows the tenant "deep-review" with a different reasoning effort.
 let mockClientLogicalOverrides = [
-  { id: 'ov-deep', name: 'deep-review', capability: 'chat', connectionId: 'ai-1', configuredModelId: 'm-gpt4o', reasoningEffort: 'medium', protocolMode: 'auto', scope: 'client' },
+  { id: 'ov-deep', name: 'deep-review', capability: 'chat', connectionId: 'ai-1', configuredModelId: 'm-gpt4o', reasoningEffort: 'medium', protocolMode: 'Auto', scope: 'client' },
 ]
 
 // The client's purpose → logical-model map.
@@ -2482,7 +2647,7 @@ function logicalModelFromBody(body: any, scope: string): any {
     connectionId: body.connectionId ?? '',
     configuredModelId: body.configuredModelId ?? '',
     reasoningEffort: body.reasoningEffort ?? 'none',
-    protocolMode: body.protocolMode ?? 'auto',
+    protocolMode: body.protocolMode ?? 'Auto',
     scope,
   }
 }
@@ -3406,20 +3571,18 @@ export const handlers = [
   }),
 
   // What this client may configure: every family this build has a driver for, each flagged with whether the
-  // tenant permits it, plus the wire shapes its driver speaks. Mirrors the server, which is authoritative for
-  // all three — the UI must not offer a family it cannot call or a shape that cannot be spoken.
+  // tenant permits it, plus the protocol modes its driver speaks and the authentication modes it reads. Mirrors the
+  // server, which is authoritative for all four — the UI must not offer a family it cannot call, a shape that
+  // cannot be spoken, or a credential the family does not read.
   http.get(`${base}/clients/:clientId/ai-connections/permitted-providers`, async () => {
     await delay(160)
-    const allowed = mockTenants[0]?.allowedAiProviderKinds ?? []
+    return HttpResponse.json(mockPermittedProviders())
+  }),
 
-    return HttpResponse.json({
-      isRestricted: allowed.length > 0,
-      providers: mockDriverProtocolModes.map(([providerKind, protocolModes]) => ({
-        providerKind,
-        isPermitted: allowed.length === 0 || allowed.includes(providerKind),
-        protocolModes,
-      })),
-    })
+  // The same answer for a tenant, which the tenant connection editor and the provider allow-list read.
+  http.get(`${base}/tenants/:tenantId/ai-connections/permitted-providers`, async () => {
+    await delay(160)
+    return HttpResponse.json(mockPermittedProviders())
   }),
 
   // Probing an unsaved profile. The refusal arm is reachable so the failure path can be seen without a provider:
@@ -3527,8 +3690,8 @@ export const handlers = [
   http.post(`${base}/clients/:clientId/ai-connections/discover-models`, async ({ request }) => {
     await delay(500)
     const body = await request.json() as any
-    const providerKind = String(body.providerKind ?? 'azureOpenAi')
-    const discovered = mockDiscoveredModels[providerKind] ?? mockDiscoveredModels.azureOpenAi
+    const providerKind = String(body.providerKind ?? 'meisterdev/azureOpenAi')
+    const discovered = mockDiscoveredModels[providerKind] ?? mockDiscoveredModels['meisterdev/azureOpenAi']
 
     return HttpResponse.json({
       discoveryStatus: 'succeeded',
@@ -5230,7 +5393,7 @@ export const handlers = [
   http.get(`${base}/code-quality/repositories`, async () => {
     await delay(200)
 
-    // The entry: where the findings are, ranked by volume. Two of these belong to different clients, which is what
+    // The entry: where the findings are, ranked by volume. Two of these belong to different clients, which 
     // the row's second line is for.
     const rows = [
       { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', findings: 48, pullRequests: 17, files: 22, averagePerPullRequest: 48 / 17, lastActivityOn: '2026-07-28' },

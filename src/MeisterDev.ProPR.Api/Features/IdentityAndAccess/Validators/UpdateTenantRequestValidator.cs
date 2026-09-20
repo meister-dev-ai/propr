@@ -19,7 +19,8 @@ public sealed class UpdateTenantRequestValidator : AbstractValidator<UpdateTenan
                 || request.IsActive.HasValue
                 || request.LocalLoginEnabled.HasValue
                 || request.AllowedAiProviderKinds is not null
-                || request.AllowedAiEndpointHosts is not null)
+                || request.AllowedAiEndpointHosts is not null
+                || request.RemovedUnresolvedAiProviderKinds is { Count: > 0 })
             .WithMessage("At least one field must be provided.");
 
 

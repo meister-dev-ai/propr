@@ -6,7 +6,7 @@ using MeisterDev.ProPR.Domain.Enums;
 namespace MeisterDev.ProPR.Application.Features.ThreadOwnership;
 
 /// <summary>
-///     How far a provider's comment ids reach before they repeat, which is what decides whether the thread id
+///     How far a provider's comment ids reach before they repeat, and that decides whether the thread id
 ///     is part of a comment's identity when a provenance row is matched to a comment.
 /// </summary>
 public enum ProviderCommentIdScope

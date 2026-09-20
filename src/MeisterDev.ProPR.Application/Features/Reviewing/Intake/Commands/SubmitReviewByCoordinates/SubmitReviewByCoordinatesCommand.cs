@@ -7,7 +7,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.Submit
 /// <remarks>
 ///     These are exactly the five values pull-request resolution hands back, so a caller that can address a
 ///     pull request can trigger its review without learning anything else about it. No commit identity
-///     appears here on purpose: the SHAs are read from the provider at submission time, which is what makes
+///     appears here on purpose: the SHAs are read from the provider at submission time, and that makes
 ///     one request serve both a first review and a re-review after new commits.
 /// </remarks>
 /// <param name="ClientId">The client whose configuration and credential the review runs under.</param>

@@ -21,6 +21,9 @@ Do this first: it is what bounds every step below. The step is Commercial only -
 A policy says what is permitted; the connection list says what is configured. Read the base URL of every
 active AI connection.
 
+Read the **AI provider add-ins** page as well. A family reaches hosts of its own beyond the base URL an
+operator entered, and the host list has to cover those too - see [compliance](../ai/compliance.md).
+
 On an AWS Bedrock connection, read its `region` default query parameter too, not only the host - the
 parameter is what decides where inference runs. See [AWS Bedrock](../ai/credentials.md#aws-bedrock).
 
@@ -35,8 +38,8 @@ If you do turn it on, the host list from step 1 is what keeps the widened reach 
 ## 4. Decide what is kept, not only where it is sent
 
 Two switches change what a copy of your code persists into: per-connection archiving of comment threads
-and diffs, and the capture of model reasoning into the protocol. Decide both deliberately rather than
-leaving them as found - see [what ProPR stores](../reference/security.md#what-propr-stores).
+and diffs, and the capture of model reasoning into the protocol. Decide both; do not leave them as found - see
+[what ProPR stores](../reference/security.md#what-propr-stores).
 
 ## 5. Keep tenants apart, and keep your edge closed
 
@@ -48,8 +51,8 @@ While you are here: block `/metrics` at your edge on any public deployment - see
 
 ## Confirm it worked
 
-1. Try to save a connection on a host the policy does not permit. It is refused rather than saved, with a
-   message naming the tenant's permitted endpoint list - see
+1. Try to save a connection on a host the policy does not permit. It is refused, not saved, with a message
+   naming the tenant's permitted endpoint list - see
    [common messages](../ai/credentials.md#common-messages).
 2. Read the tenant audit log: the restriction and the person who set it are both evidence - see
    [auditing](../reference/security.md#auditing).

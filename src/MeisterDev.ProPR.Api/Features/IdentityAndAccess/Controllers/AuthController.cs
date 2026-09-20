@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using MeisterDev.ProPR.Api.Extensions;
@@ -250,7 +251,22 @@ public sealed class AuthController(
 }
 
 /// <summary>Login request payload.</summary>
-public sealed record LoginRequest(string Username, string Password);
+public sealed record LoginRequest(string Username, string Password)
+{
+    /// <summary>Renders the request without the password; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(LoginRequest)} {{ Username = {this.Username}, "
+               + $"Password = {SecretSafeRendering.Elide(this.Password)} }}";
+    }
+}
 
 /// <summary>Refresh token request payload.</summary>
-public sealed record RefreshRequest(string RefreshToken);
+public sealed record RefreshRequest(string RefreshToken)
+{
+    /// <summary>Renders the request without the token; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(RefreshRequest)} {{ RefreshToken = {SecretSafeRendering.Elide(this.RefreshToken)} }}";
+    }
+}

@@ -162,6 +162,14 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      // Which provider add-ins this host loaded and which it skipped. Platform administrators only, because
+      // the directories, the file paths and the content hashes describe the installation.
+      path: '/provider-add-ins',
+      name: 'provider-add-ins',
+      component: () => import('@/features/provider-add-ins/views/ProviderAddInsView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       // What this installation reports about itself, and the control over it. Platform administrators only,
       // because the setting and the identity in the payload are installation-wide.
       path: '/usage-statistics',

@@ -216,7 +216,7 @@ public static class CodeInsightTrendAnalyzer
             });
     }
 
-    /// <summary>The median of every pairwise slope, which is what makes it robust to one odd period.</summary>
+    /// <summary>The median of every pairwise slope, and that makes it robust to one odd period.</summary>
     private static double SensSlope(IReadOnlyList<double> values)
     {
         var slopes = new List<double>();

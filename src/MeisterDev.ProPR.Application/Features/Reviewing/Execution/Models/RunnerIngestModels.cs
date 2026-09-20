@@ -61,15 +61,27 @@ public sealed record RunnerFileOutcome(
     string? ExclusionReason = null);
 
 /// <summary>What one relayed completion cost.</summary>
+/// <remarks>
+///     All five counters travel, because all five are priced: the control plane charges the input total less the
+///     two cache buckets at the input rate and each bucket at its own. A record carrying only the two headline
+///     counts charges a cached prompt at the full rate, so a review run out of process costs more than the same
+///     review run in process.
+/// </remarks>
 /// <param name="LogicalModelName">The model role that served it.</param>
-/// <param name="InputTokens">Input tokens consumed.</param>
-/// <param name="OutputTokens">Output tokens produced.</param>
+/// <param name="InputTokens">Input tokens consumed, inclusive of the cached and cache-write portions.</param>
+/// <param name="OutputTokens">Output tokens produced, inclusive of the reasoning portion.</param>
 /// <param name="EstimatedCostUsd">Estimated cost, or null when the model has no configured pricing.</param>
+/// <param name="CachedInputTokens">Portion of the input served from the provider's cache.</param>
+/// <param name="CacheWriteTokens">Portion of the input written to the provider's cache.</param>
+/// <param name="ReasoningTokens">Portion of the output spent on model reasoning.</param>
 public sealed record RunnerSpendRecord(
     string LogicalModelName,
     long InputTokens,
     long OutputTokens,
-    decimal? EstimatedCostUsd);
+    decimal? EstimatedCostUsd,
+    long CachedInputTokens = 0,
+    long CacheWriteTokens = 0,
+    long ReasoningTokens = 0);
 
 /// <summary>What happened to a batch.</summary>
 public enum RunnerIngestOutcome

@@ -33,7 +33,7 @@ export type CodeInsightDisposition =
   | 'discussed'
 
 /**
- * Why a rejected finding was rejected. The tokens are the server's enum names, which is what the drill-through
+ * Why a rejected finding was rejected. The tokens are the server's enum names, which the drill-through
  * filter takes back, so a label lookup and a filter never disagree about what a reason is called.
  */
 export type CodeInsightRejectionReason =

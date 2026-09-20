@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>MeisterDev.Ai.Providers.AzureOpenAiAddIn.Tests</RootNamespace>
+        <!--
+            A test project that references the contract is not an add-in: it runs as an ordinary project and needs
+            the shared assemblies in its own output folder to run at all.
+        -->
+        <ProviderAddInPackaging>false</ProviderAddInPackaging>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="8.0.1">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0"/>
+        <PackageReference Include="NSubstitute" Version="5.3.0"/>
+        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit"/>
+    </ItemGroup>
+
+    <!--
+        The family's own tests, referencing the add-in and the shared driver checks and nothing else. That is
+        what an author outside this repository has, so the family is measured here from the position they are in:
+        the checks run against the declaration, with no access to the host that will load it.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.AzureOpenAiAddIn\MeisterDev.Ai.Providers.AzureOpenAiAddIn.csproj"/>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.Conformance\MeisterDev.Ai.Providers.Conformance.csproj"/>
+    </ItemGroup>
+
+    <!--
+        Stages the add-in's own build output as the folder a deployment holds: the family's assembly and its
+        vendor dependencies, and none of the assemblies the host and an add-in share. The packaging check reads
+        that folder, and reading this project's output instead would be reading a layout no deployment has.
+    -->
+    <Target Name="StageTheAddInAsShipped" AfterTargets="Build">
+        <ItemGroup>
+            <_AddInFile Include="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.Ai.Providers.AzureOpenAiAddIn\bin\$(Configuration)\$(TargetFramework)\**\*.*"/>
+        </ItemGroup>
+        <Copy SourceFiles="@(_AddInFile)"
+              DestinationFiles="@(_AddInFile->'$(OutDir)add-in-builds\MeisterDev.Ai.Providers.AzureOpenAiAddIn\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+    </Target>
+
+</Project>

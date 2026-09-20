@@ -164,7 +164,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                 && submission.Payload == payload),
             Arg.Any<CancellationToken>());
 
-        // Nothing reached the provider on the caller's thread, which is what the queueing mode is for.
+        // Nothing reached the provider on the caller's thread, which the queueing mode is for.
         await synchronizationService.DidNotReceiveWithAnyArgs()
             .SynchronizeAsync(default!, default);
     }

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
@@ -15,6 +16,10 @@ namespace MeisterDev.ProPR.Application.Tests.AI;
 /// </summary>
 public sealed class ProviderContractMappingTests
 {
+    private const string CompatibleApiKey = "meisterdev/openAiCompatible:ApiKey";
+
+    private const string CompatibleChatCompletions = "meisterdev/openAiCompatible:ChatCompletions";
+
     [Fact]
     public void ConnectionMapsToTheEndpointADriverNeeds()
     {
@@ -22,9 +27,9 @@ public sealed class ProviderContractMappingTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Profile",
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            AiAuthMode.ApiKey,
+            CompatibleApiKey,
             AiDiscoveryMode.ManualOnly,
             true,
             [],
@@ -38,9 +43,9 @@ public sealed class ProviderContractMappingTests
 
         var endpoint = connection.ToProviderEndpoint();
 
-        Assert.Equal(AiProviderKind.OpenAiCompatible, endpoint.ProviderKind);
+        Assert.Equal("meisterdev/openAiCompatible", endpoint.ProviderKind);
         Assert.Equal("https://api.deepseek.com/v1", endpoint.BaseUrl);
-        Assert.Equal(AiAuthMode.ApiKey, endpoint.AuthMode);
+        Assert.Equal(CompatibleApiKey, endpoint.AuthMode);
         Assert.Equal("secret-material", endpoint.Secret);
         Assert.Equal("1", endpoint.DefaultHeaders?["X-Trace"]);
         Assert.Equal("v1", endpoint.DefaultQueryParams?["api-version"]);
@@ -71,7 +76,7 @@ public sealed class ProviderContractMappingTests
 
         Assert.Equal(model.Id, descriptor.Id);
         Assert.Equal("deepseek-reasoner", descriptor.RemoteModelId);
-        Assert.Equal([AiProtocolMode.Auto, AiProtocolMode.ChatCompletions], descriptor.SupportedProtocolModes);
+        Assert.Equal([ProviderDeclaredProtocolModes.Auto, CompatibleChatCompletions], descriptor.SupportedProtocolModes);
     }
 
     private static AiConfiguredModelDto Model(string? reasoningContentField)
@@ -81,7 +86,7 @@ public sealed class ProviderContractMappingTests
             "deepseek-reasoner",
             "DeepSeek Reasoner",
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto, AiProtocolMode.ChatCompletions],
+            [ProviderDeclaredProtocolModes.Auto, CompatibleChatCompletions],
             SupportsReasoning: true,
             ReasoningContentField: reasoningContentField);
     }

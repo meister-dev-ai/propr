@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Runner.Execution;
 using Microsoft.Extensions.AI;
 
@@ -56,7 +57,7 @@ public sealed class RelayChatClientTests
     }
 
     // The options the pipeline shaped are what make the call a review: without the tools on the wire, a remote
-    // review runs no tool calls and ends after one turn, which is what the first live runs did.
+    // review runs no tool calls and ends after one turn, which the first live runs did.
     [Fact]
     public async Task TheOptionsThePipelineBuilt_RideTheWire()
     {
@@ -98,16 +99,52 @@ public sealed class RelayChatClientTests
         Assert.Equal(JsonValueKind.Null, body.RootElement.GetProperty("options").ValueKind);
     }
 
+    // This host resolves no provider driver, so the counters it meters are the ones the control plane's driver
+    // produced. Derived here instead, every cache and reasoning bucket would read zero and a remote review would
+    // cost differently from the same review run in the control plane.
+    [Fact]
+    public async Task TheRelayedCountersBecomeTheUsageOnTheResponse()
+    {
+        var client = Create(
+            Respond(
+                HttpStatusCode.OK,
+                Envelope(
+                    softCapReached: false,
+                    usage:
+                    """{"inputTokens":4170,"outputTokens":207,"cachedInputTokens":4000,"cacheWriteTokens":50,"reasoningTokens":200,"isEstimated":false}""")),
+            new RunnerBudgetSignal());
+
+        var response = await client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")]);
+        var usage = ProviderTokenUsage.FromUsageDetails(response.Usage);
+
+        Assert.Equal(new ProviderTokenUsage(4170, 207, 4000, 50, 200), usage);
+        Assert.Equal(120, usage.NonCachedInputTokens);
+    }
+
+    // A control plane that does not send the counters is one this executor was upgraded ahead of. The completion
+    // is still served, with whatever the response body itself carries.
+    [Fact]
+    public async Task AControlPlaneThatSendsNoCountersStillServesTheCompletion()
+    {
+        var client = Create(Respond(HttpStatusCode.OK, Envelope(softCapReached: false)), new RunnerBudgetSignal());
+
+        var response = await client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")]);
+
+        Assert.Equal("ok", response.Text);
+        Assert.Null(response.Usage);
+    }
+
     private static RelayChatClient Create(HttpMessageHandler handler, RunnerBudgetSignal signal)
     {
         var http = new HttpClient(handler) { BaseAddress = new Uri("http://control-plane.invalid/runners/execution/") };
         return new RelayChatClient(http, JobId, 4, "reviewer-default", signal);
     }
 
-    private static string Envelope(bool softCapReached)
+    private static string Envelope(bool softCapReached, string? usage = null)
     {
+        var counters = usage is null ? "null" : usage;
         return
-            $$"""{"response":{"messages":[{"role":"assistant","contents":[{"$type":"text","text":"ok"}]}]},"softCapReached":{{(softCapReached ? "true" : "false")}},"replayed":false}""";
+            $$"""{"response":{"messages":[{"role":"assistant","contents":[{"$type":"text","text":"ok"}]}]},"usage":{{counters}},"softCapReached":{{(softCapReached ? "true" : "false")}},"replayed":false}""";
     }
 
     private static StubHandler Respond(HttpStatusCode status, string body)

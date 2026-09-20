@@ -28,7 +28,7 @@ public sealed class LogicalModelOverrideRecord : ILogicalModelMapping
 
     public ReviewReasoningEffort ReasoningEffort { get; set; }
 
-    public AiProtocolMode ProtocolMode { get; set; }
+    public string ProtocolMode { get; set; } = string.Empty;
 
     public DateTimeOffset CreatedAt { get; set; }
 

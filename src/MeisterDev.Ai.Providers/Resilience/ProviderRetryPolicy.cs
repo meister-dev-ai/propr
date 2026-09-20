@@ -27,7 +27,7 @@ public sealed record ProviderRetryPolicy
 
     /// <summary>
     ///     Fraction of the computed backoff to spread randomly, as a defence against many jobs that were
-    ///     throttled together marching back in step. Zero makes the backoff exactly reproducible, which is what
+    ///     throttled together marching back in step. Zero makes the backoff exactly reproducible, which 
     ///     tests want.
     /// </summary>
     public double JitterFactor { get; init; } = 0.2;

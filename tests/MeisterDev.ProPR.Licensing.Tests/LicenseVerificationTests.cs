@@ -76,7 +76,7 @@ public sealed class LicenseVerificationTests
     }
 
     // The document is consistent with itself: the signature holds under the certificate it names and that
-    // certificate issued itself. What it cannot do is lead to the anchor, which is what acceptance rests on.
+    // certificate issued itself. What it cannot do is lead to the anchor, which acceptance rests on.
     [Fact]
     public void ASelfSignedCertificatePresentedAsItsOwnRoot_ReportsAnUntrustedSigner()
     {
@@ -262,7 +262,7 @@ public sealed class LicenseVerificationTests
         Assert.True(result.IsVerified, result.FailureDetail);
         Assert.Equal(LicenseTermStatus.Active, result.License.TermStatus);
 
-        // The same certificates evaluated at the current instant do not build a path, which is what makes the
+        // The same certificates evaluated at the current instant do not build a path, and that makes the
         // outcome above a consequence of the issue instant rather than of a certificate that is valid anyway.
         using var parsed = LicenseReader.Parse(compactLicense).License!;
         Assert.False(LicenseChainPolicy.LeadsToAnchor(parsed.SigningChain, anchor.Certificate!, now, out _));

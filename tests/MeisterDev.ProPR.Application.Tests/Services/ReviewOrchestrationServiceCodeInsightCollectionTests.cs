@@ -272,7 +272,6 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
 
             var providerRegistry = CreateProviderRegistry(postedComments ?? []);
             this.Publisher = providerRegistry.GetCodeReviewPublicationService(ScmProvider.AzureDevOps);
-            var (aiRepo, chatFactory) = CreateAiSubstitutes();
 
             this._sut = new ReviewOrchestrationService(
                 this.Jobs,
@@ -287,8 +286,7 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                 CreateInstructionEvaluator(),
                 Substitute.For<IOptions<AiReviewOptions>>(),
                 NullLogger<ReviewOrchestrationService>.Instance,
-                aiRepo,
-                chatFactory,
+                AiConnectionTestFactory.CreateChatRuntimeResolver(),
                 fileByFileReviewOrchestrator,
                 workspaceManager: CreateWorkspaceManager(),
                 codeInsightFindingIngestionService: withConsumer ? this.IngestionService : null,
@@ -421,19 +419,6 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
             manager.PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
                 .Returns(new ReviewRepositoryWorkspacePreparationResult(workspace, null));
             return manager;
-        }
-
-        private static (IAiConnectionRepository aiRepo, IAiChatClientFactory chatFactory) CreateAiSubstitutes()
-        {
-            var aiRepo = Substitute.For<IAiConnectionRepository>();
-            aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult<AiConnectionDto?>(AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid())));
-
-            var chatFactory = Substitute.For<IAiChatClientFactory>();
-            chatFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
-                .Returns(Substitute.For<IChatClient>());
-
-            return (aiRepo, chatFactory);
         }
     }
 }

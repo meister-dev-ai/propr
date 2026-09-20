@@ -11,10 +11,16 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.1"/>
-        <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIVersion)"/>
+        <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.12"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12"/>
+        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.12"/>
+        <!--
+            The log-destructuring policy for the connection and endpoint types declared here. Serilog rather than
+            the logging abstractions, because destructuring transforms are a Serilog concept and the alternative
+            is each host composing its own copy of the policy.
+        -->
+        <PackageReference Include="Serilog" Version="4.3.0"/>
     </ItemGroup>
 
     <PropertyGroup>

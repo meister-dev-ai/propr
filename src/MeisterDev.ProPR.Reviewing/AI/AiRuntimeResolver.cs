@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Budgeting;
@@ -22,6 +23,7 @@ public sealed class AiRuntimeResolver(
     IAiConnectionRepository aiConnectionRepository,
     IAiRuntimeFactory runtimeFactory,
     ITenantProviderPolicyProvider providerPolicies,
+    IAiProviderDriverRegistry providerDrivers,
     ILogicalModelResolver? logicalModelResolver = null,
     ILogicalModelCatalogRepository? logicalModelCatalog = null) : IAiRuntimeResolver
 {
@@ -136,16 +138,20 @@ public sealed class AiRuntimeResolver(
     private async Task RefuseForbiddenProviderAsync(Guid clientId, AiConnectionDto connection, CancellationToken ct)
     {
         var policy = await providerPolicies.GetForClientAsync(clientId, ct);
-        if (policy.DescribeRefusal(connection.ProviderKind) is { } kindRefusal)
+        if (policy.GetRefusalReason(connection.ProviderKind) is { } kindRefusal)
         {
             throw new InvalidOperationException($"The AI connection '{connection.DisplayName}' cannot be used because {kindRefusal}.");
         }
 
-        // The endpoint host is checked as well as the family. A profile on a permitted family can still be
-        // configured against a base URL the tenant's endpoint list does not permit.
-        if (policy.DescribeEndpointRefusal(connection.BaseUrl) is { } endpointRefusal)
+        // Where the traffic goes is checked as well as the family, over the whole set: a profile on a permitted
+        // family can still be configured against a base URL the tenant's endpoint list does not permit, and a
+        // family whose endpoint is fixed by its vendor carries its addresses in its declaration instead.
+        var reachRefusal = policy.DescribeReachRefusal(
+            connection.BaseUrl,
+            providerDrivers.ReachedHostPatterns(connection.ProviderKind));
+        if (reachRefusal is not null)
         {
-            throw new InvalidOperationException($"The AI connection '{connection.DisplayName}' cannot be used because {endpointRefusal}.");
+            throw new InvalidOperationException($"The AI connection '{connection.DisplayName}' cannot be used because {reachRefusal}.");
         }
     }
 

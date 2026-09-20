@@ -6,7 +6,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 
 /// <summary>
 ///     What the control plane tells an executing party to do when it renews its lease. The heartbeat is the
-///     only channel that reaches an execution wherever it runs, which is what makes it the place to carry
+///     only channel that reaches an execution wherever it runs, and that makes it the place to carry
 ///     this rather than a signal that only works inside one process.
 /// </summary>
 public enum ReviewJobDirective

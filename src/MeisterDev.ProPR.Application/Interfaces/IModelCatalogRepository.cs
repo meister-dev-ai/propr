@@ -42,7 +42,7 @@ public interface IModelCatalogRepository
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<(string ProviderId, string ProviderName, int ModelCount)>> GetProvidersAsync(CancellationToken ct = default);
 
-    /// <summary>Returns a tenant's own override rows, which is what its editor lists and edits.</summary>
+    /// <summary>Returns a tenant's own override rows, which its editor lists and edits.</summary>
     /// <param name="tenantId">Tenant whose overrides are read.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<AiModelCatalogOverrideDto>> GetTenantOverridesAsync(Guid tenantId, CancellationToken ct = default);

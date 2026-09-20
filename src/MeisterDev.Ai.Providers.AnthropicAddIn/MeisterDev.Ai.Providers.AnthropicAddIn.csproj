@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        The shared add-in build configuration, imported by path because this add-in is in the same repository as
+        the contract. An add-in built elsewhere takes the contract as a package and NuGet imports the same two
+        files for it. The three settings they carry keep the contract, the model abstractions and the
+        conformance kit out of this project's output folder, which is what the loader requires of a folder it
+        reads.
+    -->
+    <Import Project="..\MeisterDev.Ai.Providers.Abstractions\build\MeisterDev.Ai.Providers.Abstractions.props"/>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>MeisterDev.Ai.Providers.AnthropicAddIn</RootNamespace>
+    </PropertyGroup>
+
+    <!--
+        Anthropic's native Messages API, built the way a family outside this repository is built: the contract
+        assembly and nothing from the host or from the shared provider runtime. There is no vendor dependency
+        because Anthropic ships no first-party .NET SDK and this family speaks the protocol itself, so the model
+        abstractions the contract's own signatures are written in are all it takes.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.Abstractions\MeisterDev.Ai.Providers.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIVersion)"/>
+    </ItemGroup>
+
+    <Import Project="..\MeisterDev.Ai.Providers.Abstractions\build\MeisterDev.Ai.Providers.Abstractions.targets"/>
+
+</Project>

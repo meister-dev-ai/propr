@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
@@ -172,7 +173,7 @@ public sealed class DiscoveredModelCatalogEnricherTests
             remoteModelId,
             remoteModelId,
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto, AiProtocolMode.ChatCompletions]);
+            [ProviderDeclaredProtocolModes.Auto, "meisterdev/openAi:ChatCompletions"]);
     }
 
     private static AiModelCatalogEntryDto Catalog(

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        The shared add-in build configuration, imported by path because this add-in is in the same repository as
+        the contract, exactly as the example add-in imports it.
+    -->
+    <Import Project="..\..\src\MeisterDev.Ai.Providers.Abstractions\build\MeisterDev.Ai.Providers.Abstractions.props"/>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>MeisterDev.Ai.Providers.NonConformingAddIn</RootNamespace>
+    </PropertyGroup>
+
+    <!--
+        A third add-in, built the same way as the other two, that loads without error and then fails a driver
+        check. It exists so the conformance gate is exercised against a real assembly the loader really read: a
+        family that passes the checks is not evidence that one failing them is skipped, and a stand-in driver
+        would never have gone through the load path the gate sits on.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.Abstractions\MeisterDev.Ai.Providers.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIVersion)"/>
+    </ItemGroup>
+
+    <Import Project="..\..\src\MeisterDev.Ai.Providers.Abstractions\build\MeisterDev.Ai.Providers.Abstractions.targets"/>
+
+</Project>

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -36,9 +37,9 @@ public sealed class OfflineConfigAiRuntimeResolver(IOfflineTierModelAccessor tie
             throw NoBinding(purpose);
         }
 
-        var model = CreateChatModel(modelId);
+        var model = CreateChatModel(selection.ProviderKind, modelId);
         var binding = new AiPurposeBindingDto(Guid.Empty, purpose, RemoteModelId: modelId);
-        var connection = CreateConnection(clientId, model, binding);
+        var connection = CreateConnection(clientId, selection.ProviderKind, model, binding);
         var client = new ModelDefaultingChatClient(selection.ChatClient, modelId);
 
         return Task.FromResult<IResolvedAiChatRuntime>(new ResolvedAiChatRuntime(connection, model, binding, client, OfflineCapabilities));
@@ -72,28 +73,47 @@ public sealed class OfflineConfigAiRuntimeResolver(IOfflineTierModelAccessor tie
         return new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
     }
 
-    private static AiConfiguredModelDto CreateChatModel(string modelId)
+    // A protocol mode of the family the harness is configured against, composed rather than read from that
+    // family's declaration because nothing is loaded offline. The family comes from the configuration, so a
+    // harness run against Anthropic does not describe its connection as an Azure one.
+    private static string Shape(string providerKind, string modeName)
+    {
+        return ProviderVocabulary.Compose(providerKind, modeName);
+    }
+
+    // The offline connection calls one chat client the harness already built, so the shapes on it exist to keep
+    // the binding resolvable and never decide a request's format. Auto is what the binding holds; the two named
+    // ones are there because a pass that asks for a specific shape has to find it declared.
+    private static AiConfiguredModelDto CreateChatModel(string providerKind, string modelId)
     {
         return new AiConfiguredModelDto(
             Guid.Empty,
             modelId,
             modelId,
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions],
+            [
+                ProviderDeclaredProtocolModes.Auto,
+                Shape(providerKind, "Responses"),
+                Shape(providerKind, "ChatCompletions"),
+            ],
             SupportsStructuredOutput: true,
             SupportsToolUse: true,
             Source: AiConfiguredModelSource.Manual);
     }
 
-    private static AiConnectionDto CreateConnection(Guid clientId, AiConfiguredModelDto model, AiPurposeBindingDto binding)
+    private static AiConnectionDto CreateConnection(
+        Guid clientId,
+        string providerKind,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding)
     {
         return new AiConnectionDto(
             Guid.Empty,
             clientId,
             "offline-harness",
-            AiProviderKind.AzureOpenAi,
+            providerKind,
             "offline",
-            AiAuthMode.ApiKey,
+            Shape(providerKind, "ApiKey"),
             AiDiscoveryMode.ManualOnly,
             true,
             [model],

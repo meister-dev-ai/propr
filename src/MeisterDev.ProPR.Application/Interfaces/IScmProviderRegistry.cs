@@ -21,8 +21,8 @@ public interface IScmProviderRegistry
     IRepositoryDiscoveryProvider GetRepositoryDiscoveryProvider(ScmProvider provider);
 
     /// <summary>
-    ///     Reports whether active pull-request discovery is registered for the given provider family, which is
-    ///     what decides whether the provider can answer mentions at all.
+    ///     Reports whether active pull-request discovery is registered for the given provider family, which
+    ///     decides whether the provider can answer mentions at all.
     /// </summary>
     bool SupportsActivePullRequestDiscovery(ScmProvider provider);
 

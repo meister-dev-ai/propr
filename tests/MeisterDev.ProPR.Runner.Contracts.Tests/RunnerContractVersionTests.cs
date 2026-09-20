@@ -13,7 +13,7 @@ public sealed class RunnerContractVersionTests
         Assert.True(RunnerContractVersion.IsSupported(RunnerContractVersion.Current));
     }
 
-    // A control-plane deploy must not refuse every runner that has not been upgraded yet, which is what
+    // A control-plane deploy must not refuse every runner that has not been upgraded yet, which 
     // turns a routine upgrade into a fleet outage.
     [Fact]
     public void OnePriorVersion_IsStillServed()

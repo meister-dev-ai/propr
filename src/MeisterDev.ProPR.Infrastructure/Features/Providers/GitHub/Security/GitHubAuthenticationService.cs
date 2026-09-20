@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
@@ -359,5 +360,13 @@ internal sealed class GitHubAuthenticationService
     private sealed record GitHubInstallationAccessTokenResponse(
         [property: JsonPropertyName("token")] string? Token,
         [property: JsonPropertyName("expires_at")]
-        DateTimeOffset? ExpiresAt);
+        DateTimeOffset? ExpiresAt)
+    {
+        /// <summary>Renders the response without the token; see <see cref="SecretSafeRendering" />.</summary>
+        public override string ToString()
+        {
+            return $"{nameof(GitHubInstallationAccessTokenResponse)} {{ "
+                   + $"Token = {SecretSafeRendering.Elide(this.Token)}, ExpiresAt = {this.ExpiresAt:O} }}";
+        }
+    }
 }

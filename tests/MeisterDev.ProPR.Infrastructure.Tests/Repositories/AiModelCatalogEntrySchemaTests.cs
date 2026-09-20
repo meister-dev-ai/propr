@@ -100,7 +100,7 @@ public sealed class AiModelCatalogEntrySchemaTests(PostgresContainerFixture fixt
     }
 
     // A tenant and a client override of the same model coexist with the global row: they are different scopes,
-    // which is what makes the override layering possible at all.
+    // and that makes the override layering possible at all.
     [Fact]
     public async Task GlobalRowAndScopedOverridesForTheSameModel_Coexist()
     {

@@ -651,11 +651,6 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
                 Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewExclusionRules.Empty));
 
-        var connectionDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid());
-        var aiRepo = Substitute.For<IAiConnectionRepository>();
-        aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<AiConnectionDto?>(connectionDto));
-
         var providerRegistry = CreateProviderRegistry(commentPoster, resolutionSupported, autoResolveNoteCommentId);
 
         var service = new ReviewOrchestrationService(
@@ -671,8 +666,7 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
             instructionEvaluator,
             Substitute.For<IOptions<AiReviewOptions>>(),
             Substitute.For<ILogger<ReviewOrchestrationService>>(),
-            aiRepo,
-            Substitute.For<IAiChatClientFactory>(),
+            AiConnectionTestFactory.CreateChatRuntimeResolver(),
             orchestrator,
             workspaceManager: CreateDefaultWorkspaceManager(),
             postedCommentOriginStore: postedCommentOriginStore,

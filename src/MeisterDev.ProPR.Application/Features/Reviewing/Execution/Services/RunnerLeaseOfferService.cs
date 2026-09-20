@@ -244,7 +244,7 @@ public sealed partial class RunnerLeaseOfferService(
     ///     </para>
     ///     <para>
     ///         A scope built on <see cref="BudgetCaps.None" /> has nothing to trip, so an unconfigured
-    ///         client is metered and never stopped, which is what the in-process path does.
+    ///         client is metered and never stopped, which the in-process path does.
     ///     </para>
     /// </summary>
     private async Task<BudgetScope> ResolveBudgetScopeAsync(ReviewJob job, CancellationToken ct)

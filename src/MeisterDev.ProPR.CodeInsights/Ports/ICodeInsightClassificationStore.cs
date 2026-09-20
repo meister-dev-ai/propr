@@ -31,7 +31,7 @@ public interface ICodeInsightClassificationStore
     /// <summary>
     ///     Returns up to <paramref name="limit" /> findings still awaiting type classification whose attempt
     ///     count is below <paramref name="maxAttempts" />, oldest first so a backlog drains in the order it
-    ///     accumulated. A finding that has exhausted its attempts is never returned again, which is what stops
+    ///     accumulated. A finding that has exhausted its attempts is never returned again, and that stops
     ///     a permanently unclassifiable finding from being retried forever.
     /// </summary>
     Task<IReadOnlyList<CodeInsightUnclassifiedFinding>> ListUnclassifiedAsync(

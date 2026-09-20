@@ -43,8 +43,8 @@ public interface IAuthorOverageStore
     /// <param name="observedCount">The distinct authors the month holds.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>
-    ///     <see langword="true" /> when this write was the month's first observation above the number, which is
-    ///     what the once-per-month report is taken from. <see langword="false" /> when the month already held a
+    ///     <see langword="true" /> when this write was the month's first observation above the number, which
+    ///     the once-per-month report is taken from. <see langword="false" /> when the month already held a
     ///     row, including when another replica wrote it at the same moment.
     /// </returns>
     Task<bool> RecordAsync(

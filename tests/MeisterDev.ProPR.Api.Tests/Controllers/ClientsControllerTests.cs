@@ -8,10 +8,13 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Transport;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -25,6 +28,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
+using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.ProPR.Api.Tests.Support;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
@@ -1184,7 +1189,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 ConnectionId = Guid.NewGuid(),
                 ConfiguredModelId = configuredModelId,
                 ReasoningEffort = ReviewReasoningEffort.None,
-                ProtocolMode = AiProtocolMode.Auto,
+                ProtocolMode = ProviderDeclaredProtocolModes.Auto,
                 CreatedAt = now,
                 UpdatedAt = now,
             });
@@ -1219,9 +1224,9 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 Id = profileId,
                 ClientId = clientId,
                 DisplayName = "Connection",
-                ProviderKind = AiProviderKind.AzureOpenAi.ToString(),
+                ProviderKind = "AzureOpenAi",
                 BaseUrl = "https://x.openai.azure.com/",
-                AuthMode = AiAuthMode.AzureIdentity.ToString(),
+                AuthMode = "AzureIdentity",
                 DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
                 DefaultHeaders = [],
                 DefaultQueryParams = [],
@@ -1238,7 +1243,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                         RemoteModelId = "gpt-4o",
                         DisplayName = "gpt-4o",
                         OperationKinds = [AiOperationKind.Chat.ToString()],
-                        SupportedProtocolModes = [AiProtocolMode.Auto.ToString()],
+                        SupportedProtocolModes = [ProviderDeclaredProtocolModes.Auto.ToString()],
                         SupportsStructuredOutput = true,
                         SupportsToolUse = true,
                         Source = AiConfiguredModelSource.Manual.ToString(),
@@ -1250,7 +1255,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                         RemoteModelId = "text-embedding-3-large",
                         DisplayName = "text-embedding-3-large",
                         OperationKinds = [AiOperationKind.Embedding.ToString()],
-                        SupportedProtocolModes = [AiProtocolMode.Auto.ToString(), AiProtocolMode.Embeddings.ToString()],
+                        SupportedProtocolModes = [ProviderDeclaredProtocolModes.Auto.ToString(), ProviderDeclaredProtocolModes.Embeddings.ToString()],
                         TokenizerName = "cl100k_base",
                         MaxInputTokens = 8192,
                         EmbeddingDimensions = 3072,
@@ -1300,6 +1305,18 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         /// </summary>
         public (long Ceiling, long Held)? RefusedClientQuota { get; set; }
 
+        /// <summary>
+        ///     The tenant provider policy every read in this host answers with. Unrestricted unless a test states
+        ///     one, because these tests are about the client surface rather than about the allow-list.
+        /// </summary>
+        internal TenantProviderPolicy ProviderPolicy { get; set; } = TenantProviderPolicy.Unrestricted;
+
+        /// <summary>
+        ///     Answers every outbound provider call this host makes and records what was sent, so no test reaches
+        ///     a provider's real address and a test can assert the request a driver built.
+        /// </summary>
+        internal FakeProviderEndpoint ProviderWire { get; } = new();
+
         public string GenerateAdminToken()
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
@@ -1336,6 +1353,11 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 // Register IJwtTokenService for JWT Bearer token validation
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
+                // The credential rules the host owns — an undeclared field refused, a required field left empty
+                // refused, a credential of several fields kept across an update — need a family that declares
+                // more than one field, and every shipped family reads a single key.
+                services.AddSingleton<IAiProviderDriver, MultiFieldCredentialFamily>();
+
                 // Replace external stubs
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
@@ -1347,11 +1369,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                     opts.UseInMemoryDatabase(dbName, dbRoot)
                         // ActivateAsync wraps writes in a transaction; the InMemory provider
                         // ignores transactions and otherwise throws TransactionIgnoredWarning.
-                        .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
-                // The tenant provider policy is read through a context factory, over the same store as the
-                // scoped context so a policy written through the tenant API is the one the read returns.
-                services.AddDbContextFactory<MeisterProPRDbContext>(opts =>
-                    opts.UseInMemoryDatabase(dbName, dbRoot)
                         .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
 
@@ -1365,11 +1382,15 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                     .AddScoped<MeisterDev.ProPR.Application.Interfaces.IClientTokenUsageRepository,
                         MeisterDev.ProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
-                // The repository, the scope guard and the AI-connection routes all enforce the tenant's provider
-                // policy and require it. The real provider is composed here, not substituted, so a test can put
-                // an allow-list in place through the tenant API and see the routes answer to it. A tenant with
-                // no allow-list reads as unrestricted, so every other test in these classes is unaffected.
-                services.AddScoped<ITenantProviderPolicyProvider, TenantProviderPolicyProvider>();
+                // Both the repository and the scope guard enforce the tenant's provider policy and require it.
+                // The real provider reads the tenant row through a context factory this host does not compose, so
+                // the policy is stated here: these tests are about the client surface, not about the allow-list.
+                var providerPolicies = Substitute.For<ITenantProviderPolicyProvider>();
+                providerPolicies.GetForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(_ => this.ProviderPolicy);
+                providerPolicies.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(_ => this.ProviderPolicy);
+                services.AddSingleton(providerPolicies);
                 services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
                 services.AddScoped<IAiConnectionScopeGuard, AiConnectionScopeGuard>();
                 services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();
@@ -1388,7 +1409,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 services.AddSingleton(Substitute.For<IJobRepository>());
 
                 // Substitute licensing so the Budgeting gate on the budget-config patch is controllable per
-                // test. Every capability reports available by default, which is what these endpoints saw when
+                // test. Every capability reports available by default, which these endpoints saw when
                 // no licensing service was registered at all.
                 var licensing = Substitute.For<ILicensingCapabilityService>();
                 licensing.IsEnabledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -1398,6 +1419,15 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 licensing.GetCapabilityAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>())
                     .Returns(_ => Task.FromResult(CreateCapabilitySnapshot(PremiumCapabilityKey.Budgeting, this.BudgetingAvailable)));
                 services.AddScoped(_ => licensing);
+
+                // Every provider family builds its requests from one of these named clients, whether it is
+                // compiled in or loaded from the add-in directory, so answering them here keeps the suite off
+                // the internet and makes what a family sent assertable. A Vertex profile is the one that reaches
+                // none of them while verifying: it mints a token through the auth library's own client, and
+                // what a test can observe there is the refusal a credential the library will not read produces.
+                services.AddHttpClient("AiProbe").ConfigurePrimaryHttpMessageHandler(this.ProviderWire.AsSharedPrimaryHandler);
+                services.AddHttpClient("AiProviderAdmin").ConfigurePrimaryHttpMessageHandler(this.ProviderWire.AsSharedPrimaryHandler);
+                services.AddHttpClient("AiProviderRuntime").ConfigurePrimaryHttpMessageHandler(this.ProviderWire.AsSharedPrimaryHandler);
             });
         }
 

@@ -214,11 +214,11 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
             _ => new SubmitReviewByCoordinatesResult(
                 SubmitReviewByCoordinatesOutcome.NotSubmittable,
                 outcome.JobId,
-                DescribeRefusal(outcome)),
+                GetRefusalReason(outcome)),
         };
     }
 
-    private static string DescribeRefusal(PullRequestSynchronizationOutcome outcome)
+    private static string GetRefusalReason(PullRequestSynchronizationOutcome outcome)
     {
         return outcome.ActionSummaries.Count > 0
             ? string.Join(' ', outcome.ActionSummaries)
@@ -318,7 +318,7 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
             return BuildRepositoryRef(coverage, host, command.RepositoryId, named.Name.Trim());
         }
 
-        // An identity that is already a path carries the name in its last segment, which is what GitLab
+        // An identity that is already a path carries the name in its last segment, which GitLab
         // records on a review job. Reading it costs nothing and cannot miss, so it comes before asking the
         // provider. Identities that are a GUID or a number contain no slash and fall through untouched.
         if (command.RepositoryId.Contains('/', StringComparison.Ordinal))

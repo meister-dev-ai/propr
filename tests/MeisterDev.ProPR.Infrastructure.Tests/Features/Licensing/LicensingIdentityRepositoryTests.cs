@@ -137,7 +137,7 @@ public sealed class LicensingIdentityRepositoryTests
         return new MeisterProPRDbContext(options);
     }
 
-    /// <summary>Records the instant each observation was asked for, which is what pins capture to creation.</summary>
+    /// <summary>Records the instant each observation was asked for, and that pins capture to creation.</summary>
     private sealed class RecordingSystemProfileObserver : ISystemProfileObserver
     {
         public List<DateTimeOffset> Observations { get; } = [];

@@ -65,7 +65,7 @@ public sealed class GitReviewRepositoryWorkspaceDisposalTests
             Assert.False(cleanupService.IsMirrorReferenced(mirrorPath));
             Assert.False(Directory.Exists(Path.GetDirectoryName(headPath)));
 
-            // The mirror no longer lists the worktree, which is what distinguishes a git removal from a
+            // The mirror no longer lists the worktree, which distinguishes a git removal from a
             // directory that was deleted underneath it.
             var registered = await RunGitAsync(runner, mirrorPath, ["worktree", "list"]);
             Assert.DoesNotContain("source", registered, StringComparison.Ordinal);

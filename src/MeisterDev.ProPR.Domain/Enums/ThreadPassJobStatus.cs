@@ -39,7 +39,7 @@ public enum ThreadPassJobStatus
     ///     Terminal, and reached having touched nothing: the client's gates were shut, the provider was
     ///     deactivated, the pull request was not active, or the revision had already moved on. A pass in this
     ///     status blocks no future pass, so the identical trigger runs again once the reason is gone. Every
-    ///     other terminal status blocks its trigger, which is what stops a deterministic failure looping.
+    ///     other terminal status blocks its trigger, and that stops a deterministic failure looping.
     /// </summary>
     Skipped = 7,
 }

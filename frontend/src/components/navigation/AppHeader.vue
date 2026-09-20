@@ -21,7 +21,7 @@
            worse than no link. The route guard and the server both repeat the check. -->
       <RouterLink v-if="canViewCodeQuality" :to="{ name: 'code-quality' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'code-quality' }"><i class="fi fi-rr-chart-histogram"></i> Code Quality</RouterLink>
       <div v-if="hasAnyAdministrationAccess" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
-        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' || $route.name === 'usage-statistics' || $route.name === 'runners' || $route.name === 'runners-all' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
+        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'provider-add-ins' || $route.name === 'licensing' || $route.name === 'usage-statistics' || $route.name === 'runners' || $route.name === 'runners-all' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
           <i class="fi fi-rr-shield-check"></i> Administration
           <!-- A dot rather than a count or an error colour. Shown only to platform administrators, who are
                the only ones who can act on it. -->
@@ -29,17 +29,30 @@
           <i class="fi fi-rr-angle-small-down ml-1 text-xs"></i>
         </button>
         <div v-if="adminDropdownOpen" class="dropdown-menu">
+          <div v-if="defaultTenantAdminRoute || isAdmin" class="dropdown-section">
+            <p class="dropdown-section-title">Access</p>
           <RouterLink v-if="defaultTenantAdminRoute" :to="defaultTenantAdminRoute" class="dropdown-item" :class="{ 'active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-building"></i> Tenants</RouterLink>
-          <RouterLink v-if="canViewReviewerPerformance" :to="{ name: 'reviewer-performance' }" class="dropdown-item" :class="{ 'active': $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-chart-line-up"></i> Reviewer Performance</RouterLink>
+          <RouterLink v-if="isAdmin" :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
+          </div>
+          <div v-if="isAdmin" class="dropdown-section">
+            <p class="dropdown-section-title">Providers</p>
+          <RouterLink v-if="isAdmin" :to="{ name: 'provider-settings' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
+          <RouterLink v-if="isAdmin" :to="{ name: 'provider-add-ins' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-add-ins' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-puzzle"></i> AI Provider Add-ins</RouterLink>
+          </div>
+          <div v-if="isAdmin || defaultRunnersRoute" class="dropdown-section">
+            <p class="dropdown-section-title">Operations</p>
+          <RouterLink v-if="defaultRunnersRoute" :to="defaultRunnersRoute" class="dropdown-item" :class="{ 'active': $route.name === 'runners' || $route.name === 'runners-all' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-computer"></i> Runners</RouterLink>
+          <RouterLink v-if="isAdmin" :to="{ name: 'thread-memory' }" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
+          </div>
+          <div v-if="isAdmin || canViewReviewerPerformance" class="dropdown-section">
+            <p class="dropdown-section-title">Installation</p>
           <RouterLink v-if="isAdmin" :to="{ name: 'licensing' }" class="dropdown-item" :class="{ 'active': $route.name === 'licensing' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-badge"></i> Licensing</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'usage-statistics' }" class="dropdown-item" :class="{ 'active': $route.name === 'usage-statistics' }" @click="adminDropdownOpen = false">
             <i class="fi fi-rr-info"></i> Usage Statistics
             <span v-if="showUpdateBadge" class="update-dot" data-testid="update-available-item-dot" role="img" :title="updateBadgeTitle" :aria-label="updateBadgeTitle"></span>
           </RouterLink>
-          <RouterLink v-if="isAdmin" :to="{ name: 'provider-settings' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
-          <RouterLink v-if="isAdmin" :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
-          <RouterLink v-if="isAdmin" :to="{ name: 'thread-memory' }" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
-          <RouterLink v-if="defaultRunnersRoute" :to="defaultRunnersRoute" class="dropdown-item" :class="{ 'active': $route.name === 'runners' || $route.name === 'runners-all' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-computer"></i> Runners</RouterLink>
+          <RouterLink v-if="canViewReviewerPerformance" :to="{ name: 'reviewer-performance' }" class="dropdown-item" :class="{ 'active': $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-chart-line-up"></i> Reviewer Performance</RouterLink>
+          </div>
         </div>
       </div>
     </nav>
@@ -346,6 +359,30 @@ async function logout() {
   align-items: center;
   gap: 0.5rem;
   font-family: inherit;
+}
+
+/* Nine entries read as one list, so they are grouped by what an operator came to do. A section shows only
+   when one of its own entries does, so a role that hides every entry hides the heading with them. */
+.dropdown-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dropdown-section + .dropdown-section {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.dropdown-section-title {
+  margin: 0;
+  padding: 0.25rem 0.75rem 0.1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #8b949e);
 }
 
 .dropdown-menu {

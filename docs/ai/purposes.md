@@ -50,7 +50,7 @@ Map at least **Review default** and **Embedding default** - the Purposes screen 
 and map the rest unless you have a reason not to.
 
 A purpose mapped to a logical-model name that no longer exists, or whose connection or model has since been
-removed, is a hard failure rather than a fallback: resolution stops there and does not try the connection's
+removed, is a hard failure and not a fallback: resolution stops there and does not try the connection's
 purpose bindings.
 
 `proRvPrefilter` is the exception: the optional ProRV knowledge lens runs on the model configured on the `prorv`
@@ -105,15 +105,18 @@ Set on a purpose binding on the connection form, an unspeakable mode is refused 
 what the provider does speak. Set on a logical model it is **not** checked, so it saves cleanly and the review
 fails when that model is first called. On a logical model, prefer Auto.
 
+A protocol mode a family owns is written as the family's identity key, a `:`, and the mode name, so two
+families that both speak a mode called `ChatCompletions` name two different shapes. `Auto` and `Embeddings`
+belong to no family and are written on their own.
+
 What each family speaks, if you do need to pin one:
 
 | Family | Protocol modes |
 |---|---|
-| `azureOpenAi`, `openAi`, `liteLlm` | `auto`, `responses`, `chatCompletions`, `embeddings` |
-| `openAiCompatible` | `auto`, `chatCompletions`, `embeddings` - the Responses API is deliberately not assumed of an arbitrary compatible server |
-| `anthropic` | `auto`, `anthropicMessages` |
-| `awsBedrock` | `auto`, `bedrockConverse`, `embeddings` |
-| `googleVertex` | `auto`, `googleGenerateContent`, `embeddings` |
+| `meisterdev/azureOpenAi`, `meisterdev/openAi`, `meisterdev/liteLlm` | `Auto`, `<key>:Responses`, `<key>:ChatCompletions`, `Embeddings` |
+| `meisterdev/openAiCompatible` | `Auto`, `meisterdev/openAiCompatible:ChatCompletions`, `Embeddings` - the Responses API is deliberately not assumed of an arbitrary compatible server |
+| `meisterdev/anthropic` | `Auto`, `meisterdev/anthropic:AnthropicMessages` |
+| `meisterdev/awsBedrock` | `Auto`, `meisterdev/awsBedrock:BedrockConverse`, `Embeddings` |
+| `meisterdev/googleVertex` | `Auto`, `meisterdev/googleVertex:GoogleGenerateContent`, `Embeddings` |
 
-`embeddings` is the shape used to call an embedding model, which is why the one family with no embedding models
-does not list it.
+`Embeddings` calls an embedding model, so the one family with no embedding models does not list it.

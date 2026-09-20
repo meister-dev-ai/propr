@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Enums;
 
@@ -61,7 +61,8 @@ public interface IAiConnectionRepository
     /// <summary>
     ///     Resolves a chat-capable configured model by its identifier across the client's connection profiles,
     ///     synthesizing a purpose-neutral binding (reusing an existing enabled binding's protocol mode for that model
-    ///     when present, otherwise <see cref="AiProtocolMode.Auto" />). Returns <see langword="null" /> when the model
+    ///     when present, otherwise <see cref="ProviderDeclaredProtocolModes.Auto" />). Returns
+    ///     <see langword="null" /> when the model
     ///     is not found on any of the client's profiles or does not support chat workloads.
     /// </summary>
     Task<AiResolvedPurposeBindingDto?> GetModelBindingAsync(

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -123,8 +124,6 @@ public sealed class FileReviewerMultiPassUnionTests
             NullLogger<FileByFileReviewOrchestrator>.Instance,
             null,
             null,
-            null,
-            null,
             aiRuntimeResolver,
             null,
             null,
@@ -142,7 +141,7 @@ public sealed class FileReviewerMultiPassUnionTests
             remoteModelId,
             remoteModelId,
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto]);
+            [ProviderDeclaredProtocolModes.Auto]);
     }
 
     // Builds a changed file whose size heuristic lands on the requested tier (<=30 Low, <=150 Medium, else High).

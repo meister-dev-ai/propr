@@ -101,7 +101,7 @@ public sealed class RunnerIngestServiceTests
     }
 
     // Refused whole rather than partly applied: a half-applied batch leaves the executor unable to say what
-    // still needs sending, which is what the sequence exists to prevent.
+    // still needs sending, which the sequence exists to prevent.
     [Fact]
     public async Task AnOversizedBatch_IsRefusedWholeWithTheExpectedSequenceToResumeFrom()
     {

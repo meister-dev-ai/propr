@@ -190,8 +190,8 @@ public sealed class RunnerLeaseController(
         }
 
         // A failure spends one of the job's reclaim attempts; a drain costs it nothing. A release that
-        // does not say which is treated as a drain, which is what every release was before the reason
-        // existed, so an older runner keeps the behaviour it had.
+        // does not say which is treated as a drain. Every release was a drain before the reason existed, so
+        // an older runner keeps the behaviour it had.
         var lease = new ReviewJobLease(request.JobId, owner, request.LeaseGeneration, DateTimeOffset.UtcNow);
         var released = string.Equals(request.Reason, RunnerLeaseReleaseReasons.Failure, StringComparison.Ordinal)
             ? await leases.TryReleaseFailedAsync(

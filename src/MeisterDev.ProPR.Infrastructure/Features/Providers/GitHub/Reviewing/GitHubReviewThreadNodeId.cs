@@ -7,7 +7,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 
 /// <summary>
 ///     One definition of what identifies a GitHub review thread, shared by every adapter that writes to one.
-///     GitHub addresses a review thread by its GraphQL node id, which is what the thread read path carries.
+///     GitHub addresses a review thread by its GraphQL node id, which the thread read path carries.
 /// </summary>
 internal static class GitHubReviewThreadNodeId
 {

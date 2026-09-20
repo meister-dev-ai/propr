@@ -148,7 +148,6 @@ public sealed class ReviewOrchestrationServiceAuthorRecordingTests
                     Arg.Any<IChatClient?>())
                 .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
-            var (aiRepo, chatFactory) = CreateAiSubstitutes();
 
             this._sut = new ReviewOrchestrationService(
                 this.Jobs,
@@ -163,8 +162,7 @@ public sealed class ReviewOrchestrationServiceAuthorRecordingTests
                 CreateInstructionEvaluator(),
                 Substitute.For<IOptions<AiReviewOptions>>(),
                 NullLogger<ReviewOrchestrationService>.Instance,
-                aiRepo,
-                chatFactory,
+                AiConnectionTestFactory.CreateChatRuntimeResolver(),
                 fileByFileReviewOrchestrator,
                 workspaceManager: CreateWorkspaceManager());
         }
@@ -274,18 +272,6 @@ public sealed class ReviewOrchestrationServiceAuthorRecordingTests
             manager.PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
                 .Returns(new ReviewRepositoryWorkspacePreparationResult(workspace, null));
             return manager;
-        }
-
-        private static (IAiConnectionRepository AiRepo, IAiChatClientFactory ChatFactory) CreateAiSubstitutes()
-        {
-            var aiRepo = Substitute.For<IAiConnectionRepository>();
-            aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult<AiConnectionDto?>(AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid())));
-
-            var chatFactory = Substitute.For<IAiChatClientFactory>();
-            chatFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>()).Returns(Substitute.For<IChatClient>());
-
-            return (aiRepo, chatFactory);
         }
     }
 }

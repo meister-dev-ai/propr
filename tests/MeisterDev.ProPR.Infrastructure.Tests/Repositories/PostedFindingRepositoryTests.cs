@@ -90,7 +90,7 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
     [Fact]
     public async Task FindClosestInPullRequestAsync_BelowTheThreshold_ReturnsNothing()
     {
-        // An orthogonal vector is similarity 0, which is what a genuinely unrelated finding looks like.
+        // An orthogonal vector is similarity 0, which a genuinely unrelated finding looks like.
         await this._repo.AddMissingAsync([Record(ClientA, 22092, "102", V(1f, 0f))]);
 
         var match = await this._repo.FindClosestInPullRequestAsync(ClientA, Host, Project, RepoId, 22092, V(0f, 1f), 0.85f);

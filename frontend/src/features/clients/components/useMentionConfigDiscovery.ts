@@ -83,7 +83,7 @@ export function useMentionConfigDiscovery(clientId: () => string) {
 
   const selectedHost = computed(() => state.hosts.find((host) => host.id === state.hostId))
 
-  /** The scope path of the current selection, which is what a configuration stores. */
+  /** The scope path of the current selection, which a configuration stores. */
   const scopePath = computed(() => selectedHost.value?.scopePath ?? '')
 
   const isAzureDevOps = computed(() => state.provider === 'azureDevOps')

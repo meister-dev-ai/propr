@@ -346,7 +346,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                                             """)),
                 _ => new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
 
-        // Bulky enough to claim a substantial share of the narrow context window configured below, which is what
+        // Bulky enough to claim a substantial share of the narrow context window configured below, which 
         // makes the transcript worth compacting in the first place.
         var bulkyFileContent = string.Join('\n', Enumerable.Range(1, 2_000).Select(index => $"line {index}: some bulky repository content"));
         var tools = Substitute.For<IReviewContextTools>();

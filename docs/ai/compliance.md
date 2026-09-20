@@ -14,10 +14,24 @@ both are empty by default, and **empty means unrestricted** - a tenant that stat
 | `allowedAiEndpointHosts` | Only these endpoint hosts may be reached |
 
 Host entries match exactly, or match any subdomain when written with a leading dot: `.openai.azure.com` permits
-`contoso.openai.azure.com`. A base URL that cannot be parsed is refused rather than allowed through.
+`contoso.openai.azure.com`. A base URL that cannot be parsed is refused.
 
-The host list is the one that answers "where does our code actually go". The provider family says how traffic is
-shaped; for an `openAiCompatible` connection, which can point anywhere, the family alone constrains nothing.
+The host list answers where traffic actually goes. The provider family answers how it is shaped, and a
+`meisterdev/openAiCompatible` connection can point anywhere, so on its own the family constrains no destination.
+
+## Host list verification
+
+An AI connection's base URL and every host its provider family declares it reaches are checked against the list,
+and all of them must be on it. A family whose endpoint is fixed by its vendor carries no base URL, so for that
+family the check runs against the declared hosts alone.
+
+A declared host is checked by containment: the entry has to name at least every host the declared pattern admits.
+An entry `.example.com` permits a family declaring `api.example.com`. An entry `api.example.com` refuses a family
+declaring `.example.com`, because that family reaches subdomains the entry does not name.
+
+A family that reaches an authorization host as well as a model host needs both permitted. Until you permit the
+second, that family is refused, and the refusal names the host to add. The **AI provider add-ins** page under
+Administration lists what each family declares.
 
 Policy is enforced when a connection is saved **and** again before a credential is used at review time, so
 tightening a policy takes effect on existing connections without any cleanup on your side. Every change here is

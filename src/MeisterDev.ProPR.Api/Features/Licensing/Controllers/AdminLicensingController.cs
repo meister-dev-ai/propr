@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements license key functionality. License logic may not be moved, changed, disabled or circumvented.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.Features.Licensing.Commands.ActivateLicense;
 using MeisterDev.ProPR.Application.Features.Licensing.Commands.RemoveLicense;
@@ -277,7 +278,14 @@ public sealed class AdminLicensingController(
 ///     The compact license document. Text pasted by an operator and the contents of a file the browser read are
 ///     the same value here.
 /// </param>
-public sealed record ActivateLicenseRequest([property: JsonRequired] string Token);
+public sealed record ActivateLicenseRequest([property: JsonRequired] string Token)
+{
+    /// <summary>Renders the request without the document; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(ActivateLicenseRequest)} {{ Token = {SecretSafeRendering.Elide(this.Token)} }}";
+    }
+}
 
 /// <summary>Body naming why an activation was refused.</summary>
 /// <param name="Error">The stable code for an activation refusal.</param>

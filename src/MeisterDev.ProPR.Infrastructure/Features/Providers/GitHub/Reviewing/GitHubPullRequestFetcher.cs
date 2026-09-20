@@ -786,7 +786,7 @@ internal sealed class GitHubPullRequestFetcher(
             stableAuthorId,
             comment.DatabaseId ?? 0,
             comment.CreatedAt,
-            // The account's numeric id, which is what the pull-request payload's "user.id" carries as well, so
+            // The account's numeric id, which the pull-request payload's "user.id" carries as well, so
             // one person is the same identifier whether they opened the pull request or commented on it. The
             // query asks for it on both the User and the Bot shape; an actor of neither shape leaves it absent.
             AuthorNativeId: comment.Author?.DatabaseId?.ToString(CultureInfo.InvariantCulture));

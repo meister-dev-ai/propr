@@ -89,7 +89,7 @@ describe('useReviewHistoryViewModel restart action', () => {
   })
 
   // A soft cap holds a review before it starts and a hard cap stops one part-way. Both are resumed by
-  // restarting once budget is freed, which is what the server accepts and what the button offers.
+  // restarting once budget is freed, which the server accepts and what the button offers.
   it.each(['budgetHeld', 'budgetExceeded'])('restarts a %s job', async (status) => {
     const item = failedItem({ status } as Partial<JobListItem>)
     const restartJob = vi.fn().mockResolvedValue(undefined)

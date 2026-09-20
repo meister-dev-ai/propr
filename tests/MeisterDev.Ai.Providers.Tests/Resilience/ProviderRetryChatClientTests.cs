@@ -17,7 +17,7 @@ namespace MeisterDev.Ai.Providers.Tests.Resilience;
 public sealed class ProviderRetryChatClientTests
 {
     private static readonly ProviderCallTarget Target =
-        new(AiProviderKind.OpenAiCompatible, "deepseek-reasoner", "Primary DeepSeek");
+        new("meisterdev/openAiCompatible", "deepseek-reasoner", "Primary DeepSeek");
 
     private static readonly ProviderRetryPolicy Immediate = new()
     {
@@ -73,7 +73,7 @@ public sealed class ProviderRetryChatClientTests
         Assert.Contains("Primary DeepSeek", failure.Message, StringComparison.Ordinal);
         Assert.Contains("deepseek-reasoner", failure.Message, StringComparison.Ordinal);
         Assert.Contains("API key", failure.Message, StringComparison.Ordinal);
-        Assert.Equal(AiProviderKind.OpenAiCompatible, failure.ProviderKind);
+        Assert.Equal("meisterdev/openAiCompatible", failure.ProviderKind);
     }
 
     // A token that is already cancelled stops the call where it stands, so the provider is never asked. Counting

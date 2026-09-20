@@ -3,7 +3,6 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using MeisterDev.Ai.Providers.Enums;
 
 namespace MeisterDev.ProPR.Infrastructure.AI;
 
@@ -49,15 +48,15 @@ public sealed class AiProviderMetrics : IDisposable
     private readonly Counter<double> _cost;
 
     /// <summary>Records one completed attempt and how long it took.</summary>
-    /// <param name="providerKind">Provider family the call was routed to.</param>
+    /// <param name="providerKind">Identity key of the provider family the call was routed to.</param>
     /// <param name="modelId">Remote model id the call addressed.</param>
     /// <param name="outcome">How the attempt ended: <c>ok</c>, <c>error</c>, <c>throttled</c> or <c>cancelled</c>.</param>
     /// <param name="elapsedSeconds">Wall-clock duration of the attempt.</param>
-    public void RecordCall(AiProviderKind providerKind, string modelId, string outcome, double elapsedSeconds)
+    public void RecordCall(string providerKind, string modelId, string outcome, double elapsedSeconds)
     {
         var tags = new TagList
         {
-            { "ai_provider", providerKind.ToString() },
+            { "ai_provider", providerKind },
             { "ai_model", modelId },
             { "outcome", outcome },
         };
@@ -67,33 +66,33 @@ public sealed class AiProviderMetrics : IDisposable
     }
 
     /// <summary>Records the token counts a provider reported for one call, split by kind.</summary>
-    /// <param name="providerKind">Provider family the call was routed to.</param>
+    /// <param name="providerKind">Identity key of the provider family the call was routed to.</param>
     /// <param name="modelId">Remote model id the call addressed.</param>
     /// <param name="kind">Token kind: <c>input</c>, <c>output</c>, <c>cached_input</c>, <c>cache_write</c> or <c>reasoning</c>.</param>
     /// <param name="count">The count reported; zero counts are skipped by the caller.</param>
-    public void RecordTokens(AiProviderKind providerKind, string modelId, string kind, long count)
+    public void RecordTokens(string providerKind, string modelId, string kind, long count)
     {
         this._tokens.Add(
             count,
             new TagList
             {
-                { "ai_provider", providerKind.ToString() },
+                { "ai_provider", providerKind },
                 { "ai_model", modelId },
                 { "token_kind", kind },
             });
     }
 
     /// <summary>Records the estimated USD cost of one call.</summary>
-    /// <param name="providerKind">Provider family the call was routed to.</param>
+    /// <param name="providerKind">Identity key of the provider family the call was routed to.</param>
     /// <param name="modelId">Remote model id the call addressed.</param>
     /// <param name="usd">The estimate; callers skip unpriced calls rather than recording zero.</param>
-    public void RecordCost(AiProviderKind providerKind, string modelId, decimal usd)
+    public void RecordCost(string providerKind, string modelId, decimal usd)
     {
         this._cost.Add(
             (double)usd,
             new TagList
             {
-                { "ai_provider", providerKind.ToString() },
+                { "ai_provider", providerKind },
                 { "ai_model", modelId },
             });
     }

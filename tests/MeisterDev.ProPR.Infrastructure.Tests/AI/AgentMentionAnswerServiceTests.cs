@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
@@ -28,19 +29,20 @@ public sealed class AgentMentionAnswerServiceTests
 
     private static AgentMentionAnswerService CreateSut(IChatClient chatClient, IClientRegistry? clientRegistry = null)
     {
-        var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
-        aiConnectionRepository.GetActiveForClientAsync(ClientId, Arg.Any<CancellationToken>())
-            .Returns(BuildActiveConnection());
+        var connection = BuildActiveConnection();
+        var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        runtime.ChatClient.Returns(chatClient);
+        runtime.Connection.Returns(connection);
+        runtime.Model.Returns(connection.ConfiguredModels[0]);
 
-        var aiChatClientFactory = Substitute.For<IAiChatClientFactory>();
-        aiChatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
-            .Returns(chatClient);
+        var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+        aiRuntimeResolver.ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(runtime);
 
         return new AgentMentionAnswerService(
-            aiConnectionRepository,
-            aiChatClientFactory,
+            aiRuntimeResolver,
             NullLogger<AgentMentionAnswerService>.Instance,
-            clientRegistry: clientRegistry);
+            clientRegistry);
     }
 
     private static IChatClient MakeChatClient(string reply = "The answer.")

@@ -25,6 +25,7 @@ using MeisterDev.ProPR.Api.Telemetry;
 using MeisterDev.ProPR.Api.Validators;
 using MeisterDev.ProPR.Api.Workers;
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
@@ -76,10 +77,14 @@ using MeisterDev.ProPR.CodeInsights.Support;
 using MeisterDev.ProPR.CodeInsights.Workers;
 using MeisterDev.ProPR.Web;
 
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .WriteTo.Console()
+// The startup logger, in use until the host's own is built. It carries the same credential-scrubbing transforms
+// the host logger does, because startup is where a configuration object is most likely to be written out and a
+// logger that redacts only after the host is built redacts nothing for the part of the run before it.
+Log.Logger = SecretLogRedaction.Apply(
+        new LoggerConfiguration()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+            .Enrich.FromLogContext()
+            .WriteTo.Console())
     .CreateLogger();
 
 try
@@ -92,7 +97,7 @@ try
     }
 
     // Verifies a license document against the trust anchor compiled into this build and exits. Handled here,
-    // ahead of the host, because the mode reads no configuration and opens no database or socket, which is what
+    // ahead of the host, because the mode reads no configuration and opens no database or socket, which 
     // lets a release run it inside the built image.
     if (await LicenseVerificationCommand.TryRunAsync(args, Console.Out, Console.Error, Console.In) is { } verifyExitCode)
     {
@@ -676,6 +681,14 @@ try
         return;
     }
 
+    // Builds the AI provider driver registry while the host is still starting. The registry rejects a
+    // composition that registers two drivers for one provider family, and every other consumer of it resolves
+    // per request, so without this resolution the rejection would first surface during a review. It runs ahead
+    // of startup maintenance so a composition error is reported before the schema of a live installation is
+    // touched. Building it is also what runs the one add-in discovery pass, so the add-in directories are read
+    // here and never again for the life of the process.
+    _ = app.Services.GetRequiredService<IAiProviderDriverRegistry>();
+
     // Apply migrations, secret/logical-model backfills, startup recovery, and seeding when a database is configured.
     await app.ApplyStartupMaintenanceAsync(hasDatabaseConnectionString);
 
@@ -842,7 +855,7 @@ public partial class Program
         Guid licensingIdentity);
 
     /// <summary>
-    ///     Whether the failure is PostgreSQL reporting that a table the query named does not exist, which is what
+    ///     Whether the failure is PostgreSQL reporting that a table the query named does not exist, which 
     ///     a database without the migrations applied answers.
     ///     <para>
     ///         The chain is walked because the same condition arrives wrapped when it surfaces on a write: Entity

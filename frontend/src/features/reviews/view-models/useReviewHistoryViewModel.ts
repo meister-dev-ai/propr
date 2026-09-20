@@ -99,7 +99,7 @@ const ITEMS_VISIBLE_DEFAULT = 3
 const ITEMS_PER_PAGE = 10
 
 /**
- * The states a review can be restarted from, which is what the server accepts.
+ * The states a review can be restarted from, which the server accepts.
  *
  * Budget-blocked work belongs here as much as a failure does: a soft cap holds a review before it starts
  * and a hard cap stops one part-way, and both are resumed by restarting once budget is freed. Offering the

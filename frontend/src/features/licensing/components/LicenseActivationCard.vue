@@ -90,7 +90,7 @@ async function readFile(event: Event): Promise<void> {
 function noteTokenEdited(): void {
   readSequence += 1
   fileName.value = null
-  // A failed read asks for the contents to be pasted instead, which is what this edit does, so the message
+  // A failed read asks for the contents to be pasted instead, which this edit does, so the message
   // stops applying to what is now staged.
   fileError.value = ''
 }

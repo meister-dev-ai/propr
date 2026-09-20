@@ -1,0 +1,24 @@
+<Project>
+
+    <!--
+        MSBuild imports this file into every project below the repository root. It defines the
+        Microsoft.Extensions.AI package versions so that every project that references one of those packages
+        names the same version. Target frameworks, compiler settings and analyzer configuration stay in the
+        individual project files.
+    -->
+    <PropertyGroup>
+
+        <!--
+            The version of Microsoft.Extensions.AI, Microsoft.Extensions.AI.Abstractions and
+            Microsoft.Extensions.AI.OpenAI that the host runs. IChatClient, ChatMessage and the rest of the
+            abstractions cross the assembly load boundary between the host and a provider add-in built
+            outside this repository, so both sides have to resolve the same assembly. Changing this value
+            requires every externally built provider family to be rebuilt against the new version. An add-in
+            project outside this repository reads the version from this file and sets it on its own package
+            references.
+        -->
+        <MicrosoftExtensionsAIVersion>10.10.0</MicrosoftExtensionsAIVersion>
+
+    </PropertyGroup>
+
+</Project>

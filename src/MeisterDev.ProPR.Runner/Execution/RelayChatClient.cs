@@ -4,6 +4,7 @@
 
 using System.Net;
 using System.Net.Http.Json;
+using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.Extensions.AI;
 
@@ -92,8 +93,20 @@ public sealed class RelayChatClient(
             budgetSignal?.MarkExhausted();
         }
 
-        return relayed?.Response
-               ?? throw new RelayRefusedException("The control plane returned an unreadable completion.");
+        var completion = relayed?.Response
+                         ?? throw new RelayRefusedException("The control plane returned an unreadable completion.");
+
+        // The counters the control plane's provider driver produced, put back onto the response so every reader
+        // in the review pipeline meters a relayed call exactly as an in-process one. This host resolves no driver
+        // and holds no vendor-field mapping, so deriving them here is not available to it. A control plane that
+        // sends none leaves the response as it arrived, which is the case for an executor upgraded ahead of the
+        // control plane it talks to.
+        if (relayed!.Usage is { } counters)
+        {
+            completion.Usage = ToUsageDetails(counters);
+        }
+
+        return completion;
     }
 
     /// <inheritdoc />
@@ -133,7 +146,29 @@ public sealed class RelayChatClient(
         }
     }
 
-    private sealed record RelayEnvelope(ChatResponse? Response, bool SoftCapReached, bool Replayed);
+    /// <summary>
+    ///     Restates the relayed counters as a usage payload, in the shape the review pipeline reads.
+    /// </summary>
+    /// <remarks>
+    ///     Built through the same value type the control plane produced them from, so the names the counters
+    ///     arrive under here are the names they left under.
+    /// </remarks>
+    private static UsageDetails ToUsageDetails(RunnerRelayedUsage counters)
+    {
+        return new ProviderTokenUsage(
+            counters.InputTokens,
+            counters.OutputTokens,
+            counters.CachedInputTokens,
+            counters.CacheWriteTokens,
+            counters.ReasoningTokens,
+            counters.IsEstimated).ToUsageDetails();
+    }
+
+    private sealed record RelayEnvelope(
+        ChatResponse? Response,
+        bool SoftCapReached,
+        bool Replayed,
+        RunnerRelayedUsage? Usage);
 }
 
 /// <summary>

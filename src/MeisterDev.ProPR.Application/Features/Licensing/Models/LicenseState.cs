@@ -145,7 +145,7 @@ public sealed record LicenseState
     /// <summary>The state of a stored document that comes from a signer this build accepts.</summary>
     /// <param name="license">The verified license.</param>
     /// <param name="evaluatedAt">
-    ///     The instant the term was judged at, which is what the stage and the days remaining are computed
+    ///     The instant the term was judged at, which the stage and the days remaining are computed
     ///     against. It is a parameter so the caller decides which clock is authoritative.
     /// </param>
     /// <param name="activatedAt">When the license was activated.</param>

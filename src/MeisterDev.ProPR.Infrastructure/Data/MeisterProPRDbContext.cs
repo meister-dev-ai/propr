@@ -114,6 +114,20 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Provider-neutral AI connection profiles.</summary>
     public DbSet<AiConnectionProfileRecord> AiConnectionProfiles => this.Set<AiConnectionProfileRecord>();
 
+    /// <summary>Short-lived named values provider add-ins keep between the start of a flow and its completion.</summary>
+    public DbSet<ProviderKeyedEntryRecord> ProviderKeyedEntries => this.Set<ProviderKeyedEntryRecord>();
+
+    /// <summary>Machine-scoped resources held by one connection of one provider add-in at a time.</summary>
+    public DbSet<ProviderResourceLeaseRecord> ProviderResourceLeases => this.Set<ProviderResourceLeaseRecord>();
+
+    /// <summary>Runs of operator-started provider add-in actions, and the terminal state each reported.</summary>
+    public DbSet<ProviderActionInvocationRecord> ProviderActionInvocations =>
+        this.Set<ProviderActionInvocationRecord>();
+
+    /// <summary>The add-in binaries a platform administrator has allowed this host to run.</summary>
+    public DbSet<ProviderAddInActivationRecord> ProviderAddInActivations =>
+        this.Set<ProviderAddInActivationRecord>();
+
     /// <summary>Configured models under provider-neutral AI connection profiles.</summary>
     public DbSet<AiConfiguredModelRecord> AiConfiguredModels => this.Set<AiConfiguredModelRecord>();
 

@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!--
+            The root namespace stays MeisterDev.Ai.Providers while the assembly is named
+            MeisterDev.Ai.Providers.Abstractions. The types in here were declared under that namespace before the
+            assembly was split out, and keeping it means moving a type between this assembly and the shared
+            runtime is not a source change for anything that uses it. Microsoft.Extensions.AI.Abstractions is
+            named the same way for the same reason.
+        -->
+        <RootNamespace>MeisterDev.Ai.Providers</RootNamespace>
+    </PropertyGroup>
+
+    <!--
+        The contract a provider add-in is written against, and the only assembly from this repository an add-in
+        is required to reference. Three rules keep it usable for that:
+
+        - no ProjectReference to any MeisterDev.ProPR.* project, and none to the shared runtime;
+        - no vendor SDK package reference, and no web framework or object-relational mapper;
+        - no file in it carries the commercial-only notice.
+
+        Microsoft.Extensions.AI.Abstractions is the one package it takes, because IChatClient, ChatMessage and
+        IEmbeddingGenerator are part of the driver contract's own signatures. The version comes from
+        Directory.Build.props: this assembly and that one both load from the host's default load context, so an
+        add-in resolves the host's copy of each and a change to the version is a rebuild of every add-in.
+    -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIVersion)"/>
+    </ItemGroup>
+
+    <!--
+        The shared add-in build configuration travels with the contract. An add-in built outside this repository
+        takes the contract as a package and gets these two files imported automatically; one built inside imports
+        them by path. Both routes therefore carry the same three settings, and an author who never reads the
+        README still gets them.
+    -->
+    <ItemGroup>
+        <None Include="build\**" Pack="true" PackagePath="build\"/>
+        <None Include="README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+</Project>

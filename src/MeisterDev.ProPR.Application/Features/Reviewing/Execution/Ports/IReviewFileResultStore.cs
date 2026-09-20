@@ -22,7 +22,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 public interface IReviewFileResultStore
 {
     /// <summary>
-    ///     The job together with the per-file results already recorded for it, which is what lets a resumed
+    ///     The job together with the per-file results already recorded for it, and that lets a resumed
     ///     job skip the files it finished rather than re-reviewing and re-paying for them.
     /// </summary>
     /// <param name="id">The job.</param>

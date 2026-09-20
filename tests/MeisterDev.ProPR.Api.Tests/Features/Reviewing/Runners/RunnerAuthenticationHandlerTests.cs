@@ -127,7 +127,7 @@ public sealed class RunnerAuthenticationHandlerTests
 
     // Recording that a runner was heard from belongs to the registration service, because only it can write
     // the row. This asserts the handler delegates rather than that the field changed: a handler that mutates
-    // the entity itself satisfies the second and still never persists anything, which is what it used to do.
+    // the entity itself satisfies the second and still never persists anything, which it used to do.
     [Fact]
     public async Task AuthenticatingARunner_LeavesRecordingItToTheRegistrationService()
     {

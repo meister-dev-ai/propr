@@ -31,11 +31,18 @@
         <PackageReference Include="DiffPlex" Version="1.9.0"/>
         <PackageReference Include="Handlebars.Net" Version="2.1.6"/>
         <PackageReference Include="Microsoft.Agents.AI" Version="1.6.2"/>
-        <PackageReference Include="Microsoft.Extensions.AI" Version="10.5.1"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)"/>
+        <!--
+            The OpenAI client library, for the one place this pipeline hands a provider its own options object:
+            reasoning is expressed incompatibly by each vendor, and the family that speaks the OpenAI protocol is
+            the one that takes the library's own type. Referenced here rather than arriving with the shared
+            provider runtime, which carries no vendor dependency now that every family is an add-in.
+        -->
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="$(MicrosoftExtensionsAIVersion)"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12"/>
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12"/>
         <PackageReference Include="SharpToken" Version="2.0.6"/>
     </ItemGroup>
 

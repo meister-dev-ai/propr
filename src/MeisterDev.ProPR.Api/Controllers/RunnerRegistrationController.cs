@@ -22,7 +22,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 ///     </para>
 ///     <para>
 ///         Renewal does present a credential, and is authorized like everything else. It exists so a
-///         credential can expire without an operator having to re-enroll every host by hand, which is what
+///         credential can expire without an operator having to re-enroll every host by hand, which 
 ///         makes short expiries practical.
 ///     </para>
 /// </summary>

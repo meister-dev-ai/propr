@@ -4,7 +4,7 @@
 <script setup lang="ts">
 /**
  * Refreshing the global model catalog. The application never fetches a snapshot itself — an operator uploads
- * one — which is what keeps it free of any outbound request to a catalog host.
+ * one — and that keeps it free of any outbound request to a catalog host.
  *
  * Platform-admin only, because an import writes the global entries every tenant reads. A tenant that needs a
  * different price records an override instead, which cannot affect anybody else.

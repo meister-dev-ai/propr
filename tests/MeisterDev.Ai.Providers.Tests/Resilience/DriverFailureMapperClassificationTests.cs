@@ -1,18 +1,18 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.ClientModel;
-using System.ClientModel.Primitives;
 using System.Net;
 using System.Net.Sockets;
 using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.Ai.Providers.Enums;
 
 namespace MeisterDev.Ai.Providers.Tests.Resilience;
 
 /// <summary>
 ///     Covers the shared classification the runtime retry path acts on. The point of these is that retry is
 ///     decided by what the provider said, not by which SDK's exception type carried it — a provider added later
-///     inherits this behaviour without the classifier being reopened.
+///     inherits this behaviour without the classifier being reopened. What a vendor SDK's own exception type
+///     classifies as is covered beside the driver that carries that SDK.
 /// </summary>
 public sealed class DriverFailureMapperClassificationTests
 {
@@ -56,14 +56,6 @@ public sealed class DriverFailureMapperClassificationTests
         Assert.False(DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(status)).IsTransient);
     }
 
-    [Fact]
-    public void AProviderStatedRetryAfterInSecondsIsCarriedOnTheVerdict()
-    {
-        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, retryAfter: "7"));
-
-        Assert.Equal(TimeSpan.FromSeconds(7), verdict.RetryAfter);
-    }
-
     // Throttling is separated from the other transient classes so a later stage can pace the connection without
     // re-reading the HTTP status off an exception it was never given.
     [Fact]
@@ -77,55 +69,8 @@ public sealed class DriverFailureMapperClassificationTests
         Assert.False(serverError.IsThrottled);
     }
 
-    // OpenAI and the gateways that speak its shape state the wait in the error body and often send no header at
-    // all, so the body is read rather than the wait being guessed at.
-    [Fact]
-    public void AStatedDelayInTheBodyIsReadWhenNoHeaderCarriesOne()
-    {
-        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, message: RateLimitBody("Please try again in 4.023s.")));
-
-        Assert.Equal(TimeSpan.FromSeconds(4.023), verdict.RetryAfter);
-    }
-
-    [Fact]
-    public void AStatedDelayInMillisecondsIsReadAsAFractionOfASecond()
-    {
-        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, message: RateLimitBody("Please try again in 500ms.")));
-
-        Assert.Equal(TimeSpan.FromMilliseconds(500), verdict.RetryAfter);
-    }
-
-    [Fact]
-    public void ABodyThatStatesNoDelayLeavesTheScheduleToDecide()
-    {
-        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, message: RateLimitBody("Rate limit reached for this organization.")));
-
-        Assert.True(verdict.IsThrottled);
-        Assert.Null(verdict.RetryAfter);
-    }
-
-    // The header is the protocol's answer and the body is the provider's prose, so the header wins where both
-    // are present.
-    [Fact]
-    public void TheHeaderWinsOverADelayStatedInTheBody()
-    {
-        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, retryAfter: "7", message: RateLimitBody("Please try again in 4.023s.")));
-
-        Assert.Equal(TimeSpan.FromSeconds(7), verdict.RetryAfter);
-    }
-
-    // A header of zero is the provider taking back the wait it just offered. Reading it as "come straight back"
-    // would throw away a real number the body gave and send the fan-out into the quota it was asked to wait out.
-    [Fact]
-    public void ARetryAfterOfZeroDoesNotMaskADelayStatedInTheBody()
-    {
-        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429, retryAfter: "0", message: RateLimitBody("Please try again in 4.023s.")));
-
-        Assert.Equal(TimeSpan.FromSeconds(4.023), verdict.RetryAfter);
-    }
-
-    // Anthropic, Google and Vertex report a 429 as an HttpRequestException rather than through the OpenAI SDK's
-    // own type, and the body rides along in the message, so the stated wait has to be read from there as well.
+    // Anthropic, Google and Vertex report a 429 as an HttpRequestException rather than through a vendor SDK's own
+    // type, and the body rides along in the message, so the stated wait has to be read from there as well.
     [Fact]
     public void AStatedDelayIsReadFromAnHttpRequestExceptionToo()
     {
@@ -137,13 +82,22 @@ public sealed class DriverFailureMapperClassificationTests
     }
 
     [Fact]
-    public void ARetryAfterDateAlreadyPastYieldsNoWaitRatherThanANegativeOne()
+    public void AStatedDelayInMillisecondsIsReadAsAFractionOfASecond()
     {
-        var past = DateTimeOffset.UtcNow.AddMinutes(-5).ToString("R");
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(
+            new HttpRequestException(RateLimitBody("Please try again in 500ms."), null, HttpStatusCode.TooManyRequests));
 
-        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(503, retryAfter: past));
+        Assert.Equal(TimeSpan.FromMilliseconds(500), verdict.RetryAfter);
+    }
 
-        Assert.Equal(TimeSpan.Zero, verdict.RetryAfter);
+    [Fact]
+    public void ABodyThatStatesNoDelayLeavesTheScheduleToDecide()
+    {
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(
+            new HttpRequestException(RateLimitBody("Rate limit reached for this organization."), null, HttpStatusCode.TooManyRequests));
+
+        Assert.True(verdict.IsThrottled);
+        Assert.Null(verdict.RetryAfter);
     }
 
     [Fact]
@@ -186,6 +140,17 @@ public sealed class DriverFailureMapperClassificationTests
         Assert.True(DriverFailureMapper.ClassifyRuntimeFailure(wrapped).IsTransient);
     }
 
+    // An aggregate is flattened as well, because a failure raised inside a parallel pass arrives wrapped in one.
+    [Fact]
+    public void AFailureInsideAnAggregateIsStillFound()
+    {
+        var aggregate = new AggregateException(
+            new InvalidOperationException("unrelated"),
+            new HttpRequestException(HttpRequestError.ConnectionError, "connection refused"));
+
+        Assert.True(DriverFailureMapper.ClassifyRuntimeFailure(aggregate).IsTransient);
+    }
+
     [Fact]
     public void AFailureThatIsNotATransportFailureAtAllIsPermanent()
     {
@@ -204,10 +169,109 @@ public sealed class DriverFailureMapperClassificationTests
         Assert.Equal(fromVerification.ActionHint, fromRuntime);
     }
 
-    private static ClientResultException HttpFailure(int status, string? retryAfter = null, string? message = null)
+    // A driver that reads a status off its own SDK's exception maps it through the same rules rather than
+    // restating them, and that keeps one status from meaning two things across families.
+    [Fact]
+    public void AStatusReadByADriverClassifiesTheSameWayAsOneReadFromATransportFailure()
     {
-        var response = new StubResponse(status, retryAfter);
-        return message is null ? new ClientResultException(response) : new ClientResultException(message, response);
+        var fromDriver = DriverFailureMapper.ClassifyStatus(429, TimeSpan.FromSeconds(3));
+        var fromTransport = DriverFailureMapper.ClassifyRuntimeFailure(HttpFailure(429));
+
+        Assert.Equal(fromTransport.IsThrottled, fromDriver.IsThrottled);
+        Assert.Equal(fromTransport.Reason, fromDriver.Reason);
+        Assert.Equal(TimeSpan.FromSeconds(3), fromDriver.RetryAfter);
+    }
+
+    // A verification that threw is described the way the runtime path describes the same exception. It is a
+    // public helper add-in authors are told to call, so a family reporting a rejected credential as an
+    // unreachable endpoint sends the operator to the network instead of to the key.
+    [Theory]
+    [InlineData(401, AiVerificationFailureCategory.Credentials)]
+    [InlineData(403, AiVerificationFailureCategory.Authorization)]
+    [InlineData(404, AiVerificationFailureCategory.EndpointReachability)]
+    [InlineData(400, AiVerificationFailureCategory.ProviderRejected)]
+    [InlineData(503, AiVerificationFailureCategory.ProviderRejected)]
+    public void AFailureCarryingAStatusIsCategorisedByThatStatus(int status, AiVerificationFailureCategory expected)
+    {
+        Assert.Equal(expected, DriverFailureMapper.Failed(HttpFailure(status)).FailureCategory);
+    }
+
+    // The four the runtime classifier treats as transport failures. None of them got an answer, so all four are
+    // the endpoint not being reached; leaving three of them unknown gives the operator no remedy to try.
+    [Fact]
+    public void EveryTransportFailureIsCategorisedAsTheEndpointNotBeingReached()
+    {
+        Exception[] transport =
+        [
+            new HttpRequestException("no route"),
+            new TimeoutException("timed out"),
+            new SocketException((int)SocketError.ConnectionRefused),
+            new IOException("stream ended"),
+        ];
+
+        Assert.All(
+            transport,
+            failure => Assert.Equal(
+                AiVerificationFailureCategory.EndpointReachability,
+                DriverFailureMapper.Failed(failure).FailureCategory));
+    }
+
+    [Fact]
+    public void AStatusWrappedInsideAnotherExceptionIsStillRead()
+    {
+        var wrapped = new InvalidOperationException("the call failed", HttpFailure(401));
+
+        Assert.Equal(AiVerificationFailureCategory.Credentials, DriverFailureMapper.Failed(wrapped).FailureCategory);
+    }
+
+    [Fact]
+    public void AFailureThatIsNeitherAStatusNorTransportStaysUnknown()
+    {
+        Assert.Equal(
+            AiVerificationFailureCategory.Unknown,
+            DriverFailureMapper.Failed(new InvalidOperationException("the family is misconfigured")).FailureCategory);
+    }
+
+    // The verification path has retried nothing, so the hint cannot say the call was already retried with
+    // backoff: an operator reading it would stop looking for a retry that never happened.
+    [Fact]
+    public void TheThrottlingHintDoesNotClaimARetryThatDidNotHappen()
+    {
+        Assert.DoesNotContain(
+            "already retried",
+            DriverFailureMapper.ActionHintFor(HttpStatusCode.TooManyRequests),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    // A status anywhere in the chain decides, so an SDK that wraps a refusal in a status-less transport
+    // exception still has its 429 read as throttling. Transient either way; the difference is whether the
+    // connection is paced or every other call on it walks into the same refusal.
+    [Fact]
+    public void AStatusWrappedInAStatuslessTransportFailureIsStillRead()
+    {
+        var wrapped = new HttpRequestException(
+            "The endpoint could not be reached.",
+            HttpFailure(429),
+            statusCode: null);
+
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(wrapped);
+
+        Assert.True(verdict.IsThrottled);
+        Assert.True(verdict.IsTransient);
+    }
+
+    [Fact]
+    public void AStatuslessTransportFailureWithNothingUnderItStaysTransient()
+    {
+        var verdict = DriverFailureMapper.ClassifyRuntimeFailure(new HttpRequestException("The endpoint could not be reached."));
+
+        Assert.True(verdict.IsTransient);
+        Assert.False(verdict.IsThrottled);
+    }
+
+    private static HttpRequestException HttpFailure(int status)
+    {
+        return new HttpRequestException($"HTTP {status}", null, (HttpStatusCode)status);
     }
 
     /// <summary>The shape a rate-limit failure arrives in: the status line, then the provider's own JSON body.</summary>
@@ -215,53 +279,5 @@ public sealed class DriverFailureMapperClassificationTests
     {
         return "HTTP 429 (Too Many Requests)\n\n"
                + "{\"error\":{\"message\":\"Rate limit reached for gpt-4o. " + detail + "\",\"type\":\"tokens\"}}";
-    }
-
-    /// <summary>Minimal transport response so a real <see cref="ClientResultException" /> can be constructed.</summary>
-    private sealed class StubResponse(int status, string? retryAfter) : PipelineResponse
-    {
-        public override int Status => status;
-
-        public override string ReasonPhrase => string.Empty;
-
-        public override Stream? ContentStream { get; set; }
-
-        public override BinaryData Content => BinaryData.FromString(string.Empty);
-
-        protected override PipelineResponseHeaders HeadersCore { get; } = new StubHeaders(retryAfter);
-
-        public override BinaryData BufferContent(CancellationToken cancellationToken = default) => this.Content;
-
-        public override ValueTask<BinaryData> BufferContentAsync(CancellationToken cancellationToken = default)
-            => ValueTask.FromResult(this.Content);
-
-        public override void Dispose()
-        {
-        }
-    }
-
-    private sealed class StubHeaders(string? retryAfter) : PipelineResponseHeaders
-    {
-        public override IEnumerator<KeyValuePair<string, string>> GetEnumerator()
-        {
-            if (retryAfter is not null)
-            {
-                yield return new KeyValuePair<string, string>("Retry-After", retryAfter);
-            }
-        }
-
-        public override bool TryGetValue(string name, out string? value)
-        {
-            var matches = retryAfter is not null && string.Equals(name, "Retry-After", StringComparison.OrdinalIgnoreCase);
-            value = matches ? retryAfter : null;
-            return matches;
-        }
-
-        public override bool TryGetValues(string name, out IEnumerable<string>? values)
-        {
-            var found = this.TryGetValue(name, out var value);
-            values = found ? [value!] : null;
-            return found;
-        }
     }
 }

@@ -1,19 +1,19 @@
 # Models, the catalog and prices
 
 A verified connection does nothing until models are attached to it. This page covers getting the right models onto
-a connection with correct metadata and correct prices - which is what makes spend figures and budgets trustworthy.
+a connection with correct metadata and correct prices. Spend figures and budgets are only as good as those.
 
 Attaching a model does not decide what it is used for; that is [purposes](purposes.md).
 
 ## Discovery
 
 Ask the provider what it exposes and pick from the result. Not every provider can be enumerated - when one
-cannot, ProPR says so and manual entry stays available rather than blocking you. Which providers those are, and
+cannot, ProPR says so and manual entry stays available. Which providers those are, and
 what to enter instead, is per family: see
 [provider-specific setup notes](credentials.md#provider-specific-setup-notes).
 
-Discovery returns model ids. It does not return context windows, capabilities or prices, which is what the
-catalog is for.
+Discovery returns model ids. It does not return context windows, capabilities or prices. The catalog holds
+those.
 
 ## The model catalog
 
@@ -27,7 +27,7 @@ models are matched against it where the ids line up.
 A platform administrator can upload a newer catalog snapshot from **Administration → SCM Providers**, in the
 **Model catalog** section at the bottom of that page, when a model you need is newer than the bundled data.
 Importing updates the shared entries every tenant reads. Tenant pricing overrides are left untouched, and a model
-that has disappeared from the newer snapshot is kept rather than removed from under a configuration still using it.
+that has disappeared from the newer snapshot is kept, not removed from under a configuration still using it.
 
 ## Defining a model the catalog does not list
 

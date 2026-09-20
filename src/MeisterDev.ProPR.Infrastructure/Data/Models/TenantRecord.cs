@@ -13,8 +13,9 @@ public sealed class TenantRecord
     public bool LocalLoginEnabled { get; set; } = true;
 
     /// <summary>
-    ///     Provider families this tenant's clients may use, as <c>AiProviderKind</c> names. Empty means
-    ///     unrestricted — the only reading under which a tenant that has never set a policy keeps working.
+    ///     Provider families this tenant's clients may use, as provider identity keys. Empty means unrestricted —
+    ///     the one reading under which a tenant that has never set a policy keeps working. An entry no loaded
+    ///     family claims is kept, and permits nothing.
     /// </summary>
     public string[] AllowedAiProviderKinds { get; set; } = [];
 

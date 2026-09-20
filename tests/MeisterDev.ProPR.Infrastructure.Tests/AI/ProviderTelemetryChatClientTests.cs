@@ -9,6 +9,7 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.AI;
+using MeisterDev.Ai.Providers.Usage;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -35,7 +36,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
 
     public ProviderTelemetryChatClientTests()
     {
-        this._target = new ProviderCallTarget(AiProviderKind.OpenAiCompatible, this._modelId, "Primary DeepSeek");
+        this._target = new ProviderCallTarget("meisterdev/openAiCompatible", this._modelId, "Primary DeepSeek");
         this._listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == "MeisterProPR.Infrastructure",
@@ -106,7 +107,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
 
         var activity = Assert.Single(this.Activities);
         Assert.Equal("ai.provider.chat", activity.OperationName);
-        Assert.Equal("OpenAiCompatible", Tag(activity, "ai_provider"));
+        Assert.Equal("meisterdev/openAiCompatible", Tag(activity, "ai_provider"));
         Assert.Equal(this._modelId, Tag(activity, "ai_model"));
         Assert.Equal("Primary DeepSeek", Tag(activity, "ai_profile"));
         Assert.Equal(ActivityStatusCode.Ok, activity.Status);
@@ -120,7 +121,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
         var usage = Usage(input: 1_000, output: 200);
         usage.CachedInputTokenCount = 400;
         usage.ReasoningTokenCount = 150;
-        usage.AdditionalCounts = new AdditionalPropertiesDictionary<long> { ["cache_creation_input_tokens"] = 100 };
+        usage.AdditionalCounts = new AdditionalPropertiesDictionary<long> { [ProviderTokenUsage.CacheWriteCountName] = 100 };
         var client = this.Client(new StubChatClient(usage), new ModelPricing(3m, 15m, 0.75m, 3.75m));
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]);
@@ -219,7 +220,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
     }
 
     // This stage sees one attempt, never the call as a whole, so what is pinned here is the attempt: its throttle
-    // line is written without an exception argument, which is what keeps a stack trace out of the log. That the
+    // line is written without an exception argument, and that keeps a stack trace out of the log. That the
     // call then recovers is a question for the two stages together, covered further down.
     [Fact]
     public async Task AThrottledAttemptIsLoggedWithNoStackTraceBehindIt()
@@ -352,7 +353,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
     }
 
     /// <summary>
-    ///     Keeps each line and whatever exception was handed to it, which is what tells an absorbed throttle from
+    ///     Keeps each line and whatever exception was handed to it, which tells an absorbed throttle from
     ///     a fault the operator is meant to see a trace for.
     /// </summary>
     private sealed class CapturingLogger : ILogger

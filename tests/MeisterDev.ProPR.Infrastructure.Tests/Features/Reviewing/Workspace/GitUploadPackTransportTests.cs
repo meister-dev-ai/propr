@@ -104,7 +104,7 @@ public sealed class GitUploadPackTransportTests : IDisposable
         await new GitUploadPackTransport().AdvertiseRefsAsync(mirror, output, CancellationToken.None);
 
         var text = Encoding.UTF8.GetString(output.ToArray());
-        // A 40-character object id appears for the branch tip, which is what the client negotiates against.
+        // A 40-character object id appears for the branch tip, which the client negotiates against.
         Assert.Matches("[0-9a-f]{40} refs/heads/main", text);
     }
 

@@ -128,7 +128,7 @@ public sealed partial class ControlPlaneClient(HttpClient http, ILogger<ControlP
 
     /// <summary>
     ///     Asks for a fresh credential, keeping this runner's identity and the scope the server stamped on
-    ///     it. Presented with the credential being replaced, which is what proves it is the same host.
+    ///     it. Presented with the credential being replaced, and that proves it is the same host.
     /// </summary>
     /// <param name="ct">The cancellation token.</param>
     public async Task<CredentialResult> RenewCredentialAsync(CancellationToken ct)

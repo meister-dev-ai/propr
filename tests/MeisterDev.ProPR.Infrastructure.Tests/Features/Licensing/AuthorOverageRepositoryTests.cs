@@ -223,7 +223,7 @@ public sealed class AuthorOverageRepositoryTests(PostgresContainerFixture fixtur
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => sut.RecordAsync(new DateOnly(2026, 8, 12), 5, 8, EarlyInAugust));
     }
 
-    // An unstated instant takes the database clock, which is what orders the observations replicas make of one
+    // An unstated instant takes the database clock, and that orders the observations replicas make of one
     // month whatever their own clocks read.
     [Fact]
     public async Task AnUnstatedInstant_TakesTheObservationInstantFromTheDatabaseClock()
@@ -266,7 +266,7 @@ public sealed class AuthorOverageRepositoryTests(PostgresContainerFixture fixtur
         Assert.Equal(13, recorded.HighestObservedCount);
     }
 
-    /// <summary>The database's own clock, which is what an unstated instant is taken from.</summary>
+    /// <summary>The database's own clock, which an unstated instant is taken from.</summary>
     private static async Task<DateTimeOffset> ReadDatabaseInstantAsync(MeisterProPRDbContext db)
     {
         var instants = await db.Database

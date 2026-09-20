@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Diagnostics;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
@@ -214,7 +215,7 @@ public sealed partial class RunnerJobManifestResolver(
     }
 
     /// <summary>
-    ///     Maps the configured pass list onto the wire shape. A pass names a logical model; a pass that
+    ///     Maps the configured pass list onto the protocol mode. A pass names a logical model; a pass that
     ///     still binds a concrete configured model cannot be executed remotely, because resolving that
     ///     binding is the control plane's job and naming it is how the key stays there.
     /// </summary>
@@ -289,7 +290,7 @@ public sealed partial class RunnerJobManifestResolver(
         return new RunnerModelBinding(
             logicalModelName,
             runtime.Model.RemoteModelId,
-            runtime.Connection.ProviderKind.ToString(),
+            runtime.Connection.ProviderKind,
             effort.ToString(),
             runtime.Model.TokenizerName,
             runtime.Model.MaxInputTokens,

@@ -582,7 +582,7 @@ public sealed class AdminLicensingControllerTests
         Assert.Equal("replica-a", Assert.Single(payload.Hostnames).Hostname);
     }
 
-    // Every route answers with the same 503 when the licensing module is not registered, which is what a
+    // Every route answers with the same 503 when the licensing module is not registered, which a
     // deployment without a database configured looks like.
     [Fact]
     public async Task EveryRoute_ReportsServiceUnavailableWithoutTheLicensingModule()
@@ -946,7 +946,7 @@ public sealed class AdminLicensingControllerTests
     /// <summary>
     ///     The licensing clock over the harness clock, so a test moving one moves both. The production clock
     ///     compares against a stored instant, which has its own tests; here the term instant is the one the test
-    ///     set, which is what makes the stage a document is judged in exactly assertable.
+    ///     set, and that makes the stage a document is judged in exactly assertable.
     /// </summary>
     private sealed class HarnessLicensingClock(TimeProvider timeProvider) : ILicensingClock
     {

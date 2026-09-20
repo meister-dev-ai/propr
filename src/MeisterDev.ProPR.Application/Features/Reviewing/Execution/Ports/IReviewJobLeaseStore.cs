@@ -11,7 +11,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 /// <summary>
 ///     Claiming and liveness boundary for review-job execution. A claim is a single conditional write, so
 ///     exactly one party wins it no matter how many are asking, and the claim stamps a lease whose holder
-///     keeps it alive by renewing it. Liveness is that renewal, never elapsed processing time, which is what
+///     keeps it alive by renewing it. Liveness is that renewal, never elapsed processing time, which 
 ///     lets one long review and one abandoned review be told apart.
 /// </summary>
 public interface IReviewJobLeaseStore

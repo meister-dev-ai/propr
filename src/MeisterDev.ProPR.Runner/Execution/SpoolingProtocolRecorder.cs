@@ -239,7 +239,10 @@ public sealed class SpoolingProtocolRecorder(JobSpool spool, TimeProvider timePr
                     logicalModelName,
                     totalInputTokens,
                     totalOutputTokens,
-                    null));
+                    null,
+                    totalCachedInputTokens ?? 0,
+                    totalCacheWriteTokens ?? 0,
+                    totalReasoningTokens ?? 0));
         }
 
         this._protocolModels.TryRemove(protocolId, out _);
@@ -286,7 +289,10 @@ public sealed class SpoolingProtocolRecorder(JobSpool spool, TimeProvider timePr
                     logicalModelName,
                     inputTokens,
                     outputTokens,
-                    null));
+                    null,
+                    cachedInputTokens,
+                    cacheWriteTokens,
+                    reasoningTokens));
         }
 
         this.Record(

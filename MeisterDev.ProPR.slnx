@@ -1,5 +1,14 @@
 <Solution>
     <Folder Name="/src/">
+        <Project Path="src/MeisterDev.Ai.Providers.Abstractions/MeisterDev.Ai.Providers.Abstractions.csproj" />
+        <Project Path="src/MeisterDev.Ai.Providers.Conformance/MeisterDev.Ai.Providers.Conformance.csproj" />
+        <Project Path="src/MeisterDev.Ai.Providers.GoogleVertexAddIn/MeisterDev.Ai.Providers.GoogleVertexAddIn.csproj" />
+        <Project Path="src/MeisterDev.Ai.Providers.OpenAiCompatibleAddIn/MeisterDev.Ai.Providers.OpenAiCompatibleAddIn.csproj" />
+        <Project Path="src/MeisterDev.Ai.Providers.LiteLlmAddIn/MeisterDev.Ai.Providers.LiteLlmAddIn.csproj" />
+        <Project Path="src/MeisterDev.Ai.Providers.BedrockAddIn/MeisterDev.Ai.Providers.BedrockAddIn.csproj" />
+        <Project Path="src/MeisterDev.Ai.Providers.AzureOpenAiAddIn/MeisterDev.Ai.Providers.AzureOpenAiAddIn.csproj" />
+        <Project Path="src/MeisterDev.Ai.Providers.OpenAiAddIn/MeisterDev.Ai.Providers.OpenAiAddIn.csproj" />
+        <Project Path="src/MeisterDev.Ai.Providers.AnthropicAddIn/MeisterDev.Ai.Providers.AnthropicAddIn.csproj" />
         <Project Path="src/MeisterDev.Ai.Providers/MeisterDev.Ai.Providers.csproj" />
         <Project Path="src/MeisterDev.ProPR.Api/MeisterDev.ProPR.Api.csproj" />
         <Project Path="src/MeisterDev.ProPR.Application/MeisterDev.ProPR.Application.csproj" />
@@ -22,7 +31,18 @@
         <Project Path="src/MeisterDev.ProPR.CodeAnalysis.Roslyn/MeisterDev.ProPR.CodeAnalysis.Roslyn.csproj" />
     </Folder>
     <Folder Name="/tests/">
+        <Project Path="tests/MeisterDev.Ai.Providers.AnthropicAddIn.Tests/MeisterDev.Ai.Providers.AnthropicAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.AzureOpenAiAddIn.Tests/MeisterDev.Ai.Providers.AzureOpenAiAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.BedrockAddIn.Tests/MeisterDev.Ai.Providers.BedrockAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.ExampleAddIn/MeisterDev.Ai.Providers.ExampleAddIn.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.GoogleVertexAddIn.Tests/MeisterDev.Ai.Providers.GoogleVertexAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.LiteLlmAddIn.Tests/MeisterDev.Ai.Providers.LiteLlmAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.NonConformingAddIn/MeisterDev.Ai.Providers.NonConformingAddIn.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.OpenAiAddIn.Tests/MeisterDev.Ai.Providers.OpenAiAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.OpenAiCompatibleAddIn.Tests/MeisterDev.Ai.Providers.OpenAiCompatibleAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.StaleAddIn/MeisterDev.Ai.Providers.StaleAddIn.csproj" />
         <Project Path="tests/MeisterDev.Ai.Providers.Tests/MeisterDev.Ai.Providers.Tests.csproj" />
+        <Project Path="tests/MeisterDev.Ai.Providers.TwoFamilyAddIn/MeisterDev.Ai.Providers.TwoFamilyAddIn.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Api.Tests/MeisterDev.ProPR.Api.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Application.Tests/MeisterDev.ProPR.Application.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Domain.Tests/MeisterDev.ProPR.Domain.Tests.csproj" />

@@ -129,7 +129,7 @@ public sealed class InstallationObservedTimeRepository(MeisterProPRDbContext dbC
     }
 
     /// <summary>
-    ///     The higher of the value read back and the value this replica supplied, which is what keeps the
+    ///     The higher of the value read back and the value this replica supplied, and that keeps the
     ///     returned instant from falling below the write that has already succeeded.
     /// </summary>
     private static DateTimeOffset AtLeast(DateTimeOffset? recorded, DateTimeOffset instant)

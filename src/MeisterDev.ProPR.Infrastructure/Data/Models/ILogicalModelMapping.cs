@@ -31,6 +31,13 @@ public interface ILogicalModelMapping
     /// <summary>Reasoning effort carried on the mapping (single source of truth).</summary>
     ReviewReasoningEffort ReasoningEffort { get; }
 
-    /// <summary>Protocol mode carried on the mapping (single source of truth).</summary>
-    AiProtocolMode ProtocolMode { get; }
+    /// <summary>
+    ///     Protocol mode carried on the mapping (single source of truth), as the name it is stored under.
+    /// </summary>
+    /// <remarks>
+    ///     The name rather than an enum member, matching the two other locations that store a protocol mode. A
+    ///     protocol mode is supplied by the family that speaks it, so a stored value can name a shape this build has
+    ///     no member for, and a property typed as the enum would have nowhere to put one.
+    /// </remarks>
+    string ProtocolMode { get; }
 }

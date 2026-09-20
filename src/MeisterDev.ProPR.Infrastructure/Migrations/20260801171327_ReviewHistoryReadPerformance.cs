@@ -37,7 +37,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
             // Backfill the count for jobs that already have file results. Readers fall back to counting the
             // file results when the column is null, so this is an optimisation rather than a correctness
             // step: without it every pre-existing job would keep paying that fallback on every list read.
-            // Jobs with no file results stay null, which is what a job that never dispatched any should read as.
+            // Jobs with no file results stay null, which a job that never dispatched any should read as.
             migrationBuilder.Sql(
                 """
                 UPDATE review_jobs j

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
@@ -186,7 +187,7 @@ public sealed class AdminRunnersController(
 
     /// <summary>
     ///     Issues a registration token. The value is returned here and never again. Single-use unless the
-    ///     request asks for more, which is what a scaling group needs: its replicas start without an
+    ///     request asks for more, which a scaling group needs: its replicas start without an
     ///     operator present to issue each of them one.
     /// </summary>
     /// <param name="request">Which tenant and clients the enrolled runner will be scoped to.</param>
@@ -677,4 +678,12 @@ public sealed class AssignRunnerScopeRequest
 /// <param name="TokenId">Identity of the token.</param>
 /// <param name="Token">The secret, shown once.</param>
 /// <param name="ExpiresAt">When it stops being usable.</param>
-public sealed record RunnerRegistrationTokenDto(Guid TokenId, string Token, DateTimeOffset? ExpiresAt);
+public sealed record RunnerRegistrationTokenDto(Guid TokenId, string Token, DateTimeOffset? ExpiresAt)
+{
+    /// <summary>Renders the token without its value; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(RunnerRegistrationTokenDto)} {{ TokenId = {this.TokenId}, "
+               + $"Token = {SecretSafeRendering.Elide(this.Token)}, ExpiresAt = {this.ExpiresAt:O} }}";
+    }
+}

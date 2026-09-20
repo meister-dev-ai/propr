@@ -263,7 +263,7 @@ public sealed record RunnerReviewPass(
 ///     A model the executor may call, named rather than connected.
 ///     <para>
 ///         The relay resolves <paramref name="LogicalModelName" /> to a connection and a credential on the
-///         control-plane side, which is what keeps the key off the executor. Everything else here is
+///         control-plane side, and that keeps the key off the executor. Everything else here is
 ///         non-secret description the pipeline needs before it makes a call: which tokenizer counts the
 ///         prompt, what fits in the context window, and which behaviours the model supports.
 ///     </para>

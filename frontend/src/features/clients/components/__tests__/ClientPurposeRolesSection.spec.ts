@@ -22,8 +22,8 @@ describe('ClientPurposeRolesSection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.listEffectiveForClient.mockResolvedValue([
-      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c', configuredModelId: 'm', reasoningEffort: 'high', protocolMode: 'auto', scope: 'client' },
-      { id: '2', name: 'embed', capability: 'embedding', connectionId: 'c', configuredModelId: 'm', reasoningEffort: 'none', protocolMode: 'embeddings', scope: 'client' },
+      { id: '1', name: 'deep', capability: 'chat', connectionId: 'c', configuredModelId: 'm', reasoningEffort: 'high', protocolMode: 'Auto', scope: 'client' },
+      { id: '2', name: 'embed', capability: 'embedding', connectionId: 'c', configuredModelId: 'm', reasoningEffort: 'none', protocolMode: 'Embeddings', scope: 'client' },
     ])
     mocks.listPurposeRoles.mockResolvedValue([{ purpose: 'reviewTriage', logicalModelName: 'deep' }])
   })

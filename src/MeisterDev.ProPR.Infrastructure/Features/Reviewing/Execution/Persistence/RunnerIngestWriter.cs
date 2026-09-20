@@ -162,6 +162,9 @@ public sealed partial class RunnerIngestWriter(
                 ct: ct,
                 logicalModelName: record.LogicalModelName);
 
+            // All five counters, because the pricing pass charges the input total less the two cache buckets at
+            // the input rate and each bucket at its own. Recording only the headline counts would charge a
+            // cached prompt at the full rate and make a remote review cost more than a local one.
             await protocolRecorder.SetCompletedAsync(
                 protocolId,
                 "Completed",
@@ -170,7 +173,17 @@ public sealed partial class RunnerIngestWriter(
                 0,
                 0,
                 null,
-                ct);
+                ct,
+                record.CachedInputTokens,
+
+                // Stated, because the counters came back from the runner. Left unset, a protocol carrying real
+                // cache counts was stored as though nobody could tell whether caching happened, and the cache
+                // reporting read it as unknown rather than as the hit it was.
+                cacheObservability: record.CachedInputTokens > 0 || record.CacheWriteTokens > 0
+                    ? CacheObservabilityStatus.Observable
+                    : CacheObservabilityStatus.Unknown,
+                totalCacheWriteTokens: record.CacheWriteTokens,
+                totalReasoningTokens: record.ReasoningTokens);
         }
     }
 

@@ -1,5 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.Ai.Providers.Diagnostics;
+
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -38,6 +41,14 @@ public sealed record RunnerRegistrationResult(
 {
     /// <summary>Whether a credential was issued.</summary>
     public bool Succeeded => this.RunnerId is not null;
+
+    /// <summary>Renders the result without the credential; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(RunnerRegistrationResult)} {{ RunnerId = {this.RunnerId}, "
+               + $"Credential = {SecretSafeRendering.Elide(this.Credential)}, "
+               + $"ExpiresAt = {this.ExpiresAt:o}, Refusal = {this.Refusal} }}";
+    }
 
     /// <summary>A successful enrollment or renewal.</summary>
     public static RunnerRegistrationResult Enrolled(Guid runnerId, string credential, DateTimeOffset expiresAt)

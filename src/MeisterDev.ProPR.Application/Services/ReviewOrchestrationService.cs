@@ -46,12 +46,10 @@ public sealed partial class ReviewOrchestrationService(
     IRepositoryInstructionEvaluator instructionEvaluator,
     IOptions<AiReviewOptions> options,
     ILogger<ReviewOrchestrationService> logger,
-    IAiConnectionRepository aiConnectionRepository,
-    IAiChatClientFactory aiChatClientFactory,
+    IAiRuntimeResolver aiRuntimeResolver,
     IFileByFileReviewOrchestrator fileByFileReviewOrchestrator,
     IPromptOverrideService? promptOverrideService = null,
     IProviderActivationService? providerActivationService = null,
-    IAiRuntimeResolver? aiRuntimeResolver = null,
     IReviewRepositoryWorkspaceManager? workspaceManager = null,
     IClientScmConnectionRepository? scmConnectionRepository = null,
     IReviewArchiveIngestionService? reviewArchiveIngestionService = null,
@@ -82,7 +80,7 @@ public sealed partial class ReviewOrchestrationService(
     /// <summary>
     ///     The shared adopt-prior-work rules, self-built from this service's own dependencies so nothing
     ///     changes for callers that construct this service directly. The dispatch preparer resolves the
-    ///     same type from the container, which is what keeps a remote review adopting exactly what a
+    ///     same type from the container, and that keeps a remote review adopting exactly what a
     ///     local one would.
     /// </summary>
     private ReviewJobReuse Reuse => this._reuse ??= new ReviewJobReuse(jobs, prScanRepository, logger);
@@ -957,54 +955,40 @@ public sealed partial class ReviewOrchestrationService(
         return new ResolvedReviewerContext(configuredTriggerReviewer);
     }
 
-    // T070: Resolve per-client AI connection — returns null when not configured (caller sets job failed).
+    // Resolves the review's chat runtime through the shared resolver. Returns null when it cannot be resolved,
+    // having already failed the job with the reason the resolver gave.
     private async Task<(IChatClient ChatClient, AgentReviewRuntimeCapabilities Capabilities, string? LogicalModelName)?> ResolveAiConnectionAsync(
         ReviewJob job, CancellationToken ct)
     {
-        if (aiRuntimeResolver is not null)
+        try
         {
-            try
-            {
-                var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, ct);
-                job.SetAiConfig(runtime.Connection.Id, runtime.Model.RemoteModelId, job.ReviewTemperature);
-                await jobs.UpdateAiConfigAsync(job.Id, runtime.Connection.Id, runtime.Model.RemoteModelId, ct, job.ReviewTemperature);
-                return (runtime.ChatClient, runtime.Capabilities, runtime.LogicalModelName);
-            }
-            catch (Exception ex)
-            {
-                LogNoAiConnectionConfigured(logger, job.ClientId, job.Id);
-                await jobs.SetFailedAsync(job.Id, ex.Message, ct);
-                return null;
-            }
+            var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, ct);
+            job.SetAiConfig(runtime.Connection.Id, runtime.Model.RemoteModelId, job.ReviewTemperature);
+            await jobs.UpdateAiConfigAsync(job.Id, runtime.Connection.Id, runtime.Model.RemoteModelId, ct, job.ReviewTemperature);
+            return (runtime.ChatClient, runtime.Capabilities, runtime.LogicalModelName);
         }
-
-        var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(job.ClientId, ct);
-        if (activeConnection is null)
+        catch (AiPurposeBindingNotConfiguredException ex) when (!ct.IsCancellationRequested)
         {
             LogNoAiConnectionConfigured(logger, job.ClientId, job.Id);
-            await jobs.SetFailedAsync(
-                job.Id,
-                $"No active AI connection configured for client {job.ClientId}. Configure one via the admin UI.",
-                ct);
+            await jobs.SetFailedAsync(job.Id, ex.Message, ct);
             return null;
         }
-
-        var effectiveModelId = activeConnection.GetBoundModelId(AiPurpose.ReviewDefault)
-                               ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId;
-        if (string.IsNullOrWhiteSpace(effectiveModelId))
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            await jobs.SetFailedAsync(
-                job.Id,
-                $"Active AI connection for client {job.ClientId} has no model deployment selected. Activate a deployment in the admin UI.",
-                ct);
+            // Resolution fails for reasons other than an unconfigured client: a model that cannot chat, a
+            // profile this host cannot serve, a provider family the tenant does not permit. Reporting all of
+            // them as a missing connection sends an operator to the wrong screen and loses the cause, so only
+            // the unconfigured case takes that message and the rest are logged with the failure that produced
+            // them.
+            //
+            // A cancelled token is left to propagate, because the worker that owns the job tells a stop, a
+            // shutdown and a lost lease apart and finalizes each one differently; failing the job here would
+            // overwrite what it recorded. The condition is the token rather than the exception type, so a
+            // provider timeout — which arrives as a cancellation with nothing cancelled — still fails the job.
+            LogReviewRuntimeUnresolved(logger, job.ClientId, job.Id, ex);
+            await jobs.SetFailedAsync(job.Id, ex.Message, ct);
             return null;
         }
-
-        var client = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
-        job.SetAiConfig(activeConnection.Id, effectiveModelId, job.ReviewTemperature);
-        await jobs.UpdateAiConfigAsync(job.Id, activeConnection.Id, effectiveModelId, ct, job.ReviewTemperature);
-        // Legacy (non-logical-model) resolution path — no logical model in play.
-        return (client, new AgentReviewRuntimeCapabilities(false, false, false, false), null);
     }
 
     // Load scan state: whether a new revision exists, the reusable carry-forward baseline
@@ -1530,8 +1514,8 @@ public sealed partial class ReviewOrchestrationService(
     /// </summary>
     /// <remarks>
     ///     A suppressed duplicate is kept rather than dropped, so it has to be visible somewhere. The counts in
-    ///     the summary event say how many were withheld; this says which ones and on what evidence, which is
-    ///     what makes a badly chosen similarity threshold detectable after the fact instead of invisible.
+    ///     the summary event say how many were withheld; this says which ones and on what evidence, which
+    ///     makes a badly chosen similarity threshold detectable after the fact instead of invisible.
     /// </remarks>
     /// <summary>
     ///     Maps each position in the list handed to the poster back to its position in the persisted result.

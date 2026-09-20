@@ -93,7 +93,7 @@ public sealed class ProviderRepositoryDiscoveryPaginationTests
 
         Assert.Equal(["1", "2"], repositories.Select(repository => repository.ExternalRepositoryId));
 
-        // A nested project keeps its path, which is what tells two same-named projects apart.
+        // A nested project keeps its path, which tells two same-named projects apart.
         Assert.Contains(repositories, repository => repository.ProjectPath == "acme/nested/api");
     }
 

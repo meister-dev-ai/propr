@@ -69,7 +69,7 @@ public static class RunnerLeaseReleaseReasons
 public static class RunnerContractJson
 {
     /// <summary>
-    ///     Refuses unknown members, which is what makes a round-trip test detect a field the schema lost.
+    ///     Refuses unknown members, and that makes a round-trip test detect a field the schema lost.
     ///     <para>
     ///         Deliberately not what production readers use. A reader that refused unknown fields would
     ///         reject the whole manifest as soon as an older peer received a newer peer's additive field,

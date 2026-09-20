@@ -42,7 +42,7 @@ public static class LicenseWriter
         var payload = Base64Url.EncodeToString(WritePayload(claims));
         var signedText = string.Concat(header, ".", payload);
 
-        // The signature covers the ASCII bytes of the two encoded segments and the separator, which is what a
+        // The signature covers the ASCII bytes of the two encoded segments and the separator, which a
         // reader can reconstruct from the document without re-serializing any JSON.
         var signature = signingKey.SignData(
             Encoding.ASCII.GetBytes(signedText),

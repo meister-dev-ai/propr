@@ -34,7 +34,7 @@ describe('buildFlameTree', () => {
     expect(tree.children.map((child) => child.name)).toEqual(['c.cs', 'a.cs', 'b.cs'])
   })
 
-  it('keys every frame on its full path, which is what a click has to mean', () => {
+  it('keys every frame on its full path, which a click has to mean', () => {
     const tree = buildFlameTree([{ key: 'src/Payments/Refund.cs', value: 1 }])
 
     expect(tree.children[0].key).toBe('src')

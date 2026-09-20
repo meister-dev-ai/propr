@@ -94,7 +94,7 @@ public sealed class CodeInsightFinding
     /// <remarks>
     ///     Name-based and per file: two overloads share a name, and the name carries no namespace. It is what makes
     ///     "which parts of this codebase keep producing findings" answerable, and it is the same key the reference
-    ///     lookup already uses, which is what a dependency-weighted reading would join on.
+    ///     lookup already uses, which a dependency-weighted reading would join on.
     /// </remarks>
     public string? OriginSymbolName { get; init; }
 

@@ -47,9 +47,10 @@ function primeValidEditor(options: { mode: 'create' | 'edit'; profileId?: string
   api.editor.mode = options.mode
   api.editor.profileId = options.profileId ?? ''
   api.editor.displayName = 'Azure Test'
+  api.editor.providerKind = 'azureOpenAi'
   api.editor.baseUrl = 'https://example.openai.azure.com'
   api.editor.authMode = 'apiKey'
-  api.editor.apiKey = options.apiKey ?? ''
+  api.editor.credentials = options.apiKey ? { apiKey: options.apiKey } : {}
   api.editor.bindings = []
 }
 
@@ -133,9 +134,9 @@ describe('useClientAiConnectionsTab per-model USD pricing', () => {
     const model = chatModel({ inputCostPer1MUsd: '0.2', outputCostPer1MUsd: '1.2', cachedInputCostPer1MUsd: '' })
     api.editor.models = [model]
     api.editor.bindings = [
-      { id: null, purpose: 'reviewDefault', configuredModelId: '', protocolMode: 'auto', isEnabled: true },
-      { id: null, purpose: 'embeddingDefault', configuredModelId: '', protocolMode: 'embeddings', isEnabled: true },
-      { id: null, purpose: 'reviewLowEffort', configuredModelId: model.localId, protocolMode: 'auto', isEnabled: true },
+      { id: null, purpose: 'reviewDefault', configuredModelId: '', protocolMode: 'Auto', isEnabled: true },
+      { id: null, purpose: 'embeddingDefault', configuredModelId: '', protocolMode: 'Embeddings', isEnabled: true },
+      { id: null, purpose: 'reviewLowEffort', configuredModelId: model.localId, protocolMode: 'Auto', isEnabled: true },
     ]
 
     await api.saveProfile()

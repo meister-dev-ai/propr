@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -68,7 +69,12 @@ public sealed class LogicalModelMigrationBackfillTests(PostgresContainerFixture 
             this._dbContext,
             Substitute.For<ILogicalModelCapabilityValidator>(),
             this._connections,
-            Substitute.For<IAiConnectionScopeGuard>());
+            Substitute.For<IAiConnectionScopeGuard>(),
+
+            // The family the seeded connection is stored against, still under the spelling it supersedes. A
+            // wire shape belongs to the family that declared it, so a catalog read with no family loaded could
+            // resolve nothing the backfill wrote.
+            DeclaringProviderFamilies.Superseding(AiConnectionTestFactory.AzureFamilyKey, "AzureOpenAi"));
         this._backfill = new LogicalModelMigrationBackfill(this._dbContext, this._connections, this._catalog);
     }
 
@@ -95,10 +101,15 @@ public sealed class LogicalModelMigrationBackfillTests(PostgresContainerFixture 
         var modelId = Guid.NewGuid();
         this.SeedConnectionModel(connProfileId, modelId, "gpt-4o");
 
-        // The backfill resolves the legacy model through the connection repository (substituted here).
+        // The backfill resolves the legacy model through the connection repository (substituted here). The
+        // connection carries the seeded row's id, because a catalog entry's wire shape is read against the
+        // family of the connection the entry maps to and an id matching no row names no family.
         var model = AiConnectionTestFactory.CreateChatModel("gpt-4o", modelId);
-        var connection = AiConnectionTestFactory.CreateConnection(this._clientId, [model]);
-        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model, AiProtocolMode.Responses);
+        var connection = AiConnectionTestFactory.CreateConnection(this._clientId, [model]) with
+        {
+            Id = connProfileId,
+        };
+        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model, AiConnectionTestFactory.ResponsesProtocol);
         this._connections.GetModelBindingAsync(this._clientId, modelId, Arg.Any<CancellationToken>())
             .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
 
@@ -119,7 +130,7 @@ public sealed class LogicalModelMigrationBackfillTests(PostgresContainerFixture 
         Assert.Equal("migrated-gpt-4o", role.Name);
         Assert.Equal(connection.Id, role.ConnectionId);
         Assert.Equal(modelId, role.ConfiguredModelId);
-        Assert.Equal(AiProtocolMode.Responses, role.ProtocolMode);
+        Assert.Equal(AiConnectionTestFactory.ResponsesProtocol, role.ProtocolMode);
         Assert.Equal(AiOperationKind.Chat, role.Capability);
 
         // Idempotent: a second run migrates nothing and creates no further overrides.
@@ -145,15 +156,18 @@ public sealed class LogicalModelMigrationBackfillTests(PostgresContainerFixture 
         this._connections.GetActiveBindingForPurposeAsync(this._clientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
             .Returns(
                 new AiResolvedPurposeBindingDto(
-                    connection, chatModel, AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, chatModel, AiProtocolMode.Responses)));
+                    connection, chatModel,
+                    AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, chatModel, AiConnectionTestFactory.ResponsesProtocol)));
         this._connections.GetActiveBindingForPurposeAsync(this._clientId, AiPurpose.ReviewTriage, Arg.Any<CancellationToken>())
             .Returns(
                 new AiResolvedPurposeBindingDto(
-                    connection, chatModel, AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewTriage, chatModel, AiProtocolMode.Responses)));
+                    connection, chatModel,
+                    AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewTriage, chatModel, AiConnectionTestFactory.ResponsesProtocol)));
         this._connections.GetActiveBindingForPurposeAsync(this._clientId, AiPurpose.EmbeddingDefault, Arg.Any<CancellationToken>())
             .Returns(
                 new AiResolvedPurposeBindingDto(
-                    connection, embedModel, AiConnectionTestFactory.CreateBinding(AiPurpose.EmbeddingDefault, embedModel, AiProtocolMode.Embeddings)));
+                    connection, embedModel,
+                    AiConnectionTestFactory.CreateBinding(AiPurpose.EmbeddingDefault, embedModel, ProviderDeclaredProtocolModes.Embeddings)));
 
         var migrated = await this._backfill.BackfillClientPurposesAsync(this._clientId, default);
         Assert.Equal(3, migrated);

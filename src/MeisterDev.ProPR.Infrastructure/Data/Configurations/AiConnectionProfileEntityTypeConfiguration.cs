@@ -1,7 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,14 +23,27 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
         builder.Property(x => x.ClientId).HasColumnName("client_id");
         builder.Property(x => x.TenantId).HasColumnName("tenant_id");
         builder.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(200).IsRequired();
-        builder.Property(x => x.ProviderKind).HasColumnName("provider_kind").HasMaxLength(50).IsRequired();
+        // The identity of the family this connection belongs to, at the width an identity key needs. The same
+        // bound as client_token_usage_samples.provider_kind, which sits inside a unique index and is therefore
+        // what every location storing a key alone is held to.
+        builder.Property(x => x.ProviderKind)
+            .HasColumnName("provider_kind")
+            .HasMaxLength(ProviderVocabulary.MaximumKeyLength)
+            .IsRequired();
         builder.Property(x => x.BaseUrl).HasColumnName("base_url").HasMaxLength(1000).IsRequired();
-        builder.Property(x => x.AuthMode).HasColumnName("auth_mode").HasMaxLength(50).IsRequired();
-        // Sized for the largest credential a provider class is expected to bring rather than for an API key: a
-        // Google service-account JSON is a couple of kilobytes before Data-Protection wrapping inflates it, and
-        // the envelope adds its field names on top. The exact figure is not load-bearing — the point is that a
-        // native provider's credential must not fail to persist against a cap chosen for a short string.
-        builder.Property(x => x.ProtectedSecret).HasColumnName("protected_secret").HasMaxLength(16000);
+
+        // A declared authentication mode persists qualified by the key of the family that declared it, so the width
+        // is the qualified bound rather than the mode name's.
+        builder.Property(x => x.AuthMode)
+            .HasColumnName("auth_mode")
+            .HasMaxLength(ProviderVocabulary.MaximumQualifiedValueLength)
+            .IsRequired();
+        // Unbounded, because what goes in here is not one credential: the envelope holds every credential field a
+        // family's authentication mode needs and every secret-marked value it declares, each of which the host
+        // will store up to its own field cap, and Data-Protection wrapping inflates the total on top of that. A
+        // column width chosen for one API key, or for one service-account document, refuses a family that is
+        // within the limits the host itself states.
+        builder.Property(x => x.ProtectedSecret).HasColumnName("protected_secret");
         builder.Property(x => x.DefaultHeaders)
             .HasColumnName("default_headers")
             .HasColumnType("jsonb")
@@ -42,7 +57,33 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
             .HasConversion(JsonPropertyConversions.StringDictionaryConverter)
             .Metadata.SetValueComparer(JsonPropertyConversions.StringDictionaryComparer);
         builder.Property(x => x.DefaultQueryParams).IsRequired();
+
+        // Nullable rather than an empty document: a connection whose family declares no configuration has no
+        // document, and writing `{}` for it would make "nothing declared" and "everything left empty" look alike.
+        // No index, because nothing selects on a declared value; see the record for what that costs.
+        builder.Property(x => x.ProviderSettings)
+            .HasColumnName("provider_settings")
+            .HasColumnType("jsonb")
+            .HasConversion(JsonPropertyConversions.NullableStringDictionaryConverter)
+            .Metadata.SetValueComparer(JsonPropertyConversions.NullableStringDictionaryComparer);
+
         builder.Property(x => x.DiscoveryMode).HasColumnName("discovery_mode").HasMaxLength(50).IsRequired();
+        // Nullable rather than defaulted: a connection nothing has reported on is not one someone checked and
+        // found usable, and a default would say it was.
+        builder.Property(x => x.CredentialHealth).HasColumnName("credential_health").HasMaxLength(40);
+        builder.Property(x => x.CredentialHealthCause)
+            .HasColumnName("credential_health_cause")
+            .HasMaxLength(ProviderHostLimits.MaximumMessageLength);
+        builder.Property(x => x.CredentialHealthChangedAt).HasColumnName("credential_health_changed_at");
+
+        // Written by the host from the administrator who initiated the invocation that produced the credential.
+        // No foreign key: the grant records who authorized it, and that record has to survive the account being
+        // removed rather than being nulled out with it, which a revocation would then have no owner for.
+        builder.Property(x => x.CredentialOwnerAdminId).HasColumnName("credential_owner_admin_id");
+        builder.Property(x => x.CredentialOwnerDisplayName)
+            .HasColumnName("credential_owner_display_name")
+            .HasMaxLength(256);
+        builder.Property(x => x.CredentialAuthorizedAt).HasColumnName("credential_authorized_at");
         builder.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(false).IsRequired();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();

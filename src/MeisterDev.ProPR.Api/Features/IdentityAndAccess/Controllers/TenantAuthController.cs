@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using System.Globalization;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess;
@@ -301,4 +302,12 @@ public sealed class TenantAuthController(
 }
 
 /// <summary>Tenant-local login request payload.</summary>
-public sealed record TenantLocalLoginRequest(string Username, string Password);
+public sealed record TenantLocalLoginRequest(string Username, string Password)
+{
+    /// <summary>Renders the request without the password; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(TenantLocalLoginRequest)} {{ Username = {this.Username}, "
+               + $"Password = {SecretSafeRendering.Elide(this.Password)} }}";
+    }
+}

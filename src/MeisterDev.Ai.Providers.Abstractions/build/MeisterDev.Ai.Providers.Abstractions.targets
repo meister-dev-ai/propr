@@ -1,0 +1,100 @@
+<Project>
+
+    <!--
+        Shared build configuration for a provider add-in, continued from the .props beside this file. MSBuild
+        imports this file after the project has declared its references, and the two settings below act on
+        those references.
+
+        Everything here is conditioned on ProviderAddInPackaging, which the .props defaults to true. A project
+        that references the contract without being an add-in sets it to false and this file contributes
+        nothing.
+    -->
+
+    <!--
+        A project reference to one of the shared assemblies is compiled against but not copied, so the add-in's
+        folder holds no copy of it. This covers an add-in built inside the ProPR repository. One built
+        elsewhere takes the shared assemblies as packages, which the next target covers.
+    -->
+    <Target Name="ApplyProviderAddInProjectReferenceSettings"
+            BeforeTargets="AssignProjectConfiguration"
+            Condition="'$(ProviderAddInPackaging)' == 'true'">
+        <ItemGroup>
+            <ProjectReference Condition="'%(Filename)' == 'MeisterDev.Ai.Providers.Abstractions' OR '%(Filename)' == 'MeisterDev.Ai.Providers.Conformance'">
+                <Private>false</Private>
+            </ProjectReference>
+        </ItemGroup>
+    </Target>
+
+    <!--
+        A package reference to one of the shared assemblies contributes its compile-time reference and none of
+        its runtime files, for the same reason.
+
+        The exclusion is applied to the resolved copy list, not by putting ExcludeAssets on the package
+        reference. NuGet reads ExcludeAssets during restore, and when the contract arrives as a package these
+        two build files are imported from inside that package, which is on disk only once restore has
+        finished. An add-in built outside this repository would therefore restore without the exclusion and
+        copy both shared assemblies into its output. Removing them from the copy list happens during the
+        build, so it holds whether the contract came as a package or a project.
+    -->
+    <Target Name="RemoveProviderAddInSharedAssembliesFromOutput"
+            AfterTargets="ResolveReferences"
+            Condition="'$(ProviderAddInPackaging)' == 'true'">
+        <PropertyGroup>
+            <_ProviderAddInSharedNames>;@(ProviderAddInSharedAssembly);</_ProviderAddInSharedNames>
+        </PropertyGroup>
+        <ItemGroup>
+            <ReferenceCopyLocalPaths
+                Remove="@(ReferenceCopyLocalPaths)"
+                Condition="$(_ProviderAddInSharedNames.Contains(';%(Filename);'))"/>
+        </ItemGroup>
+    </Target>
+
+    <!--
+        Publish resolves its own file list, so the same removal is applied there. Without it a published add-in
+        folder carries the shared assemblies even though the build output does not. An add-in reaches the
+        directory the host reads by being published.
+    -->
+    <Target Name="RemoveProviderAddInSharedAssembliesFromPublish"
+            AfterTargets="ComputeResolvedFilesToPublishList"
+            Condition="'$(ProviderAddInPackaging)' == 'true'">
+        <PropertyGroup>
+            <_ProviderAddInSharedNames>;@(ProviderAddInSharedAssembly);</_ProviderAddInSharedNames>
+        </PropertyGroup>
+        <ItemGroup>
+            <ResolvedFileToPublish
+                Remove="@(ResolvedFileToPublish)"
+                Condition="$(_ProviderAddInSharedNames.Contains(';%(Filename);'))"/>
+        </ItemGroup>
+    </Target>
+
+    <!--
+        Without the settings above the failure is silent. The loader resolves the second copy in the add-in's
+        folder, the add-in's driver type then implements a different interface than the host's, the assembly
+        loads, the version check passes, and the family is absent from the registry with nothing reporting a
+        failure. The two targets below turn that into a build error.
+    -->
+    <Target Name="VerifyProviderAddInDoesNotShadowSharedAssemblies"
+            AfterTargets="Build"
+            Condition="'$(ProviderAddInPackaging)' == 'true' AND '$(ProviderAddInPackagingCheck)' != 'false'">
+        <ItemGroup>
+            <_ProviderAddInShadowed Include="@(ProviderAddInSharedAssembly)"
+                                    Condition="Exists('$(OutDir)%(Identity).dll')"/>
+        </ItemGroup>
+        <Error Condition="'@(_ProviderAddInShadowed)' != ''"
+               Code="PROPRADDIN001"
+               Text="This add-in's output folder contains a copy of @(_ProviderAddInShadowed, ', '). The host resolves those from its own load context, so a copy here is loaded instead and the add-in's driver ends up implementing a different interface than the host's, with nothing reporting a failure. Import the shared add-in build configuration, or set EnableDynamicLoading, Private=false on the project reference and ExcludeAssets=runtime on the package reference by hand. A project that references the contract without being an add-in sets ProviderAddInPackaging to false instead."/>
+    </Target>
+
+    <Target Name="VerifyPublishedProviderAddInDoesNotShadowSharedAssemblies"
+            AfterTargets="Publish"
+            Condition="'$(ProviderAddInPackaging)' == 'true' AND '$(ProviderAddInPackagingCheck)' != 'false'">
+        <ItemGroup>
+            <_ProviderAddInPublishedShadowed Include="@(ProviderAddInSharedAssembly)"
+                                             Condition="Exists('$(PublishDir)%(Identity).dll')"/>
+        </ItemGroup>
+        <Error Condition="'@(_ProviderAddInPublishedShadowed)' != ''"
+               Code="PROPRADDIN001"
+               Text="This add-in's publish folder contains a copy of @(_ProviderAddInPublishedShadowed, ', '). The host resolves those from its own load context, so a copy here is loaded instead and the add-in's driver ends up implementing a different interface than the host's, with nothing reporting a failure. Import the shared add-in build configuration, or set EnableDynamicLoading, Private=false on the project reference and ExcludeAssets=runtime on the package reference by hand. A project that references the contract without being an add-in sets ProviderAddInPackaging to false instead."/>
+    </Target>
+
+</Project>

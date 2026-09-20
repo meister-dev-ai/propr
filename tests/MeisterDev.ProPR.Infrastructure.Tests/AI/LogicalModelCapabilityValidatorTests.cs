@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
@@ -107,7 +108,7 @@ public sealed class LogicalModelCapabilityValidatorTests
             "embed-nometa",
             "embed-nometa",
             [AiOperationKind.Embedding],
-            [AiProtocolMode.Embeddings]);
+            [ProviderDeclaredProtocolModes.Embeddings]);
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
         this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
 
@@ -127,7 +128,7 @@ public sealed class LogicalModelCapabilityValidatorTests
             "omni",
             "omni",
             [AiOperationKind.Chat, AiOperationKind.Embedding],
-            [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+            [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
             TokenizerName: "cl100k_base",
             EmbeddingDimensions: 1536);
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
@@ -209,6 +210,6 @@ public sealed class LogicalModelCapabilityValidatorTests
             connectionId,
             modelId,
             ReviewReasoningEffort.None,
-            AiProtocolMode.Auto);
+            ProviderDeclaredProtocolModes.Auto);
     }
 }

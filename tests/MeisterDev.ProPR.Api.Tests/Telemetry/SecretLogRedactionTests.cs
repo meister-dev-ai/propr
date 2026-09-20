@@ -21,13 +21,23 @@ namespace MeisterDev.ProPR.Api.Tests.Telemetry;
 /// </summary>
 public sealed class SecretLogRedactionTests
 {
+    private const string CompatibleApiKey = "meisterdev/openAiCompatible:ApiKey";
+
     private const string Secret = "sk-must-never-be-logged";
+
+    // A family's secret-marked declared value. It goes into the same protected envelope as the credential and is
+    // withheld from the caller on the same terms.
+    private const string DeclaredSecret = "cs-must-never-be-logged";
+
+    // A family's non-secret declared value. The host cannot know whether a family put credential material in one,
+    // so none of them is written to a log line.
+    private const string DeclaredSetting = "eu-west-must-never-be-logged";
 
     public static TheoryData<string, object> CredentialBearingValues()
     {
         return new TheoryData<string, object>
         {
-            { nameof(AiConnectionAuthRequest), new AiConnectionAuthRequest(AiAuthMode.ApiKey, Secret) },
+            { nameof(AiConnectionAuthRequest), new AiConnectionAuthRequest(CompatibleApiKey, Secret) },
             { nameof(CreateAiConnectionRequest), CreateRequest() },
             { nameof(DiscoverModelsRequest), Discover() },
             { nameof(ProbeAiConnectionRequest), Probe() },
@@ -56,14 +66,51 @@ public sealed class SecretLogRedactionTests
         Assert.Contains(label, label, StringComparison.Ordinal);
     }
 
-    // Interpolated into a message, Serilog uses ToString — which is why the types override it. A transform does
-    // nothing for this path.
-    [Theory]
-    [MemberData(nameof(CredentialBearingValues))]
-    public void RenderingACredentialBearingValueAsTextDoesNotEmitTheSecret(string label, object value)
+    // The declared settings document is whatever a provider family chose to declare, so the host has no basis
+    // for deciding which entry is safe to print and prints none of them. A family that declared credential
+    // material as a plain value therefore has a visibility defect and not a leak into the log.
+    [Fact]
+    public void ADestructuredConnectionWritesNoDeclaredValueAtAll()
     {
-        Assert.DoesNotContain(Secret, value.ToString() ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains(label, label, StringComparison.Ordinal);
+        var sink = new CapturingSink();
+        using var logger = SecretLogRedaction.Apply(new LoggerConfiguration().MinimumLevel.Verbose())
+            .WriteTo.Sink(sink)
+            .CreateLogger();
+
+        logger.Information("configuring {@Value}", Connection());
+
+        var rendered = sink.Rendered();
+        Assert.DoesNotContain(DeclaredSetting, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(DeclaredSecret, rendered, StringComparison.Ordinal);
+    }
+
+    // Interpolated into a message, Serilog uses ToString rather than the transforms. The connection renders its
+    // declared fields as names, which the operator needs to tell one connection from another, and none of
+    // their values.
+    [Fact]
+    public void AnInterpolatedConnectionWritesItsDeclaredFieldNamesAndNoDeclaredValue()
+    {
+        var rendered = Connection().ToString();
+
+        Assert.Contains("region", rendered, StringComparison.Ordinal);
+        Assert.Contains("clientSecret", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(DeclaredSetting, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(DeclaredSecret, rendered, StringComparison.Ordinal);
+    }
+
+    // A connection whose family declares nothing renders the same shape as one with entries, so a reader is not
+    // left wondering whether the absence means "none declared" or "withheld".
+    [Fact]
+    public void AConnectionWithAnEmptyDeclaredDocumentRendersTheSameShape()
+    {
+        var rendered = (Connection() with
+        {
+            ProviderSettings = null,
+            DeclaredSecrets = new Dictionary<string, string>(),
+        }).ToString();
+
+        Assert.Contains("ProviderSettings", rendered, StringComparison.Ordinal);
+        Assert.Contains("DeclaredSecrets", rendered, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -72,8 +119,17 @@ public sealed class SecretLogRedactionTests
         var json = JsonSerializer.Serialize(Connection());
 
         Assert.DoesNotContain(Secret, json, StringComparison.Ordinal);
-        Assert.DoesNotContain("secret", json, StringComparison.OrdinalIgnoreCase);
-        // The rest of the profile is still there, so this is redaction rather than an empty response.
+        Assert.DoesNotContain(DeclaredSecret, json, StringComparison.Ordinal);
+
+        // Neither credential member is serialized at all, so nothing downstream can read one back out of the
+        // response by name.
+        var properties = JsonDocument.Parse(json).RootElement.EnumerateObject().Select(property => property.Name);
+        Assert.DoesNotContain("secret", properties, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("declaredSecrets", properties, StringComparer.OrdinalIgnoreCase);
+
+        // What a console needs is still there: which secret-marked fields hold a value, and the rest of the
+        // profile, so this is redaction rather than an empty response.
+        Assert.Contains("clientSecret", json, StringComparison.Ordinal);
         Assert.Contains("https://api.deepseek.com/v1", json, StringComparison.Ordinal);
     }
 
@@ -86,9 +142,9 @@ public sealed class SecretLogRedactionTests
             .WriteTo.Sink(sink)
             .CreateLogger();
         var endpoint = new ProviderEndpoint(
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            AiAuthMode.ApiKey,
+            CompatibleApiKey,
             DefaultHeaders: new Dictionary<string, string> { ["Authorization"] = $"Bearer {Secret}" },
             DefaultQueryParams: new Dictionary<string, string> { ["api-key"] = Secret });
 
@@ -101,25 +157,25 @@ public sealed class SecretLogRedactionTests
     {
         return new CreateAiConnectionRequest(
             "Primary DeepSeek",
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            new AiConnectionAuthRequest(AiAuthMode.ApiKey, Secret));
+            new AiConnectionAuthRequest(CompatibleApiKey, Secret));
     }
 
     private static DiscoverModelsRequest Discover()
     {
         return new DiscoverModelsRequest(
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            new AiConnectionAuthRequest(AiAuthMode.ApiKey, Secret));
+            new AiConnectionAuthRequest(CompatibleApiKey, Secret));
     }
 
     private static ProbeAiConnectionRequest Probe()
     {
         return new ProbeAiConnectionRequest(
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            new AiConnectionAuthRequest(AiAuthMode.ApiKey, Secret));
+            new AiConnectionAuthRequest(CompatibleApiKey, Secret));
     }
 
     private static AiConnectionDto Connection()
@@ -128,9 +184,9 @@ public sealed class SecretLogRedactionTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Primary DeepSeek",
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            AiAuthMode.ApiKey,
+            CompatibleApiKey,
             AiDiscoveryMode.ManualOnly,
             true,
             [],
@@ -140,16 +196,20 @@ public sealed class SecretLogRedactionTests
             DateTimeOffset.UtcNow,
             null,
             null,
-            Secret);
+            Secret)
+        {
+            ProviderSettings = new Dictionary<string, string> { ["region"] = DeclaredSetting },
+            DeclaredSecrets = new Dictionary<string, string> { ["clientSecret"] = DeclaredSecret },
+        };
     }
 
     private static AiConnectionWriteRequestDto WriteRequest()
     {
         return new AiConnectionWriteRequestDto(
             "Primary DeepSeek",
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            AiAuthMode.ApiKey,
+            CompatibleApiKey,
             AiDiscoveryMode.ManualOnly,
             [],
             [],
@@ -159,18 +219,18 @@ public sealed class SecretLogRedactionTests
     private static AiConnectionProbeOptionsDto ProbeOptions()
     {
         return new AiConnectionProbeOptionsDto(
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            AiAuthMode.ApiKey,
+            CompatibleApiKey,
             Secret);
     }
 
     private static ProviderEndpoint Endpoint()
     {
         return new ProviderEndpoint(
-            AiProviderKind.OpenAiCompatible,
+            "meisterdev/openAiCompatible",
             "https://api.deepseek.com/v1",
-            AiAuthMode.ApiKey,
+            CompatibleApiKey,
             Secret);
     }
 

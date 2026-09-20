@@ -92,6 +92,58 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
         Assert.False(body.GetProperty("localLoginEnabled").GetBoolean());
     }
 
+    // A permitted-family entry names a family by the identity key that family declares, and one no installed
+    // family claims permits nothing. Refused on the write so a mistyped key is corrected on the form, rather than
+    // stored and then quietly refusing every provider the tenant has.
+    [Fact]
+    public async Task PatchTenant_WithAPermittedFamilyNoInstalledProviderClaims_Returns400NamingIt()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync("acme", "Acme Corp");
+        var userId = await factory.SeedUserAsync("tenant.admin", "tenant.admin@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{tenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(userId, AppUserRole.User));
+        request.Content = JsonContent.Create(new { allowedAiProviderKinds = new[] { "contoso/llm" } });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("contoso/llm", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    // A family an installed add-in declares is stored, and the tenant reads it back under the key it was saved
+    // with, which is the key its connections are stored against.
+    [Fact]
+    public async Task PatchTenant_WithAPermittedFamilyAnInstalledProviderClaims_Returns200AndKeepsIt()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync("acme", "Acme Corp");
+        var userId = await factory.SeedUserAsync("tenant.admin", "tenant.admin@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{tenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(userId, AppUserRole.User));
+        request.Content = JsonContent.Create(new { allowedAiProviderKinds = new[] { "meisterdev/openAi" } });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(
+            ["meisterdev/openAi"],
+            body.GetProperty("allowedAiProviderKinds").EnumerateArray().Select(entry => entry.GetString()));
+    }
+
     [Fact]
     public async Task PatchTenant_TenantAdministratorForOtherTenant_Returns403()
     {

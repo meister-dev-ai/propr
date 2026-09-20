@@ -92,6 +92,35 @@ builder.AppendLine("| All other repository files unless otherwise noted | Elasti
 File.WriteAllText(outputFile, builder.ToString(), new UTF8Encoding(false));
 Console.WriteLine($"Updated {outputFile}");
 
+// The provider stack ships separately from the product, at the organisation level, so no file in it carries a
+// commercial or license-key notice. The shipped families are also the reference implementations someone reads
+// when writing a new one, and a family under a commercial notice is one nobody outside the team can learn from.
+// Reported here because this sweep already reads every marked file; the project-graph half of the rule is a
+// build check in Directory.Build.targets.
+var providerStackPrefix = "src/MeisterDev.Ai.Providers";
+var notPublishable = markedFiles
+    .Where(file => file.Path.StartsWith(providerStackPrefix, StringComparison.Ordinal))
+    .ToArray();
+
+if (notPublishable.Length > 0)
+{
+    Console.Error.WriteLine(
+        "The provider stack must carry no commercial or license key notice, and these files do:");
+
+    foreach (var file in notPublishable)
+    {
+        Console.Error.WriteLine($"  {file.Path}");
+    }
+
+    Console.Error.WriteLine(
+        "Move the commercial functionality into a MeisterDev.ProPR project, or remove the notice if the file "
+        + "does not implement any.");
+
+    return 1;
+}
+
+return 0;
+
 static string FindRepoRoot(string startDirectory)
 {
     var current = new DirectoryInfo(startDirectory);

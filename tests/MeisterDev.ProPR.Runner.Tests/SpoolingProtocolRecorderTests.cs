@@ -40,6 +40,38 @@ public sealed class SpoolingProtocolRecorderTests
         Assert.Equal(340, spend.GetProperty("outputTokens").GetInt64());
     }
 
+    // All five counters have to reach the control plane, because all five are priced: it charges the input total
+    // less the two cache buckets at the input rate and each bucket at its own. A record carrying only the two
+    // headline counts prices a cached prompt at the full rate.
+    [Fact]
+    public async Task APassThatCompletes_ShipsEveryCounterThePricingReads()
+    {
+        var handler = new CapturingHandler();
+        var (recorder, spool) = Create(handler);
+
+        var protocolId = await recorder.BeginAsync(JobId, 1, "file", logicalModelName: "reviewer-medium");
+        await recorder.SetCompletedAsync(
+            protocolId,
+            "Completed",
+            4170,
+            207,
+            1,
+            0,
+            null,
+            CancellationToken.None,
+            4000,
+            totalCacheWriteTokens: 50,
+            totalReasoningTokens: 200);
+        await spool.FlushAsync(CancellationToken.None);
+
+        var spend = Assert.Single(handler.Batches[^1].GetProperty("spend").EnumerateArray());
+        Assert.Equal(4170, spend.GetProperty("inputTokens").GetInt64());
+        Assert.Equal(207, spend.GetProperty("outputTokens").GetInt64());
+        Assert.Equal(4000, spend.GetProperty("cachedInputTokens").GetInt64());
+        Assert.Equal(50, spend.GetProperty("cacheWriteTokens").GetInt64());
+        Assert.Equal(200, spend.GetProperty("reasoningTokens").GetInt64());
+    }
+
     // A pass that spent nothing produces no spend record. Sending zeros would open a priced protocol per
     // stage on the control plane for stages that never called a model.
     [Fact]

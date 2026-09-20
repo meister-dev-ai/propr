@@ -545,7 +545,7 @@ public sealed partial class MentionScanService(
         job.SetReviewThreadContext(threadRef);
         job.SetReviewCommentContext(commentRef);
 
-        // The account the developer addressed, which is what makes this comment one unit of work rather
+        // The account the developer addressed, and that makes this comment one unit of work rather
         // than one per client that happens to cover the repository.
         job.SetMentionedReviewer(inputs.Reviewer);
 

@@ -9,7 +9,7 @@ namespace MeisterDev.ProPR.Application.Features.Licensing.Ports;
 ///     <para>
 ///         The installation records the instant it has reached and reports the recorded value whenever the host
 ///         clock reads earlier, so a host clock set back does not return the installation to a term that has
-///         already ended. The record trails the last reading by at most one advance interval, which is what a
+///         already ended. The record trails the last reading by at most one advance interval, which a
 ///         restart resumes from: an operator who sets the clock back recovers that much of the timeline and no
 ///         more. Within one process the reading does not go backwards at all.
 ///     </para>
@@ -26,7 +26,7 @@ public interface ILicensingClock
     ///     it belongs on a path that already runs at a bounded rate rather than on a per-request one.
     ///     <para>
     ///         A read that fails is raised rather than absorbed: with no recorded instant to compare against, the
-    ///         term would be judged on the host clock alone, which is what this port exists to prevent. An initial
+    ///         term would be judged on the host clock alone, which this port exists to prevent. An initial
     ///         or scheduled forward write is also raised when required, because a decision based on that new instant
     ///         must not succeed if a restart would lose it.
     ///     </para>

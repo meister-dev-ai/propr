@@ -4,7 +4,6 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
-using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -20,10 +19,8 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 ///     Generates answers grounded in the pull request's diff, description, and existing threads.
 /// </summary>
 internal sealed partial class AgentMentionAnswerService(
-    IAiConnectionRepository aiConnectionRepository,
-    IAiChatClientFactory aiChatClientFactory,
+    IAiRuntimeResolver aiRuntimeResolver,
     ILogger<AgentMentionAnswerService> logger,
-    IAiRuntimeResolver? aiRuntimeResolver = null,
     IClientRegistry? clientRegistry = null) : IMentionAnswerService
 {
     private const string SystemPrompt =
@@ -53,35 +50,11 @@ internal sealed partial class AgentMentionAnswerService(
         var cleanQuestion = MentionPrefixRegex.Replace(question, string.Empty).Trim();
         var userMessage = BuildUserMessage(pullRequest, cleanQuestion, threadId);
 
-        string modelId;
-        IChatClient chatClient;
-        Guid? connectionId;
-        string? logicalModelName;
-        AiProviderKind? providerKind;
-
-        if (aiRuntimeResolver is not null)
-        {
-            var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(clientId, AiPurpose.ReviewDefault, cancellationToken);
-            modelId = runtime.Model.RemoteModelId;
-            chatClient = runtime.ChatClient;
-            connectionId = runtime.Connection.Id;
-            logicalModelName = runtime.LogicalModelName;
-            providerKind = runtime.Connection.ProviderKind;
-        }
-        else
-        {
-            var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, cancellationToken)
-                                   ?? throw new InvalidOperationException($"No active AI connection configured for client {clientId}.");
-
-            modelId = activeConnection.GetBoundModelId(AiPurpose.ReviewDefault)
-                      ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId
-                      ?? throw new InvalidOperationException($"No active AI model configured for client {clientId}.");
-
-            chatClient = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
-            connectionId = activeConnection.Id;
-            logicalModelName = null;
-            providerKind = activeConnection.ProviderKind;
-        }
+        var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(clientId, AiPurpose.ReviewDefault, cancellationToken);
+        var modelId = runtime.Model.RemoteModelId;
+        var chatClient = runtime.ChatClient;
+        Guid? connectionId = runtime.Connection.Id;
+        var logicalModelName = runtime.LogicalModelName;
 
         // A mention answer is not part of a review job, so the language is resolved from the client here rather
         // than read off a review context.
@@ -110,7 +83,7 @@ internal sealed partial class AgentMentionAnswerService(
         // needs to price rather than reading the number and throwing it away.
         return new MentionAnswer(
             response.Text ?? string.Empty,
-            AiTokenUsageExtractor.FromResponse(response, providerKind),
+            AiTokenUsageExtractor.FromResponse(response),
             modelId,
             connectionId,
             logicalModelName);

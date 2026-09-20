@@ -24,7 +24,7 @@ public sealed class ReviewCommentQuotingTests
     }
 
     /// <summary>
-    ///     An answer that is itself quoted later still reads as a conversation, which is what makes a
+    ///     An answer that is itself quoted later still reads as a conversation, and that makes a
     ///     follow-up question answerable without any thread.
     /// </summary>
     [Fact]

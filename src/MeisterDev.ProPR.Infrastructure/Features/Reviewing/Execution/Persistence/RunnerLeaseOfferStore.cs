@@ -31,7 +31,7 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
         ArgumentNullException.ThrowIfNull(clientScope);
         ArgumentNullException.ThrowIfNull(runnerTags);
 
-        // A non-positive limit is a request for nothing, which is what JobRepository's claim candidates
+        // A non-positive limit is a request for nothing, which JobRepository's claim candidates
         // already answer. Passed through it would reach LIMIT and raise a database error instead.
         if (limit <= 0)
         {
@@ -220,7 +220,7 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
     /// <inheritdoc />
     public async Task<int> CountRunnersHoldingLeasesAsync(CancellationToken ct = default)
     {
-        // Distinct owners, not leased jobs: a runner given several jobs consumes one slot, which is what an
+        // Distinct owners, not leased jobs: a runner given several jobs consumes one slot, which an
         // entitlement counted in runners has to mean.
         var counts = await dbContext.Database
             .SqlQueryRaw<int>(

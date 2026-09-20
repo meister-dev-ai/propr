@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 ///     this is the mechanism that reaches the wire as <c>reasoning: { … }</c>.
 /// </summary>
 /// <remarks>
-///     That mechanism is per-client by design — the factory is handed the client it is building for — which is what
+///     That mechanism is per-client by design — the factory is handed the client it is building for — which 
 ///     lets one call site serve providers that express reasoning incompatibly. A client speaking a provider's own
 ///     protocol is given the request in neutral terms and maps it itself; only the OpenAI family is handed the
 ///     OpenAI library's options object, because only it understands one.

@@ -46,8 +46,8 @@ public sealed class RunnerHostOptions
     public string Tags { get; set; } = string.Empty;
 
     /// <summary>
-    ///     How many jobs this runner runs at once. It asks for a lease only when it has a free slot, which is
-    ///     what lets the control plane dispatch without tracking runner capacity itself.
+    ///     How many jobs this runner runs at once. It asks for a lease only when it has a free slot, which
+    ///     lets the control plane dispatch without tracking runner capacity itself.
     /// </summary>
     [Range(1, 64, ErrorMessage = "RUNNER_CAPACITY must be between 1 and 64.")]
     public int Capacity { get; set; } = 2;

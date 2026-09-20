@@ -506,7 +506,7 @@ public sealed class ClientAdminService(
             client.WithholdOutOfScopeFindings);
     }
 
-    // Without the licensing module there is no installation state to read, which is what a deployment with no
+    // Without the licensing module there is no installation state to read, which a deployment with no
     // database configured looks like. Tenancy is left unrestricted there.
     private async ValueTask<bool> IsMultiTenancyAvailableAsync(CancellationToken ct)
     {

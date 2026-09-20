@@ -98,7 +98,7 @@ public sealed class CachedLicenseStateProviderTests
     }
 
     // The stage rides the state the provider hands out, so it is derived against the licensing clock rather than
-    // recomputed by each caller. Crossing a boundary is observed at the next load, which is what the cache
+    // recomputed by each caller. Crossing a boundary is observed at the next load, which the cache
     // duration bounds.
     [Fact]
     public async Task ALicenseThatCrossesTheGraceBoundary_IsObservedOnTheNextLoad()
@@ -455,7 +455,7 @@ public sealed class CachedLicenseStateProviderTests
     }
 
     // Callers that arrive together while nothing is cached must share one load rather than each running their
-    // own, which is what the gate around the refresh is for.
+    // own, which the gate around the refresh is for.
     [Fact]
     public async Task ConcurrentFirstReads_LoadOnce()
     {
@@ -732,7 +732,7 @@ public sealed class CachedLicenseStateProviderTests
         }
     }
 
-    /// <summary>Keeps the rendered warnings, which is what the once-per-transition rule is asserted against.</summary>
+    /// <summary>Keeps the rendered warnings, which the once-per-transition rule is asserted against.</summary>
     private sealed class CapturingLogger(List<string> warnings) : ILogger<CachedLicenseStateProvider>
     {
         public IDisposable? BeginScope<TState>(TState state)

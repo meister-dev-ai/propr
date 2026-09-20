@@ -1,12 +1,14 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 using NSubstitute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
@@ -33,11 +35,20 @@ public sealed class AiConnectionScopeGuardTests
 
     private readonly ITenantProviderPolicyProvider _policies = Substitute.For<ITenantProviderPolicyProvider>();
 
+    // The connections below are on the Azure family, whose endpoint carries the operator's own resource name, so
+    // what it declares are suffixes. That is the shape the endpoint restriction has to be checked by containment.
+    private readonly IAiProviderDriverRegistry _drivers = DeclaringProviderFamilies.Declaring(
+        "meisterdev/azureOpenAi",
+        DeclaringProviderFamilies.DeclarationWith("meisterdev/azureOpenAi") with
+        {
+            ReachedHostPatterns = [".openai.azure.com"],
+        });
+
     private AiConnectionScopeGuard Sut()
     {
         this._policies.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(TenantProviderPolicy.Unrestricted);
-        return new AiConnectionScopeGuard(this._clients, this._policies);
+        return new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
     }
 
     [Fact]
@@ -106,14 +117,34 @@ public sealed class AiConnectionScopeGuardTests
     {
         var connection = Connection(tenantId: TenantA);
         this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
-            .Returns(new TenantProviderPolicy([AiProviderKind.OpenAiCompatible]));
-        var guard = new AiConnectionScopeGuard(this._clients, this._policies);
+            .Returns(new TenantProviderPolicy(["meisterdev/openAiCompatible"]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
 
         var reason = await guard.ValidateAsync(connection, TenantA);
 
         Assert.NotNull(reason);
-        Assert.Contains("AzureOpenAi", reason, StringComparison.Ordinal);
+        Assert.Contains("meisterdev/azureOpenAi", reason, StringComparison.Ordinal);
         Assert.Contains("permitted provider list", reason, StringComparison.Ordinal);
+    }
+
+    // An allow-list whose entries this build cannot name permits nothing, so a profile inside the right tenant is
+    // still refused. The reason names the entry that was not understood, so the refusal is actionable.
+    [Fact]
+    public async Task ConnectionUnderAnAllowListNamingNoKnownFamily_IsRefusedAndTheEntryIsNamed()
+    {
+        var connection = Connection(tenantId: TenantA);
+
+        // The policy is read before the substitute is configured: reading the registry inside Returns() would
+        // attach the return value to that read rather than to the policy read.
+        var unreadable = TenantProviderPolicy.FromStored(["Acme.Llm"], [], this._drivers);
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>()).Returns(unreadable);
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
+
+        var reason = await guard.ValidateAsync(connection, TenantA);
+
+        Assert.NotNull(reason);
+        Assert.Contains("permitted provider list", reason, StringComparison.Ordinal);
+        Assert.Contains("Acme.Llm", reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -121,8 +152,8 @@ public sealed class AiConnectionScopeGuardTests
     {
         var connection = Connection(tenantId: TenantA);
         this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
-            .Returns(new TenantProviderPolicy([AiProviderKind.AzureOpenAi]));
-        var guard = new AiConnectionScopeGuard(this._clients, this._policies);
+            .Returns(new TenantProviderPolicy(["meisterdev/azureOpenAi"]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
 
         Assert.Null(await guard.ValidateAsync(connection, TenantA));
     }
@@ -135,13 +166,68 @@ public sealed class AiConnectionScopeGuardTests
         var connection = Connection(tenantId: TenantA);
         this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
             .Returns(new TenantProviderPolicy([], ["opencode.ai"]));
-        var guard = new AiConnectionScopeGuard(this._clients, this._policies);
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
 
         var reason = await guard.ValidateAsync(connection, TenantA);
 
         Assert.NotNull(reason);
         Assert.Contains("test.openai.azure.com", reason, StringComparison.Ordinal);
         Assert.Contains("permitted endpoint list", reason, StringComparison.Ordinal);
+    }
+
+    // Every member of the set has to be permitted. The base URL of this profile is on the tenant's list, and the
+    // family also reaches every other resource under the same suffix, which the tenant has not permitted.
+    [Fact]
+    public async Task ConnectionWhoseFamilyReachesMoreThanTheTenantPermits_IsRefusedAndThePatternIsNamed()
+    {
+        var connection = Connection(tenantId: TenantA);
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([], ["test.openai.azure.com"]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
+
+        var reason = await guard.ValidateAsync(connection, TenantA);
+
+        Assert.NotNull(reason);
+        Assert.Contains(".openai.azure.com", reason, StringComparison.Ordinal);
+        Assert.Contains("permitted endpoint list", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConnectionWhoseBaseUrlAndDeclaredPatternsTheTenantPermits_IsAllowed()
+    {
+        var connection = Connection(tenantId: TenantA);
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([], [".openai.azure.com"]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
+
+        Assert.Null(await guard.ValidateAsync(connection, TenantA));
+    }
+
+    // The case the declaration exists for: a family whose endpoint is fixed by its vendor carries no base URL,
+    // so without the declared patterns the tenant's endpoint restriction would have nothing to read.
+    [Fact]
+    public async Task ConnectionWithNoBaseUrl_IsStillSubjectToTheEndpointRestriction()
+    {
+        var connection = Connection(tenantId: TenantA, baseUrl: string.Empty);
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([], ["opencode.ai"]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
+
+        var reason = await guard.ValidateAsync(connection, TenantA);
+
+        Assert.NotNull(reason);
+        Assert.Contains(".openai.azure.com", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConnectionWithNoBaseUrlOnAFamilyTheTenantPermitsTheReachOf_IsAllowed()
+    {
+        var connection = Connection(tenantId: TenantA, baseUrl: string.Empty);
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([], [".azure.com"]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
+
+        Assert.Null(await guard.ValidateAsync(connection, TenantA));
     }
 
     // The two rules are independent: a tenant that has stated no policy still cannot reference a profile owned by
@@ -155,16 +241,19 @@ public sealed class AiConnectionScopeGuardTests
         Assert.NotNull(await guard.ValidateAsync(Connection(tenantId: TenantA), TenantB));
     }
 
-    private static AiConnectionDto Connection(Guid? clientId = null, Guid? tenantId = null)
+    private static AiConnectionDto Connection(
+        Guid? clientId = null,
+        Guid? tenantId = null,
+        string baseUrl = "https://test.openai.azure.com")
     {
         var now = DateTimeOffset.UtcNow;
         return new AiConnectionDto(
             Guid.NewGuid(),
             clientId,
             "Scoped Connection",
-            AiProviderKind.AzureOpenAi,
-            "https://test.openai.azure.com",
-            AiAuthMode.ApiKey,
+            "meisterdev/azureOpenAi",
+            baseUrl,
+            "meisterdev/azureOpenAi:ApiKey",
             AiDiscoveryMode.ManualOnly,
             true,
             [],

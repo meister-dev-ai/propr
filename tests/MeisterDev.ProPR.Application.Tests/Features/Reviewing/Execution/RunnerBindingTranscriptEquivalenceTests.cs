@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
@@ -117,7 +116,7 @@ public sealed class RunnerBindingTranscriptEquivalenceTests
                 new ReviewSpendBaseline(ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None)));
         var models = Substitute.For<IRunnerRelayModelResolver>();
         models.ResolveAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new RunnerRelayModel(scripted, AiProviderKind.OpenAi, new ModelPricing(null, null)));
+            .Returns(new RunnerRelayModel(scripted, new ModelPricing(null, null)));
         var usage = Substitute.For<IRunnerRelayUsageRecorder>();
 
         var relay = new RunnerAiRelay(authorizer, budgets, models, usage, new RunnerRelayReplayCache());

@@ -246,8 +246,6 @@ public partial class ReviewOrchestrationServiceTests
         IRepositoryInstructionFetcher? instructionFetcher = null,
         IRepositoryInstructionEvaluator? instructionEvaluator = null,
         IRepositoryExclusionFetcher? exclusionFetcher = null,
-        IAiConnectionRepository? aiRepo = null,
-        IAiChatClientFactory? chatFactory = null,
         IProtocolRecorder? protocolRecorder = null,
         IReviewContextToolsFactory? reviewContextToolsFactory = null,
         ICodeReviewQueryService? queryService = null,
@@ -270,9 +268,6 @@ public partial class ReviewOrchestrationServiceTests
             threadStatusWriter,
             threadReplyPublisher);
 
-        var aiDependencies = aiRepo is not null && chatFactory is not null
-            ? (aiRepo, chatFactory)
-            : CreateAiSubstitutes();
         return new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -286,11 +281,9 @@ public partial class ReviewOrchestrationServiceTests
             evaluator,
             Substitute.For<IOptions<AiReviewOptions>>(),
             logger,
-            aiDependencies.aiRepo,
-            aiDependencies.chatFactory,
+            aiRuntimeResolver ?? AiConnectionTestFactory.CreateChatRuntimeResolver(),
             orchestrator,
             providerActivationService: providerActivationService,
-            aiRuntimeResolver: aiRuntimeResolver,
             workspaceManager: workspaceManager ?? CreateDefaultWorkspaceManager(),
             scmConnectionRepository: scmConnectionRepository,
             postedCommentOriginStore: postedCommentOriginStore);
@@ -412,20 +405,6 @@ public partial class ReviewOrchestrationServiceTests
             .Returns(Task.FromResult<ReviewerIdentity?>(reviewerIdentity));
         clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewerIdentity?>(reviewerIdentity));
-    }
-
-    private static (IAiConnectionRepository aiRepo, IAiChatClientFactory chatFactory) CreateAiSubstitutes()
-    {
-        var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid());
-        aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<AiConnectionDto?>(connDto));
-
-        var chatFactory = Substitute.For<IAiChatClientFactory>();
-        chatFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
-            .Returns(Substitute.For<IChatClient>());
-
-        return (aiRepo, chatFactory);
     }
 
     private static bool HasReviewPostingFailureDiagnostics(string? details, ReviewJob job)
@@ -572,76 +551,7 @@ public partial class ReviewOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_ActiveConnectionWithoutSelectedModel_UsesFirstAvailableModel()
-    {
-        // Arrange
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
-            CreateDeps();
-
-        var job = CreateJob();
-        var pr = CreatePullRequest();
-        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
-
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(CreateReviewResult());
-
-        var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var model = AiConnectionTestFactory.CreateChatModel("gpt-4.1");
-        var activeConnection = AiConnectionTestFactory.CreateConnection(
-            job.ClientId,
-            [model],
-            [],
-            "Client Connection");
-        aiRepo.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<AiConnectionDto?>(activeConnection));
-
-        var chatClient = Substitute.For<IChatClient>();
-        var chatFactory = Substitute.For<IAiChatClientFactory>();
-        chatFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret).Returns(chatClient);
-
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            instructionFetcher,
-            instructionEvaluator,
-            aiRepo: aiRepo,
-            chatFactory: chatFactory);
-
-        // Act
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        // Assert
-        await jobs.Received(1)
-            .UpdateAiConfigAsync(job.Id, activeConnection.Id, "gpt-4.1", Arg.Any<CancellationToken>(), Arg.Any<float?>());
-    }
-
-    [Fact]
-    public async Task ProcessAsync_WithRuntimeResolver_UsesResolvedRuntimeWithoutReadingActiveConnection()
+    public async Task ProcessAsync_ResolvesTheReviewRuntime_AndRecordsItsConnectionAndModel()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
                 instructionFetcher, instructionEvaluator, logger) =
@@ -672,7 +582,6 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<IChatClient?>())
             .Returns(CreateReviewResult());
 
-        var aiRepo = Substitute.For<IAiConnectionRepository>();
         var chatClient = Substitute.For<IChatClient>();
         var model = AiConnectionTestFactory.CreateChatModel("gpt-4.1");
         var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model);
@@ -698,23 +607,22 @@ public partial class ReviewOrchestrationServiceTests
             logger,
             instructionFetcher,
             instructionEvaluator,
-            aiRepo: aiRepo,
-            chatFactory: Substitute.For<IAiChatClientFactory>(),
             aiRuntimeResolver: aiRuntimeResolver);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
         await aiRuntimeResolver.Received(1)
             .ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>());
-        await aiRepo.DidNotReceive().GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await jobs.Received(1)
             .UpdateAiConfigAsync(job.Id, connection.Id, model.RemoteModelId, Arg.Any<CancellationToken>(), Arg.Any<float?>());
     }
 
+    // A review whose model sits on a profile this host cannot serve stops at resolution: the refusal becomes the
+    // job's failure reason so an operator reads what to install, and the job is never dispatched, so nothing
+    // repeats the attempt on a configuration that has not changed.
     [Fact]
-    public async Task ProcessAsync_ActiveConnectionWithoutAnyAvailableModel_FailsJobBeforeReviewDispatch()
+    public async Task ProcessAsync_RuntimeResolverRefusesAnUnavailableConnection_FailsTheJobWithTheRefusal()
     {
-        // Arrange
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
                 instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
@@ -722,11 +630,18 @@ public partial class ReviewOrchestrationServiceTests
         var job = CreateJob();
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
 
-        var aiRepo = Substitute.For<IAiConnectionRepository>();
-        aiRepo.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<AiConnectionDto?>(AiConnectionTestFactory.CreateConnection(job.ClientId, [], [], "Broken Connection")));
+        var connection = AiConnectionTestFactory.CreateConnection(job.ClientId, [], [], "Quarantined Connection");
+        var refusal = new AiConnectionUnavailableException(
+            connection,
+            new AiConnectionAvailabilityDto(
+                AiConnectionAvailabilityState.Unavailable,
+                AiConnectionUnavailableReason.ProviderFamilyAbsent,
+                "ContosoLlm",
+                []));
 
-        var chatFactory = Substitute.For<IAiChatClientFactory>();
+        var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+        aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .ThrowsAsync(refusal);
 
         var service = CreateService(
             jobs,
@@ -739,8 +654,53 @@ public partial class ReviewOrchestrationServiceTests
             logger,
             instructionFetcher,
             instructionEvaluator,
-            aiRepo: aiRepo,
-            chatFactory: chatFactory);
+            aiRuntimeResolver: aiRuntimeResolver);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1)
+            .SetFailedAsync(
+                job.Id,
+                Arg.Is<string>(message => message.Contains("Quarantined Connection", StringComparison.Ordinal)
+                                          && message.Contains("ContosoLlm", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>());
+        await orchestrator.DidNotReceive()
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>());
+        await jobs.DidNotReceive().UpdateRetryCountAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RuntimeResolverReportsNoBinding_FailsJobBeforeReviewDispatch()
+    {
+        // Arrange
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+        aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new AiPurposeBindingNotConfiguredException(AiPurpose.ReviewDefault));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            instructionFetcher,
+            instructionEvaluator,
+            aiRuntimeResolver: aiRuntimeResolver);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -750,7 +710,7 @@ public partial class ReviewOrchestrationServiceTests
             .SetFailedAsync(
                 job.Id,
                 Arg.Is<string>(message => message.Contains(
-                    "has no model deployment selected",
+                    "No active AI binding is configured",
                     StringComparison.OrdinalIgnoreCase)),
                 Arg.Any<CancellationToken>());
         await orchestrator.DidNotReceive()
@@ -760,6 +720,83 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<ReviewSystemContext>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>());
+    }
+
+    // A stop, a host shutdown and a lost lease all arrive as a cancelled token, and the worker that owns the job
+    // tells them apart and finalizes each one differently. Failing the job here would overwrite what it recorded
+    // and would report a cancelled review as a broken connection.
+    [Fact]
+    public async Task ProcessAsync_RuntimeResolutionCancelled_LeavesFinalizingTheJobToItsWorker()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+        aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException(cancellation.Token));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            instructionFetcher,
+            instructionEvaluator,
+            aiRuntimeResolver: aiRuntimeResolver);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.ProcessAsync(job, cancellation.Token));
+
+        await jobs.DidNotReceive()
+            .SetFailedAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    // A provider that times out raises a cancellation with nothing cancelled. That is a failure of the review,
+    // not a stop, so the job still has to be failed with what went wrong.
+    [Fact]
+    public async Task ProcessAsync_RuntimeResolutionTimesOutWithNothingCancelled_FailsTheJob()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+        aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout."));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            instructionFetcher,
+            instructionEvaluator,
+            aiRuntimeResolver: aiRuntimeResolver);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1)
+            .SetFailedAsync(
+                job.Id,
+                Arg.Is<string>(message => message.Contains("HttpClient.Timeout", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>());
     }
 
     // T025 — AddOptionalReviewerAsync is called with client's ReviewerId before PostAsync
@@ -811,7 +848,6 @@ public partial class ReviewOrchestrationServiceTests
 
         var reviewContextToolsFactory = CreateDefaultReviewContextToolsFactory();
 
-        var (aiRepo, chatFactory) = CreateAiSubstitutes();
         var service = CreateService(
             jobs,
             prFetcher,
@@ -824,8 +860,6 @@ public partial class ReviewOrchestrationServiceTests
             instructionFetcher,
             instructionEvaluator,
             CreateDefaultExclusionFetcher(),
-            aiRepo,
-            chatFactory,
             reviewContextToolsFactory: reviewContextToolsFactory);
 
         // Act

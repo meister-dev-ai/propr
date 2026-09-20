@@ -157,7 +157,7 @@ internal sealed partial class ReviewTriageClassifier(
     /// <summary>Reads what the call consumed, in the terms the job breakdown records.</summary>
     private static TriageSpend? MeasureSpend(IResolvedAiChatRuntime runtime, ChatResponse response)
     {
-        var usage = AiTokenUsageExtractor.FromResponse(response, runtime.Connection.ProviderKind);
+        var usage = AiTokenUsageExtractor.FromResponse(response);
 
         // A response with no usage payload extracts as all-zero. Attributing that would add a line to the
         // breakdown claiming the call was free, which is a stronger statement than "the provider did not say".

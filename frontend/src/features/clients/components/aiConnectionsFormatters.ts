@@ -2,34 +2,63 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import type {
-  AiAuthMode,
+  AiConnectionAvailabilityDto,
   AiConnectionDto,
+  AiConnectionVocabularyField,
   AiProtocolMode,
-  AiProviderKind,
+  AiProviderConnectionFormDto,
   AiPurpose,
   AiVerificationStatus,
 } from '@/services/aiConnectionsService'
 import type { EditableBinding, EditableModel } from './aiConnectionsForm.types'
 import type { AiModelCatalogEntryDto } from '@/services/modelCatalogService'
 
-// Static option tables and pure label/parse helpers for the AI-connections form.
-// Extracted from ClientAiConnectionsTab.vue so the component holds only state.
+// Label, option and parse helpers for the AI-connections form.
+//
+// No provider family is named here. The family list, its labels, its credential and protocol modes and its
+// connection-box text all come from the permitted-providers endpoint. An add-in installed after this build
+// shipped would otherwise render as a bare key.
+
+/** One value a picker offers, as the server described it. */
+export interface ModeOption<TValue extends string> {
+  value: TValue
+  label: string
+}
 
 /**
- * Every provider family the system can name, with its label. This is the LABEL CATALOGUE, not the offer list:
- * which families a given client may actually pick comes from the server, because a family can be named here
- * before this build has a driver for it. Rendering a label for such a family still matters — a profile carrying
- * one has to read as itself rather than as "Unknown".
+ * Converts the server's vocabulary entries for one axis into picker options.
+ *
+ * An entry with no label falls back to its value. Operators match that stored value against an install or an
+ * allow-list, so it is more useful than a placeholder.
  */
-export const providerOptions: Array<{ value: AiProviderKind; label: string }> = [
-  { value: 'azureOpenAi', label: 'Azure OpenAI / AI Foundry' },
-  { value: 'openAi', label: 'OpenAI (non-Azure)' },
-  { value: 'liteLlm', label: 'LiteLLM' },
-  { value: 'openAiCompatible', label: 'OpenAI-compatible (custom base URL)' },
-  { value: 'anthropic', label: 'Anthropic (native)' },
-  { value: 'awsBedrock', label: 'AWS Bedrock' },
-  { value: 'googleVertex', label: 'Google Gemini / Vertex AI' },
-]
+export const modeOptions = <TValue extends string>(
+  reported: ReadonlyArray<{ value?: TValue | null; label?: string | null }> | null | undefined,
+): Array<ModeOption<TValue>> =>
+  (reported ?? [])
+    .filter((entry): entry is { value: TValue; label?: string | null } => Boolean(entry.value))
+    .map((entry) => ({ value: entry.value, label: entry.label || entry.value }))
+
+/**
+ * Picker options for one vocabulary axis. Superseded entries are dropped, except one already selected.
+ *
+ * A superseded entry is still read by the family but is no longer offered for a new connection. Keeping the
+ * selected one means a stored profile opens on the value it holds. Dropping it would open that profile on a
+ * different value, and saving would overwrite a credential the operator never touched.
+ */
+export const offeredModeOptions = <TValue extends string>(
+  reported:
+    | ReadonlyArray<{ value?: TValue | null; label?: string | null; isSuperseded?: boolean | null }>
+    | null
+    | undefined,
+  selected: TValue | null | undefined,
+): Array<ModeOption<TValue>> =>
+  modeOptions((reported ?? []).filter((entry) => !entry.isSuperseded || entry.value === selected))
+
+/** Returns the label for one vocabulary value, from the options the server described. */
+export const modeLabel = <TValue extends string>(
+  options: ReadonlyArray<ModeOption<TValue>>,
+  value: TValue | null | undefined,
+): string => (value ? options.find((option) => option.value === value)?.label ?? value : 'Unknown')
 
 // Sections group the purpose rows in the editor so the flat list stays readable as purposes grow.
 export type PurposeSection = 'generation' | 'support' | 'memory' | 'insights'
@@ -56,128 +85,48 @@ export const purposeOptions: Array<{ value: AiPurpose; label: string; descriptio
   { value: 'insightsClassification', label: 'Insights Classification', description: 'Classifies collected findings for quality analytics. Falls back to Review Triage when unset.', defaultEnabled: false, section: 'insights' },
 ]
 
-export const protocolOptionLabels: Record<AiProtocolMode, string> = {
-  auto: 'Automatic',
-  responses: 'Responses',
-  chatCompletions: 'Chat Completions',
-  embeddings: 'Embeddings',
-  anthropicMessages: 'Anthropic Messages',
-  bedrockConverse: 'Bedrock Converse',
-  googleGenerateContent: 'Google generateContent',
-}
-
 export const enabledBindings = (profile: AiConnectionDto) => (profile.purposeBindings ?? []).filter((binding) => binding.isEnabled)
 
 /**
- * What to tell an operator about the two fields whose correct value differs most between provider families.
- * A Bedrock access key and an Anthropic key are both "the secret", but pasted into the wrong shape one of them
- * fails with a signing error that reads like a permissions problem — so the form says which shape it wants.
+ * Placeholder and hint text for the three connection boxes the host keeps for every family: display name,
+ * base URL and default query parameters.
+ *
+ * The base URL needs it most. The same box takes a resource endpoint on one family and a regional host on
+ * another, and the wrong one fails with a provider error naming neither. Credential boxes are excluded. A
+ * family declares those fields with its own labels and hints.
  */
 export interface ProviderGuidance {
   namePlaceholder: string
   baseUrlPlaceholder: string
   baseUrlHint: string
-  credentialHint: string
-  /** A query parameter this family cannot work without, so the form can stop presenting it as optional. */
+  /** A query parameter this family requires, so the form does not present it as optional. */
   requiredQueryParam: string
   queryParamPlaceholder: string
 }
 
-const defaultGuidance: ProviderGuidance = {
-  namePlaceholder: 'OpenAI (prod)',
-  baseUrlPlaceholder: 'https://api.openai.com/v1',
-  baseUrlHint: 'Azure-hosted endpoints, including Azure AI Foundry OpenAI endpoints, belong under Azure OpenAI / AI Foundry.',
-  credentialHint: '',
+/**
+ * Fallback text for a box the family says nothing about. It names no family and gives no example address. An
+ * example written for one family is misleading under another. The query-parameter placeholder describes the
+ * shape of an entry. That shape is the same for every family.
+ */
+export const neutralGuidance: ProviderGuidance = {
+  namePlaceholder: '',
+  baseUrlPlaceholder: '',
+  baseUrlHint: '',
   requiredQueryParam: '',
-  queryParamPlaceholder: 'api-version=2024-10-21',
+  queryParamPlaceholder: 'name=value',
 }
 
-const guidanceByProvider: Partial<Record<AiProviderKind, ProviderGuidance>> = {
-  azureOpenAi: {
-    ...defaultGuidance,
-    namePlaceholder: 'Azure OpenAI (prod)',
-    baseUrlPlaceholder: 'https://your-resource.openai.azure.com/',
-    baseUrlHint: 'The Azure AI resource endpoint, not a deployment URL.',
-  },
-  openAiCompatible: {
-    ...defaultGuidance,
-    namePlaceholder: 'DeepSeek via opencode Zen',
-    baseUrlPlaceholder: 'https://opencode.ai/zen/v1',
-    baseUrlHint: 'Whatever serves an OpenAI-compatible /chat/completions at this URL, vendor or self-hosted.',
-  },
-  liteLlm: {
-    ...defaultGuidance,
-    namePlaceholder: 'LiteLLM gateway',
-    baseUrlPlaceholder: 'https://gateway.example.com/v1',
-    baseUrlHint: 'The gateway URL; models are named as the gateway exposes them.',
-  },
-  anthropic: {
-    ...defaultGuidance,
-    namePlaceholder: 'Claude (native)',
-    baseUrlPlaceholder: 'https://api.anthropic.com/v1',
-    baseUrlHint: 'Any host that speaks the Messages API works, including a gateway in front of it.',
-    credentialHint: 'Sent as the x-api-key header, which is what Anthropic reads.',
-  },
-  awsBedrock: {
-    ...defaultGuidance,
-    namePlaceholder: 'Bedrock (eu-central-1)',
-    baseUrlPlaceholder: 'https://bedrock-runtime.eu-central-1.amazonaws.com',
-    baseUrlHint: 'The host names the region inference runs in, which is what pins where the data goes.',
-    credentialHint: 'Store the access key as accessKeyId:secretAccessKey, adding :sessionToken for temporary credentials.',
-    queryParamPlaceholder: 'region=eu-central-1',
-  },
-  googleVertex: {
-    ...defaultGuidance,
-    namePlaceholder: 'Gemini on Vertex (europe-west4)',
-    baseUrlPlaceholder: 'https://europe-west4-aiplatform.googleapis.com',
-    baseUrlHint:
-      'A Vertex host names the location it serves. For the Gemini API use '
-      + 'https://generativelanguage.googleapis.com instead.',
-    credentialHint: 'Vertex takes the JSON key of a service account; the Gemini API takes a plain API key.',
-    requiredQueryParam: 'project',
-    queryParamPlaceholder: 'project=your-gcp-project',
-  },
-}
-
-export const providerGuidance = (providerKind: AiProviderKind | undefined): ProviderGuidance =>
-  (providerKind && guidanceByProvider[providerKind]) || defaultGuidance
-
-export const authOptionsForProvider = (providerKind: AiProviderKind): Array<{ value: AiAuthMode; label: string }> => {
-  return providerKind === 'azureOpenAi'
-    ? [
-        { value: 'apiKey', label: 'API Key' },
-        { value: 'azureIdentity', label: 'Azure Identity' },
-      ]
-    : [{ value: 'apiKey', label: 'API Key' }]
-}
-
-export const protocolOptions = (purpose: AiPurpose): Array<{ value: AiProtocolMode; label: string }> => {
-  if (purpose === 'embeddingDefault') {
-    return [
-      { value: 'auto', label: protocolOptionLabels.auto },
-      { value: 'embeddings', label: protocolOptionLabels.embeddings },
-    ]
-  }
-
-  return [
-    { value: 'auto', label: protocolOptionLabels.auto },
-    { value: 'responses', label: protocolOptionLabels.responses },
-    { value: 'chatCompletions', label: protocolOptionLabels.chatCompletions },
-  ]
-}
-
-export const providerLabel = (providerKind: AiProviderKind | undefined) => providerOptions.find((option) => option.value === providerKind)?.label ?? 'Unknown'
-
-export const authModeLabel = (authMode: AiAuthMode | undefined) => {
-  switch (authMode) {
-    case 'azureIdentity':
-      return 'Azure Identity'
-    case 'apiKey':
-      return 'API Key'
-    default:
-      return 'Unknown'
-  }
-}
+/** Merges the selected family's box text over the family-neutral fallback. */
+export const providerGuidance = (
+  connectionForm: AiProviderConnectionFormDto | null | undefined,
+): ProviderGuidance => ({
+  namePlaceholder: connectionForm?.namePlaceholder || neutralGuidance.namePlaceholder,
+  baseUrlPlaceholder: connectionForm?.baseUrlPlaceholder || neutralGuidance.baseUrlPlaceholder,
+  baseUrlHint: connectionForm?.baseUrlHint || neutralGuidance.baseUrlHint,
+  requiredQueryParam: connectionForm?.requiredQueryParam || neutralGuidance.requiredQueryParam,
+  queryParamPlaceholder: connectionForm?.queryParamPlaceholder || neutralGuidance.queryParamPlaceholder,
+})
 
 export const verificationLabel = (status: AiVerificationStatus | undefined) => {
   switch (status) {
@@ -207,14 +156,102 @@ export const verificationChipClass = (status: AiVerificationStatus | undefined) 
   verificationChipModifier(status),
 ]
 
+/**
+ * Reports whether the server marked the stored profile unusable.
+ *
+ * Read from the profile, not derived from its provider family. A family this build cannot name has no value in
+ * the enum-typed `providerKind`, so that field reports a different family and says nothing about the profile.
+ */
+export const isConnectionUnavailable = (profile: AiConnectionDto): boolean =>
+  profile.availability?.state === 'unavailable'
+
+/** Label for each stored vocabulary position, so a reason line names the setting an operator edits. */
+const vocabularyFieldLabels: Record<AiConnectionVocabularyField, string> = {
+  authMode: 'Authentication mode',
+  discoveryMode: 'Discovery mode',
+  operationKind: 'Model workload',
+  protocolMode: 'Protocol mode',
+  configuredModelSource: 'Model source',
+  purpose: 'Purpose',
+  verificationStatus: 'Verification status',
+  verificationFailureCategory: 'Verification failure category',
+}
+
+const unresolvedValueText = (availability: AiConnectionAvailabilityDto): string =>
+  (availability.unresolvedValues ?? [])
+    .map((unresolved) => {
+      const field = unresolved.field ? vocabularyFieldLabels[unresolved.field] ?? unresolved.field : 'Stored value'
+      return `${field} “${unresolved.value ?? ''}”`
+    })
+    .join(', ')
+
+const identityText = (availability: AiConnectionAvailabilityDto): string =>
+  availability.providerIdentity || 'unnamed'
+
+/**
+ * The short line under an unavailable profile, naming the value behind the state. The provider identity is
+ * quoted as stored. Operators match that value against an install or an allow-list.
+ */
+export const unavailableReasonText = (availability: AiConnectionAvailabilityDto | undefined): string => {
+  if (!availability) {
+    return ''
+  }
+
+  switch (availability.reason) {
+    case 'providerFamilyAbsent':
+      return `Provider family “${identityText(availability)}” is not installed on this host.`
+    case 'providerFamilyNotPermitted':
+      return `Provider family “${identityText(availability)}” is not permitted for this tenant.`
+    case 'endpointNotPermitted':
+      return "This profile's endpoint is not on the tenant's permitted endpoint list."
+    case 'storedValueUnresolved':
+      return `This build cannot read ${unresolvedValueText(availability) || 'a value stored on this profile'}.`
+    default:
+      return 'This profile cannot be used as it is stored.'
+  }
+}
+
+/**
+ * The remedy shown under an unavailable profile. Each reason is separate because the actions differ. An absent
+ * family is installed on the host. A refused family is added to the tenant's family allow-list, and a refused
+ * endpoint to its endpoint allow-list.
+ */
+export const unavailableRemedyText = (availability: AiConnectionAvailabilityDto | undefined): string => {
+  if (!availability) {
+    return ''
+  }
+
+  switch (availability.reason) {
+    case 'providerFamilyAbsent':
+      return `Install the “${identityText(availability)}” provider family on this host, or point this profile at a family that is installed.`
+    case 'providerFamilyNotPermitted':
+      return `Add “${identityText(availability)}” to the tenant's provider allow-list, or point this profile at a permitted family.`
+    case 'endpointNotPermitted':
+      return "Add the endpoint to the tenant's permitted endpoint list, or point this profile at a permitted one."
+    case 'storedValueUnresolved':
+      return 'Edit the profile and choose a value this build offers.'
+    default:
+      return 'Edit the profile to correct what it is stored with.'
+  }
+}
+
 export const purposeLabel = (purpose: AiPurpose | undefined) => purposeOptions.find((option) => option.value === purpose)?.label ?? 'Unknown purpose'
 export const purposeDescription = (purpose: AiPurpose | undefined) => purposeOptions.find((option) => option.value === purpose)?.description ?? ''
+
+/**
+ * The protocol mode that leaves the format to the driver. Host-reserved, so it carries no family key and every
+ * family serves it. A binding holds this value when it has no preference.
+ */
+export const autoProtocolMode: AiProtocolMode = 'Auto'
+
+/** The host-reserved protocol mode for an embedding call, written the same way. */
+export const embeddingsProtocolMode: AiProtocolMode = 'Embeddings'
 
 export const makeBindingDefaults = (): EditableBinding[] => purposeOptions.map((option) => ({
   id: null,
   purpose: option.value,
   configuredModelId: '',
-  protocolMode: option.value === 'embeddingDefault' ? 'embeddings' : 'auto',
+  protocolMode: option.value === 'embeddingDefault' ? embeddingsProtocolMode : autoProtocolMode,
   isEnabled: option.defaultEnabled,
 }))
 

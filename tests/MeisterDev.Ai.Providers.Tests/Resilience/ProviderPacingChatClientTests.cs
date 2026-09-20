@@ -289,7 +289,7 @@ public sealed class ProviderPacingChatClientTests
 
     private static IList<ChatMessage> Hello => [new ChatMessage(ChatRole.User, "hello")];
 
-    /// <summary>The jitter is switched off so a release lands exactly on the window, which is what these assert.</summary>
+    /// <summary>The jitter is switched off so a release lands exactly on the window, which these assert.</summary>
     private static ProviderThrottleGate Gate(TimeProvider clock)
     {
         return new ProviderThrottleGate(clock, TimeSpan.Zero);

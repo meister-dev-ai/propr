@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -274,7 +275,15 @@ public sealed class AdminUsersController(
 }
 
 /// <summary>Create-user request.</summary>
-public sealed record CreateUserRequest(string Username, string Password, AppUserRole? GlobalRole);
+public sealed record CreateUserRequest(string Username, string Password, AppUserRole? GlobalRole)
+{
+    /// <summary>Renders the request without the password; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(CreateUserRequest)} {{ Username = {this.Username}, "
+               + $"Password = {SecretSafeRendering.Elide(this.Password)}, GlobalRole = {this.GlobalRole} }}";
+    }
+}
 
 /// <summary>Enable/disable request for a user.</summary>
 public sealed record SetUserActiveRequest([property: JsonRequired] bool IsActive);

@@ -69,7 +69,7 @@ public sealed class CodeInsightBrowseReader(
                 }
 
                 // Exact, not prefix: the drill from a symbol hotspot must show that definition's findings and no
-                // sibling's, which is what makes the number on the row checkable.
+                // sibling's, and that makes the number on the row checkable.
                 if (query.SymbolName is not null)
                 {
                     findings = findings.Where(finding => finding.OriginSymbolName == query.SymbolName);

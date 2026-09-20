@@ -2,6 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
@@ -25,6 +28,16 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 /// <summary>Unit tests for <see cref="AiConnectionRepository" /> using EF Core in-memory database.</summary>
 public sealed class AiConnectionRepositoryTests
 {
+    private const string AzureKey = "meisterdev/azureOpenAi";
+
+    private const string AzureApiKey = AzureKey + ":ApiKey";
+
+    private const string AzureIdentityAuth = AzureKey + ":AzureIdentity";
+
+    private const string AzureResponses = AzureKey + ":Responses";
+
+    private const string AzureChatCompletions = AzureKey + ":ChatCompletions";
+
     private static ISecretProtectionCodec CreateCodec()
     {
         var keysDirectory = Path.Combine(
@@ -53,17 +66,42 @@ public sealed class AiConnectionRepositoryTests
         return policies;
     }
 
+    // A tenant that permits only the families named here, and nothing else.
+    private static ITenantProviderPolicyProvider PoliciesAllowing(params string[] allowedKinds)
+    {
+        return PoliciesFor(new TenantProviderPolicy(allowedKinds));
+    }
+
+    private static ITenantProviderPolicyProvider PoliciesFor(TenantProviderPolicy policy)
+    {
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(policy);
+        policies.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(policy);
+        return policies;
+    }
+
     private static AiConnectionRepository CreateRepository(
         MeisterProPRDbContext db,
         IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
         ISecretProtectionCodec? codec = null,
-        ITenantProviderPolicyProvider? providerPolicies = null)
+        ITenantProviderPolicyProvider? providerPolicies = null,
+        IAiProviderDriverRegistry? providerDrivers = null)
     {
         return new AiConnectionRepository(
             db,
             codec ?? CreateCodec(),
             providerPolicies ?? UnrestrictedPolicies(),
+            providerDrivers ?? StoredFamily(),
+            EgressUrlPolicy.Locked,
             contextFactory);
+    }
+
+    // The family the fixture profiles are stored against: it declares the key those rows would carry after its
+    // migration, and supersedes the spelling they carry before it. A test about a family nothing claims passes
+    // DeclaringProviderFamilies.None() instead.
+    private static IAiProviderDriverRegistry StoredFamily()
+    {
+        return DeclaringProviderFamilies.Superseding("meisterdev/azureOpenAi", "AzureOpenAi");
     }
 
     private static MeisterProPRDbContext CreateContext()
@@ -106,9 +144,9 @@ public sealed class AiConnectionRepositoryTests
             Id = profileId,
             ClientId = clientId,
             DisplayName = displayName,
-            ProviderKind = AiProviderKind.AzureOpenAi.ToString(),
+            ProviderKind = "AzureOpenAi",
             BaseUrl = "https://my-openai.openai.azure.com/",
-            AuthMode = AiAuthMode.AzureIdentity.ToString(),
+            AuthMode = "AzureIdentity",
             DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
             DefaultHeaders = [],
             DefaultQueryParams = [],
@@ -126,9 +164,9 @@ public sealed class AiConnectionRepositoryTests
                     OperationKinds = [AiOperationKind.Chat.ToString()],
                     SupportedProtocolModes =
                     [
-                        AiProtocolMode.Auto.ToString(),
-                        AiProtocolMode.Responses.ToString(),
-                        AiProtocolMode.ChatCompletions.ToString(),
+                        ProviderDeclaredProtocolModes.Auto,
+                        "Responses",
+                        "ChatCompletions",
                     ],
                     SupportsStructuredOutput = true,
                     SupportsToolUse = true,
@@ -143,8 +181,8 @@ public sealed class AiConnectionRepositoryTests
                     OperationKinds = [AiOperationKind.Embedding.ToString()],
                     SupportedProtocolModes =
                     [
-                        AiProtocolMode.Auto.ToString(),
-                        AiProtocolMode.Embeddings.ToString(),
+                        ProviderDeclaredProtocolModes.Auto.ToString(),
+                        ProviderDeclaredProtocolModes.Embeddings.ToString(),
                     ],
                     TokenizerName = "cl100k_base",
                     MaxInputTokens = 8192,
@@ -170,7 +208,8 @@ public sealed class AiConnectionRepositoryTests
                 ConnectionProfileId = profileId,
                 ConfiguredModelId = purpose == AiPurpose.EmbeddingDefault ? embeddingModelId : chatModelId,
                 Purpose = purpose.ToString(),
-                ProtocolMode = (purpose == AiPurpose.EmbeddingDefault ? AiProtocolMode.Embeddings : AiProtocolMode.Auto).ToString(),
+                ProtocolMode =
+                    (purpose == AiPurpose.EmbeddingDefault ? ProviderDeclaredProtocolModes.Embeddings : ProviderDeclaredProtocolModes.Auto).ToString(),
                 IsEnabled = true,
                 CreatedAt = createdAt,
                 UpdatedAt = createdAt,
@@ -244,9 +283,9 @@ public sealed class AiConnectionRepositoryTests
         // A request that keeps only the embedding model — dropping the referenced chat model.
         var dropChat = new AiConnectionWriteRequestDto(
             "Updated",
-            AiProviderKind.AzureOpenAi,
+            "meisterdev/azureOpenAi",
             "https://updated.openai.azure.com/",
-            AiAuthMode.ApiKey,
+            AzureApiKey,
             AiDiscoveryMode.ManualOnly,
             [
                 new AiConfiguredModelDto(
@@ -254,7 +293,7 @@ public sealed class AiConnectionRepositoryTests
                     "text-embedding-3-large",
                     "text-embedding-3-large",
                     [AiOperationKind.Embedding],
-                    [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+                    [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
                     "cl100k_base",
                     8192,
                     3072),
@@ -318,7 +357,7 @@ public sealed class AiConnectionRepositoryTests
             ConnectionId = connectionId,
             ConfiguredModelId = modelId,
             ReasoningEffort = ReviewReasoningEffort.None,
-            ProtocolMode = AiProtocolMode.Auto,
+            ProtocolMode = ProviderDeclaredProtocolModes.Auto,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -327,7 +366,7 @@ public sealed class AiConnectionRepositoryTests
     private static AiConnectionWriteRequestDto CreateWriteRequest(
         string displayName = "Updated Connection",
         string baseUrl = "https://updated.openai.azure.com/",
-        AiAuthMode authMode = AiAuthMode.AzureIdentity,
+        string authMode = AzureIdentityAuth,
         string? secret = null,
         string chatModelId = "gpt-4o",
         string embeddingModelId = "text-embedding-3-large")
@@ -337,7 +376,7 @@ public sealed class AiConnectionRepositoryTests
             chatModelId,
             chatModelId,
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions],
+            [ProviderDeclaredProtocolModes.Auto, AzureResponses, AzureChatCompletions],
             null,
             null,
             null,
@@ -349,14 +388,14 @@ public sealed class AiConnectionRepositoryTests
             embeddingModelId,
             embeddingModelId,
             [AiOperationKind.Embedding],
-            [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+            [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
             "cl100k_base",
             8192,
             3072);
 
         return new AiConnectionWriteRequestDto(
             displayName,
-            AiProviderKind.AzureOpenAi,
+            "meisterdev/azureOpenAi",
             baseUrl,
             authMode,
             AiDiscoveryMode.ManualOnly,
@@ -368,11 +407,388 @@ public sealed class AiConnectionRepositoryTests
                 new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewMediumEffort, null, chatModelId),
                 new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewHighEffort, null, chatModelId),
                 new AiPurposeBindingDto(Guid.Empty, AiPurpose.MemoryReconsideration, null, chatModelId),
-                new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, embeddingModelId, AiProtocolMode.Embeddings),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, embeddingModelId, ProviderDeclaredProtocolModes.Embeddings),
             ],
             null,
             null,
             secret);
+    }
+
+    // The column holds the identity the API reports. A spelling a loaded family claims is reported as that
+    // family's key, which everything else compares against; an identity no loaded family claims is
+    // reported exactly as it is stored, so a profile whose add-in is absent can still be seen and corrected
+    // rather than being dropped or rewritten to another family.
+    [Theory]
+    [InlineData("meisterdev/azureOpenAi", "meisterdev/azureOpenAi")]
+    [InlineData("AzureOpenAi", "meisterdev/azureOpenAi")]
+    [InlineData("contoso/llm", "contoso/llm")]
+    public async Task AProfileIsReadBackUnderTheIdentityItWasStoredAgainst(string storedIdentity, string reported)
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        profile.ProviderKind = storedIdentity;
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var read = await CreateRepository(db).GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(reported, read.ProviderKind);
+    }
+
+    // A profile saved by a build that had a family this one does not is listed, because an operator cannot
+    // install the missing family for a connection they cannot see. The identity is carried on the availability
+    // state: the family field is enum-typed and has no member to put it in. Both spellings a row can hold are
+    // reported the same way — the member name a row written before its family declared a key still holds, and
+    // the declared key a row carries once that family's rows have been rewritten.
+    [Theory]
+    [InlineData("SomeExternalFamily")]
+    [InlineData("meisterdev/someExternalFamily")]
+    public async Task AProfileStoredAgainstAFamilyThisBuildCannotNameIsUnavailableNamingTheIdentity(string storedIdentity)
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        profile.ProviderKind = storedIdentity;
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var read = await CreateRepository(db).GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(AiConnectionAvailabilityState.Unavailable, read.Availability.State);
+        Assert.Equal(AiConnectionUnavailableReason.ProviderFamilyAbsent, read.Availability.Reason);
+        Assert.Equal(storedIdentity, read.Availability.ProviderIdentity);
+    }
+
+    // A family the tenant does not permit is a different fault with a different remedy: the family is installed,
+    // and the allow-list has to be amended. Reporting both as one state would send the operator to the wrong one.
+    [Fact]
+    public async Task AProfileWhoseFamilyTheTenantDoesNotPermitIsUnavailableWithTheAllowListReason()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId);
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var read = await CreateRepository(db, providerPolicies: PoliciesAllowing("meisterdev/anthropic"))
+            .GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(AiConnectionAvailabilityState.Unavailable, read.Availability.State);
+        Assert.Equal(AiConnectionUnavailableReason.ProviderFamilyNotPermitted, read.Availability.Reason);
+        Assert.Equal("AzureOpenAi", read.Availability.ProviderIdentity);
+        Assert.Empty(read.Availability.UnresolvedValues);
+    }
+
+    // A tenant can narrow its endpoint allow-list after a profile was saved. The write-time refusal cannot see
+    // that, and runtime resolution refuses the profile, so the list has to report it instead of advertising a
+    // connection that will not run.
+    [Fact]
+    public async Task AProfileWhoseEndpointTheTenantNoLongerPermitsIsUnavailableWithTheEndpointReason()
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var narrowed = new TenantProviderPolicy([], ["api.vendor.example"]);
+
+        var read = await CreateRepository(db, providerPolicies: PoliciesFor(narrowed)).GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(AiConnectionAvailabilityState.Unavailable, read.Availability.State);
+        Assert.Equal(AiConnectionUnavailableReason.EndpointNotPermitted, read.Availability.Reason);
+    }
+
+    // A profile whose family this build has and the tenant permits, holding only values this build can read, is
+    // usable, and says so rather than leaving the caller to infer it from an absent reason.
+    [Fact]
+    public async Task AProfileThisBuildCanReadAndTheTenantPermitsIsAvailable()
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var read = await CreateRepository(db, providerPolicies: PoliciesAllowing("meisterdev/azureOpenAi"))
+            .GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(AiConnectionAvailabilityState.Available, read.Availability.State);
+        Assert.Null(read.Availability.Reason);
+        Assert.Null(read.Availability.ProviderIdentity);
+        Assert.Empty(read.Availability.UnresolvedValues);
+    }
+
+    // A stored value the build cannot read leaves the profile usable in no sense, but the remedy is to correct
+    // the row rather than to install or permit a family, so it is reported under its own reason.
+    [Fact]
+    public async Task AProfileHoldingAnUnresolvedStoredValueIsUnavailableUnderItsOwnReason()
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        profile.AuthMode = "SomeExternalCredentialShape";
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var read = await CreateRepository(db).GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(AiConnectionAvailabilityState.Unavailable, read.Availability.State);
+        Assert.Equal(AiConnectionUnavailableReason.StoredValueUnresolved, read.Availability.Reason);
+        Assert.Equal(
+            new AiUnresolvedValueDto(AiConnectionVocabularyField.AuthMode, "SomeExternalCredentialShape"),
+            Assert.Single(read.Availability.UnresolvedValues));
+    }
+
+    // The console reaches one profile through a list and through the profile's own address. Two answers for one
+    // row would have an operator fix a connection on one screen that the other reports as usable.
+    [Fact]
+    public async Task EveryReadReportsTheSameAvailabilityForTheSameRow()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, isActive: true);
+        profile.ProviderKind = "SomeExternalFamily";
+        profile.DiscoveryMode = "SomeExternalDiscovery";
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+        var repository = CreateRepository(db);
+
+        var fromList = Assert.Single(await repository.GetByClientAsync(clientId));
+        var fromId = await repository.GetByIdAsync(profile.Id);
+        var fromActive = await repository.GetActiveForClientAsync(clientId);
+
+        Assert.NotNull(fromId);
+        Assert.NotNull(fromActive);
+        foreach (var availability in new[] { fromList.Availability, fromId.Availability, fromActive.Availability })
+        {
+            Assert.Equal(AiConnectionAvailabilityState.Unavailable, availability.State);
+            Assert.Equal(AiConnectionUnavailableReason.ProviderFamilyAbsent, availability.Reason);
+            Assert.Equal("SomeExternalFamily", availability.ProviderIdentity);
+
+            // The identity names no loaded family, so the credential and wire shapes it carries are nobody's to
+            // claim either, and every one of them is reported beside the discovery mode.
+            Assert.Equal(
+                [
+                    new AiUnresolvedValueDto(AiConnectionVocabularyField.ProtocolMode, "Responses"),
+                    new AiUnresolvedValueDto(AiConnectionVocabularyField.ProtocolMode, "ChatCompletions"),
+                    new AiUnresolvedValueDto(AiConnectionVocabularyField.AuthMode, "AzureIdentity"),
+                    new AiUnresolvedValueDto(AiConnectionVocabularyField.DiscoveryMode, "SomeExternalDiscovery"),
+                ],
+                availability.UnresolvedValues);
+        }
+    }
+
+    // Every reason for unavailability is reported through a list as well, because a row that is left out of the
+    // list is a connection the operator has no way to reach.
+    [Fact]
+    public async Task GetByClientAsync_ListsAProfileStoredAgainstAFamilyThisBuildCannotName()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var absentFamily = MakeProfile(clientId, displayName: "Absent Family");
+        absentFamily.ProviderKind = "SomeExternalFamily";
+        var readable = MakeProfile(clientId, displayName: "Readable Profile");
+        db.AiConnectionProfiles.Add(absentFamily);
+        db.AiConnectionProfiles.Add(readable);
+        await db.SaveChangesAsync();
+
+        var connections = await CreateRepository(db).GetByClientAsync(clientId);
+
+        Assert.Equal(2, connections.Count);
+        Assert.Equal(
+            AiConnectionUnavailableReason.ProviderFamilyAbsent,
+            connections.Single(connection => connection.Id == absentFamily.Id).Availability.Reason);
+        Assert.Equal(
+            AiConnectionAvailabilityState.Available,
+            connections.Single(connection => connection.Id == readable.Id).Availability.State);
+    }
+
+    // Every vocabulary column on a profile holds unconstrained text, so a build that declared a member this one
+    // does not has already written values this one cannot read. The profile is returned and names each value it
+    // could not resolve: an enum parse in the middle of the projection throws and takes out every profile being
+    // projected with it.
+    [Fact]
+    public async Task AProfileHoldingValuesThisBuildCannotNameIsReturnedNamingEachOfThem()
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        profile.AuthMode = "SomeExternalCredentialShape";
+        profile.DiscoveryMode = "SomeExternalDiscovery";
+        var model = profile.ConfiguredModels.First();
+        model.OperationKinds = ["SomeExternalOperation"];
+        model.SupportedProtocolModes = ["SomeExternalModelProtocol"];
+        model.Source = "SomeExternalSource";
+        var binding = profile.PurposeBindings.First();
+        binding.Purpose = "SomeExternalPurpose";
+        binding.ProtocolMode = "SomeExternalBindingProtocol";
+        profile.VerificationSnapshot!.Status = "SomeExternalStatus";
+        profile.VerificationSnapshot.FailureCategory = "SomeExternalCategory";
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var read = await CreateRepository(db).GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(
+            new HashSet<AiUnresolvedValueDto>
+            {
+                new(AiConnectionVocabularyField.AuthMode, "SomeExternalCredentialShape"),
+                new(AiConnectionVocabularyField.DiscoveryMode, "SomeExternalDiscovery"),
+                new(AiConnectionVocabularyField.OperationKind, "SomeExternalOperation"),
+                new(AiConnectionVocabularyField.ProtocolMode, "SomeExternalModelProtocol"),
+                new(AiConnectionVocabularyField.ConfiguredModelSource, "SomeExternalSource"),
+                new(AiConnectionVocabularyField.Purpose, "SomeExternalPurpose"),
+                new(AiConnectionVocabularyField.ProtocolMode, "SomeExternalBindingProtocol"),
+                new(AiConnectionVocabularyField.VerificationStatus, "SomeExternalStatus"),
+                new(AiConnectionVocabularyField.VerificationFailureCategory, "SomeExternalCategory"),
+            },
+            read.Availability.UnresolvedValues.ToHashSet());
+    }
+
+    // Two rows of one profile store the same vocabulary. Two different values that fail are two things for an
+    // operator to fix, and the same value twice is one, so it is named once.
+    [Fact]
+    public async Task EachDistinctUnresolvedValueIsNamedOnce()
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        var models = profile.ConfiguredModels.ToList();
+        models[0].SupportedProtocolModes = ["SomeExternalProtocol", "SomeExternalProtocol"];
+        models[1].SupportedProtocolModes = ["SomeExternalProtocol", "AnotherExternalProtocol"];
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var read = await CreateRepository(db).GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(
+            new HashSet<AiUnresolvedValueDto>
+            {
+                new(AiConnectionVocabularyField.ProtocolMode, "SomeExternalProtocol"),
+                new(AiConnectionVocabularyField.ProtocolMode, "AnotherExternalProtocol"),
+            },
+            read.Availability.UnresolvedValues.ToHashSet());
+        Assert.Equal(2, read.Availability.UnresolvedValues.Count);
+    }
+
+    // The client list projects every row client-side, so one unreadable value used to fail the call and leave
+    // the operator with no connections at all. The unreadable row is listed with the rest, and the rest are
+    // projected exactly as they were.
+    [Fact]
+    public async Task GetByClientAsync_ListsEveryRowWhenOneHoldsAValueThisBuildCannotName()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var unreadable = MakeProfile(clientId, displayName: "Unreadable Profile");
+        unreadable.AuthMode = "SomeExternalCredentialShape";
+        var readable = MakeProfile(clientId, displayName: "Readable Profile");
+        db.AiConnectionProfiles.Add(unreadable);
+        db.AiConnectionProfiles.Add(readable);
+        await db.SaveChangesAsync();
+
+        var connections = await CreateRepository(db).GetByClientAsync(clientId);
+
+        Assert.Equal(2, connections.Count);
+        Assert.Equal(
+            new AiUnresolvedValueDto(AiConnectionVocabularyField.AuthMode, "SomeExternalCredentialShape"),
+            Assert.Single(connections.Single(connection => connection.Id == unreadable.Id).Availability.UnresolvedValues));
+
+        var readableDto = connections.Single(connection => connection.Id == readable.Id);
+        Assert.Empty(readableDto.Availability.UnresolvedValues);
+        Assert.Equal(AzureIdentityAuth, readableDto.AuthMode);
+        Assert.Equal("gpt-4o", readableDto.GetBoundModelId(AiPurpose.ReviewDefault));
+    }
+
+    // The tenant list projects the same way the client list does, so it drops a row for the same reason if it is
+    // left alone.
+    [Fact]
+    public async Task GetByTenantAsync_ListsEveryRowWhenOneHoldsAValueThisBuildCannotName()
+    {
+        await using var db = CreateContext();
+        var tenantId = Guid.NewGuid();
+        var unreadable = MakeTenantProfile(tenantId, "Unreadable Profile");
+        unreadable.DiscoveryMode = "SomeExternalDiscovery";
+        var readable = MakeTenantProfile(tenantId, "Readable Profile");
+        db.AiConnectionProfiles.Add(unreadable);
+        db.AiConnectionProfiles.Add(readable);
+        await db.SaveChangesAsync();
+
+        var connections = await CreateRepository(db).GetByTenantAsync(tenantId);
+
+        Assert.Equal(2, connections.Count);
+        Assert.Equal(
+            new AiUnresolvedValueDto(AiConnectionVocabularyField.DiscoveryMode, "SomeExternalDiscovery"),
+            Assert.Single(connections.Single(connection => connection.Id == unreadable.Id).Availability.UnresolvedValues));
+        Assert.Empty(connections.Single(connection => connection.Id == readable.Id).Availability.UnresolvedValues);
+    }
+
+    // The tolerant read stands where an enum parse used to, so a profile that holds only values this build
+    // recognises has to project to what it projected before: every position is read back as stored, and nothing
+    // is reported as unresolved.
+    [Fact]
+    public async Task AProfileHoldingOnlyRecognisedValuesProjectsEveryPositionAsStored()
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        profile.VerificationSnapshot!.Status = AiVerificationStatus.Failed.ToString();
+        profile.VerificationSnapshot.FailureCategory = AiVerificationFailureCategory.Credentials.ToString();
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var read = await CreateRepository(db).GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Empty(read.Availability.UnresolvedValues);
+        Assert.Equal(AzureIdentityAuth, read.AuthMode);
+        Assert.Equal(AiDiscoveryMode.ManualOnly, read.DiscoveryMode);
+
+        var chatModel = read.ConfiguredModels.Single(model => model.RemoteModelId == "gpt-4o");
+        Assert.Equal(new[] { AiOperationKind.Chat }, chatModel.OperationKinds);
+        Assert.Equal(
+            new[] { ProviderDeclaredProtocolModes.Auto, AzureResponses, AzureChatCompletions },
+            chatModel.SupportedProtocolModes);
+        Assert.Equal(AiConfiguredModelSource.Manual, chatModel.Source);
+
+        var embeddingBinding = read.PurposeBindings.Single(binding => binding.Purpose == AiPurpose.EmbeddingDefault);
+        Assert.Equal(ProviderDeclaredProtocolModes.Embeddings, embeddingBinding.ProtocolMode);
+
+        Assert.Equal(AiVerificationStatus.Failed, read.Verification.Status);
+        Assert.Equal(AiVerificationFailureCategory.Credentials, read.Verification.FailureCategory);
+    }
+
+    private static AiConnectionProfileRecord MakeTenantProfile(Guid tenantId, string displayName)
+    {
+        var profile = MakeProfile(Guid.NewGuid(), displayName: displayName);
+        profile.ClientId = null;
+        profile.TenantId = tenantId;
+        return profile;
+    }
+
+    // A row carrying neither owner is read as unrestricted, which both write guards do with an empty
+    // identifier. Looking a policy up for Guid.Empty would describe the row against whatever that lookup
+    // happened to answer with, so one read and the guard beside it could disagree about the same row.
+    [Fact]
+    public async Task GetByIdAsync_ForARowWithNeitherOwner_DoesNotLookUpAPolicy()
+    {
+        await using var db = CreateContext();
+        var profile = MakeProfile(Guid.NewGuid());
+        profile.ClientId = null;
+        profile.TenantId = null;
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        // Refuses this profile's family if it is ever asked.
+        var policies = PoliciesAllowing("meisterdev/anthropic");
+
+        var read = await CreateRepository(db, providerPolicies: policies).GetByIdAsync(profile.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(AiConnectionAvailabilityState.Available, read.Availability.State);
+        await policies.DidNotReceive().GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await policies.DidNotReceive().GetForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -849,7 +1265,7 @@ public sealed class AiConnectionRepositoryTests
         var updated = await repo.UpdateAsync(
             profile.Id,
             CreateWriteRequest(
-                authMode: AiAuthMode.ApiKey,
+                authMode: AzureApiKey,
                 secret: "updated-secret",
                 chatModelId: "gpt-4.1"));
 
@@ -872,9 +1288,9 @@ public sealed class AiConnectionRepositoryTests
             clientId,
             new AiConnectionWriteRequestDto(
                 "Embedding Connection",
-                AiProviderKind.AzureOpenAi,
+                "meisterdev/azureOpenAi",
                 "https://my-openai.openai.azure.com/",
-                AiAuthMode.ApiKey,
+                AzureApiKey,
                 AiDiscoveryMode.ManualOnly,
                 [
                     new AiConfiguredModelDto(
@@ -882,7 +1298,7 @@ public sealed class AiConnectionRepositoryTests
                         "text-embedding-3-small",
                         "text-embedding-3-small",
                         [AiOperationKind.Embedding],
-                        [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+                        [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
                         "cl100k_base",
                         8192,
                         1536,
@@ -896,7 +1312,7 @@ public sealed class AiConnectionRepositoryTests
                         0.1m),
                 ],
                 [
-                    new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, "text-embedding-3-small", AiProtocolMode.Embeddings),
+                    new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, "text-embedding-3-small", ProviderDeclaredProtocolModes.Embeddings),
                 ],
                 null,
                 null,
@@ -924,9 +1340,9 @@ public sealed class AiConnectionRepositoryTests
             clientId,
             new AiConnectionWriteRequestDto(
                 "Protected Connection",
-                AiProviderKind.AzureOpenAi,
+                "meisterdev/azureOpenAi",
                 "https://my-openai.openai.azure.com/",
-                AiAuthMode.ApiKey,
+                AzureApiKey,
                 AiDiscoveryMode.ManualOnly,
                 [
                     new AiConfiguredModelDto(
@@ -934,7 +1350,7 @@ public sealed class AiConnectionRepositoryTests
                         "gpt-4o",
                         "gpt-4o",
                         [AiOperationKind.Chat],
-                        [AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions],
+                        [ProviderDeclaredProtocolModes.Auto, AzureResponses, AzureChatCompletions],
                         null,
                         null,
                         null,
@@ -983,14 +1399,34 @@ public sealed class AiConnectionRepositoryTests
         var clientId = Guid.NewGuid();
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
-            .Returns(new TenantProviderPolicy([AiProviderKind.OpenAiCompatible]));
-        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
+            .Returns(new TenantProviderPolicy(["meisterdev/openAiCompatible"]));
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies, DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked);
 
         // CreateWriteRequest builds an AzureOpenAi profile, which this tenant does not permit.
         var failure = await Assert.ThrowsAsync<ProviderKindNotPermittedException>(() => repo.AddAsync(clientId, CreateWriteRequest()));
 
-        Assert.Equal(AiProviderKind.AzureOpenAi, failure.ProviderKind);
-        Assert.Contains("OpenAiCompatible", failure.Message, StringComparison.Ordinal);
+        Assert.Equal("meisterdev/azureOpenAi", failure.ProviderKind);
+        Assert.Contains("meisterdev/openAiCompatible", failure.Message, StringComparison.Ordinal);
+        Assert.Empty(db.AiConnectionProfiles);
+    }
+
+    // An allow-list this build can no longer read permits nothing, so a write is refused too. The refusal names
+    // the entry, because "permitted: none" on its own gives an operator nothing to correct.
+    [Fact]
+    public async Task AddAsync_RefusesUnderAnAllowListNamingNoKnownFamily()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        // The policy is read before the substitute is configured: building one inside Returns() would attach
+        // the return value to the substitute's own call rather than to the policy read.
+        var unreadable = TenantProviderPolicy.FromStored(["Acme.Llm"], [], DeclaringProviderFamilies.None());
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>()).Returns(unreadable);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies, DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked);
+
+        var failure = await Assert.ThrowsAsync<ProviderKindNotPermittedException>(() => repo.AddAsync(clientId, CreateWriteRequest()));
+
+        Assert.Contains("Acme.Llm", failure.Message, StringComparison.Ordinal);
         Assert.Empty(db.AiConnectionProfiles);
     }
 
@@ -1001,12 +1437,12 @@ public sealed class AiConnectionRepositoryTests
         var clientId = Guid.NewGuid();
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
-            .Returns(new TenantProviderPolicy([AiProviderKind.AzureOpenAi]));
-        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
+            .Returns(new TenantProviderPolicy(["meisterdev/azureOpenAi"]));
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies, DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked);
 
         var created = await repo.AddAsync(clientId, CreateWriteRequest());
 
-        Assert.Equal(AiProviderKind.AzureOpenAi, created.ProviderKind);
+        Assert.Equal("meisterdev/azureOpenAi", created.ProviderKind);
     }
 
     // A tenant that has stated no policy is unrestricted, so nothing changes for it.
@@ -1018,7 +1454,7 @@ public sealed class AiConnectionRepositoryTests
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(TenantProviderPolicy.Unrestricted);
-        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies, DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked);
 
         Assert.NotNull(await repo.AddAsync(clientId, CreateWriteRequest()));
     }
@@ -1033,7 +1469,7 @@ public sealed class AiConnectionRepositoryTests
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(new TenantProviderPolicy([], ["opencode.ai"]));
-        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies, DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked);
 
         // CreateWriteRequest points at an Azure host, which this tenant has not permitted.
         var failure = await Assert.ThrowsAsync<ProviderKindNotPermittedException>(() => repo.AddAsync(clientId, CreateWriteRequest()));
@@ -1050,7 +1486,7 @@ public sealed class AiConnectionRepositoryTests
         var policies = Substitute.For<ITenantProviderPolicyProvider>();
         policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(new TenantProviderPolicy([], [".openai.azure.com"]));
-        var repo = new AiConnectionRepository(db, CreateCodec(), policies);
+        var repo = new AiConnectionRepository(db, CreateCodec(), policies, DeclaringProviderFamilies.None(), EgressUrlPolicy.Locked);
 
         Assert.NotNull(await repo.AddAsync(clientId, CreateWriteRequest()));
     }

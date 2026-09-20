@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.Extensions.AI;
@@ -10,7 +11,7 @@ using Microsoft.Extensions.AI;
 namespace MeisterDev.ProPR.Runner.Execution;
 
 /// <summary>
-///     Flattens the chat options the review pipeline built into the wire shape the relay accepts.
+///     Flattens the chat options the review pipeline built into the protocol mode the relay accepts.
 ///     <para>
 ///         The pipeline hands the relay client the same options object it hands a provider client: tools
 ///         with implementations attached, and reasoning settings hidden inside a per-client factory. Neither
@@ -68,7 +69,7 @@ internal static class RelayedChatOptions
     {
         public static readonly ReasoningProbe Instance = new();
 
-        public AiProtocolMode NativeProtocol => AiProtocolMode.Auto;
+        public string NativeProtocol => ProviderDeclaredProtocolModes.Auto;
 
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,

@@ -217,10 +217,10 @@ rejected with `400`.
 
 A binding names a `purpose` and the model on this profile that serves it. Name the model by `remoteModelId`,
 matched against `configuredModels` in the same request, or by `configuredModelId` once the model has an id.
-`protocolMode` defaults to `auto` and `isEnabled` to `true`. A purpose may appear once.
+`protocolMode` defaults to `Auto` and `isEnabled` to `true`. A purpose may appear once.
 
 `purpose` takes the API value of any purpose listed under [AI purposes](../ai/purposes.md#ai-purposes).
-`embeddingDefault` needs an embedding-capable model and a `protocolMode` of `auto` or `embeddings`; every other
+`embeddingDefault` needs an embedding-capable model and a `protocolMode` of `Auto` or `Embeddings`; every other
 purpose needs a chat-capable model.
 
 Logical models select a model first, and these bindings resolve after them. See
@@ -235,7 +235,7 @@ Each entry in `configuredModels` takes these fields.
 | `remoteModelId` | Required; unique within the request, case-insensitively |
 | `displayName` | Defaults to `remoteModelId` |
 | `operationKinds` | `chat`, `embedding`, or both |
-| `supportedProtocolModes` | `auto`, `responses`, `chatCompletions`, `embeddings`, `anthropicMessages`, `bedrockConverse`, `googleGenerateContent` |
+| `supportedProtocolModes` | `Auto`, `Embeddings`, and the shapes the family declares, each written as its identity key, a `:`, and the mode name; `permitted-providers` reports them under `protocolModes` |
 | `tokenizerName`, `maxInputTokens`, `embeddingDimensions` | Mandatory for an embedding model |
 | `supportsStructuredOutput`, `supportsToolUse` | Default `false` |
 | `maxContextTokens` | Context window, used for context budgeting |
@@ -244,15 +244,16 @@ Each entry in `configuredModels` takes these fields.
 
 The server infers `operationKinds` when you omit it: `embedding` when the model id contains `embedding` or when
 `tokenizerName` or `embeddingDimensions` is supplied, `chat` otherwise. It infers `supportedProtocolModes` the
-same way: `auto` and `embeddings` for an embedding-only model, `auto`, `responses` and `chatCompletions`
-otherwise. A declared protocol the model's capabilities do not support is rejected: the embeddings protocol on a
-model without embedding capability, or a chat protocol on a model without chat capability.
+same way: `Auto` and `Embeddings` for an embedding-only model, and every shape the family speaks except
+`Embeddings` otherwise. A declared protocol the model's capabilities do not support is rejected: `Embeddings` on
+a model without embedding capability, or a shape a family owns on a model without chat capability.
 
 An embedding model must carry `tokenizerName`, a `maxInputTokens` above zero, and an `embeddingDimensions` between
 64 and 4096. `source` is `discovered`, `manual` or `knownCatalog`.
 
-`providerKind` accepts `azureOpenAi`, `openAi`, `liteLlm`, `openAiCompatible`, `anthropic`, `awsBedrock`,
-and `googleVertex`. Ask the API which of those this build can call, and which the tenant permits:
+`providerKind` takes the identity key a provider family declares, such as `meisterdev/anthropic`. Which keys an
+installation has depends on which add-ins it loaded, so ask the API which families this build can call, which
+the tenant permits, and which authentication and protocol modes each one accepts:
 
 ```bash
 curl -k https://localhost:5443/api/clients/<client-id>/ai-connections/permitted-providers \
@@ -304,7 +305,10 @@ profile=$(curl -sk -X POST "$BASE/ai-connections" "${AUTH[@]}" -d '{
   "displayName": "Bedrock Frankfurt",
   "providerKind": "awsBedrock",
   "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
-  "auth": { "mode": "apiKey", "apiKey": "<accessKeyId>:<secretAccessKey>" },
+  "auth": {
+    "mode": "sigV4",
+    "fields": { "accessKeyId": "<accessKeyId>", "secretAccessKey": "<secretAccessKey>" }
+  },
   "discoveryMode": "manualOnly",
   "defaultQueryParams": { "region": "eu-central-1" },
   "configuredModels": [
@@ -335,7 +339,7 @@ curl -sk -X POST "$BASE/logical-models/overrides" "${AUTH[@]}" -d "{
   \"connectionId\": \"$connection_id\",
   \"configuredModelId\": \"$model_id\",
   \"reasoningEffort\": \"medium\",
-  \"protocolMode\": \"auto\"
+  \"protocolMode\": \"Auto\"
 }"
 
 curl -sk -X PUT "$BASE/logical-models/purposes/reviewDefault" "${AUTH[@]}" \
@@ -353,8 +357,15 @@ Bedrock, `project` for Vertex AI. When to set each, and which wins if the host n
 headers a gateway in front of a provider expects. Probe after setting one, because the families differ in where
 headers are applied.
 
-The credential is stored only when `auth.mode` is `apiKey`; Azure OpenAI also accepts `azureIdentity`, which uses
-the host's managed identity and needs no key. What to send as the key for each family is in
+`auth.mode` names a credential shape the family declares, written as the family's identity key, a `:`, and the
+mode name — `meisterdev/googleVertex:GcpAdc`, say.
+
+`auth` carries the credential in one of two shapes. `auth.apiKey` sends a single-string key. `auth.fields` sends
+named values, keyed by the names `permitted-providers` reports for that mode under `credentialFields`:
+`serviceAccountJson` for `meisterdev/googleVertex:GcpAdc`. A mode that declares no field stores no credential:
+`meisterdev/azureOpenAi:AzureIdentity` reaches the resource with the host's managed identity. A family accepts the modes `permitted-providers` reports
+for it under `authModes`, and a create or update is refused when it names another mode, omits a required field,
+or sends a name the mode does not declare. What to send for each family is in
 [credentials by provider](../ai/credentials.md#credentials-by-provider).
 
 ## Guided discovery endpoints

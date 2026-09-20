@@ -27,7 +27,7 @@ internal sealed class HandlebarsPromptRenderer
     ///         One environment is held because one partial set is expected. A caller alternating between two sets
     ///         would rebuild on every render and get no reuse at all, so a second stable set is a reason to key this
     ///         by partial set again. What such a caller would lose is the reuse: the cost of a render returns to
-    ///         building an environment, which is what it cost before this cache existed, and it does not resume
+    ///         building an environment, which it cost before this cache existed, and it does not resume
     ///         growing, because each environment carries its own configuration and a discarded one leaves nothing
     ///         behind.
     ///     </para>
@@ -35,7 +35,7 @@ internal sealed class HandlebarsPromptRenderer
     ///         Each environment is built with <c>Handlebars.Create</c> and its own configuration. A shared
     ///         configuration holds one template registry for every environment built from it, which makes
     ///         registration last-writer-wins across callers and across threads, so a render could compile against
-    ///         another render's partials. An environment with its own configuration cannot, which is what lets one be
+    ///         another render's partials. An environment with its own configuration cannot, and that lets one be
     ///         reused, and what keeps a rebuild from accumulating anything.
     ///     </para>
     /// </summary>

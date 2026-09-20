@@ -72,7 +72,7 @@ public sealed partial class PostgresClusterIdentityProbe(
     ///     <para>
     ///         The profile hashes absence as such, so an installation whose answer here changes records one
     ///         change rather than looking like a different installation from then on. The log names the SQL
-    ///         state, which is what separates a refused privilege from the other reasons.
+    ///         state, and that separates a refused privilege from the other reasons.
     ///     </para>
     /// </summary>
     private async Task<string?> ReadSystemIdentifierAsync(

@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Services;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.Infrastructure.Features.UsageReporting.Persistence;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -48,8 +49,7 @@ internal sealed partial class ModelUsageRecorder(
     {
         ArgumentNullException.ThrowIfNull(runtime);
 
-        var providerKind = runtime.Connection.ProviderKind;
-        var usage = AiTokenUsageExtractor.FromResponse(response, providerKind);
+        var usage = AiTokenUsageExtractor.FromResponse(response);
 
         // A response with no usage payload extracts as all-zero. Recording it would add a row that says a call
         // cost nothing, which is a stronger claim than "the provider did not say".
@@ -75,6 +75,14 @@ internal sealed partial class ModelUsageRecorder(
                 .Usd;
 
             await using var db = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+
+            // The family the sample is attributed to, read from the connection row through the same reader the
+            // review path uses. Nothing about the counters reads it: the driver mapped those before the response
+            // left the provider layer.
+            var providerIdentity = await UsageSampleProviderIdentity
+                .ReadAsync(db, runtime.Connection.Id, ct)
+                .ConfigureAwait(false);
+
             await new ClientTokenUsageRepository(db).UpsertAsync(
                 clientId,
                 model.RemoteModelId,
@@ -87,7 +95,7 @@ internal sealed partial class ModelUsageRecorder(
                 usage.ReasoningTokens,
                 cost,
                 runtime.LogicalModelName ?? string.Empty,
-                providerKind.ToString()).ConfigureAwait(false);
+                providerIdentity).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

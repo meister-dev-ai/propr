@@ -394,7 +394,7 @@ public sealed class SystemProfileObserverTests
         }
     }
 
-    /// <summary>Keeps what was logged, which is what the one-line-per-change rule is asserted against.</summary>
+    /// <summary>Keeps what was logged, which the one-line-per-change rule is asserted against.</summary>
     private sealed class ListLogger : ILogger<SystemProfileObserver>
     {
         public List<LogEntry> Entries { get; } = [];

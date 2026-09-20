@@ -7,7 +7,7 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 
 /// <summary>
 ///     The one place the output-language rule is worded. Every prompt that emits reviewer-facing prose appends
-///     the same fragment, which is what keeps a review's per-file findings, its summary, its thread replies, its
+///     the same fragment, and that keeps a review's per-file findings, its summary, its thread replies, its
 ///     mention answers and its memory prose in one language.
 /// </summary>
 internal static class OutputLanguageDirective

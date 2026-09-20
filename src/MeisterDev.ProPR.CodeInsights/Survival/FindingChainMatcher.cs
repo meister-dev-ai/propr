@@ -19,7 +19,7 @@ public sealed record FindingChainCandidate(Guid ChainId, string? FilePath, strin
 ///     <para>
 ///         Every increment materialises its own rows, so "the finding is still there" is not something the
 ///         records say by themselves: the same problem re-reported on a later revision is a different row. This
-///         matcher links those rows into a chain, which is what makes the durable question answerable: of what a
+///         matcher links those rows into a chain, and that makes the durable question answerable: of what a
 ///         review raised, how much was still being raised when the pull request finished, and how much simply
 ///         stopped being reported.
 ///     </para>

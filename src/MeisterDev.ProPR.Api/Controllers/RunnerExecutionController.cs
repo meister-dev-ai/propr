@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.IO.Compression;
+using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Api.Features.Reviewing.Runners;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
@@ -158,13 +159,36 @@ public sealed class RunnerExecutionController(
 
         return result.Refusal switch
         {
-            RunnerRelayRefusal.None => this.Ok(new { response = result.Response, softCapReached = result.SoftCapReached, replayed = result.Replayed }),
+            // The counters travel beside the response because the executor resolves no provider driver and has
+            // no way to read a vendor's counter names out of the body itself.
+            RunnerRelayRefusal.None => this.Ok(
+                new
+                {
+                    response = result.Response,
+                    usage = ToRelayedUsage(result.Usage),
+                    softCapReached = result.SoftCapReached,
+                    replayed = result.Replayed,
+                }),
             RunnerRelayRefusal.BudgetHardCapReached => this.StatusCode(
                 StatusCodes.Status402PaymentRequired,
                 new RunnerContractError(RunnerContractError.BudgetCapReached, "The job's hard budget cap is reached.")),
             RunnerRelayRefusal.NotAuthorized => this.LeaseRefusal(result.CallRefusal),
             _ => this.Conflict(new RunnerContractError(RunnerContractError.LeaseNotHeld, "This job is not held open by this replica.")),
         };
+    }
+
+    /// <summary>Restates the counters the driver produced in the shape the contract carries them in.</summary>
+    private static RunnerRelayedUsage? ToRelayedUsage(ProviderTokenUsage? usage)
+    {
+        return usage is null
+            ? null
+            : new RunnerRelayedUsage(
+                usage.InputTokens,
+                usage.OutputTokens,
+                usage.CachedInputTokens,
+                usage.CacheWriteTokens,
+                usage.ReasoningTokens,
+                usage.IsEstimated);
     }
 
     /// <summary>Applies one batch of trace events, per-file results, and spend.</summary>

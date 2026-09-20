@@ -8,7 +8,7 @@ namespace MeisterDev.ProPR.CodeInsights.Tests.Dispositions;
 
 /// <summary>
 ///     The deterministic half of a finding's outcome. It is separated from the model call precisely so this
-///     part is reproducible from stored inputs, which is what makes the metrics recomputable.
+///     part is reproducible from stored inputs, and that makes the metrics recomputable.
 /// </summary>
 public sealed class FindingDispositionMapperTests
 {

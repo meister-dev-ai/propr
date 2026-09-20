@@ -65,7 +65,7 @@ public sealed class RunnerReviewPipelineTests
     }
 
     // Absences are decisions, not defaults. A new absence must be added here deliberately, with its
-    // consequence written down, which is what separates a smaller review from a different one.
+    // consequence written down, and that separates a smaller review from a different one.
     [Fact]
     public void TheAbsences_AreExactlyTheDecidedOnes()
     {

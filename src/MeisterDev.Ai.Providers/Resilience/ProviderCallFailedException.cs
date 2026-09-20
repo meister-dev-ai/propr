@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Contracts;
-using MeisterDev.Ai.Providers.Enums;
 
 namespace MeisterDev.Ai.Providers.Resilience;
 
@@ -53,7 +52,7 @@ public sealed class ProviderCallFailedException : Exception
     public string? ActionHint { get; }
 
     /// <summary>The provider family the failed call was routed to.</summary>
-    public AiProviderKind ProviderKind => this.Target.ProviderKind;
+    public string ProviderKind => this.Target.ProviderKind;
 
     private static string BuildMessage(
         ProviderCallTarget target,

@@ -13,6 +13,9 @@
 FROM mcr.microsoft.com/dotnet/sdk@sha256:72dd743782f2ae7e5476fd64f6a460045e3998dc862218b80e6944cba79a01b0 AS build
 WORKDIR /source
 
+# The repository-root build properties, so the image restores the same package versions a local build
+# resolves.
+COPY Directory.Build.props .
 COPY MeisterDev.ProPR.slnx .
 COPY src/ src/
 COPY tests/ tests/

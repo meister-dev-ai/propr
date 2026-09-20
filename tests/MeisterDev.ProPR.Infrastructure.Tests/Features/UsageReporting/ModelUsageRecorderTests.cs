@@ -1,11 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Tests.AI;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -52,14 +54,51 @@ public sealed class CodeInsightModelUsageRecorderTests
     {
         var options = CreateOptions();
         var recorder = CreateRecorder(options);
+        var runtime = CreateRuntime(logicalModelName: "cheap-classifier");
+        await SeedConnectionAsync(options, runtime.Connection.Id, "AzureOpenAi");
 
-        await recorder.RecordAsync(ClientId, CreateRuntime(logicalModelName: "cheap-classifier"), CreateResponse(10, 5));
+        await recorder.RecordAsync(ClientId, runtime, CreateResponse(10, 5));
 
         await using var db = new MeisterProPRDbContext(options);
         var sample = Assert.Single(db.ClientTokenUsageSamples);
         Assert.Equal("cheap-classifier", sample.LogicalModelName);
-        Assert.Equal(nameof(AiProviderKind.AzureOpenAi), sample.ProviderKind);
+        Assert.Equal("AzureOpenAi", sample.ProviderKind);
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow), sample.Date);
+    }
+
+    // The identity comes off the connection row rather than being composed here, so a family whose rows have
+    // moved onto its declared key is metered under one identity however the spend was produced. Two spellings
+    // for one family would sit in two rows of the unique index the daily sample accumulates through, and every
+    // total sliced by provider would show the family twice.
+    [Fact]
+    public async Task RecordAsync_AttributesTheSampleToTheIdentityTheConnectionStores()
+    {
+        const string DeclaredIdentity = "meisterdev/googleVertex";
+
+        var options = CreateOptions();
+        var recorder = CreateRecorder(options);
+        var runtime = CreateRuntime();
+        await SeedConnectionAsync(options, runtime.Connection.Id, DeclaredIdentity);
+
+        await recorder.RecordAsync(ClientId, runtime, CreateResponse(10, 5));
+
+        await using var db = new MeisterProPRDbContext(options);
+        Assert.Equal(DeclaredIdentity, Assert.Single(db.ClientTokenUsageSamples).ProviderKind);
+    }
+
+    // A connection deleted since the tokens were spent leaves the sample unattributed rather than losing it.
+    [Fact]
+    public async Task RecordAsync_WithNoConnectionRow_RecordsTheSpendUnattributed()
+    {
+        var options = CreateOptions();
+        var recorder = CreateRecorder(options);
+
+        await recorder.RecordAsync(ClientId, CreateRuntime(), CreateResponse(10, 5));
+
+        await using var db = new MeisterProPRDbContext(options);
+        var sample = Assert.Single(db.ClientTokenUsageSamples);
+        Assert.Equal(string.Empty, sample.ProviderKind);
+        Assert.Equal(10, sample.InputTokens);
     }
 
     [Fact]
@@ -120,6 +159,31 @@ public sealed class CodeInsightModelUsageRecorderTests
             NullLogger<ModelUsageRecorder>.Instance);
     }
 
+    // The connection the runtime was resolved from, as the row the recorder reads its attribution off.
+    private static async Task SeedConnectionAsync(
+        DbContextOptions<MeisterProPRDbContext> options,
+        Guid connectionId,
+        string storedIdentity)
+    {
+        await using var db = new MeisterProPRDbContext(options);
+        db.AiConnectionProfiles.Add(
+            new AiConnectionProfileRecord
+            {
+                Id = connectionId,
+                ClientId = ClientId,
+                DisplayName = "Seeded",
+                ProviderKind = storedIdentity,
+                BaseUrl = "https://api.test.com/",
+                AuthMode = "ApiKey",
+                DiscoveryMode = nameof(AiDiscoveryMode.ManualOnly),
+                DefaultHeaders = [],
+                DefaultQueryParams = [],
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+    }
+
     private static DbContextOptions<MeisterProPRDbContext> CreateOptions()
     {
         return new DbContextOptionsBuilder<MeisterProPRDbContext>()
@@ -147,7 +211,7 @@ public sealed class CodeInsightModelUsageRecorderTests
             "gpt-4o-mini",
             "Classifier",
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto],
+            [ProviderDeclaredProtocolModes.Auto],
             InputCostPer1MUsd: 1m,
             OutputCostPer1MUsd: 4m,
             CachedInputCostPer1MUsd: 0.25m);

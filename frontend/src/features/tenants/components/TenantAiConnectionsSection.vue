@@ -124,16 +124,30 @@ import {
   type AiConnectionDto,
   type CreateAiConnectionRequest,
 } from '@/services/logicalModelsService'
+import { listTenantPermittedProviders } from '@/services/aiConnectionsService'
 
 const props = defineProps<{ tenantId: string }>()
 
 type ProviderKind = NonNullable<CreateAiConnectionRequest['providerKind']>
 
-const providerOptions: { value: ProviderKind; label: string }[] = [
-  { value: 'azureOpenAi' as ProviderKind, label: 'Azure OpenAI / AI Foundry' },
-  { value: 'openAi' as ProviderKind, label: 'OpenAI' },
-  { value: 'liteLlm' as ProviderKind, label: 'LiteLLM' },
-]
+// The families this installation has, named as each one names itself, each with the authentication mode this form
+// can fill. Read from the server rather than held here, so a family supplied by an add-in this build has never
+// seen can be configured at the tenant too.
+const providerOptions = ref<{ value: ProviderKind; label: string; apiKeyMode: string | null }[]>([])
+
+/**
+ * The authentication mode the selected family declares for a credential that is one key, which is the only shape
+ * this form can fill: it collects a single secret. A shape belongs to the family that declared it, so the value
+ * comes from the family's own declaration rather than from a name this form holds. Null for a family whose
+ * credential is several values, which is configured on the client tab instead.
+ */
+const selectedApiKeyMode = computed(
+  () => providerOptions.value.find(option => option.value === draft.providerKind)?.apiKeyMode ?? null,
+)
+
+// The single field name the host stores a one-value credential under, which a family declaring that
+// shape names its one field.
+const apiKeyFieldName = 'apiKey'
 
 interface ModelDraft {
   remoteModelId: string
@@ -151,7 +165,8 @@ const showCreate = ref(false)
 
 const draft = reactive({
   displayName: '',
-  providerKind: 'openAi' as ProviderKind,
+  // Set to the first family the server offers once it has answered; this form names none of its own.
+  providerKind: '' as ProviderKind | '',
   baseUrl: '',
   apiKey: '',
   models: [] as ModelDraft[],
@@ -184,26 +199,57 @@ function isModelComplete(model: ModelDraft): boolean {
 const canCreate = computed(
   () =>
     draft.displayName.trim().length > 0 &&
+    draft.providerKind.length > 0 &&
     draft.baseUrl.trim().length > 0 &&
     draft.apiKey.trim().length > 0 &&
+    selectedApiKeyMode.value !== null &&
     draft.models.length > 0 &&
     draft.models.every(isModelComplete),
 )
 
+// A connection whose family the installation no longer has still reads as the family it is stored against,
+// because the stored identity is what an operator matches against an install or an allow-list.
 function providerLabel(kind: string | null | undefined): string {
-  return providerOptions.find(option => option.value === kind)?.label ?? (kind ?? '—')
+  return providerOptions.value.find(option => option.value === kind)?.label ?? (kind ?? '—')
 }
 
 async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    connections.value = await listTenantConnections(props.tenantId)
+    // The families and the connections together: a connection names a family, and without the family list the
+    // table would show a key where a name belongs and the picker would have nothing to offer.
+    const [listed, families] = await Promise.all([
+      listTenantConnections(props.tenantId),
+      listTenantPermittedProviders(props.tenantId),
+    ])
+
+    connections.value = listed
+    providerOptions.value = (families.providers ?? [])
+      .filter(provider => provider.isPermitted && Boolean(provider.providerKind))
+      .map(provider => ({
+        value: provider.providerKind as ProviderKind,
+        label: provider.label || provider.providerKind,
+        apiKeyMode: singleKeyMode(provider),
+      }))
   } catch {
     error.value = 'Failed to load tenant connections.'
   } finally {
     loading.value = false
   }
+}
+
+// The first authentication mode a family declares whose fields are the one key box this form shows.
+function singleKeyMode(provider: { authModes?: ({ value?: string | null } | null)[] | null; credentialFields?: Record<string, { name?: string | null }[] | undefined> | null }): string | null {
+  for (const mode of provider.authModes ?? []) {
+    const value = mode?.value
+    const fields = value ? provider.credentialFields?.[value] : undefined
+    if (value && fields?.length === 1 && fields[0]?.name === apiKeyFieldName) {
+      return value
+    }
+  }
+
+  return null
 }
 
 function addModel(): void {
@@ -218,9 +264,9 @@ async function create(): Promise<void> {
   error.value = ''
   const request: CreateAiConnectionRequest = {
     displayName: draft.displayName.trim(),
-    providerKind: draft.providerKind,
+    providerKind: draft.providerKind as ProviderKind,
     baseUrl: draft.baseUrl.trim(),
-    auth: { mode: 'apiKey', apiKey: draft.apiKey.trim() },
+    auth: { mode: selectedApiKeyMode.value as string, apiKey: draft.apiKey.trim() },
     discoveryMode: 'manualOnly',
     configuredModels: draft.models.map(model => ({
       remoteModelId: model.remoteModelId.trim(),
@@ -272,7 +318,7 @@ async function remove(connectionId: string | null | undefined): Promise<void> {
 
 function resetDraft(): void {
   draft.displayName = ''
-  draft.providerKind = 'openAi' as ProviderKind
+  draft.providerKind = providerOptions.value[0]?.value ?? ''
   draft.baseUrl = ''
   draft.apiKey = ''
   draft.models = []

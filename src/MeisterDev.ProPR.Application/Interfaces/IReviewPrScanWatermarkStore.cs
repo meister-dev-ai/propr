@@ -6,6 +6,6 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 /// <summary>
 ///     The scan record as the file pass sees it: everything readable, and of the progress facts only the
 ///     review watermark writable. The thread watermark and the per-thread counters are unreachable through
-///     this port, which is what keeps the thread pass their only writer.
+///     this port, and that keeps the thread pass their only writer.
 /// </summary>
 public interface IReviewPrScanWatermarkStore : IReviewPrScanReader, IReviewPrScanWatermarkWriter;

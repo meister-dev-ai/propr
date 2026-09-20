@@ -103,7 +103,7 @@ public sealed class ReviewRunner
     /// <summary>When the runner enrolled.</summary>
     public DateTimeOffset EnrolledAt { get; init; }
 
-    /// <summary>When the runner was last heard from, which is what makes it look alive.</summary>
+    /// <summary>When the runner was last heard from, and that makes it look alive.</summary>
     public DateTimeOffset? LastSeenAt { get; private set; }
 
     /// <summary>When it was revoked, if it was.</summary>

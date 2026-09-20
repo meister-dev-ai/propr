@@ -32,7 +32,7 @@ public sealed class CodeInsightTrendAnalyzerTests
         var trend = CodeInsightTrendAnalyzer.Analyse([0.50, 0.52, 0.54, 0.56, 0.58, 0.60, 0.62, 0.64]);
 
         Assert.Equal(CodeInsightTrendVerdict.Rising, trend.Verdict);
-        // Every one of the 28 ordered pairs agrees, which is what Tau of 1 means.
+        // Every one of the 28 ordered pairs agrees, which Tau of 1 means.
         Assert.Equal(1d, trend.Tau!.Value, 12);
         Assert.True(trend.PValue < 0.05, $"p-value {trend.PValue} should clear the significance level");
         Assert.Equal(0.02d, trend.SlopePerPeriod!.Value, 12);

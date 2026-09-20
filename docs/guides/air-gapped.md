@@ -34,7 +34,7 @@ license identifier, which identifies the licensee, and keeps sending while the l
 
 ## Point ProPR at a model you host
 
-Use the `openAiCompatible` family for anything serving an OpenAI-shaped API at a URL you supply, including
+Use the `meisterdev/openAiCompatible` family for anything serving an OpenAI-shaped API at a URL you supply, including
 something you run yourself - see [AI providers](../ai/index.md).
 
 An endpoint on a private address needs the private-egress opt-in. Read

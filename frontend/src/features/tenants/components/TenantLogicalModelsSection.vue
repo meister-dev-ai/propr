@@ -140,6 +140,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
+import { autoProtocolMode } from '@/features/clients/components/aiConnectionsFormatters'
 import {
   createTenantEntry,
   deleteTenantEntry,
@@ -169,7 +170,7 @@ const draft = reactive({
   connectionId: '',
   configuredModelId: '',
   reasoningEffort: 'none' as NonNullable<LogicalModelWriteRequest['reasoningEffort']>,
-  protocolMode: 'auto' as NonNullable<LogicalModelWriteRequest['protocolMode']>,
+  protocolMode: autoProtocolMode as NonNullable<LogicalModelWriteRequest['protocolMode']>,
 })
 
 // The models on the chosen connection that can serve the chosen capability (chat vs embedding).
@@ -207,7 +208,7 @@ function startEdit(model: LogicalModelResponse): void {
   draft.connectionId = model.connectionId ?? ''
   draft.configuredModelId = model.configuredModelId ?? ''
   draft.reasoningEffort = (model.reasoningEffort ?? 'none') as NonNullable<LogicalModelWriteRequest['reasoningEffort']>
-  draft.protocolMode = (model.protocolMode ?? 'auto') as NonNullable<LogicalModelWriteRequest['protocolMode']>
+  draft.protocolMode = (model.protocolMode ?? autoProtocolMode) as NonNullable<LogicalModelWriteRequest['protocolMode']>
   error.value = ''
   showCreate.value = true
 }
@@ -272,7 +273,7 @@ function resetDraft(): void {
   draft.connectionId = ''
   draft.configuredModelId = ''
   draft.reasoningEffort = 'none'
-  draft.protocolMode = 'auto'
+  draft.protocolMode = autoProtocolMode
 }
 
 onMounted(load)

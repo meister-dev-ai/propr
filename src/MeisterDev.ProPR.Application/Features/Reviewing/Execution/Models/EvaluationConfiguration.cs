@@ -3,6 +3,7 @@
 
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.Ai.Providers.Declaration;
 
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 
@@ -109,11 +110,46 @@ public sealed record EvaluationTieredModels(
 public sealed record EvaluationOutputOptions(string ArtifactPath, string DetailMode);
 
 /// <summary>
-///     Non-secret AI connection settings used by the offline harness. <see cref="Provider" /> selects which
-///     client SDK builds the chat client: Azure OpenAI / AI Foundry by default, or an OpenAI-compatible
-///     endpoint (plain OpenAI, or a LiteLLM proxy) when set accordingly.
+///     Non-secret AI connection settings used by the offline harness.
 /// </summary>
+/// <param name="EndpointUrl">Where the harness reaches the provider.</param>
+/// <param name="ApiKeyReferenceName">The name the harness reads the key under, or null for an endpoint needing none.</param>
+/// <param name="Provider">
+///     The identity key of the family that builds the chat client. Stated rather than defaulted: the family
+///     decides how a request is shaped and how a failure is read, and a configuration that omitted it used to
+///     run against a family nobody named. A run is worth a refusal it can act on.
+/// </param>
+/// <exception cref="ArgumentException"><paramref name="Provider" /> is not a well-formed identity key.</exception>
 public sealed record EvaluationAiConnection(
     string EndpointUrl,
-    string? ApiKeyReferenceName = null,
-    AiProviderKind Provider = AiProviderKind.AzureOpenAi);
+    string? ApiKeyReferenceName,
+    string Provider)
+{
+    /// <summary>The identity key of the Azure OpenAI / AI Foundry family.</summary>
+    /// <remarks>
+    ///     Written out rather than read from the family that declares it: that family ships as an add-in the
+    ///     host does not reference. It is no longer a default for <see cref="Provider" /> — the two callers that
+    ///     name it are building an Azure connection deliberately.
+    /// </remarks>
+    public const string AzureOpenAiKey = "meisterdev/azureOpenAi";
+
+    private readonly string _provider = Named(Provider);
+
+    /// <summary>The identity key of the family that builds the chat client.</summary>
+    public string Provider
+    {
+        get => this._provider;
+        init => this._provider = Named(value);
+    }
+
+    private static string Named(string provider)
+    {
+        return ProviderVocabulary.IsValidIdentityKey(provider)
+            ? provider
+            : throw new ArgumentException(
+                $"The evaluation configuration names '{provider}' as its provider family, which is not a "
+                + "well-formed identity key. State the family the harness runs against, for instance "
+                + "'meisterdev/azureOpenAi'.",
+                nameof(EvaluationAiConnection.Provider));
+    }
+}

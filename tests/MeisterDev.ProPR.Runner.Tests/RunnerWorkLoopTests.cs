@@ -43,7 +43,7 @@ public sealed class RunnerWorkLoopTests
         await loop.StopAsync(CancellationToken.None);
     }
 
-    // Every ask carries the free-slot count, which is what lets the control plane answer without tracking
+    // Every ask carries the free-slot count, and that lets the control plane answer without tracking
     // runner capacity itself.
     [Fact]
     public async Task EveryAsk_SaysHowMuchRoomThereIs()

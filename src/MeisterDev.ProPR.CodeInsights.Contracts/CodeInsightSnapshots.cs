@@ -229,8 +229,8 @@ public enum CodeInsightClassificationStatus
 ///     The classification of one finding of a review job, keyed by its position in that job's finding list.
 /// </summary>
 /// <remarks>
-///     <paramref name="Ordinal" /> is the index of the finding in the job's persisted review result, which is
-///     what lets a caller line these up with the findings it already renders without needing a finding id of
+///     <paramref name="Ordinal" /> is the index of the finding in the job's persisted review result, which
+///     lets a caller line these up with the findings it already renders without needing a finding id of
 ///     its own. Tag slugs are returned rather than identities: this is a display contract.
 /// </remarks>
 /// <param name="Ordinal">Index of the finding within its job's review result.</param>

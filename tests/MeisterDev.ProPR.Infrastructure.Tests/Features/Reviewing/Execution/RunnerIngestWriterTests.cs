@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -118,7 +119,7 @@ public sealed class RunnerIngestWriterTests
             new MeisterDev.ProPR.Application.DTOs.AiConfiguredModelDto(
                 Guid.NewGuid(), "gpt-5-mini", "Reviewer",
                 [MeisterDev.Ai.Providers.Enums.AiOperationKind.Chat],
-                [MeisterDev.Ai.Providers.Enums.AiProtocolMode.Auto]));
+                [MeisterDev.Ai.Providers.Declaration.ProviderDeclaredProtocolModes.Auto]));
         logicalModels.ResolveChatRuntimeAsync(
                 job.ClientId, "reviewer-medium",
                 Arg.Any<MeisterDev.ProPR.Application.Interfaces.IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
@@ -163,7 +164,31 @@ public sealed class RunnerIngestWriterTests
             Arg.Any<CancellationToken>(),
             Arg.Any<MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models.ReviewPassKind?>(), Arg.Any<string?>(),
             "reviewer-medium");
-        await this._protocols.Received(1).SetCompletedAsync(Arg.Any<Guid>(), "Completed", 100, 20, 0, 0, null, Arg.Any<CancellationToken>());
+        await this._protocols.Received(1).SetCompletedAsync(
+            Arg.Any<Guid>(), "Completed", 100, 20, 0, 0, null, Arg.Any<CancellationToken>(), 0, Arg.Any<CacheObservabilityStatus>(), 0, 0);
+    }
+
+    // The control plane prices the input total less the two cache buckets at the input rate and each bucket at
+    // its own, so a relayed pass whose buckets were dropped on the way in is charged the full rate for a prompt
+    // the provider served from cache. All five counters reach the protocol the pricing pass reads.
+    [Fact]
+    public async Task ASpendRecordsCacheAndReasoningCountersReachTheProtocolThePricingReads()
+    {
+        this._jobs.GetById(JobId).Returns(Job());
+        var logicalModels = Substitute.For<MeisterDev.ProPR.Application.Interfaces.ILogicalModelResolver>();
+        logicalModels.ResolveChatRuntimeAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(),
+                Arg.Any<MeisterDev.ProPR.Application.Interfaces.IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns<MeisterDev.ProPR.Application.DTOs.ResolvedLogicalModelChatRuntime>(_ => throw new InvalidOperationException("binding deleted"));
+        var writer = new RunnerIngestWriter(this._jobs, this._protocols, logicalModels);
+
+        await writer.WriteSpendAsync(
+            JobId,
+            [new RunnerSpendRecord("reviewer-medium", 4170, 207, null, 4000, 50, 200)]);
+
+        await this._protocols.Received(1).SetCompletedAsync(
+            Arg.Any<Guid>(), "Completed", 4170, 207, 0, 0, null, Arg.Any<CancellationToken>(),
+            4000, Arg.Any<CacheObservabilityStatus>(), 50, 200);
     }
 
     // An excluded row is a checkpoint like a completed one: a replayed batch must not overwrite it, and

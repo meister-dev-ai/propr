@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Diagnostics;
+
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Runtime;
 
 internal sealed class GitHubInstallationTokenCache
@@ -66,5 +68,13 @@ internal sealed class GitHubInstallationTokenCache
         }
     }
 
-    private sealed record CachedTokenEntry(string Token, DateTimeOffset ExpiresAt, DateTimeOffset LastAccessedAt);
+    private sealed record CachedTokenEntry(string Token, DateTimeOffset ExpiresAt, DateTimeOffset LastAccessedAt)
+    {
+        /// <summary>Renders the entry without the token; see <see cref="SecretSafeRendering" />.</summary>
+        public override string ToString()
+        {
+            return $"{nameof(CachedTokenEntry)} {{ Token = {SecretSafeRendering.Elide(this.Token)}, "
+                   + $"ExpiresAt = {this.ExpiresAt:O}, LastAccessedAt = {this.LastAccessedAt:O} }}";
+        }
+    }
 }

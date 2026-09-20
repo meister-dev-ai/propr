@@ -56,6 +56,19 @@ public interface ITenantAdminService
     /// <param name="displayName">Optional replacement display name.</param>
     /// <param name="isActive">Optional replacement active flag.</param>
     /// <param name="localLoginEnabled">Optional replacement local-login flag.</param>
+    /// <param name="allowedAiProviderKinds">
+    ///     Optional replacement permitted-family list, by identity key; an empty list lifts the family
+    ///     restriction. Entries no loaded family claims survive the write and are removed through
+    ///     <paramref name="removedUnresolvedAiProviderKinds" /> alone.
+    /// </param>
+    /// <param name="allowedAiEndpointHosts">
+    ///     Optional replacement permitted-host list; an empty list lifts the endpoint restriction.
+    /// </param>
+    /// <param name="removedUnresolvedAiProviderKinds">
+    ///     Permitted-family entries no loaded family claims, to remove from the stored list. Naming an entry here
+    ///     is what removes it, so a removal cannot happen as a side effect of saving the families. An entry the
+    ///     tenant does not hold is ignored, and the returned tenant reports what remains.
+    /// </param>
     /// <param name="ct">Cancellation token for the operation.</param>
     /// <returns>The updated tenant when found; otherwise <c>null</c>.</returns>
     Task<TenantDto?> PatchAsync(
@@ -63,8 +76,9 @@ public interface ITenantAdminService
         string? displayName = null,
         bool? isActive = null,
         bool? localLoginEnabled = null,
-        IReadOnlyList<AiProviderKind>? allowedAiProviderKinds = null,
+        IReadOnlyList<string>? allowedAiProviderKinds = null,
         IReadOnlyList<string>? allowedAiEndpointHosts = null,
+        IReadOnlyList<string>? removedUnresolvedAiProviderKinds = null,
         CancellationToken ct = default);
 
     /// <summary>

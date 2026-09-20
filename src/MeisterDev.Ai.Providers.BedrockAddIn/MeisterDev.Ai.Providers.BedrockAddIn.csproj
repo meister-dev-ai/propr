@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        The shared add-in build configuration, imported by path because this add-in is in the same repository as
+        the contract. An add-in built elsewhere takes the contract as a package and NuGet imports the same two
+        files for it. The three settings they carry keep the contract, the model abstractions and the
+        conformance kit out of this project's output folder, which is what the loader requires of a folder it
+        reads.
+    -->
+    <Import Project="..\MeisterDev.Ai.Providers.Abstractions\build\MeisterDev.Ai.Providers.Abstractions.props"/>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>MeisterDev.Ai.Providers.BedrockAddIn</RootNamespace>
+    </PropertyGroup>
+
+    <!--
+        Amazon Bedrock, built the way a family outside this repository is built: the contract assembly and this
+        family's own vendor dependencies, and nothing from the host or from the shared provider runtime. The
+        three AWS packages are referenced here and nowhere else, so their transitive versions no longer have to
+        agree with any other family's vendor SDK, and replacing the deprecated one is a change inside this
+        folder.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.Abstractions\MeisterDev.Ai.Providers.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AWSSDK.Bedrock" Version="4.0.100.6"/>
+        <PackageReference Include="AWSSDK.BedrockRuntime" Version="4.0.100.6"/>
+        <PackageReference Include="AWSSDK.Extensions.Bedrock.MEAI" Version="4.0.101.6"/>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIVersion)"/>
+    </ItemGroup>
+
+    <Import Project="..\MeisterDev.Ai.Providers.Abstractions\build\MeisterDev.Ai.Providers.Abstractions.targets"/>
+
+</Project>

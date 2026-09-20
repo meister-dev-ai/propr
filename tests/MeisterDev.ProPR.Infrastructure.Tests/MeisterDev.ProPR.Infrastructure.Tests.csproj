@@ -15,9 +15,9 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.AI" Version="10.5.1"/>
-        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.1"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)"/>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIVersion)"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.12"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0"/>
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.10.0"/>
         <PackageReference Include="NSubstitute" Version="5.3.0"/>
@@ -42,6 +42,13 @@
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.ProRV\MeisterDev.ProPR.ProRV.csproj"/>
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.ProCursor\MeisterDev.ProPR.ProCursor.csproj"/>
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.CodeAnalysis.TreeSitter\MeisterDev.ProPR.CodeAnalysis.TreeSitter.csproj"/>
+
+        <!--
+            The add-in written against the contract assembly alone. Referenced here so the credential flow an
+            add-in author writes is driven against the host's real primitives and a real database: a flow that
+            works against doubles and not against the implementations is the failure these tests exist to catch.
+        -->
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.ExampleAddIn\MeisterDev.Ai.Providers.ExampleAddIn.csproj"/>
     </ItemGroup>
 
 </Project>

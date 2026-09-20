@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 
@@ -20,7 +21,8 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 /// </remarks>
 public sealed class AiConnectionScopeGuard(
     IClientRegistry clients,
-    ITenantProviderPolicyProvider providerPolicies) : IAiConnectionScopeGuard
+    ITenantProviderPolicyProvider providerPolicies,
+    IAiProviderDriverRegistry providerDrivers) : IAiConnectionScopeGuard
 {
     public async Task<string?> ValidateAsync(
         AiConnectionDto connection,
@@ -42,14 +44,20 @@ public sealed class AiConnectionScopeGuard(
         }
 
         var policy = await providerPolicies.GetForTenantAsync(referencingTenantId, ct).ConfigureAwait(false);
-        if (policy.DescribeRefusal(connection.ProviderKind) is { } kindRefusal)
+        if (policy.GetRefusalReason(connection.ProviderKind) is { } kindRefusal)
         {
             return $"connection '{connection.DisplayName}' cannot be used because {kindRefusal}.";
         }
 
-        if (policy.DescribeEndpointRefusal(connection.BaseUrl) is { } endpointRefusal)
+        // Where the traffic goes is asked of the whole set: the connection's base URL, and every host its family
+        // declared it reaches. A family whose endpoint is fixed by its vendor carries no base URL, so the
+        // declared patterns are what the tenant's list is checked against for it.
+        var reachRefusal = policy.DescribeReachRefusal(
+            connection.BaseUrl,
+            providerDrivers.ReachedHostPatterns(connection.ProviderKind));
+        if (reachRefusal is not null)
         {
-            return $"connection '{connection.DisplayName}' cannot be used because {endpointRefusal}.";
+            return $"connection '{connection.DisplayName}' cannot be used because {reachRefusal}.";
         }
 
         return null;

@@ -1,14 +1,29 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
+using Microsoft.Extensions.AI;
+using NSubstitute;
 
 namespace MeisterDev.ProPR.Application.Tests.Services;
 
 internal static class AiConnectionTestFactory
 {
+    public const string AzureFamilyKey = "meisterdev/azureOpenAi";
+
+    public const string AzureResponses = AzureFamilyKey + ":Responses";
+
+    public const string AzureChatCompletions = AzureFamilyKey + ":ChatCompletions";
+
+    public const string ApiKeyAuth = AzureFamilyKey + ":ApiKey";
+
+    public const string AzureIdentityAuth = AzureFamilyKey + ":AzureIdentity";
+
     public static AiConfiguredModelDto CreateChatModel(string remoteModelId, Guid? id = null)
     {
         return new AiConfiguredModelDto(
@@ -16,7 +31,7 @@ internal static class AiConnectionTestFactory
             remoteModelId,
             remoteModelId,
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions],
+            [ProviderDeclaredProtocolModes.Auto, AzureResponses, AzureChatCompletions],
             null,
             null,
             null,
@@ -34,7 +49,7 @@ internal static class AiConnectionTestFactory
             remoteModelId,
             remoteModelId,
             [AiOperationKind.Embedding],
-            [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+            [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
             "cl100k_base",
             8192,
             dimensions);
@@ -43,7 +58,7 @@ internal static class AiConnectionTestFactory
     public static AiPurposeBindingDto CreateBinding(
         AiPurpose purpose,
         AiConfiguredModelDto model,
-        AiProtocolMode protocolMode = AiProtocolMode.Auto,
+        string protocolMode = ProviderDeclaredProtocolModes.Auto,
         bool isEnabled = true)
     {
         return new AiPurposeBindingDto(
@@ -70,9 +85,9 @@ internal static class AiConnectionTestFactory
             Guid.NewGuid(),
             clientId,
             displayName,
-            AiProviderKind.AzureOpenAi,
+            AzureFamilyKey,
             baseUrl,
-            secret is null ? AiAuthMode.AzureIdentity : AiAuthMode.ApiKey,
+            secret is null ? AzureIdentityAuth : ApiKeyAuth,
             AiDiscoveryMode.ManualOnly,
             isActive,
             configuredModels ?? [],
@@ -98,5 +113,24 @@ internal static class AiConnectionTestFactory
         var model = CreateChatModel(modelId);
         var bindings = includeBinding ? new[] { CreateBinding(purpose, model) } : [];
         return CreateConnection(clientId, [model], bindings, displayName, baseUrl, isActive, secret);
+    }
+
+    /// <summary>
+    ///     A resolver that answers every chat purpose with one runtime over the given client. Callers that do not
+    ///     care which client a call lands on can leave it unset and get a substitute.
+    /// </summary>
+    public static IAiRuntimeResolver CreateChatRuntimeResolver(IChatClient? chatClient = null, string modelId = "gpt-4o")
+    {
+        var model = CreateChatModel(modelId);
+        var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        runtime.ChatClient.Returns(chatClient ?? Substitute.For<IChatClient>());
+        runtime.Model.Returns(model);
+        runtime.Connection.Returns(CreateConnection(Guid.NewGuid(), [model], [CreateBinding(AiPurpose.ReviewDefault, model)]));
+        runtime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, false));
+
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>())
+            .Returns(runtime);
+        return resolver;
     }
 }

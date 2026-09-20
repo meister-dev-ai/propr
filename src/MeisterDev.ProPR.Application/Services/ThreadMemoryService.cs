@@ -36,8 +36,6 @@ public sealed partial class ThreadMemoryService(
     ILogger<ThreadMemoryService> logger,
     IMemoryReconsiderationPromptBuilder reconsiderationPrompts,
     IChatClient? chatClient = null,
-    IAiConnectionRepository? aiConnectionRepository = null,
-    IAiChatClientFactory? aiChatClientFactory = null,
     IAiRuntimeResolver? aiRuntimeResolver = null,
     ICodeInsightFindingStore? codeInsightFindingStore = null,
     IMemoryKeywordExtractor? memoryKeywordExtractor = null,
@@ -1054,31 +1052,16 @@ public sealed partial class ThreadMemoryService(
             return new ResolvedChatClient(chatClient, modelId);
         }
 
-        if (aiRuntimeResolver is not null)
-        {
-            var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
-                clientId,
-                AiPurpose.MemoryReconsideration,
-                ct);
-            return new ResolvedChatClient(runtime.ChatClient, runtime.Model.RemoteModelId, runtime.LogicalModelName);
-        }
-
-        if (aiConnectionRepository is null || aiChatClientFactory is null)
+        if (aiRuntimeResolver is null)
         {
             return null;
         }
 
-        var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, ct);
-        if (activeConnection is null)
-        {
-            return null;
-        }
-
-        var resolvedModelId = activeConnection.GetBoundModelId(AiPurpose.MemoryReconsideration)
-                              ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId
-                              ?? modelId;
-        var client = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
-        return new ResolvedChatClient(client, resolvedModelId);
+        var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
+            clientId,
+            AiPurpose.MemoryReconsideration,
+            ct);
+        return new ResolvedChatClient(runtime.ChatClient, runtime.Model.RemoteModelId, runtime.LogicalModelName);
     }
 
     private (string SystemMessage, string UserMessage) BuildReconsiderationMessages(
@@ -1253,7 +1236,7 @@ public sealed partial class ThreadMemoryService(
     ///     Reduces a file path to the one form the memory store keeps: repository-relative, forward slashes,
     ///     no leading slash. Every write and every read goes through this, so a record is retrievable by
     ///     whichever producer supplies the path. Returns <see langword="null" /> for a path that carries no
-    ///     file, which is what a pull-request-level thread has.
+    ///     file, which a pull-request-level thread has.
     /// </summary>
     private static string? CanonicalizeFilePath(string? filePath)
     {

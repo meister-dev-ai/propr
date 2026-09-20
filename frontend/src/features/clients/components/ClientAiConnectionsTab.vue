@@ -77,9 +77,8 @@
               <div class="ai-chip-row">
                 <span class="chip chip-sm chip-muted">{{ providerLabel(profile.providerKind) }}</span>
                 <span
-                  v-if="!isProviderPermitted(profile.providerKind)"
+                  v-if="connectionAvailability(profile)"
                   class="chip chip-sm chip-danger"
-                  :title="providerUnavailableReason(profile.providerKind)"
                   data-testid="ai-provider-unavailable"
                 >
                   Unavailable
@@ -123,27 +122,63 @@
               {{ profile.verification.summary }}
             </p>
 
+            <div v-if="connectionAvailability(profile)" class="ai-unavailable-note" data-testid="ai-unavailable-note">
+              <p class="ai-unavailable-reason">{{ unavailableReasonText(connectionAvailability(profile)) }}</p>
+              <p class="ai-unavailable-remedy">{{ unavailableRemedyText(connectionAvailability(profile)) }}</p>
+            </div>
+
             <div class="ai-profile-actions" @click.stop>
-              <button class="btn-secondary btn-sm" :disabled="busyConnectionId === profile.id" @click="handleVerify(profile)">
+              <!-- One button per operation the family declares, labelled as the family labels it. This markup
+                   names no family, so a family this console has never seen is operable too. -->
+              <button
+                v-for="action in declaredActionsFor(profile)"
+                :key="action.id ?? ''"
+                class="btn-secondary btn-sm"
+                :disabled="
+                  busyConnectionId === profile.id ||
+                  Boolean(connectionAvailability(profile)) ||
+                  isActionRunActive
+                "
+                :data-testid="`ai-action-${action.id}`"
+                @click="openDeclaredAction(profile, action)"
+              >
+                {{ action.label }}
+              </button>
+              <button
+                v-if="!connectionAvailability(profile)"
+                class="btn-secondary btn-sm"
+                :disabled="busyConnectionId === profile.id"
+                data-testid="ai-verify"
+                @click="handleVerify(profile)"
+              >
                 Verify
               </button>
               <button
-                v-if="!profile.isActive"
+                v-if="!profile.isActive && !connectionAvailability(profile)"
                 class="btn-secondary btn-sm"
                 :disabled="busyConnectionId === profile.id"
+                data-testid="ai-activate"
                 @click="handleActivate(profile)"
               >
                 Activate
               </button>
+              <!-- Deactivate stays available on an unavailable profile: an operator can still take it out of
+                   use while its family is missing. -->
               <button
-                v-else
+                v-if="profile.isActive"
                 class="btn-secondary btn-sm"
                 :disabled="busyConnectionId === profile.id"
+                data-testid="ai-deactivate"
                 @click="handleDeactivate(profile)"
               >
                 Deactivate
               </button>
-              <button class="btn-danger btn-sm" :disabled="busyConnectionId === profile.id" @click="confirmDelete(profile)">
+              <button
+                class="btn-danger btn-sm"
+                :disabled="busyConnectionId === profile.id"
+                data-testid="ai-delete"
+                @click="confirmDelete(profile)"
+              >
                 Delete
               </button>
             </div>
@@ -196,15 +231,38 @@
             <label class="form-field">
               <span>Authentication</span>
               <select v-model="editor.authMode" data-testid="ai-auth-mode">
-                <option v-for="option in authOptionsForProvider(editor.providerKind)" :key="option.value" :value="option.value">{{ option.label }}</option>
+                <option v-for="option in authModeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
               </select>
             </label>
 
-            <label v-if="editor.authMode === 'apiKey'" class="form-field">
-              <span>API Key</span>
-              <input v-model="editor.apiKey" data-testid="ai-api-key" type="password" placeholder="Paste the provider secret" />
-              <small v-if="guidance.credentialHint" class="field-hint-inline" data-testid="ai-api-key-hint">{{ guidance.credentialHint }}</small>
-            </label>
+            <ProviderCredentialFieldInputs
+              :fields="credentialFields"
+              :values="editor.credentials"
+              @update="(name: string, value: string) => (editor.credentials[name] = value)"
+            />
+
+            <!-- The fields the selected family declares. Every family compiled into this build declares none,
+                 so this renders nothing for them; their address, credential and verification state have their
+                 own fields above. -->
+            <template v-for="field in visibleDeclaredFields" :key="field.name">
+              <ProviderComputedFieldValue
+                v-if="field.isComputed"
+                :field="field"
+                :test-id="`ai-declared-${field.name}`"
+                :value="computedDeclaredValues[field.name!]?.value ?? ''"
+                :refusal="computedDeclaredValues[field.name!]?.refusal"
+              />
+
+              <ProviderDeclaredFieldInput
+                v-else
+                v-model="editor.declaredValues[field.name!]"
+                :field="field"
+                :test-id="`ai-declared-${field.name}`"
+                :placeholder="declaredPlaceholder(field)"
+                :error="declaredFieldError(field.name)"
+                :note="storedSecretNote(field)"
+              />
+            </template>
 
             <label class="form-field">
               <span>Discovery Mode</span>
@@ -418,34 +476,58 @@
               </div>
             </div>
 
+            <!-- The same reason and remedy as the list row, because a profile opened from a link is read here
+                 and nowhere else. -->
+            <div
+              v-if="connectionAvailability(selectedProfile)"
+              class="ai-unavailable-note"
+              data-testid="ai-unavailable-note-detail"
+            >
+              <p class="ai-unavailable-reason">{{ unavailableReasonText(connectionAvailability(selectedProfile)) }}</p>
+              <p class="ai-unavailable-remedy">{{ unavailableRemedyText(connectionAvailability(selectedProfile)) }}</p>
+            </div>
+
             <div class="ai-profile-actions ai-profile-actions--detail">
-              <button class="btn-secondary btn-sm" :disabled="busyConnectionId === selectedProfile.id" @click="handleVerify(selectedProfile)">
+              <button
+                v-if="!connectionAvailability(selectedProfile)"
+                class="btn-secondary btn-sm"
+                :disabled="busyConnectionId === selectedProfile.id"
+                data-testid="ai-verify-detail"
+                @click="handleVerify(selectedProfile)"
+              >
                 Verify
               </button>
               <button
-                v-if="!selectedProfile.isActive"
+                v-if="!selectedProfile.isActive && !connectionAvailability(selectedProfile)"
                 class="btn-secondary btn-sm"
                 :disabled="busyConnectionId === selectedProfile.id"
+                data-testid="ai-activate-detail"
                 @click="handleActivate(selectedProfile)"
               >
                 Activate
               </button>
               <button
-                v-else
+                v-if="selectedProfile.isActive"
                 class="btn-secondary btn-sm"
                 :disabled="busyConnectionId === selectedProfile.id"
+                data-testid="ai-deactivate-detail"
                 @click="handleDeactivate(selectedProfile)"
               >
                 Deactivate
               </button>
-              <button class="btn-danger btn-sm" :disabled="busyConnectionId === selectedProfile.id" @click="confirmDelete(selectedProfile)">
+              <button
+                class="btn-danger btn-sm"
+                :disabled="busyConnectionId === selectedProfile.id"
+                data-testid="ai-delete-detail"
+                @click="confirmDelete(selectedProfile)"
+              >
                 Delete
               </button>
             </div>
           </div>
 
           <div class="form-actions ai-editor-actions">
-            <button class="btn-primary" :disabled="saving" @click="saveProfile">
+            <button class="btn-primary" :disabled="saving" data-testid="ai-save-profile" @click="saveProfile">
               {{ saving ? 'Saving…' : editor.mode === 'edit' ? 'Save Profile' : 'Create Profile' }}
             </button>
             <button class="btn-secondary" :disabled="saving" @click="resetEditor">Reset</button>
@@ -496,6 +578,99 @@
         </section>
     </div>
 
+    <ModalDialog
+      :isOpen="Boolean(actionRun)"
+      :title="actionRun?.action.label ?? ''"
+      @update:isOpen="closeDeclaredAction"
+    >
+      <div v-if="actionRun" class="ai-action-run" data-testid="ai-action-run">
+        <!-- Shown before the run starts, so an operator whose deployment cannot meet the requirement reads it
+             now and not when the run expires. -->
+        <p
+          v-if="actionRun.action.coLocationNotice"
+          class="ai-action-notice"
+          data-testid="ai-action-notice"
+        >
+          {{ actionRun.action.coLocationNotice }}
+        </p>
+
+        <p v-if="actionRun.error" class="error" data-testid="ai-action-error">{{ actionRun.error }}</p>
+
+        <template v-if="actionRun.started">
+          <p
+            v-if="actionRun.result?.kind === 'completed'"
+            class="ai-action-completed"
+            data-testid="ai-action-completed"
+          >
+            {{ actionRun.result.message }}
+          </p>
+          <p
+            v-else-if="actionRun.result?.kind === 'failed'"
+            class="error"
+            data-testid="ai-action-failed"
+          >
+            {{ actionRun.result.message }}
+          </p>
+          <p
+            v-else-if="actionRun.result?.kind === 'openUrl'"
+            class="ai-action-opened"
+            data-testid="ai-action-opened"
+          >
+            The provider was opened in a new tab. Finish signing in there.
+          </p>
+
+          <p
+            v-if="actionRun.invocation?.state === 'Pending'"
+            class="ai-action-pending"
+            data-testid="ai-action-pending"
+          >
+            {{ actionRun.invocation.waitingFor }}
+          </p>
+          <p
+            v-else-if="actionRun.invocation?.state === 'Expired'"
+            class="error"
+            data-testid="ai-action-expired"
+          >
+            {{ actionRun.invocation.message }}
+          </p>
+
+          <!-- The form the family asked for, or the action's declared inputs once the operator has been sent
+               to the provider. The second is the fallback for every flow. Shapes render as in the connection
+               form: a choice is a select, a boolean is a checkbox. A text box for either would accept a value
+               the family declared it will not take. -->
+          <template v-if="actionFormFields.length > 0">
+            <ProviderDeclaredFieldInput
+              v-for="field in actionFormFields"
+              :key="field.name ?? ''"
+              v-model="actionRun.values[field.name!]"
+              :field="field"
+              :test-id="`ai-action-field-${field.name}`"
+              :placeholder="field.placeholder ?? ''"
+            />
+
+            <button
+              class="btn-primary btn-sm"
+              :disabled="actionRun.busy"
+              data-testid="ai-action-submit"
+              @click="submitDeclaredActionValues"
+            >
+              Submit
+            </button>
+          </template>
+        </template>
+
+        <button
+          v-else
+          class="btn-primary btn-sm"
+          :disabled="actionRun.busy"
+          data-testid="ai-action-start"
+          @click="startDeclaredAction"
+        >
+          Start
+        </button>
+      </div>
+    </ModalDialog>
+
     <ConfirmDialog
       :open="Boolean(deleteTarget)"
       message="Delete this AI provider?"
@@ -513,21 +688,22 @@ import ClientReviewPassesEditor from './ClientReviewPassesEditor.vue'
 import ClientLogicalModelsSection from './ClientLogicalModelsSection.vue'
 import ClientPurposeRolesSection from './ClientPurposeRolesSection.vue'
 import ModelCatalogPicker from './ModelCatalogPicker.vue'
+import ProviderComputedFieldValue from './ProviderComputedFieldValue.vue'
+import ProviderCredentialFieldInputs from './ProviderCredentialFieldInputs.vue'
+import ProviderDeclaredFieldInput from './ProviderDeclaredFieldInput.vue'
 import { listModels as listCatalogModels, listProviders as listCatalogProviders } from '@/services/modelCatalogService'
 
 import { listEffectiveForClient, type LogicalModelResponse } from '@/services/logicalModelsService'
 import { ClientDetailVmKey, type ReviewPassEntry } from '@/features/clients/view-models/useClientDetailViewModel'
 import {
   applyCatalogEntryToModel,
-  authModeLabel,
-  authOptionsForProvider,
-  providerGuidance,
-  providerLabel,
-  providerOptions,
+  unavailableReasonText,
+  unavailableRemedyText,
   verificationChipClass,
   verificationLabel,
 } from './aiConnectionsFormatters'
 import { useClientAiConnectionsTab } from './useClientAiConnectionsTab'
+import type { AiDeclaredFieldDto } from '@/services/aiConnectionsService'
 
 const props = withDefaults(
   defineProps<{
@@ -598,9 +774,21 @@ const {
   showListView,
   selectedProfile,
   availableProviderOptions,
-  isProviderPermitted,
-  providerUnavailableReason,
+  authModeOptions,
+  providerLabel,
+  authModeLabel,
+  guidance,
+  credentialFields,
+  visibleDeclaredFields,
+  computedDeclaredValues,
+  storedDeclaredSecretNames,
+  declaredFieldError,
+  connectionAvailability,
   providersRestricted,
+  actionRun,
+  actionFormFields,
+  isActionRunActive,
+  declaredActionsFor,
   refreshProfiles,
   resetEditor,
   openCreateEditor,
@@ -621,11 +809,27 @@ const {
   handleDeactivate,
   confirmDelete,
   handleDelete,
+  openDeclaredAction,
+  startDeclaredAction,
+  submitDeclaredActionValues,
+  closeDeclaredAction,
 } = useClientAiConnectionsTab(props)
 
-// What the base URL and the secret have to look like differs by family, and getting either wrong surfaces as a
-// provider rejection that names something else entirely.
-const guidance = computed(() => providerGuidance(editor.providerKind))
+// A stored secret is never returned, so its box starts empty; saying so beats an empty box that reads as
+// unconfigured.
+const declaredPlaceholder = (field: AiDeclaredFieldDto): string => {
+  if (field.isSecret) {
+    return storedDeclaredSecretNames.value.includes(field.name ?? '') ? 'Stored' : 'Paste the provider secret'
+  }
+
+  return field.placeholder ?? ''
+}
+
+// Said under a secret field that already holds a value, so the empty box does not read as unconfigured.
+const storedSecretNote = (field: AiDeclaredFieldDto): string | null =>
+  field.isSecret && storedDeclaredSecretNames.value.includes(field.name ?? '')
+    ? 'A value is stored. Enter a new one to replace it.'
+    : null
 </script>
 
 <style scoped>
@@ -766,6 +970,26 @@ const guidance = computed(() => providerGuidance(editor.providerKind))
   color: var(--color-text-muted);
 }
 
+.ai-unavailable-note {
+  margin-top: 0.9rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+}
+
+.ai-unavailable-reason {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.ai-unavailable-remedy {
+  margin: 0.3rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
 .ai-profile-actions,
 .ai-editor-actions {
   display: flex;
@@ -806,6 +1030,10 @@ const guidance = computed(() => providerGuidance(editor.providerKind))
 .form-field {
   display: grid;
   gap: 0.4rem;
+  /* Packed to the top of the cell. A field is a grid inside a grid row, so without this it stretches to the
+     tallest field beside it and the extra height goes into its own rows — which makes a lone select taller than
+     the input next to it whenever that input carries a hint under it. */
+  align-content: start;
 }
 
 .form-field span {

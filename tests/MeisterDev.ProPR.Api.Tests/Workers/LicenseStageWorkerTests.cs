@@ -170,7 +170,7 @@ public sealed class LicenseStageWorkerTests
         Assert.Equal(LicenseStage.Reverted, await worker.SweepOnceAsync(CancellationToken.None));
     }
 
-    // An installation nobody is using still has to record a move it has made, which is what makes the sweep the
+    // An installation nobody is using still has to record a move it has made, and that makes the sweep the
     // place the profile is re-observed from.
     [Fact]
     public async Task TheSweep_ReObservesTheSystemProfileAgainstTheInstallationsFirstSeenInstant()
@@ -440,7 +440,7 @@ public sealed class LicenseStageWorkerTests
         }
     }
 
-    /// <summary>Keeps what was logged, which is what the once-per-transition rule is asserted against.</summary>
+    /// <summary>Keeps what was logged, which the once-per-transition rule is asserted against.</summary>
     private sealed class ListLogger : ILogger<LicenseStageWorker>
     {
         public List<LogEntry> Entries { get; } = [];

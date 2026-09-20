@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Api.Workers;
 ///     <para>
 ///         The sweep reads the license state through the provider and does not invalidate its cache. The
 ///         interval is longer than the provider's cache duration, so an idle installation's sweep is a cache
-///         miss that loads, verifies and reads the licensing clock, which is what records the observed instant
+///         miss that loads, verifies and reads the licensing clock, and that records the observed instant
 ///         and advances the rollback ratchet. On a busy installation another caller may have loaded within the
 ///         cache window, in which case the sweep is a cache hit that reads nothing and the ratchet was advanced
 ///         by that load moments earlier. The sweep therefore adds no work beyond the load the cache duration

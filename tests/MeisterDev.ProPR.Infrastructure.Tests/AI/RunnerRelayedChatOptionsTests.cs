@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Runner.Contracts;
@@ -97,7 +98,7 @@ public sealed class RunnerRelayedChatOptionsTests
 
     private sealed class FakeNativeClient : INativeProtocolChatClient
     {
-        public AiProtocolMode NativeProtocol => AiProtocolMode.Auto;
+        public string NativeProtocol => ProviderDeclaredProtocolModes.Auto;
 
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
@@ -114,5 +115,24 @@ public sealed class RunnerRelayedChatOptionsTests
         public void Dispose()
         {
         }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(int.MaxValue)]
+    public void AnOutputCeilingOutsideTheAcceptedRangeIsDropped(int relayed)
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(new RunnerChatOptions(MaxOutputTokens: relayed));
+
+        Assert.Null(options!.MaxOutputTokens);
+    }
+
+    [Fact]
+    public void AnOutputCeilingInsideTheAcceptedRangeIsHonoured()
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(new RunnerChatOptions(MaxOutputTokens: 8192));
+
+        Assert.Equal(8192, options!.MaxOutputTokens);
     }
 }

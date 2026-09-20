@@ -32,7 +32,7 @@ namespace MeisterDev.ProPR.CodeInsights.History;
 ///         twice persists two jobs' worth of findings in review history, while the collection holds one set for it:
 ///         identity is the revision and the finding's position in it, so the second review's findings land on the
 ///         first review's rows. Summing per job would report such a repository as permanently half collected. The
-///         largest job in a revision is what the collection can hold for it, which is what the collected count is
+///         largest job in a revision is what the collection can hold for it, which the collected count is
 ///         then compared against.
 ///     </para>
 /// </remarks>

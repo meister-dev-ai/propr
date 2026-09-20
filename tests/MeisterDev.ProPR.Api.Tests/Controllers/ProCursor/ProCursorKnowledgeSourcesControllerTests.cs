@@ -8,6 +8,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
@@ -840,7 +841,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                     "text-embedding-3-small",
                     "text-embedding-3-small",
                     [AiOperationKind.Embedding],
-                    [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+                    [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
                     "cl100k_base",
                     8192,
                     1536);
@@ -849,14 +850,14 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                     AiPurpose.EmbeddingDefault,
                     embeddingModelId,
                     embeddingModel.RemoteModelId,
-                    AiProtocolMode.Embeddings);
+                    ProviderDeclaredProtocolModes.Embeddings);
                 var embeddingConnection = new AiConnectionDto(
                     Guid.NewGuid(),
                     clientId,
                     "Embedding Connection",
-                    AiProviderKind.AzureOpenAi,
+                    "meisterdev/azureOpenAi",
                     "https://embeddings.openai.azure.com/",
-                    AiAuthMode.AzureIdentity,
+                    "meisterdev/azureOpenAi:AzureIdentity",
                     AiDiscoveryMode.ManualOnly,
                     false,
                     [embeddingModel],

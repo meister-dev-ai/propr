@@ -52,7 +52,7 @@ public class ReviewJobWorkerTests
 
     /// <summary>
     ///     A lease store that offers the supplied jobs as claim candidates and grants each exactly once,
-    ///     which is what the database does: a second claim of the same job finds it no longer pending. The
+    ///     which the database does: a second claim of the same job finds it no longer pending. The
     ///     capped claim counts the grants it has made against the cap it is given, as the database counts
     ///     executing jobs across every host.
     /// </summary>
@@ -565,7 +565,7 @@ public class ReviewJobWorkerTests
         processor.ProcessAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromException(
                 new ProviderCallFailedException(
-                    new ProviderCallTarget(AiProviderKind.OpenAiCompatible, "deepseek-reasoner", "Primary DeepSeek"),
+                    new ProviderCallTarget("meisterdev/openAiCompatible", "deepseek-reasoner", "Primary DeepSeek"),
                     ProviderFailureVerdict.Permanent("The provider rejected the credential (HTTP 401).", 401),
                     1,
                     "Check the configured API key or credential source.")));

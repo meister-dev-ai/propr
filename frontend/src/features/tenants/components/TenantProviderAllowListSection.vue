@@ -18,7 +18,7 @@
 
 import { computed, onMounted, ref } from 'vue'
 
-import { providerOptions } from '@/features/clients/components/aiConnectionsFormatters'
+import { listTenantPermittedProviders } from '@/services/aiConnectionsService'
 import { getTenant, updateTenant } from '@/services/tenantAdminService'
 import type { AiProviderKind } from '@/services/aiConnectionsService'
 
@@ -29,13 +29,42 @@ interface Props {
 const props = defineProps<Props>()
 
 const selected = ref<AiProviderKind[]>([])
+// The families this installation has, named as each one names itself. Read from the server rather than held
+// here, so a family supplied by an add-in this build has never seen is a box an operator can tick.
+const describedProviders = ref<Array<{ value: AiProviderKind; label: string }>>([])
 const endpointHostsText = ref('')
 const loading = ref(false)
+
+// Whether a read has ever succeeded. The form is not shown until one has: the load clears the previous policy
+// before it asks, so a failed read leaves empty boxes, and an empty list is how a restriction is lifted. One
+// click on Save after a failed read would remove the tenant's whole provider and endpoint policy.
+const loaded = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
 const savedMessage = ref('')
+// Entries no installed family claims. They restrict and the operator cannot tick them, so they are shown rather
+// than edited; the server keeps them across a save and refuses a permitted-family list that names one, so
+// saving the boxes cannot drop them.
+const unresolved = ref<string[]>([])
 
-const isUnrestricted = computed(() => selected.value.length === 0)
+// A box per family the installation has, plus one for any family the policy already names that it does not:
+// such a family restricts, and without a box of its own an operator could neither see the tick nor remove it.
+const providerOptions = computed(() => {
+  const described = describedProviders.value
+  const missing = selected.value
+    .filter((kind) => !described.some((option) => option.value === kind))
+    .map((kind) => ({ value: kind, label: kind }))
+
+  return [...described, ...missing]
+})
+
+// Unrestricted means the server permits everything, and an entry it cannot name restricts on its own — it
+// permits no family, so a policy holding one and no ticked family refuses every provider. Reading the ticked
+// boxes alone would report "no restriction" for exactly that policy.
+const isUnrestricted = computed(() => selected.value.length === 0 && unresolved.value.length === 0)
+
+// Nothing ticked and an entry that does not resolve: the policy restricts, and it permits nothing.
+const permitsNoFamily = computed(() => selected.value.length === 0 && unresolved.value.length > 0)
 
 const endpointHosts = computed(() =>
   endpointHostsText.value
@@ -50,11 +79,29 @@ onMounted(load)
 
 async function load(): Promise<void> {
   loading.value = true
+  loaded.value = false
   errorMessage.value = ''
+  // Cleared before the request, not after it succeeds: a reload that fails would otherwise leave the previous
+  // read on screen, and the entries in particular would be reported against a policy they are not part of.
+  selected.value = []
+  unresolved.value = []
+  describedProviders.value = []
+  endpointHostsText.value = ''
   try {
-    const tenant = await getTenant(props.tenantId)
+    // Both reads together: the policy is a selection over the families the installation has, and rendering it
+    // against a stale list would show a ticked family with no box, or a box for a family nobody can configure.
+    const [tenant, families] = await Promise.all([
+      getTenant(props.tenantId),
+      listTenantPermittedProviders(props.tenantId),
+    ])
+
+    describedProviders.value = (families.providers ?? [])
+      .filter((provider) => Boolean(provider.providerKind))
+      .map((provider) => ({ value: provider.providerKind, label: provider.label || provider.providerKind }))
     selected.value = [...(tenant.allowedAiProviderKinds ?? [])]
+    unresolved.value = [...(tenant.unresolvedAiProviderKinds ?? [])]
     endpointHostsText.value = (tenant.allowedAiEndpointHosts ?? []).join('\n')
+    loaded.value = true
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'The provider policy could not be loaded.'
   } finally {
@@ -111,6 +158,13 @@ async function save(): Promise<void> {
     <p v-if="errorMessage" class="error" data-testid="tenant-provider-policy-error">{{ errorMessage }}</p>
     <p v-if="loading" class="muted-hint">Loading provider policy…</p>
 
+    <p v-else-if="!loaded" class="muted-hint">
+      The policy in force was not read, so it is not shown and cannot be saved over.
+      <button type="button" class="btn-secondary btn-sm" data-testid="tenant-provider-policy-retry" @click="load">
+        Try again
+      </button>
+    </p>
+
     <template v-else>
       <div class="provider-policy-grid">
         <label v-for="option in providerOptions" :key="option.value" class="toggle-checkbox">
@@ -127,6 +181,10 @@ async function save(): Promise<void> {
       <p class="muted provider-policy-summary" data-testid="tenant-provider-policy-summary">
         <template v-if="isUnrestricted">
           No restriction: clients may use any provider family.
+        </template>
+        <template v-else-if="permitsNoFamily">
+          No provider family is permitted: this policy names only entries this build has no provider for, so every
+          provider is refused. Tick a family, or remove those entries, to make it usable again.
         </template>
         <template v-else>
           Clients may only use the selected families. A profile already configured on another family stops working
@@ -149,6 +207,15 @@ async function save(): Promise<void> {
           of your own Azure resources. Leave empty to permit any destination.
         </small>
       </label>
+
+      <p
+        v-if="unresolved.length > 0"
+        class="muted provider-policy-summary"
+        data-testid="tenant-provider-policy-unresolved"
+      >
+        This policy also names {{ unresolved.join(', ') }}, which this build has no provider for. Those entries
+        still restrict, and saving this policy keeps them. Removing one is a deliberate action through the API.
+      </p>
 
       <p class="muted provider-policy-summary" data-testid="tenant-endpoint-policy-summary">
         <template v-if="endpointsUnrestricted">

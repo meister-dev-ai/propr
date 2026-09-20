@@ -58,7 +58,7 @@ internal static class GeneratedLicenseChain
     }
 
     /// <summary>
-    ///     A self-signed root that issued nothing, which is what a test compares a built path's terminal
+    ///     A self-signed root that issued nothing, which a test compares a built path's terminal
     ///     certificate against when it has to be one the path does not lead to.
     /// </summary>
     /// <returns>The root, without a private key. The caller disposes it.</returns>

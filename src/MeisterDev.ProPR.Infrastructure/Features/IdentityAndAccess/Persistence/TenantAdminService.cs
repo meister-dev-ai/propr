@@ -2,7 +2,10 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
@@ -18,8 +21,14 @@ namespace MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Persistence
 public sealed class TenantAdminService(
     MeisterProPRDbContext dbContext,
     IHttpContextAccessor? httpContextAccessor = null,
-    ILicensingCapabilityService? licensingCapabilityService = null) : ITenantAdminService
+    ILicensingCapabilityService? licensingCapabilityService = null,
+    IAiProviderDriverRegistry? providerDrivers = null) : ITenantAdminService
 {
+    // A composition always supplies the registry. The fallback is for a caller that constructs this without one:
+    // no family is loaded, so every stored allow-list entry reads as one nothing claims and the tenant permits
+    // nothing, which is the fail-closed side of the same rule.
+    private static readonly IAiProviderDriverRegistry NoFamilies = new AiProviderRegistry([]);
+
     public async Task<IReadOnlyList<TenantDto>> GetAllAsync(CancellationToken ct = default)
     {
         var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
@@ -28,7 +37,7 @@ public sealed class TenantAdminService(
             .OrderByDescending(tenant => tenant.CreatedAt)
             .ToListAsync(ct);
 
-        return tenants.Select(ToDto).ToList().AsReadOnly();
+        return tenants.Select(this.ToDto).ToList().AsReadOnly();
     }
 
     public async Task<TenantDto?> GetByIdAsync(Guid tenantId, CancellationToken ct = default)
@@ -42,7 +51,7 @@ public sealed class TenantAdminService(
         var tenant = await dbContext.Tenants
             .AsNoTracking()
             .SingleOrDefaultAsync(record => record.Id == tenantId, ct);
-        return tenant is null ? null : ToDto(tenant);
+        return tenant is null ? null : this.ToDto(tenant);
     }
 
     // Filtered on the same terms as the lookup by id: a slug and an id name the same tenant, so one must not
@@ -53,7 +62,7 @@ public sealed class TenantAdminService(
         var tenant = await ApplyTenancyFilter(dbContext.Tenants, multiTenancyAvailable)
             .FirstOrDefaultAsync(record => record.Slug == tenantSlug, ct);
 
-        return tenant is null ? null : ToDto(tenant);
+        return tenant is null ? null : this.ToDto(tenant);
     }
 
     public async Task<TenantDto> CreateAsync(
@@ -91,7 +100,7 @@ public sealed class TenantAdminService(
             null,
             ct);
 
-        return ToDto(tenant);
+        return this.ToDto(tenant);
     }
 
     public async Task<TenantDto?> PatchAsync(
@@ -99,8 +108,9 @@ public sealed class TenantAdminService(
         string? displayName = null,
         bool? isActive = null,
         bool? localLoginEnabled = null,
-        IReadOnlyList<AiProviderKind>? allowedAiProviderKinds = null,
+        IReadOnlyList<string>? allowedAiProviderKinds = null,
         IReadOnlyList<string>? allowedAiEndpointHosts = null,
+        IReadOnlyList<string>? removedUnresolvedAiProviderKinds = null,
         CancellationToken ct = default)
     {
         var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
@@ -135,14 +145,36 @@ public sealed class TenantAdminService(
             tenant.LocalLoginEnabled = localLoginEnabled.Value;
         }
 
-        if (allowedAiProviderKinds is not null)
+        if (allowedAiProviderKinds is not null || removedUnresolvedAiProviderKinds is { Count: > 0 })
         {
-            // Stored as canonical enum names, de-duplicated. An empty list is a meaningful value here: it clears
-            // the policy back to unrestricted, which is how a tenant lifts a restriction it no longer wants.
-            tenant.AllowedAiProviderKinds = allowedAiProviderKinds
-                .Distinct()
-                .Select(kind => kind.ToString())
-                .ToArray();
+            // Stored as canonical provider identities, de-duplicated. An empty family list is a meaningful value
+            // here: it clears the policy back to unrestricted, which is how a tenant lifts a restriction it no
+            // longer wants.
+            //
+            // An entry no loaded family claims is kept across the write unless it is named for removal. The
+            // family list carries only entries a loaded family claims, so replacing the stored list with what a
+            // caller stated would drop those entries and lift the restriction they carry — which saving
+            // the policy unchanged would otherwise do. Removal is its own input and names the entry, so it is a
+            // deliberate act, not a side effect of saving something else.
+            var stored = TenantProviderPolicy.FromStored(tenant.AllowedAiProviderKinds, [], providerDrivers ?? NoFamilies);
+
+            // Matched against the stored entry as it is reported, so an operator removes the value shown to them.
+            // An entry the tenant does not hold is ignored: the write states the policy that remains, and the
+            // returned tenant reports it.
+            var removed = (removedUnresolvedAiProviderKinds ?? [])
+                .Select(entry => entry.Trim())
+                .ToHashSet(StringComparer.Ordinal);
+
+            // A family list the caller left out means the families stay as they are, so they are carried from the
+            // stored policy. Removing an entry therefore does not require restating them.
+            tenant.AllowedAiProviderKinds =
+            [
+                .. (allowedAiProviderKinds ?? stored.AllowedKinds)
+                .Select(entry => entry.Trim())
+                .Where(entry => entry.Length > 0)
+                .Distinct(ProviderVocabulary.KeyComparer),
+                .. stored.UnresolvedProviderEntries.Where(entry => !removed.Contains(entry)),
+            ];
         }
 
         if (allowedAiEndpointHosts is not null)
@@ -167,7 +199,7 @@ public sealed class TenantAdminService(
             + $"allowedAiEndpointHosts={(tenant.AllowedAiEndpointHosts.Length == 0 ? "(unrestricted)" : string.Join(",", tenant.AllowedAiEndpointHosts))}",
             ct);
 
-        return ToDto(tenant);
+        return this.ToDto(tenant);
     }
 
     public Task<bool> ExistsAsync(Guid tenantId, CancellationToken ct = default)
@@ -210,8 +242,14 @@ public sealed class TenantAdminService(
         return Guid.TryParse(rawUserId, out var actorUserId) ? actorUserId : null;
     }
 
-    private static TenantDto ToDto(TenantRecord tenant)
+    private TenantDto ToDto(TenantRecord tenant)
     {
+        // The stored allow-list is read through the same translation the enforcement path uses, so the operator's
+        // view cannot disagree with what is enforced. The entries no loaded family claims are reported alongside
+        // the ones that resolved: a tenant whose entries all stopped resolving refuses every provider, and the
+        // entry that caused it is the one thing an operator needs to see.
+        var policy = TenantProviderPolicy.FromStored(tenant.AllowedAiProviderKinds, tenant.AllowedAiEndpointHosts, providerDrivers ?? NoFamilies);
+
         return new TenantDto(
             tenant.Id,
             tenant.Slug,
@@ -221,21 +259,12 @@ public sealed class TenantAdminService(
             TenantCatalog.IsEditable(tenant.Id),
             tenant.CreatedAt,
             tenant.UpdatedAt,
-            ParseAllowedProviderKinds(tenant.AllowedAiProviderKinds),
-            tenant.AllowedAiEndpointHosts);
+            policy.AllowedKinds,
+            tenant.AllowedAiEndpointHosts,
+            policy.UnresolvedProviderEntries);
     }
 
-    // A stored name that no longer parses is dropped rather than failing the read: a renamed provider family must
-    // not make a tenant unreadable, and the names that do parse still restrict.
-    private static IReadOnlyList<AiProviderKind> ParseAllowedProviderKinds(string[] stored)
-    {
-        return stored
-            .Select(name => Enum.TryParse<AiProviderKind>(name, true, out var kind) ? kind : (AiProviderKind?)null)
-            .OfType<AiProviderKind>()
-            .ToList();
-    }
-
-    // Without the licensing module there is no installation state to read, which is what a deployment with no
+    // Without the licensing module there is no installation state to read, which a deployment with no
     // database configured looks like. Tenancy is left unrestricted there.
     private async ValueTask<bool> IsMultiTenancyAvailableAsync(CancellationToken ct)
     {

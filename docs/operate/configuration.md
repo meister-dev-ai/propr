@@ -504,6 +504,27 @@ much work one lookup may do before it returns what it has, marked truncated.
 Whether linked items are pulled in at all is a per-client setting - see
 [what you can tune](../concepts/reviews.md#what-you-can-tune).
 
+## AI provider add-ins
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `AI_PLUGIN_DIRECTORY` | Directory holding privately built AI provider add-ins, one folder per family | `plugins` beside the application | readable directory path; a relative one resolves against the application directory | no |
+
+The AI provider families the image ships load from a directory inside the image, at a path the image fixes,
+whatever this is set to. This names the second directory, for a family you built yourself. A directory that
+is not there is reported once at startup and is not a failure, since most installations have none. The
+directories are read once while the host starts, so a file added or removed afterwards changes nothing until
+the host restarts.
+
+> **Whoever can write to this directory runs code in the API host.** The host loads the assemblies it finds
+> there at startup and executes them in its own process, with its configuration, its network and its database
+> connection. An add-in is not sandboxed and is not meant to be. Treat write access to the directory as
+> equivalent to deploy access: mount it read-only where the platform allows it, keep it out of any volume a
+> review or a webhook can write to, and check a binary before you put it there.
+
+How to install a family and what the host does with one it cannot load:
+[installing an AI provider add-in](deploy.md#installing-an-ai-provider-add-in).
+
 ## Egress and stored content
 
 | Variable | What it does | Default | Accepted | Example stack |

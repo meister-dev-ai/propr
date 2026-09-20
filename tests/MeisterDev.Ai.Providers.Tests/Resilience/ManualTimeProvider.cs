@@ -4,8 +4,8 @@
 namespace MeisterDev.Ai.Providers.Tests.Resilience;
 
 /// <summary>
-///     A clock the test moves by hand. Timers fire only when the test advances past their due time, which is
-///     what makes a waiter observable while it is still waiting.
+///     A clock the test moves by hand. Timers fire only when the test advances past their due time, which
+///     makes a waiter observable while it is still waiting.
 /// </summary>
 /// <remarks>
 ///     <see cref="RecordingTimeProvider" /> answers a different question: it fires everything at once and records

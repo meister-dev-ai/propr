@@ -137,7 +137,7 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
         if (leftPartialClone)
         {
             // Every object is present now, so the mirror no longer needs a promisor remote. Leaving it set
-            // would keep reads able to reach the server for objects, which is what the policy just stopped.
+            // would keep reads able to reach the server for objects, which the policy just stopped.
             var unsetPromisorResult = await gitCommandRunner.RunAsync(
                 mirrorPath,
                 ["config", "--local", "--unset-all", "remote.origin.promisor"],

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Globalization;
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
@@ -1176,15 +1177,15 @@ public sealed class ThreadPassServiceTests
                     "thread-pass-model",
                     "thread-pass-model",
                     [AiOperationKind.Chat],
-                    [AiProtocolMode.Auto]));
+                    [ProviderDeclaredProtocolModes.Auto]));
             runtime.Connection.Returns(
                 new AiConnectionDto(
                     ConnectionId,
                     ClientId,
                     "Thread pass connection",
-                    AiProviderKind.AzureOpenAi,
+                    "meisterdev/azureOpenAi",
                     "https://test.openai.azure.com",
-                    AiAuthMode.ApiKey,
+                    "meisterdev/azureOpenAi:ApiKey",
                     AiDiscoveryMode.ManualOnly,
                     true,
                     [],
@@ -1274,7 +1275,7 @@ public sealed class ThreadPassServiceTests
             return protocolId;
         }
 
-        /// <summary>Makes closing the trace record throw, which is what a failed usage write looks like here.</summary>
+        /// <summary>Makes closing the trace record throw, which a failed usage write looks like here.</summary>
         public void WithFailingSpendRecording()
         {
             this.ProtocolRecorder.SetCompletedAsync(

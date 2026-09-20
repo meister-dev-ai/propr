@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -10,10 +9,13 @@ namespace MeisterDev.ProPR.Application.AI;
 
 /// <summary>
 ///     Adapts the provider library's normalized usage shape onto the domain's <see cref="AiTokenUsage" />.
-///     Reading a provider usage payload — including the per-provider cache-write key map — belongs to the
-///     provider layer; this type exists so the review-side token stores keep receiving a domain value object
-///     without taking a dependency on the library's shape.
 /// </summary>
+/// <remarks>
+///     The counters are read as the provider family's driver already mapped them: the runtime pipeline applies
+///     that mapping to every response before it leaves the provider layer, and a relayed response carries the
+///     counters the control plane's driver produced. Nothing here reads a vendor's field name, so a call site
+///     needs no knowledge of which family served it.
+/// </remarks>
 public static class AiTokenUsageExtractor
 {
     /// <summary>
@@ -21,17 +23,15 @@ public static class AiTokenUsageExtractor
     ///     <see cref="AiTokenUsage.Missing" /> (all-zero, flagged estimated) rather than a silent measured zero.
     /// </summary>
     /// <param name="response">The AI chat response; may be <see langword="null" />.</param>
-    /// <param name="providerKind">The provider family used to pick cache-write keys; <see langword="null" /> selects the default keys.</param>
-    public static AiTokenUsage FromResponse(ChatResponse? response, AiProviderKind? providerKind = null)
-        => ToDomain(ProviderUsageExtractor.FromResponse(response, providerKind));
+    public static AiTokenUsage FromResponse(ChatResponse? response)
+        => ToDomain(ProviderTokenUsage.FromUsageDetails(response?.Usage));
 
     /// <summary>
     ///     Builds a normalized usage record from a raw <see cref="UsageDetails" /> payload (chat or embedding).
     /// </summary>
     /// <param name="usage">The provider usage payload; may be <see langword="null" />.</param>
-    /// <param name="providerKind">The provider family used to pick cache-write keys; <see langword="null" /> selects the default keys.</param>
-    public static AiTokenUsage FromUsage(UsageDetails? usage, AiProviderKind? providerKind = null)
-        => ToDomain(ProviderUsageExtractor.FromUsage(usage, providerKind));
+    public static AiTokenUsage FromUsage(UsageDetails? usage)
+        => ToDomain(ProviderTokenUsage.FromUsageDetails(usage));
 
     private static AiTokenUsage ToDomain(ProviderTokenUsage usage)
     {

@@ -31,6 +31,11 @@ public sealed partial class ReviewOrchestrationService
         Message = "No active AI connection configured for client {ClientId} — failing job {JobId}")]
     private static partial void LogNoAiConnectionConfigured(ILogger logger, Guid clientId, Guid jobId);
 
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The review runtime could not be resolved for client {ClientId} — failing job {JobId}")]
+    private static partial void LogReviewRuntimeUnresolved(ILogger logger, Guid clientId, Guid jobId, Exception ex);
+
     [LoggerMessage(Level = LogLevel.Trace, Message = "Starting review for job {JobId} PR#{PrId}")]
     private static partial void LogReviewStarted(ILogger logger, Guid jobId, int prId);
 

@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers;
 
 /// <summary>
 ///     Answering where the provider offers no thread to reply into: a new comment opening with a quote of the
-///     question, which is what those providers' own quote reply produces.
+///     question, which those providers' own quote reply produces.
 /// </summary>
 public sealed class QuotedReplyPublisherTests
 {

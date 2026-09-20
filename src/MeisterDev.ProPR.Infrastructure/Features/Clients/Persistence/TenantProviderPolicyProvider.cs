@@ -2,12 +2,13 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
 
@@ -16,11 +17,15 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 /// </summary>
 /// <remarks>
 ///     The system tenant has no allow-list surface, so it is answered as unrestricted without a query: a policy
-///     nobody can edit could only ever be a trap. A stored name that no longer parses is dropped rather than
-///     failing the read, which keeps a renamed or removed provider family from locking a tenant out of every
-///     provider — the surviving names still restrict, and a policy that reduces to nothing reads as unrestricted.
+///     nobody can edit could only ever be a trap. A stored identity this build cannot name is kept as an opaque
+///     key that matches no family, so a tenant whose entries stopped resolving permits nothing and every
+///     connection it owns is refused. Each such entry is logged on every read, because a tenant that refuses
+///     everything is only actionable once an operator can see which entry was not understood.
 /// </remarks>
-public sealed class TenantProviderPolicyProvider(IDbContextFactory<MeisterProPRDbContext> contextFactory)
+public sealed partial class TenantProviderPolicyProvider(
+    IDbContextFactory<MeisterProPRDbContext> contextFactory,
+    IAiProviderDriverRegistry providerDrivers,
+    ILogger<TenantProviderPolicyProvider> logger)
     : ITenantProviderPolicyProvider
 {
     /// <inheritdoc />
@@ -39,7 +44,7 @@ public sealed class TenantProviderPolicyProvider(IDbContextFactory<MeisterProPRD
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
 
-        return ToPolicy(stored);
+        return this.ToPolicy(tenantId, stored);
     }
 
     /// <inheritdoc />
@@ -70,26 +75,34 @@ public sealed class TenantProviderPolicyProvider(IDbContextFactory<MeisterProPRD
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
 
-        return ToPolicy(stored);
+        return this.ToPolicy(tenantId, stored);
     }
 
-    private static TenantProviderPolicy ToPolicy(StoredPolicy? stored)
+    private TenantProviderPolicy ToPolicy(Guid tenantId, StoredPolicy? stored)
     {
         if (stored is null)
         {
             return TenantProviderPolicy.Unrestricted;
         }
 
-        var kinds = (stored.ProviderKinds ?? [])
-            .Select(name => Enum.TryParse<AiProviderKind>(name, true, out var kind) ? kind : (AiProviderKind?)null)
-            .OfType<AiProviderKind>()
-            .ToList();
-        var hosts = stored.EndpointHosts ?? [];
+        var policy = TenantProviderPolicy.FromStored(stored.ProviderKinds, stored.EndpointHosts, providerDrivers);
 
-        return kinds.Count == 0 && hosts.Length == 0
-            ? TenantProviderPolicy.Unrestricted
-            : new TenantProviderPolicy(kinds, hosts);
+        // Logged per read, not once per process: the policy is read on every enforcement and is not cached, so a
+        // record only of the first read would age out of a log window while the tenant is still refusing
+        // everything.
+        foreach (var entry in policy.UnresolvedProviderEntries)
+        {
+            LogUnresolvedAllowListEntry(logger, tenantId, entry);
+        }
+
+        return policy;
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message =
+            "Tenant {TenantId} has permitted-provider entry '{ProviderIdentity}', which no loaded provider family claims. The entry permits nothing, and the tenant stays restricted until it is corrected.")]
+    private static partial void LogUnresolvedAllowListEntry(ILogger logger, Guid tenantId, string providerIdentity);
 
     private sealed record StoredPolicy(string[]? ProviderKinds, string[]? EndpointHosts);
 }

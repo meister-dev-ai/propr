@@ -562,7 +562,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         var reference = Assert.Single(diagnostics.PostedComments);
         Assert.Equal("9001", reference.ProviderCommentId);
 
-        // The node id of the thread the comment opened, which is what addresses a GitHub review thread. The
+        // The node id of the thread the comment opened, which addresses a GitHub review thread. The
         // review id the same response also carries names a different object and can never address one.
         Assert.Equal(ThreadNodeId, reference.ProviderThreadId);
         Assert.Equal("src/file.ts", reference.FilePath);

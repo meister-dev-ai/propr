@@ -15,7 +15,7 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 ///     open has no memory record at all. That is precisely the window in which duplicates appear.
 ///     <para>
 ///         Rows are written once per review job, after that job finishes publishing. A lookup therefore only
-///         ever sees earlier jobs, which is what makes this check strictly cross-increment.
+///         ever sees earlier jobs, and that makes this check strictly cross-increment.
 ///     </para>
 ///     <para>Neither method throws: duplicate protection degrades, it never fails a review.</para>
 /// </remarks>

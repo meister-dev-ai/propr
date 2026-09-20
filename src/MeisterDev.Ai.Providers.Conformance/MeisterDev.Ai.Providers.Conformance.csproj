@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <RootNamespace>MeisterDev.Ai.Providers.Conformance</RootNamespace>
+    </PropertyGroup>
+
+    <!--
+        The driver checks, as a library anyone can call. An add-in author references it from their own build and
+        runs the same checks the host runs when it loads their family, so a family that cannot be loaded says so
+        while it is being built rather than after it is deployed.
+
+        It takes no test framework, because the host runs it while it starts and hosting a test runner in the
+        host is not something to arrange. It references the contract and nothing else from this repository: a
+        reference to the shared runtime would drag the decorator stages, the guarded egress handler and six
+        vendor SDKs into an add-in's build.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.Abstractions\MeisterDev.Ai.Providers.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIVersion)"/>
+    </ItemGroup>
+
+</Project>

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
@@ -917,7 +918,17 @@ public sealed record CreateClientProviderConnectionRequest(
     long? GitHubAppInstallationId = null,
     bool StoreThreads = false,
     bool StoreDiffs = false,
-    int? RetentionDays = null);
+    int? RetentionDays = null)
+{
+    /// <summary>Renders the request without the secret; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(CreateClientProviderConnectionRequest)} {{ ProviderFamily = {this.ProviderFamily}, "
+               + $"HostBaseUrl = {SecretSafeRendering.Address(this.HostBaseUrl)}, AuthenticationKind = {this.AuthenticationKind}, "
+               + $"UserName = {this.UserName}, DisplayName = {this.DisplayName}, "
+               + $"Secret = {SecretSafeRendering.Elide(this.Secret)}, IsActive = {this.IsActive} }}";
+    }
+}
 
 /// <summary>Request body for patching a client-scoped provider connection.</summary>
 public sealed record PatchClientProviderConnectionRequest(
@@ -933,4 +944,14 @@ public sealed record PatchClientProviderConnectionRequest(
     long? GitHubAppInstallationId = null,
     bool? StoreThreads = null,
     bool? StoreDiffs = null,
-    int? RetentionDays = null);
+    int? RetentionDays = null)
+{
+    /// <summary>Renders the request without the secret; see <see cref="SecretSafeRendering" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(PatchClientProviderConnectionRequest)} {{ HostBaseUrl = {SecretSafeRendering.Address(this.HostBaseUrl)}, "
+               + $"AuthenticationKind = {this.AuthenticationKind}, UserName = {this.UserName}, "
+               + $"DisplayName = {this.DisplayName}, Secret = {SecretSafeRendering.Elide(this.Secret)}, "
+               + $"IsActive = {this.IsActive} }}";
+    }
+}

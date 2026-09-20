@@ -46,7 +46,7 @@ public sealed class ReviewingExecutionServiceCollectionExtensionsTests
     /// </summary>
     /// <remarks>
     ///     The connection string is never connected to. Constructing the context reads it and nothing opens a
-    ///     connection, which is what makes resolving the graph a test rather than a database dependency.
+    ///     connection, and that makes resolving the graph a test rather than a database dependency.
     ///     <para>
     ///         What this does not cover is the option binding: <c>IOptions&lt;T&gt;</c> resolves from the
     ///         generic registration whether or not anything configured it, so a lease option left unbound

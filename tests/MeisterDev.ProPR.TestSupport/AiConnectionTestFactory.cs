@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Enums;
@@ -9,6 +10,16 @@ namespace MeisterDev.ProPR.TestSupport;
 
 public static class AiConnectionTestFactory
 {
+    public const string AzureFamilyKey = "meisterdev/azureOpenAi";
+
+    public const string ResponsesProtocol = AzureFamilyKey + ":Responses";
+
+    public const string ChatCompletionsProtocol = AzureFamilyKey + ":ChatCompletions";
+
+    public const string ApiKeyAuth = AzureFamilyKey + ":ApiKey";
+
+    public const string AzureIdentityAuth = AzureFamilyKey + ":AzureIdentity";
+
     public static AiConfiguredModelDto CreateChatModel(string remoteModelId, Guid? id = null)
     {
         return new AiConfiguredModelDto(
@@ -16,7 +27,7 @@ public static class AiConnectionTestFactory
             remoteModelId,
             remoteModelId,
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions],
+            [ProviderDeclaredProtocolModes.Auto, ResponsesProtocol, ChatCompletionsProtocol],
             null,
             null,
             null,
@@ -34,7 +45,7 @@ public static class AiConnectionTestFactory
             remoteModelId,
             remoteModelId,
             [AiOperationKind.Embedding],
-            [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+            [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
             "cl100k_base",
             8192,
             dimensions);
@@ -43,7 +54,7 @@ public static class AiConnectionTestFactory
     public static AiPurposeBindingDto CreateBinding(
         AiPurpose purpose,
         AiConfiguredModelDto model,
-        AiProtocolMode protocolMode = AiProtocolMode.Auto,
+        string protocolMode = ProviderDeclaredProtocolModes.Auto,
         bool isEnabled = true)
     {
         return new AiPurposeBindingDto(
@@ -70,9 +81,9 @@ public static class AiConnectionTestFactory
             Guid.NewGuid(),
             clientId,
             displayName,
-            AiProviderKind.AzureOpenAi,
+            AzureFamilyKey,
             baseUrl,
-            secret is null ? AiAuthMode.AzureIdentity : AiAuthMode.ApiKey,
+            secret is null ? AzureIdentityAuth : ApiKeyAuth,
             AiDiscoveryMode.ManualOnly,
             isActive,
             configuredModels ?? [],
@@ -111,7 +122,7 @@ public static class AiConnectionTestFactory
     {
         var primaryModel = CreateEmbeddingModel(modelId);
         var secondaryModel = CreateEmbeddingModel("fallback-model");
-        var bindings = includeBinding ? new[] { CreateBinding(AiPurpose.EmbeddingDefault, primaryModel, AiProtocolMode.Embeddings) } : [];
+        var bindings = includeBinding ? new[] { CreateBinding(AiPurpose.EmbeddingDefault, primaryModel, ProviderDeclaredProtocolModes.Embeddings) } : [];
         return CreateConnection(clientId, [primaryModel, secondaryModel], bindings, displayName, baseUrl, isActive, secret);
     }
 }

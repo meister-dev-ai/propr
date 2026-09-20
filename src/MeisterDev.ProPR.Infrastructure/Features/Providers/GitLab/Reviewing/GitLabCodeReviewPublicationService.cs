@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
@@ -442,7 +443,15 @@ internal sealed class GitLabCodeReviewPublicationService(
         GitLabDiscussionTarget Target,
         int SuccessfulDiscussionCount,
         string? FilePath,
-        int? Line);
+        int? Line)
+    {
+        /// <summary>Renders the request without the token; see <see cref="SecretSafeRendering" />.</summary>
+        public override string ToString()
+        {
+            return $"{nameof(GitLabDiscussionPostRequest)} {{ Token = {SecretSafeRendering.Elide(this.Token)}, "
+                   + $"DiscussionUri = {this.DiscussionUri}, FilePath = {this.FilePath}, Line = {this.Line} }}";
+        }
+    }
 
     private sealed record GitLabCreatedDiscussionResponse(
         [property: JsonPropertyName("id")] string? Id,

@@ -1,0 +1,34 @@
+<Project>
+
+    <!--
+        MSBuild imports this file into every project below the repository root, after the project has declared
+        its own references.
+    -->
+
+    <!--
+        The provider stack stays publishable at the organisation level, which means no project in it may
+        reference a project of the product that hosts it. The shipped families are also the reference
+        implementations someone reads when writing a new one, so a family that pulled in host runtime would be a
+        family nobody outside the team could learn from, and an add-in referencing one could not be built at all.
+
+        Checked over the resolved reference set rather than over the declared ProjectReference items. That set is
+        what the compiler is given, so it holds for a host assembly reached through an intermediate project as
+        well as for one referenced directly, and for one arriving as a package. Each item's filename is the
+        assembly that was resolved, not the name of a project file, so renaming a project file changes nothing
+        about what the guard catches. Keyed on the assembly-name prefix, so a project added to the stack later is
+        covered with no edit here.
+    -->
+    <Target Name="VerifyProviderStackDoesNotReferenceTheHost"
+            AfterTargets="ResolveReferences"
+            Condition="$(MSBuildProjectName.StartsWith('MeisterDev.Ai.Providers'))">
+        <ItemGroup>
+            <_ProviderStackHostReference
+                Include="@(ReferencePath)"
+                Condition="$([MSBuild]::ValueOrDefault('%(Filename)', '').StartsWith('MeisterDev.ProPR'))"/>
+        </ItemGroup>
+        <Error Condition="'@(_ProviderStackHostReference)' != ''"
+               Code="PROPRLIB001"
+               Text="$(MSBuildProjectName) is part of the provider stack and compiles against @(_ProviderStackHostReference->'%(Filename)', ', '). The provider stack ships separately from the product and every family built against it compiles without the host, so it takes no reference to a MeisterDev.ProPR assembly, whether declared here or reached through another project. Move what is needed into the contract assembly, or invert the dependency."/>
+    </Target>
+
+</Project>

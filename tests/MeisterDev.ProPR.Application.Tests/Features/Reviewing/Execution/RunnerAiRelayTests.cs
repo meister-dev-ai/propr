@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -24,6 +24,54 @@ public sealed class RunnerAiRelayTests
     private readonly IRunnerRelayModelResolver _models = Substitute.For<IRunnerRelayModelResolver>();
     private readonly RunnerRelayReplayCache _replays = new();
     private readonly IRunnerRelayUsageRecorder _usage = Substitute.For<IRunnerRelayUsageRecorder>();
+
+    // The executor resolves no provider driver, so what it meters is what comes back here. A relay that dropped
+    // a bucket would leave a remote review priced differently from the same review run in process.
+    [Fact]
+    public async Task ACompletedCallCarriesTheCountersTheDriverProduced()
+    {
+        var relay = this.CreateRelay(budget: Budget(null, 0m));
+        this.Answers(new ProviderTokenUsage(4170, 207, 4000, 50, 200).ToUsageDetails());
+
+        var result = await relay.CompleteAsync(Call, Request());
+
+        Assert.Equal(new ProviderTokenUsage(4170, 207, 4000, 50, 200), result.Usage);
+    }
+
+    // A retry answered from the first attempt is charged nothing further, and has to report the same counters:
+    // an executor that recorded zeros for a replay would under-report the spend the first attempt made.
+    [Fact]
+    public async Task AReplayedCallCarriesTheSameCountersAsTheAttemptItReplays()
+    {
+        var relay = this.CreateRelay(budget: Budget(null, 0m));
+        this.Answers(new ProviderTokenUsage(4170, 207, 4000, 50, 200).ToUsageDetails());
+
+        var first = await relay.CompleteAsync(Call, Request());
+        var replayed = await relay.CompleteAsync(Call, Request());
+
+        Assert.True(replayed.Replayed);
+        Assert.Equal(first.Usage, replayed.Usage);
+    }
+
+    // A call the provider reported no usage for stays distinguishable from one that measured zero, or the
+    // executor records an unmetered call as a free one.
+    [Fact]
+    public async Task ACallThatReportedNoUsageCarriesZeroedCountersFlaggedAsEstimated()
+    {
+        var relay = this.CreateRelay(budget: Budget(null, 0m));
+        this.Answers(usage: null);
+
+        var result = await relay.CompleteAsync(Call, Request());
+
+        Assert.Equal(ProviderTokenUsage.Missing, result.Usage);
+    }
+
+    /// <summary>Has the resolved client answer with one usage payload, replacing whatever the fixture set.</summary>
+    private void Answers(UsageDetails? usage)
+    {
+        this._client.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")) { Usage = usage });
+    }
 
     private static RunnerRelayRequest Request(string key = "call-1")
     {
@@ -55,7 +103,7 @@ public sealed class RunnerAiRelayTests
         // The cost per call comes out of the pricing, not out of the recorder: one million output tokens
         // at a per-million rate equal to the wanted cost. A null rate is a model with no pricing at all.
         this._models.ResolveAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new RunnerRelayModel(this._client, AiProviderKind.OpenAi, new ModelPricing(null, costPerCall)));
+            .Returns(new RunnerRelayModel(this._client, new ModelPricing(null, costPerCall)));
         this._client.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
                 new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok"))

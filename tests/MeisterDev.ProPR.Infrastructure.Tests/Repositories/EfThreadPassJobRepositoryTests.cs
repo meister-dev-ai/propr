@@ -135,7 +135,7 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
             var attemptsRemain = await this._repository.RecordAttemptFailureAsync(job.Id, "the provider refused");
             Assert.Equal(attempt < ThreadPassJob.MaxAttempts, attemptsRemain);
 
-            // Stands in for waiting out the retry delay, which is what spaces the attempts in production.
+            // Stands in for waiting out the retry delay, which spaces the attempts in production.
             await this.ClearRetryDelayAsync(job.Id);
         }
 

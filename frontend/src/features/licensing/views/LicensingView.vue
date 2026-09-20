@@ -8,7 +8,7 @@
  *
  * The panel loads the summary once and keeps it in the shared licensing state, so the expiry notice beside
  * every page and this page never report different stages. The session's edition and capability list are
- * primed from the same read, which is what keeps the header badge and the navigation in step after an
+ * primed from the same read, and that keeps the header badge and the navigation in step after an
  * activation without a sign-out.
  *
  * The observed system profile is not rendered here. The endpoint that serves it exists, and the panel is

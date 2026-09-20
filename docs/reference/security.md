@@ -55,14 +55,21 @@ Outbound AI traffic goes through a guarded transport. It checks the connection a
 **resolved IP address**, not the hostname alone, so a name that resolves to an internal address, or is rebound
 to one between check and connect, is refused. The transport never follows redirects. Private, loopback and
 link-local addresses, including cloud metadata endpoints, are refused by default. That guard covers every
-provider family except Azure OpenAI.
+provider family, Azure OpenAI included.
 
-Azure OpenAI is reached through the Azure SDK, which uses its own transport and does not pass through that
-check. It is constrained differently. An Azure connection's base URL is rejected unless it uses `https` and
-its host is an Azure AI host: `*.openai.azure.com`, `*.services.ai.azure.com` or
-`*.cognitiveservices.azure.com`. Those hostnames are Microsoft-controlled, including for private endpoints,
-so an Azure profile cannot be pointed at an arbitrary internal host. An Azure-hosted endpoint configured
-under the plain OpenAI family is refused, with a message naming the family to use.
+A provider add-in reaches the network through the same transport. The host builds the client and places its
+own connect-time check innermost; an add-in supplies handlers that run outside that check, so it can see and
+change what it sends and what comes back, and it cannot remove the check or ask for an exemption. Everything
+an add-in sends goes through it, model calls and credential exchanges alike.
+
+Azure OpenAI carries a second restriction on top of it. The family declares the hosts it reaches —
+`*.openai.azure.com`, `*.services.ai.azure.com` and `*.cognitiveservices.azure.com` — and rejects a base URL
+that does not use `https` or whose host is none of them. Those hostnames are Microsoft-controlled, including
+for private endpoints. An Azure connection authenticates with a resource key or a Microsoft Entra token, so
+the restriction keeps that credential going to a host Microsoft controls. The declared hosts are shown beside
+the family on the plugin inventory, and a tenant's endpoint allow-list is checked against them. An
+Azure-hosted endpoint configured under the plain OpenAI family is refused, with a message naming the family
+to use.
 
 To reach a self-hosted provider on a private network, set `AI_ALLOW_PRIVATE_EGRESS=true`. It permits private
 addresses. Plain `http` stays refused outside local development, and the redirect block stays in force.

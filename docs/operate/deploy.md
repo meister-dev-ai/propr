@@ -183,6 +183,78 @@ together pass the target, so a target larger than the volume starts it after the
 and reviews fail during checkout with "No space left on device".
 See [review workspace](configuration.md#review-workspace).
 
+## Installing an AI provider add-in
+
+An AI provider family can be added as a built assembly the API host runs. The API image contains a
+directory for the families ProPR ships, which are always loaded. A provider add-in you built yourself goes
+in a second directory, which `AI_PLUGIN_DIRECTORY` names and which defaults to `plugins` beside the
+application. A platform administrator activates an add-in in that second directory before the host runs
+it. The runner image carries neither: a runner relays model calls and resolves no driver.
+
+> **An add-in runs with the host's full authority.** The families in the image's directory load on every
+> start. One in your directory loads once an administrator activates it. Either way it runs in the API
+> host's own process, with its configuration, its network and its database connection, and it is not
+> sandboxed. Write access to the add-in directory is deploy access. See
+> [AI provider add-ins](configuration.md#ai-provider-add-ins).
+
+Each family occupies its own folder, named after its assembly, so the folder holds that family's assembly
+and that family's own dependencies:
+
+```
+/provider-add-ins/
+  Contoso.Ai.Providers.Acme/
+    Contoso.Ai.Providers.Acme.dll
+    Contoso.Ai.Providers.Acme.deps.json
+    <that family's own dependencies>
+```
+
+Two ways to install one: mount the directory into the API container, as the commented-out block in
+`example/docker-compose/docker-compose.yml` shows, or add it as a layer on top of the published image.
+**Mount it read-only, and own it on the host as a principal other than the container's app user.** An
+add-in runs inside the API process with the host's full authority and nothing sandboxes it, so the
+directory holds code you have decided to run. Neither the read-only mount nor the separate owner is a
+security boundary. They keep the process that loads the code from changing it, so the content hashes on
+the inventory page can be compared against what you shipped.
+
+The host reads both directories once, while it starts. A file added or removed afterwards changes nothing
+until the host restarts. An assembly that cannot be loaded is skipped and does not stop the host starting:
+the host starts with whatever loaded, and records the skip with a category and a reason.
+
+The host treats the two directories differently. It loads every family in the image's directory. It reads a
+file in your directory without running it: the assembly states its identity, label, version, contract
+version, reached hosts and required capability, and the host reads that statement and executes nothing in
+the file.
+
+An administrator opens the **AI provider add-ins** page under Administration. The page lists both
+directories, and for each file its path, its content hash and what the assembly states about itself. The
+administrator activates the add-ins this installation is to run. Activating loads the add-in, so the family
+serves from that moment. Every later start loads the activated add-ins again, once the database schema is
+up to date.
+
+An activation is bound to the content hash. Replacing the file brings it back for a fresh decision, and
+moving it changes nothing. The page refuses an activation when the file changed since the host read it,
+when the identity is one this host already serves, and when the loaded driver declares an identity, a
+required capability or a host that the assembly does not state. A driver contacting fewer hosts than the
+assembly states is accepted, so a family whose endpoints come from local configuration states every host it
+may reach and is activated once.
+
+Withdrawing an activation records the decision and stops the next start loading the add-in. The family
+keeps serving until the host restarts, because an assembly cannot be unloaded from under the reviews using
+it.
+
+The host measures every family it loads against the shared driver checks and skips one that fails,
+recording it as `non-conforming` with the check that failed. The checks read what the family declares and
+replay the usage payload it recorded; none of them resolves a name or reaches the network. They catch an
+authentication mode that is not the family's to name, credential fields declared for a mode the family does
+not offer, a field reference naming a field that does not exist, and a usage mapping that would misprice
+every review the family serves. A family you build runs the same checks in its own build, which reports the
+same failures before you deploy it.
+
+Two rules decide a family that is installed twice. The directory inside the image wins over the one you
+configured, so a patched copy of a shipped family is recorded as a duplicate and the shipped copy keeps
+serving; changing a shipped family means a product release. Two copies inside one directory are both
+skipped, since neither has precedence over the other.
+
 ## ProCursor as a separate service
 
 ProCursor runs as a separate internal service and is never exposed publicly. The API is the public

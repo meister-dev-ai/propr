@@ -2,8 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-using MeisterDev.Ai.Providers.Enums;
-
 namespace MeisterDev.ProPR.Application.Exceptions;
 
 /// <summary>
@@ -13,14 +11,14 @@ namespace MeisterDev.ProPR.Application.Exceptions;
 public sealed class ProviderKindNotPermittedException : Exception
 {
     /// <summary>Initializes a new instance of the <see cref="ProviderKindNotPermittedException" /> class.</summary>
-    /// <param name="providerKind">The provider family that was refused.</param>
+    /// <param name="providerKind">The identity key of the provider family that was refused.</param>
     /// <param name="reason">Why it was refused, including what is permitted instead.</param>
-    public ProviderKindNotPermittedException(AiProviderKind providerKind, string reason)
+    public ProviderKindNotPermittedException(string providerKind, string reason)
         : base($"The connection profile cannot be saved: {reason}.")
     {
         this.ProviderKind = providerKind;
     }
 
-    /// <summary>The provider family that was refused.</summary>
-    public AiProviderKind ProviderKind { get; }
+    /// <summary>The identity key of the provider family that was refused.</summary>
+    public string ProviderKind { get; }
 }

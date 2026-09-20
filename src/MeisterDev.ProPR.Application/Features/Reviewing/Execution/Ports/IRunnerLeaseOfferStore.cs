@@ -27,8 +27,8 @@ public interface IRunnerLeaseOfferStore
     /// </summary>
     /// <param name="tenantId">The runner's tenant. A runner is never offered work outside it.</param>
     /// <param name="clientScope">
-    ///     The clients the server stamped onto the runner. Empty means every client in the tenant, which is
-    ///     what an unrestricted enrollment gets.
+    ///     The clients the server stamped onto the runner. Empty means every client in the tenant, which
+    ///     an unrestricted enrollment gets.
     /// </param>
     /// <param name="runnerTags">Tags the runner declares. A job is eligible when the runner declares all of the ones its client requires.</param>
     /// <param name="limit">How many candidates to consider. Bounds the work one offer costs.</param>

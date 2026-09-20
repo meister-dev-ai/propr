@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -115,6 +117,10 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
 
     public RelayChatRuntime(RunnerModelBinding binding, IChatClient chatClient)
     {
+        ArgumentNullException.ThrowIfNull(binding);
+
+        var family = ProviderFamilyOf(binding);
+
         this._binding = binding;
         this.ChatClient = chatClient;
 
@@ -123,7 +129,7 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
             binding.RemoteModelId,
             binding.LogicalModelName,
             [AiOperationKind.Chat],
-            [AiProtocolMode.Auto],
+            [ProviderDeclaredProtocolModes.Auto],
             TokenizerName: binding.TokenizerName,
             MaxInputTokens: binding.MaxInputTokens,
             MaxContextTokens: binding.MaxContextTokens,
@@ -135,11 +141,9 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
             Guid.Empty,
             null,
             binding.LogicalModelName,
-            Enum.TryParse<AiProviderKind>(binding.ProviderKind, ignoreCase: true, out var kind)
-                ? kind
-                : AiProviderKind.OpenAiCompatible,
+            family,
             string.Empty,
-            AiAuthMode.ApiKey,
+            ApiKeyShapeOf(family),
             AiDiscoveryMode.ManualOnly,
             true,
             [this.Model],
@@ -152,6 +156,41 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
             Guid.Empty,
             AiPurpose.ReviewDefault,
             RemoteModelId: binding.RemoteModelId);
+    }
+
+    /// <summary>
+    ///     The authentication mode this family qualifies an API key under, or the bare name where the manifest
+    ///     names something that is not a well-formed identity key.
+    /// </summary>
+    /// <remarks>
+    ///     Stated so the synthetic connection carries a shape of the family it names. Nothing authenticates
+    ///     through it: the relay calls back through the control plane, which holds the credential.
+    /// </remarks>
+    /// <param name="family">The identity key the manifest named.</param>
+    private static string ApiKeyShapeOf(string family)
+    {
+        return ProviderVocabulary.IsValidIdentityKey(family)
+            ? ProviderVocabulary.Compose(family, "ApiKey")
+            : "ApiKey";
+    }
+
+    /// <summary>The family the manifest says the call is priced and reported against.</summary>
+    /// <param name="binding">The model binding the manifest carried.</param>
+    /// <exception cref="InvalidOperationException">The manifest names no family for the model.</exception>
+    /// <remarks>
+    ///     Carried through as the control plane wrote it. The control plane resolved the family against the
+    ///     loaded add-ins before it wrote the manifest, and the relay calls back through that same connection, so
+    ///     repeating the resolution here could only disagree with it. A manifest naming no family is refused
+    ///     rather than substituted, because every call of the review would then be priced and reported against
+    ///     nothing.
+    /// </remarks>
+    private static string ProviderFamilyOf(RunnerModelBinding binding)
+    {
+        return string.IsNullOrWhiteSpace(binding.ProviderKind)
+            ? throw new InvalidOperationException(
+                "The manifest for this job names no provider family for the model "
+                + $"'{binding.LogicalModelName}'.")
+            : binding.ProviderKind.Trim();
     }
 
     public AiConnectionDto Connection { get; }

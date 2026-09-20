@@ -279,14 +279,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
 
-        var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
-        aiConnectionRepository.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, baseUrl: "https://ai.test.local"));
-
-        var chatClientFactory = Substitute.For<IAiChatClientFactory>();
-        chatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
-            .Returns(Substitute.For<IChatClient>());
-
         var publicationService = Substitute.For<ICodeReviewPublicationService>();
         publicationService.Provider.Returns(ScmProvider.AzureDevOps);
 
@@ -341,8 +333,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             instructionEvaluator,
             Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewRetries = 3, ModelId = "gpt-4o" }),
             NullLogger<ReviewOrchestrationService>.Instance,
-            aiConnectionRepository,
-            chatClientFactory,
+            AiConnectionTestFactory.CreateChatRuntimeResolver(),
             orchestrator,
             workspaceManager: CreateDefaultWorkspaceManager());
 
@@ -437,14 +428,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
 
-        var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
-        aiConnectionRepository.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, baseUrl: "https://ai.test.local"));
-
-        var chatClientFactory = Substitute.For<IAiChatClientFactory>();
-        chatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
-            .Returns(Substitute.For<IChatClient>());
-
         var publicationService = Substitute.For<ICodeReviewPublicationService>();
         publicationService.Provider.Returns(ScmProvider.AzureDevOps);
         publicationService.PublishReviewAsync(
@@ -513,8 +496,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             instructionEvaluator,
             Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewRetries = 3, ModelId = "gpt-4o" }),
             NullLogger<ReviewOrchestrationService>.Instance,
-            aiConnectionRepository,
-            chatClientFactory,
+            AiConnectionTestFactory.CreateChatRuntimeResolver(),
             orchestrator,
             workspaceManager: CreateDefaultWorkspaceManager());
     }

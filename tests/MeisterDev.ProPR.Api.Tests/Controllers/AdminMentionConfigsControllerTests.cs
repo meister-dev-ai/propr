@@ -112,7 +112,7 @@ public sealed class AdminMentionConfigsControllerTests
 
     /// <summary>
     ///     An installation not entitled to answer mentions accepts no configuration for it. The worker holds
-    ///     the same capability before it scans, which is what stops answers being posted, but the worker is not
+    ///     the same capability before it scans, and that stops answers being posted, but the worker is not
     ///     a boundary a request passes: without this a configuration can be stored, and read back, on an
     ///     installation that will never act on it.
     /// </summary>
@@ -473,7 +473,7 @@ public sealed class AdminMentionConfigsControllerTests
         // and refusing would be unactionable. One answer per question is kept when the mention is answered.
         //
         // The other client's claim is real, and on the same repository id this request names. Only the
-        // asking client's own configurations are consulted, which is what makes the overlap invisible.
+        // asking client's own configurations are consulted, and that makes the overlap invisible.
         var repo = CreateRepo();
         repo.GetByClientAsync(OtherClient, Arg.Any<CancellationToken>())
             .Returns([Config(OtherClient)]);

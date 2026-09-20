@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 ///     <para>
 ///         Because every completion passes through one place, the hard cap becomes a chokepoint rather than
 ///         a reconciliation done after the money is spent. The budget for a job is held against the job
-///         itself, not against whichever thread happens to be serving the call, which is what makes it hold
+///         itself, not against whichever thread happens to be serving the call, and that makes it hold
 ///         when the spender is in another process.
 ///     </para>
 /// </summary>

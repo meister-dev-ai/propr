@@ -80,7 +80,7 @@ export function useUsageStatistics() {
     return result.decision
   }
 
-  /** Records that the notice was rendered, which is what opens the send gate in a community installation. */
+  /** Records that the notice was rendered, and that opens the send gate in a community installation. */
   async function recordNoticeShown(): Promise<void> {
     settings.value = await recordUsageStatisticsNoticeShown()
   }

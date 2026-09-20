@@ -2,10 +2,13 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
@@ -19,7 +22,7 @@ public sealed class PromptExperimentBatchRunner(
     IReviewWorkflowRunner reviewWorkflowRunner,
     IReviewPromptExperimentValidator promptExperimentValidator,
     IEvaluationArtifactWriter artifactWriter,
-    IAiChatClientFactory aiChatClientFactory,
+    IAiRuntimeFactory aiRuntimeFactory,
     IProtectedValueResolver protectedValueResolver) : IPromptExperimentBatchRunner
 {
     /// <inheritdoc />
@@ -70,6 +73,9 @@ public sealed class PromptExperimentBatchRunner(
         return new PromptExperimentBatchResult(batch.BatchId, artifactPaths);
     }
 
+    // The harness names its endpoint in a configuration file, so the connection profile the shared construction
+    // step takes is assembled here from those values. Building through that step gives a harness run the same
+    // driver, retry classification and request shaping a production review gets, so the two are comparable.
     private IChatClient ResolveChatClient(EvaluationConfiguration configuration, IReadOnlyDictionary<string, string> resolvedSecrets)
     {
         if (configuration.AiConnection is null)
@@ -83,10 +89,91 @@ public sealed class PromptExperimentBatchRunner(
             resolvedSecrets.TryGetValue(configuration.AiConnection.ApiKeyReferenceName, out apiKey);
         }
 
-        return aiChatClientFactory.CreateClient(
-            configuration.AiConnection.EndpointUrl,
-            apiKey,
-            configuration.AiConnection.Provider);
+        var model = HarnessChatModel(configuration.AiConnection.Provider, configuration.ModelSelection.ModelId);
+        var binding = new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, model.Id, model.RemoteModelId);
+        var connection = HarnessConnection(configuration.AiConnection, apiKey, model, binding);
+
+        return aiRuntimeFactory.CreateChatRuntime(connection, model, binding).ChatClient;
+    }
+
+    // The run's primary model, used as the default. Each call still selects its own deployment through
+    // ChatOptions.ModelId, so naming one here restricts nothing. Both chat shapes of the configured family are
+    // declared supported because the harness configuration file carries no capability metadata to narrow the
+    // set with; a family that declares neither is unaffected, since a shape it does not declare narrows nothing.
+    private static AiConfiguredModelDto HarnessChatModel(string providerKind, string modelId)
+    {
+        return new AiConfiguredModelDto(
+            Guid.Empty,
+            modelId,
+            modelId,
+            [AiOperationKind.Chat],
+            [ProviderDeclaredProtocolModes.Auto, .. ChatShapesOf(providerKind)],
+            SupportsStructuredOutput: true,
+            SupportsToolUse: true);
+    }
+
+    // The chat shapes a family qualifies under its own key, or none where the configuration names something that
+    // is not a well-formed identity key. Composed rather than read from the family, because the harness builds
+    // this connection before any driver has been resolved.
+    private static IReadOnlyList<string> ChatShapesOf(string providerKind)
+    {
+        return ProviderVocabulary.IsValidIdentityKey(providerKind)
+            ?
+            [
+                ProviderVocabulary.Compose(providerKind, "Responses"),
+                ProviderVocabulary.Compose(providerKind, "ChatCompletions"),
+            ]
+            : [];
+    }
+
+    // The authentication mode a family qualifies under its own key, left as the bare name where the configuration
+    // names something that is not a well-formed identity key.
+    private static string AuthShapeOf(string providerKind, string modeName)
+    {
+        return ProviderVocabulary.IsValidIdentityKey(providerKind)
+            ? ProviderVocabulary.Compose(providerKind, modeName)
+            : modeName;
+    }
+
+    private static AiConnectionDto HarnessConnection(
+        EvaluationAiConnection aiConnection,
+        string? apiKey,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding)
+    {
+        // An Azure resource reached without a key authenticates from the ambient credential chain; every other
+        // family, and Azure with a key, authenticates with the key the configuration referenced.
+        var authMode = string.IsNullOrWhiteSpace(apiKey)
+                       && ProviderVocabulary.KeysEqual(aiConnection.Provider, EvaluationAiConnection.AzureOpenAiKey)
+            ? AuthShapeOf(aiConnection.Provider, "AzureIdentity")
+            : AuthShapeOf(aiConnection.Provider, "ApiKey");
+
+        return new AiConnectionDto(
+            HarnessConnectionId(aiConnection),
+            Guid.Empty,
+            "review-evaluation-harness",
+            aiConnection.Provider,
+            aiConnection.EndpointUrl,
+            authMode,
+            AiDiscoveryMode.ManualOnly,
+            true,
+            [model],
+            [binding],
+            AiVerificationResultDto.NeverVerified,
+            default,
+            default,
+            Secret: apiKey);
+    }
+
+    /// <remarks>
+    ///     The runtime keys the throttle gate on the connection's identifier, so two harness connections sharing
+    ///     one identifier would pace each other against one provider's quota. It is derived from the endpoint and
+    ///     the family instead of generated, so repeated runs against one endpoint go on sharing a gate, which the
+    ///     gate needs in order to pace anything at all.
+    /// </remarks>
+    private static Guid HarnessConnectionId(EvaluationAiConnection aiConnection)
+    {
+        return StableGuidGenerator.Create($"review-evaluation-harness|{aiConnection.Provider}|{aiConnection.EndpointUrl}");
     }
 
     private static IReadOnlyDictionary<string, string> MergeRunMetadata(

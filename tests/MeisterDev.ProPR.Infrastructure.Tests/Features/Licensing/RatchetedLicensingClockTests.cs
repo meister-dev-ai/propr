@@ -155,7 +155,7 @@ public sealed class RatchetedLicensingClockTests
 
     // Readings arriving together share one flag, and each of them sees the same host clock behind the same
     // recorded instant, so exactly one of them may claim the report. The store holds every reading until they
-    // have all arrived and releases them together, which is what puts them at the flag at the same time. The
+    // have all arrived and releases them together, which puts them at the flag at the same time. The
     // rounds repeat because a guard that reads the flag before writing it loses the race only some of the time.
     [Fact]
     public async Task ConcurrentReadingsBehindTheRecordedInstant_AreReportedOnce()
@@ -488,7 +488,7 @@ public sealed class RatchetedLicensingClockTests
 
     /// <summary>
     ///     A store that holds every reading until they have all arrived, then releases them on the test's signal.
-    ///     Releasing from outside keeps any one reading from going on ahead of the others, which is what puts them
+    ///     Releasing from outside keeps any one reading from going on ahead of the others, which puts them
     ///     all at the report flag together.
     /// </summary>
     private sealed class RendezvousObservedTimeStore(DateTimeOffset recorded, int participants)
@@ -536,7 +536,7 @@ public sealed class RatchetedLicensingClockTests
         public void MoveTo(DateTimeOffset instant) => this._instant = instant;
     }
 
-    /// <summary>Keeps the rendered warnings, which is what the once-per-transition rule is asserted against.</summary>
+    /// <summary>Keeps the rendered warnings, which the once-per-transition rule is asserted against.</summary>
     internal sealed class CapturingLogger<T>(List<string> warnings) : ILogger<T>
     {
         public IDisposable? BeginScope<TState>(TState state)
@@ -570,7 +570,7 @@ public sealed class RatchetedLicensingClockTests
 
 /// <summary>
 ///     The clock over the production store. The in-memory store cannot show that the recorded instant survives a
-///     new connection, which is what makes the value resistant to a restart.
+///     new connection, and that makes the value resistant to a restart.
 /// </summary>
 [Collection("PostgresIntegration")]
 public sealed class RatchetedLicensingClockPostgresTests(PostgresContainerFixture fixture) : IAsyncLifetime

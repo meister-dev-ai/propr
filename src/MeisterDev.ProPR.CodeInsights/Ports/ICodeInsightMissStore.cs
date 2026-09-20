@@ -7,7 +7,7 @@ using MeisterDev.ProPR.CodeInsights.Contracts;
 namespace MeisterDev.ProPR.CodeInsights.Ports;
 
 /// <summary>
-///     Persistence boundary for the human review threads the reviewer never raised, which is what makes recall
+///     Persistence boundary for the human review threads the reviewer never raised, and that makes recall
 ///     measurable rather than assumed.
 /// </summary>
 /// <remarks>

@@ -36,6 +36,81 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.Api\MeisterDev.ProPR.Api.csproj"/>
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.ProCursor\MeisterDev.ProPR.ProCursor.csproj"/>
+        <!--
+            Referenced only so it is built before these tests run. The composed host loads it from a directory
+            rather than from a reference, which is the whole point of the add-in path.
+        -->
+        <ProjectReference Include="..\MeisterDev.Ai.Providers.ExampleAddIn\MeisterDev.Ai.Providers.ExampleAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
     </ItemGroup>
+
+    <!--
+        Stages the example add-in's own build output as a folder these tests can point the composed host at. Its
+        build output is the shape a deployment holds: the add-in's assembly and its dependencies, and none of
+        the assemblies the host and an add-in share.
+    -->
+    <Target Name="StageProviderAddInsForTests" AfterTargets="Build">
+        <ItemGroup>
+            <_ExampleAddInFile Include="$(MSBuildThisFileDirectory)..\MeisterDev.Ai.Providers.ExampleAddIn\bin\$(Configuration)\$(TargetFramework)\*.*"/>
+        </ItemGroup>
+        <Copy SourceFiles="@(_ExampleAddInFile)"
+              DestinationFolder="$(OutDir)add-in-builds\MeisterDev.Ai.Providers.ExampleAddIn"
+              SkipUnchangedFiles="true"/>
+    </Target>
+
+    <!--
+        The families this build ships as add-ins, put where the composed host reads them from. The built-in
+        directory sits beside the application's own assemblies, which under a test run is this project's output,
+        so a host composed here serves each of them the same way a deployed one does.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.GoogleVertexAddIn\MeisterDev.Ai.Providers.GoogleVertexAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.OpenAiCompatibleAddIn\MeisterDev.Ai.Providers.OpenAiCompatibleAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.AzureOpenAiAddIn\MeisterDev.Ai.Providers.AzureOpenAiAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.BedrockAddIn\MeisterDev.Ai.Providers.BedrockAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.LiteLlmAddIn\MeisterDev.Ai.Providers.LiteLlmAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.OpenAiAddIn\MeisterDev.Ai.Providers.OpenAiAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="..\..\src\MeisterDev.Ai.Providers.AnthropicAddIn\MeisterDev.Ai.Providers.AnthropicAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+    <Target Name="StageBuiltInProviderAddInsForTests" AfterTargets="Build">
+        <ItemGroup>
+            <_GoogleVertexAddInFile Include="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.Ai.Providers.GoogleVertexAddIn\bin\$(Configuration)\$(TargetFramework)\**\*.*"/>
+            <_OpenAiCompatibleAddInFile Include="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.Ai.Providers.OpenAiCompatibleAddIn\bin\$(Configuration)\$(TargetFramework)\**\*.*"/>
+            <_LiteLlmAddInFile Include="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.Ai.Providers.LiteLlmAddIn\bin\$(Configuration)\$(TargetFramework)\**\*.*"/>
+            <_BedrockAddInFile Include="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.Ai.Providers.BedrockAddIn\bin\$(Configuration)\$(TargetFramework)\**\*.*"/>
+            <_AzureOpenAiAddInFile Include="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.Ai.Providers.AzureOpenAiAddIn\bin\$(Configuration)\$(TargetFramework)\**\*.*"/>
+            <_OpenAiAddInFile Include="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.Ai.Providers.OpenAiAddIn\bin\$(Configuration)\$(TargetFramework)\**\*.*"/>
+            <_AnthropicAddInFile Include="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.Ai.Providers.AnthropicAddIn\bin\$(Configuration)\$(TargetFramework)\**\*.*"/>
+        </ItemGroup>
+        <Copy SourceFiles="@(_GoogleVertexAddInFile)"
+              DestinationFiles="@(_GoogleVertexAddInFile->'$(OutDir)provider-add-ins\MeisterDev.Ai.Providers.GoogleVertexAddIn\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_OpenAiCompatibleAddInFile)"
+              DestinationFiles="@(_OpenAiCompatibleAddInFile->'$(OutDir)provider-add-ins\MeisterDev.Ai.Providers.OpenAiCompatibleAddIn\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_LiteLlmAddInFile)"
+              DestinationFiles="@(_LiteLlmAddInFile->'$(OutDir)provider-add-ins\MeisterDev.Ai.Providers.LiteLlmAddIn\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_BedrockAddInFile)"
+              DestinationFiles="@(_BedrockAddInFile->'$(OutDir)provider-add-ins\MeisterDev.Ai.Providers.BedrockAddIn\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_AzureOpenAiAddInFile)"
+              DestinationFiles="@(_AzureOpenAiAddInFile->'$(OutDir)provider-add-ins\MeisterDev.Ai.Providers.AzureOpenAiAddIn\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_OpenAiAddInFile)"
+              DestinationFiles="@(_OpenAiAddInFile->'$(OutDir)provider-add-ins\MeisterDev.Ai.Providers.OpenAiAddIn\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="@(_AnthropicAddInFile)"
+              DestinationFiles="@(_AnthropicAddInFile->'$(OutDir)provider-add-ins\MeisterDev.Ai.Providers.AnthropicAddIn\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"/>
+    </Target>
 
 </Project>

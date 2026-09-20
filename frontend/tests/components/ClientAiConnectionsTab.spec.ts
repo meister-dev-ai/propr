@@ -12,6 +12,8 @@ const mockActivateAiConnection = vi.fn()
 const mockDeactivateAiConnection = vi.fn()
 const mockVerifyAiConnection = vi.fn()
 const mockDiscoverAiModels = vi.fn()
+const mockProbeAiConnection = vi.fn()
+const mockListPermittedProviders = vi.fn()
 
 vi.mock('@/services/aiConnectionsService', () => ({
   listAiConnections: mockListAiConnections,
@@ -22,7 +24,51 @@ vi.mock('@/services/aiConnectionsService', () => ({
   deactivateAiConnection: mockDeactivateAiConnection,
   verifyAiConnection: mockVerifyAiConnection,
   discoverAiModels: mockDiscoverAiModels,
+  probeAiConnection: mockProbeAiConnection,
+  listPermittedProviders: mockListPermittedProviders,
 }))
+
+// What each family's driver declares its credential is made of. The form renders these rather than one key box,
+// so the offer has to be answered here or the mounted component has no credential inputs at all.
+const apiKeyField = { name: 'apiKey', label: 'API key', isSecret: true, isRequired: true }
+
+const permittedProviders = {
+  isRestricted: false,
+  providers: [
+    {
+      providerKind: 'openAi',
+      label: 'OpenAI (non-Azure)',
+      isPermitted: true,
+      protocolModes: [
+        { value: 'Auto', label: 'Auto' },
+        { value: 'openAi:Responses', label: 'Responses' },
+        { value: 'openAi:ChatCompletions', label: 'Chat Completions' },
+        { value: 'Embeddings', label: 'Embeddings' },
+      ],
+      authModes: [{ value: 'openAi:ApiKey', label: 'API Key' }],
+      credentialFields: { 'openAi:ApiKey': [apiKeyField] },
+    },
+    {
+      providerKind: 'awsBedrock',
+      label: 'AWS Bedrock',
+      isPermitted: true,
+      protocolModes: [
+        { value: 'Auto', label: 'Auto' },
+        { value: 'awsBedrock:BedrockConverse', label: 'Bedrock Converse' },
+        { value: 'Embeddings', label: 'Embeddings' },
+      ],
+      authModes: [{ value: 'awsBedrock:ApiKey', label: 'API Key' }, { value: 'awsBedrock:SigV4', label: 'AWS Signature v4' }],
+      credentialFields: {
+        'awsBedrock:ApiKey': [apiKeyField],
+        'awsBedrock:SigV4': [
+          { name: 'accessKeyId', label: 'Access key ID', isSecret: false, isRequired: true },
+          { name: 'secretAccessKey', label: 'Secret access key', isSecret: true, isRequired: true },
+          { name: 'sessionToken', label: 'Session token', isSecret: true, isRequired: false },
+        ],
+      },
+    },
+  ],
+}
 
 vi.mock('@/components/dialogs/ConfirmDialog.vue', () => ({
   default: {
@@ -39,7 +85,7 @@ const sampleProfile = {
   displayName: 'Primary OpenAI',
   providerKind: 'openAi',
   baseUrl: 'https://api.openai.com/v1',
-  authMode: 'apiKey',
+  authMode: 'openAi:ApiKey',
   discoveryMode: 'providerCatalog',
   isActive: false,
   configuredModels: [
@@ -48,7 +94,7 @@ const sampleProfile = {
       remoteModelId: 'gpt-4.1-mini',
       displayName: 'GPT-4.1 Mini',
       operationKinds: ['chat'],
-      supportedProtocolModes: ['auto', 'responses', 'chatCompletions'],
+      supportedProtocolModes: ['Auto', 'openAi:Responses', 'openAi:ChatCompletions'],
       supportsStructuredOutput: true,
       supportsToolUse: true,
       supportsChat: true,
@@ -57,7 +103,7 @@ const sampleProfile = {
     },
   ],
   purposeBindings: [
-    { id: 'binding-default', purpose: 'reviewDefault', configuredModelId: 'chat-model-id', remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
+    { id: 'binding-default', purpose: 'reviewDefault', configuredModelId: 'chat-model-id', remoteModelId: 'gpt-4.1-mini', protocolMode: 'Auto', isEnabled: true },
   ],
   verification: {
     status: 'verified',
@@ -76,6 +122,7 @@ describe('ClientAiConnectionsTab', () => {
     mockDeactivateAiConnection.mockResolvedValue({ ...sampleProfile, isActive: false })
     mockVerifyAiConnection.mockResolvedValue({ status: 'verified', summary: 'Verified against the provider catalog.' })
     mockDiscoverAiModels.mockResolvedValue({ discoveryStatus: 'succeeded', manualEntryAllowed: true, warnings: [], models: [] })
+    mockListPermittedProviders.mockResolvedValue(permittedProviders)
   })
 
   afterEach(() => {
@@ -156,8 +203,8 @@ describe('ClientAiConnectionsTab', () => {
     await wrapper.find('[data-testid="ai-display-name"]').setValue('Unified OpenAI Stack')
     await wrapper.find('[data-testid="ai-provider-kind"]').setValue('openAi')
     await wrapper.find('[data-testid="ai-base-url"]').setValue('https://api.openai.com/v1')
-    await wrapper.find('[data-testid="ai-auth-mode"]').setValue('apiKey')
-    await wrapper.find('[data-testid="ai-api-key"]').setValue('secret-key')
+    await wrapper.find('[data-testid="ai-auth-mode"]').setValue('openAi:ApiKey')
+    await wrapper.find('[data-testid="ai-credential-apiKey"]').setValue('secret-key')
 
     const addModelButton = wrapper.findAll('button').find((button) => button.text().includes('Add Model'))
     expect(addModelButton).toBeDefined()
@@ -217,8 +264,8 @@ describe('ClientAiConnectionsTab', () => {
         providerKind: 'openAi',
         baseUrl: 'https://api.openai.com/v1',
         auth: {
-          mode: 'apiKey',
-          apiKey: 'secret-key',
+          mode: 'openAi:ApiKey',
+          fields: { apiKey: 'secret-key' },
         },
         discoveryMode: 'providerCatalog',
         configuredModels: [
@@ -227,7 +274,7 @@ describe('ClientAiConnectionsTab', () => {
             remoteModelId: 'gpt-4.1-mini',
             displayName: 'GPT-4.1 Mini',
             operationKinds: ['chat'],
-            supportedProtocolModes: ['auto', 'responses', 'chatCompletions'],
+            supportedProtocolModes: ['Auto', 'openAi:Responses', 'openAi:ChatCompletions'],
             tokenizerName: undefined,
             maxInputTokens: undefined,
             embeddingDimensions: undefined,
@@ -242,7 +289,7 @@ describe('ClientAiConnectionsTab', () => {
             remoteModelId: 'text-embedding-3-large',
             displayName: 'Text Embedding 3 Large',
             operationKinds: ['embedding'],
-            supportedProtocolModes: ['auto', 'embeddings'],
+            supportedProtocolModes: ['Auto', 'Embeddings'],
             tokenizerName: 'cl100k_base',
             maxInputTokens: 8192,
             embeddingDimensions: 3072,
@@ -253,6 +300,56 @@ describe('ClientAiConnectionsTab', () => {
             source: 'manual',
           },
         ],
+      }),
+    )
+  })
+
+  // A credential of several values could not be entered at all while the form assumed one key box. The inputs
+  // are what the selected family declared for the selected mode, and each is submitted under its own name.
+  it('renders and submits the credential fields the selected family and mode declare', async () => {
+    mockListAiConnections.mockResolvedValue([])
+
+    const { default: ClientAiConnectionsTab } = await import('@/features/clients/components/ClientAiConnectionsTab.vue')
+    const wrapper = mount(ClientAiConnectionsTab, { props: { clientId: 'client-1' } })
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Add Profile')!.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="ai-display-name"]').setValue('Bedrock (eu-central-1)')
+    await wrapper.find('[data-testid="ai-provider-kind"]').setValue('awsBedrock')
+    await wrapper.find('[data-testid="ai-base-url"]').setValue('https://bedrock-runtime.eu-central-1.amazonaws.com')
+    await wrapper.find('[data-testid="ai-auth-mode"]').setValue('awsBedrock:SigV4')
+    await flushPromises()
+
+    // The single key box is gone; what stands in its place is the family's own declaration.
+    expect(wrapper.find('[data-testid="ai-credential-apiKey"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="ai-credential-accessKeyId"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ai-credential-sessionToken"]').exists()).toBe(true)
+
+    // The access key id identifies the credential rather than authenticating it, so it is not masked.
+    expect(wrapper.find('[data-testid="ai-credential-accessKeyId"]').attributes('type')).toBe('text')
+    expect(wrapper.find('[data-testid="ai-credential-secretAccessKey"]').attributes('type')).toBe('password')
+
+    await wrapper.find('[data-testid="ai-credential-accessKeyId"]').setValue('AKIAEXAMPLE')
+    await wrapper.find('[data-testid="ai-credential-secretAccessKey"]').setValue('a-secret')
+
+    const addModelButton = wrapper.findAll('button').find((button) => button.text().includes('Add Model'))
+    await addModelButton!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="ai-model-id-0"]').setValue('anthropic.claude-3-5-sonnet')
+
+    await wrapper.findAll('button').find((button) => button.text().includes('Create Profile'))!.trigger('click')
+    await flushPromises()
+
+    expect(mockCreateAiConnection).toHaveBeenCalledWith(
+      'client-1',
+      expect.objectContaining({
+        auth: {
+          mode: 'awsBedrock:SigV4',
+          // The session token was left empty, and an empty field is not a credential.
+          fields: { accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'a-secret' },
+        },
       }),
     )
   })

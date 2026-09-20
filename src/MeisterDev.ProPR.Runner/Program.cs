@@ -18,7 +18,6 @@ using MeisterDev.ProPR.Observability;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
-using Serilog.Events;
 
 // The container's HEALTHCHECK runs this same DLL with --healthcheck. Handled before anything is built:
 // otherwise the probe starts a second web host, fails to bind the port already in use, and reports an
@@ -30,27 +29,8 @@ if (await RunnerHealthProbe.TryRunAsync(args))
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((context, configuration) => configuration
-    // Read from the environment rather than appsettings.json. The host had a settings file whose log
-    // level nothing consumed, which is worse than no knob at all: an operator changes it and nothing
-    // happens.
-    .MinimumLevel.Is(ParseLogLevel(context.Configuration["RUNNER_LOG_LEVEL"]))
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    // The HTTP client factory writes four lines per request at Information, and an idle runner asks for work
-    // every few seconds. At Information that traffic makes up most of the log and is charged per line by
-    // most log backends. Held at Warning unless the operator has asked for Debug, where the request trace is
-    // what is being read.
-    .MinimumLevel.Override(
-        "System.Net.Http.HttpClient",
-        ParseLogLevel(context.Configuration["RUNNER_LOG_LEVEL"]) <= LogEventLevel.Debug
-            ? LogEventLevel.Debug
-            : LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    // The runner names itself in every line and every span. A trace that cannot tell runner work from
-    // control-plane work is a trace that cannot answer where a review actually ran.
-    .Enrich.WithProperty("service.name", RunnerHostIdentity.ServiceName)
-    .Enrich.WithProperty("runner.display_name", context.Configuration["RUNNER_DISPLAY_NAME"] ?? Environment.MachineName)
-    .WriteTo.Console());
+builder.Host.UseSerilog((context, configuration) =>
+    RunnerLogging.Configure(context.Configuration, configuration, Environment.MachineName).WriteTo.Console());
 
 builder.Services.AddOptions<RunnerHostOptions>()
     .Configure(options =>
@@ -185,14 +165,6 @@ app.MapHealthChecks("/livez", new HealthCheckOptions { Predicate = _ => false })
 app.MapHealthChecks("/healthz");
 
 await app.RunAsync();
-
-/// <summary>Parses the configured log level, falling back to Information on anything unrecognised.</summary>
-static LogEventLevel ParseLogLevel(string? configured)
-{
-    return Enum.TryParse<LogEventLevel>(configured, ignoreCase: true, out var level)
-        ? level
-        : LogEventLevel.Information;
-}
 
 /// <summary>
 ///     Answers the container's own health probe without starting a server.

@@ -40,7 +40,7 @@ public sealed class HttpClientTraceSuppressionTests
 
     /// <summary>
     ///     Suppressing the span must not cost the aggregate view: the request still lands in the metrics
-    ///     histogram, which is what keeps outbound traffic observable after the spans are filtered away.
+    ///     histogram, and that keeps outbound traffic observable after the spans are filtered away.
     /// </summary>
     [Fact]
     public async Task BackgroundRequest_IsStillCountedByMetrics()

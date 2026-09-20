@@ -2,6 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -30,6 +33,7 @@ public sealed class LogicalModelCatalogRepository(
     ILogicalModelCapabilityValidator validator,
     IAiConnectionRepository connections,
     IAiConnectionScopeGuard scopeGuard,
+    IAiProviderDriverRegistry providerDrivers,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory = null)
     : ILogicalModelCatalogRepository
 {
@@ -55,6 +59,7 @@ public sealed class LogicalModelCatalogRepository(
         await validator.ValidateAsync(entry, ct);
         await this.EnsureConnectionIsInTenantScopeAsync(tenantId, entry, ct);
 
+        var family = await this.FamilyOfAsync(entry.ConnectionId, ct);
         var now = DateTimeOffset.UtcNow;
         db.LogicalModels.Add(
             new LogicalModelRecord
@@ -66,7 +71,7 @@ public sealed class LogicalModelCatalogRepository(
                 ConnectionId = entry.ConnectionId,
                 ConfiguredModelId = entry.ConfiguredModelId,
                 ReasoningEffort = entry.ReasoningEffort,
-                ProtocolMode = entry.ProtocolMode,
+                ProtocolMode = this.ProtocolModeToStore(null, family, entry.ProtocolMode),
                 CreatedAt = now,
                 UpdatedAt = now,
             });
@@ -89,6 +94,7 @@ public sealed class LogicalModelCatalogRepository(
         await validator.ValidateAsync(entry, ct);
         await this.EnsureConnectionIsInClientTenantScopeAsync(clientId, entry, ct);
 
+        var family = await this.FamilyOfAsync(entry.ConnectionId, ct);
         var now = DateTimeOffset.UtcNow;
         db.LogicalModelOverrides.Add(
             new LogicalModelOverrideRecord
@@ -100,7 +106,7 @@ public sealed class LogicalModelCatalogRepository(
                 ConnectionId = entry.ConnectionId,
                 ConfiguredModelId = entry.ConfiguredModelId,
                 ReasoningEffort = entry.ReasoningEffort,
-                ProtocolMode = entry.ProtocolMode,
+                ProtocolMode = this.ProtocolModeToStore(null, family, entry.ProtocolMode),
                 CreatedAt = now,
                 UpdatedAt = now,
             });
@@ -120,7 +126,7 @@ public sealed class LogicalModelCatalogRepository(
 
         await validator.ValidateAsync(entry, ct);
         await this.EnsureConnectionIsInTenantScopeAsync(tenantId, entry, ct);
-        ApplyMapping(record, entry);
+        this.ApplyMapping(record, entry, await this.FamilyOfAsync(entry.ConnectionId, ct));
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -138,7 +144,7 @@ public sealed class LogicalModelCatalogRepository(
 
         await validator.ValidateAsync(entry, ct);
         await this.EnsureConnectionIsInClientTenantScopeAsync(clientId, entry, ct);
-        ApplyMapping(record, entry);
+        this.ApplyMapping(record, entry, await this.FamilyOfAsync(entry.ConnectionId, ct));
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -179,9 +185,13 @@ public sealed class LogicalModelCatalogRepository(
         await this.EnsureConnectionIsInTenantScopeAsync(resolved, entry, ct);
     }
 
-    // Updates the mapping fields (not the name, which is the key) on either record type.
-    private static void ApplyMapping(ILogicalModelMapping record, LogicalModelDto entry)
+    // Updates the mapping fields (not the name, which is the key) on either record type. The family is the one
+    // the entry now points at, so repointing a row to a connection of another family rewrites the protocol mode
+    // under that family's names.
+    private void ApplyMapping(ILogicalModelMapping record, LogicalModelDto entry, string? family)
     {
+        var protocolMode = this.ProtocolModeToStore(record.ProtocolMode, family, entry.ProtocolMode);
+
         switch (record)
         {
             case LogicalModelRecord tenantRecord:
@@ -189,7 +199,7 @@ public sealed class LogicalModelCatalogRepository(
                 tenantRecord.ConnectionId = entry.ConnectionId;
                 tenantRecord.ConfiguredModelId = entry.ConfiguredModelId;
                 tenantRecord.ReasoningEffort = entry.ReasoningEffort;
-                tenantRecord.ProtocolMode = entry.ProtocolMode;
+                tenantRecord.ProtocolMode = protocolMode;
                 tenantRecord.UpdatedAt = DateTimeOffset.UtcNow;
                 break;
             case LogicalModelOverrideRecord overrideRecord:
@@ -197,7 +207,7 @@ public sealed class LogicalModelCatalogRepository(
                 overrideRecord.ConnectionId = entry.ConnectionId;
                 overrideRecord.ConfiguredModelId = entry.ConfiguredModelId;
                 overrideRecord.ReasoningEffort = entry.ReasoningEffort;
-                overrideRecord.ProtocolMode = entry.ProtocolMode;
+                overrideRecord.ProtocolMode = protocolMode;
                 overrideRecord.UpdatedAt = DateTimeOffset.UtcNow;
                 break;
             default:
@@ -213,7 +223,7 @@ public sealed class LogicalModelCatalogRepository(
             .Where(x => x.TenantId == tenantId)
             .OrderBy(x => x.Name)
             .ToListAsync(ct);
-        return rows.Select(ToDto).ToList();
+        return await this.ToDtosAsync(rows, ct);
     }
 
     /// <inheritdoc />
@@ -243,7 +253,7 @@ public sealed class LogicalModelCatalogRepository(
             .Where(x => x.ClientId == clientId)
             .OrderBy(x => x.Name)
             .ToListAsync(ct);
-        return rows.Select(ToDto).ToList();
+        return await this.ToDtosAsync(rows, ct);
     }
 
     /// <inheritdoc />
@@ -425,8 +435,31 @@ public sealed class LogicalModelCatalogRepository(
         }
     }
 
-    private static LogicalModelDto ToDto(ILogicalModelMapping row)
+    private async Task<IReadOnlyList<LogicalModelDto>> ToDtosAsync(
+        IReadOnlyList<ILogicalModelMapping> rows,
+        CancellationToken ct)
     {
+        if (rows.Count == 0)
+        {
+            return [];
+        }
+
+        var families = await this.FamiliesOfAsync(rows.Select(row => row.ConnectionId), ct);
+        return rows
+            .Select(row => this.ToDto(row, families.TryGetValue(row.ConnectionId, out var family) ? family : null))
+            .ToList();
+    }
+
+    // The stored protocol mode is a name, and a name no loaded family claims is reported on the entry rather
+    // than thrown: the read is a list projection, and a failure inside one takes out every other entry being
+    // projected with it. It is read against the family of the connection the row maps to, because a protocol mode
+    // a family declares persists qualified by that family's key. Where no family can be determined only the
+    // host-reserved shapes resolve, which a row carrying the default holds.
+    private LogicalModelDto ToDto(ILogicalModelMapping row, string? family)
+    {
+        var resolution = providerDrivers.ResolveProtocolMode(family, row.ProtocolMode);
+        var resolved = resolution.TryGetValue(out var protocolMode);
+
         return new LogicalModelDto(
             row.Id,
             row.Name,
@@ -434,6 +467,77 @@ public sealed class LogicalModelCatalogRepository(
             row.ConnectionId,
             row.ConfiguredModelId,
             row.ReasoningEffort,
-            row.ProtocolMode);
+            resolved ? protocolMode : ProviderDeclaredProtocolModes.Auto)
+        {
+            UnresolvedProtocolMode = resolved ? null : resolution.Name,
+        };
+    }
+
+    // A logical model carries no family of its own: the protocol mode on the row belongs to the family of the
+    // connection the row maps to, and that is where its spelling is read and written. The identity is taken
+    // from the connection row and resolved through the loaded families, so a connection still holding the
+    // spelling its family superseded names the same family as one already rewritten. An identity no loaded
+    // family claims yields no family at all, and only the host-reserved shapes resolve for such a row.
+    private async Task<IReadOnlyDictionary<Guid, string>> FamiliesOfAsync(
+        IEnumerable<Guid> connectionIds,
+        CancellationToken ct)
+    {
+        var ids = connectionIds.Distinct().ToArray();
+        var identities = await db.AiConnectionProfiles
+            .AsNoTracking()
+            .Where(profile => ids.Contains(profile.Id))
+            .Select(profile => new { profile.Id, profile.ProviderKind })
+            .ToListAsync(ct);
+
+        var families = new Dictionary<Guid, string>();
+        foreach (var identity in identities)
+        {
+            if (providerDrivers.ResolveIdentity(identity.ProviderKind).TryGetKey(out var family))
+            {
+                families[identity.Id] = family;
+            }
+        }
+
+        return families;
+    }
+
+    private async Task<string?> FamilyOfAsync(Guid connectionId, CancellationToken ct)
+    {
+        var families = await this.FamiliesOfAsync([connectionId], ct);
+        return families.TryGetValue(connectionId, out var family) ? family : null;
+    }
+
+    // One rule for the protocol mode a logical model carries, matching the one the connection profile applies to
+    // the three axes it holds: a stored value the family still answers to is written back exactly as it was
+    // read, and only a value naming something else — or nothing, on a create — is replaced by the spelling the
+    // family declares now. Rewriting a value that already resolves would undo a family's row migration on the
+    // first edit after it, since a row is read through the spellings the family supersedes and would be saved
+    // back under the superseded name. A requested shape neither the family nor the host claims is stored as it
+    // was submitted, so the read path reports it rather than replacing it with a shape nobody asked for.
+    private string ProtocolModeToStore(string? stored, string? family, string requested)
+    {
+        // Membership is deliberately tolerant below: a shape no loaded family claims is kept as submitted so a
+        // family installed later can claim it. Well-formedness is not tolerant. The enum this replaced could
+        // not hold an empty value, a thousand characters or a control character, and the column and every reader
+        // still cannot.
+        // Either spelling is a legitimate submission: the qualified value a family declares, or the unqualified
+        // one it supersedes, which a stored row written before the family moved still holds.
+        if (!ProviderVocabulary.IsWellFormedQualifiedValue(requested)
+            && ProviderVocabulary.ValidateModeName(requested) is { } malformed)
+        {
+            throw new ArgumentException(malformed.Message, nameof(requested));
+        }
+
+        var arriving = providerDrivers.ResolveProtocolMode(family, requested);
+        if (!arriving.TryGetValue(out var arrivingMode))
+        {
+            return requested.Trim();
+        }
+
+        return stored is not null
+               && providerDrivers.ResolveProtocolMode(family, stored).TryGetValue(out var storedMode)
+               && ProviderVocabulary.ValuesEqual(storedMode, arrivingMode)
+            ? stored
+            : arrivingMode;
     }
 }

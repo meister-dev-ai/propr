@@ -15,6 +15,9 @@ ARG PRODUCT_VERSION=0.0.0-dev
 # than of its environment.
 ARG USAGE_STATISTICS_ENDPOINT=https://telemetry.meister-dev.ai/v1/ping
 
+# The repository-root build properties, so the image restores the same package versions a local build
+# resolves.
+COPY Directory.Build.props .
 COPY MeisterDev.ProPR.slnx .
 COPY src/ src/
 COPY tests/ tests/
@@ -48,6 +51,34 @@ RUN set -eux; \
     done
 
 RUN mkdir -p /app/.data-protection-keys
+
+# The built-in AI provider add-in directory. Its path is fixed by the image, beside the application's own
+# assemblies, and is not configurable: a family shipped here is replaced by a product release rather than by
+# a mounted volume. A privately built family goes in the external directory instead, which AI_PLUGIN_DIRECTORY
+# names and which defaults to /app/plugins. The two are separate because mounting a volume over a populated
+# directory hides that directory's contents, so one directory would let a single mount remove everything the
+# image ships.
+RUN mkdir -p /app/provider-add-ins
+
+# Each shipped family goes in a folder of its own named after its assembly, which is how the loader finds it and
+# how its own dependencies resolve from beside it rather than from the application's folder. Published rather
+# than copied out of the build output so the folder holds what the family needs at run time; the shared add-in
+# build configuration keeps the contract, the model abstractions and the conformance kit out of it, and fails
+# the publish if any of them reaches it.
+RUN dotnet publish src/MeisterDev.Ai.Providers.GoogleVertexAddIn/MeisterDev.Ai.Providers.GoogleVertexAddIn.csproj \
+    -c Release -o /app/provider-add-ins/MeisterDev.Ai.Providers.GoogleVertexAddIn --no-restore
+RUN dotnet publish src/MeisterDev.Ai.Providers.OpenAiCompatibleAddIn/MeisterDev.Ai.Providers.OpenAiCompatibleAddIn.csproj \
+    -c Release -o /app/provider-add-ins/MeisterDev.Ai.Providers.OpenAiCompatibleAddIn --no-restore
+RUN dotnet publish src/MeisterDev.Ai.Providers.LiteLlmAddIn/MeisterDev.Ai.Providers.LiteLlmAddIn.csproj \
+    -c Release -o /app/provider-add-ins/MeisterDev.Ai.Providers.LiteLlmAddIn --no-restore
+RUN dotnet publish src/MeisterDev.Ai.Providers.BedrockAddIn/MeisterDev.Ai.Providers.BedrockAddIn.csproj \
+    -c Release -o /app/provider-add-ins/MeisterDev.Ai.Providers.BedrockAddIn --no-restore
+RUN dotnet publish src/MeisterDev.Ai.Providers.AzureOpenAiAddIn/MeisterDev.Ai.Providers.AzureOpenAiAddIn.csproj \
+    -c Release -o /app/provider-add-ins/MeisterDev.Ai.Providers.AzureOpenAiAddIn --no-restore
+RUN dotnet publish src/MeisterDev.Ai.Providers.OpenAiAddIn/MeisterDev.Ai.Providers.OpenAiAddIn.csproj \
+    -c Release -o /app/provider-add-ins/MeisterDev.Ai.Providers.OpenAiAddIn --no-restore
+RUN dotnet publish src/MeisterDev.Ai.Providers.AnthropicAddIn/MeisterDev.Ai.Providers.AnthropicAddIn.csproj \
+    -c Release -o /app/provider-add-ins/MeisterDev.Ai.Providers.AnthropicAddIn --no-restore
 
 # Minimal Kerberos runtime slice for Azure DevOps client auth support.
 # ubuntu:24.04

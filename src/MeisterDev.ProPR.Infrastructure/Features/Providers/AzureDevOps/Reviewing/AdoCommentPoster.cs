@@ -315,7 +315,7 @@ public sealed class AdoCommentPoster(
 
         // Cross-increment duplicate protection. It runs ahead of the thread-memory arm because it is the check
         // built for this case: it compares finding text to finding text, with no anchor, no severity and no file
-        // in the key, which is what survives the drift observed between increments.
+        // in the key, and that survives the drift observed between increments.
         var postedFindingMatch = await this.FindPostedFindingDuplicateAsync(
             clientId,
             organizationUrl,

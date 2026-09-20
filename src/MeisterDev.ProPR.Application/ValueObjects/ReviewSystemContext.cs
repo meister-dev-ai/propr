@@ -272,7 +272,7 @@ public sealed class ReviewSystemContext
     /// <summary>
     ///     The client's configured output language as an IETF BCP 47 tag, resolved once for the job and stated by
     ///     every prompt that emits reviewer-facing prose. <see langword="null" /> states no language and leaves the
-    ///     prompts as they were, which is what execution contexts built outside a review job get.
+    ///     prompts as they were, which execution contexts built outside a review job get.
     ///     See <see cref="MeisterDev.ProPR.Domain.ValueObjects.ReviewOutputLanguage" />.
     /// </summary>
     public string? OutputLanguage { get; set; }
@@ -287,7 +287,7 @@ public sealed class ReviewSystemContext
     ///         indistinguishable from the client not having configured it.
     ///     </para>
     ///     <para>
-    ///         Reference-typed members are shared with the original rather than deep-copied, which is what the
+    ///         Reference-typed members are shared with the original rather than deep-copied, which the
     ///         collections, the tool provider, the workspace and the chat clients are for: one review's state,
     ///         observed by each of its passes.
     ///     </para>

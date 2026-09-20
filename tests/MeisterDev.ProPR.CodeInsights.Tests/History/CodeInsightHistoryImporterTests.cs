@@ -403,7 +403,7 @@ public sealed class CodeInsightHistoryImporterTests
         }
 
         /// <summary>
-        ///     A retained thread. Passing a job id records provenance for it too, which is what makes it one of
+        ///     A retained thread. Passing a job id records provenance for it too, and that makes it one of
         ///     ProPR's own threads rather than somebody else's.
         /// </summary>
         public void SeedRetainedThread(Guid? jobId, string threadId, string filePath, int line, bool resolved)

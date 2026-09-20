@@ -244,15 +244,15 @@ public sealed class ReviewTriageClassifierTests
             "triage-model",
             "Triage Model",
             [AiOperationKind.Chat],
-            [AiProtocolMode.ChatCompletions]);
+            ["meisterdev/openAi:ChatCompletions"]);
 
         var connection = new AiConnectionDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Test",
-            AiProviderKind.OpenAi,
+            "meisterdev/openAi",
             "https://api.openai.com/v1",
-            AiAuthMode.ApiKey,
+            "meisterdev/openAi:ApiKey",
             AiDiscoveryMode.ManualOnly,
             true,
             [model],

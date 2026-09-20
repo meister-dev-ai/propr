@@ -479,7 +479,7 @@ public sealed partial class PrCrawlService(
     /// <remarks>
     ///     No identity is known here: nothing on this path holds a live provider connection, so the
     ///     thread-status adapter contributes the identity its own handshake resolves into this same instance.
-    ///     Keyed on the same repository identity a review job for this pull request carries, which is what its
+    ///     Keyed on the same repository identity a review job for this pull request carries, which its
     ///     provenance rows were recorded under.
     /// </remarks>
     private async Task<ThreadOwnershipResolver> ResolveThreadOwnershipAsync(

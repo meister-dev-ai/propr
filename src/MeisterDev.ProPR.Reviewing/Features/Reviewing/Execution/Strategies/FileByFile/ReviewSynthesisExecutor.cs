@@ -4,7 +4,6 @@
 
 using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
-using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
@@ -40,8 +39,6 @@ internal sealed class ReviewSynthesisExecutor(
     IDeterministicReviewFindingGate? deterministicReviewFindingGate,
     IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders,
     ISummaryReconciliationService? summaryReconciliationService,
-    IAiConnectionRepository? aiConnectionRepository,
-    IAiChatClientFactory? aiClientFactory,
     IAiRuntimeResolver? aiRuntimeResolver,
     IChatClient? defaultChatClient = null,
     IFindingDeduplicator? findingDeduplicator = null,
@@ -291,10 +288,12 @@ internal sealed class ReviewSynthesisExecutor(
         IChatClient effectiveClient,
         CancellationToken ct)
     {
-        AiConnectionDto? synthTierDto = null;
         string? synthesisModelId = null;
         string? synthesisLogicalModelName = null;
 
+        // The high-effort runtime is resolved, never constructed here. Two cases leave the selection unresolved:
+        // a host composed without a runtime resolver, and a resolver with no high-effort binding. Synthesis then
+        // runs on the client the orchestrator was built with, under the model id resolved below.
         if (aiRuntimeResolver is not null)
         {
             try
@@ -311,16 +310,6 @@ internal sealed class ReviewSynthesisExecutor(
             {
                 synthesisModelId = null;
                 synthesisLogicalModelName = null;
-            }
-        }
-        else if (aiConnectionRepository is not null && aiClientFactory is not null)
-        {
-            synthTierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, ct);
-            if (synthTierDto is not null)
-            {
-                effectiveClient = aiClientFactory.CreateClient(synthTierDto.BaseUrl, synthTierDto.Secret);
-                synthesisModelId = synthTierDto.GetBoundModelId(AiPurpose.ReviewHighEffort)
-                                   ?? synthTierDto.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId;
             }
         }
 
