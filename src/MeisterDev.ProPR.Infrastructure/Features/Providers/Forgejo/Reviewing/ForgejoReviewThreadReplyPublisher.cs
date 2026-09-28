@@ -38,6 +38,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
 internal sealed partial class ForgejoReviewThreadReplyPublisher(
     ForgejoConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory,
+    IPostedCommentComposer composer,
     ILogger<ForgejoReviewThreadReplyPublisher>? logger = null) : IReviewThreadReplyPublisher
 {
     private const string PermissionAdvice =
@@ -100,7 +101,7 @@ internal sealed partial class ForgejoReviewThreadReplyPublisher(
         request.Content = JsonContent.Create(
             new
             {
-                body = FormatReplyText(ReviewCommentQuoting.BuildQuotedReply(quotedComment, replyText)),
+                body = FormatReplyText(ReviewCommentQuoting.BuildQuotedReply(quotedComment, replyText), composer),
                 @event = "COMMENT",
             });
 
@@ -126,9 +127,14 @@ internal sealed partial class ForgejoReviewThreadReplyPublisher(
         return null;
     }
 
-    private static string FormatReplyText(string replyText)
+    internal static string FormatReplyText(string replyText, IPostedCommentComposer composer)
     {
-        return HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText;
+        ArgumentNullException.ThrowIfNull(composer);
+
+        // One marker per reply: a Forgejo reply is a whole review with a body and no comments, so the body
+        // carries it once. The marker goes on after the rendering, so nothing in it is rewritten on its way
+        // to the provider.
+        return composer.Append(HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText);
     }
 
     /// <summary>

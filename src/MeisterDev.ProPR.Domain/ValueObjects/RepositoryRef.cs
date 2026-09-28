@@ -15,7 +15,10 @@ public sealed record RepositoryRef
     ///     Human-readable repository name used for git remote URLs. Falls back to
     ///     <paramref name="externalRepositoryId" /> when not supplied.
     /// </param>
-    public RepositoryRef(ProviderHostRef host, string externalRepositoryId, string ownerOrNamespace, string projectPath, string? repositoryName = null)
+    /// <param name="projectDisplayName">Optional human-readable project name from discovery.</param>
+    public RepositoryRef(
+        ProviderHostRef host, string externalRepositoryId, string ownerOrNamespace, string projectPath, string? repositoryName = null,
+        string? projectDisplayName = null)
     {
         this.Host = host ?? throw new ArgumentNullException(nameof(host));
         ArgumentException.ThrowIfNullOrWhiteSpace(externalRepositoryId);
@@ -28,6 +31,9 @@ public sealed record RepositoryRef
         this.RepositoryName = string.IsNullOrWhiteSpace(repositoryName)
             ? this.ExternalRepositoryId
             : repositoryName.Trim();
+        this.ProjectDisplayName = string.IsNullOrWhiteSpace(projectDisplayName)
+            ? null
+            : projectDisplayName.Trim();
     }
 
     /// <summary>Gets the provider host reference.</summary>
@@ -44,4 +50,7 @@ public sealed record RepositoryRef
 
     /// <summary>Gets the human-readable repository name, used for git remote URL construction.</summary>
     public string RepositoryName { get; }
+
+    /// <summary>Gets the optional human-readable project name supplied by repository discovery.</summary>
+    public string? ProjectDisplayName { get; }
 }

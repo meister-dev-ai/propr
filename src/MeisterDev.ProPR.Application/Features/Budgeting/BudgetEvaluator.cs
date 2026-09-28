@@ -8,9 +8,10 @@ using MeisterDev.ProPR.Domain.Enums;
 namespace MeisterDev.ProPR.Application.Features.Budgeting;
 
 /// <summary>
-///     Evaluates accumulated per-scope spend against a client's budget caps. Composition is most-restrictive-wins:
-///     any reached cap blocks, so the tightest applicable ceiling always binds. When several caps are reached the
-///     most specific scope (increment, then pull request, then client) is reported as the reason.
+///     Evaluates accumulated per-scope spend against the budget caps of a client and of the tenant it belongs to.
+///     Composition is most-restrictive-wins: any reached cap blocks, so the tightest applicable ceiling always
+///     binds. When several caps are reached the most specific scope (increment, then pull request, then client,
+///     then tenant) is reported as the reason.
 /// </summary>
 public static class BudgetEvaluator
 {
@@ -23,7 +24,8 @@ public static class BudgetEvaluator
         BudgetCaps caps,
         decimal clientSpentUsd,
         decimal pullRequestSpentUsd,
-        decimal incrementSpentUsd)
+        decimal incrementSpentUsd,
+        decimal tenantSpentUsd)
     {
         if (caps.IncrementHardCapUsd is { } incrementCap && incrementSpentUsd >= incrementCap)
         {
@@ -38,6 +40,11 @@ public static class BudgetEvaluator
         if (caps.MonthlyHardCapUsd is { } clientCap && clientSpentUsd >= clientCap)
         {
             return new BudgetBreach(BudgetScopeKind.ClientMonthly, BudgetCapKind.Hard, clientCap, clientSpentUsd);
+        }
+
+        if (caps.TenantMonthlyHardCapUsd is { } tenantCap && tenantSpentUsd >= tenantCap)
+        {
+            return new BudgetBreach(BudgetScopeKind.TenantMonthly, BudgetCapKind.Hard, tenantCap, tenantSpentUsd);
         }
 
         return null;
@@ -60,14 +67,15 @@ public static class BudgetEvaluator
     }
 
     /// <summary>
-    ///     Returns the soft cap the review has reached given the effective spend in the pull-request and client
-    ///     scopes, or <see langword="null" /> when no soft cap is reached. The increment scope's soft cap is not an
+    ///     Returns the soft cap the review has reached given the effective spend in the pull-request, client and
+    ///     tenant scopes, or <see langword="null" /> when no soft cap is reached. The increment scope's soft cap is not an
     ///     admission gate, so it is evaluated separately by <see cref="FindIncrementSoftCapBreach" />.
     /// </summary>
     public static BudgetBreach? FindSoftCapBreach(
         BudgetCaps caps,
         decimal clientSpentUsd,
-        decimal pullRequestSpentUsd)
+        decimal pullRequestSpentUsd,
+        decimal tenantSpentUsd)
     {
         if (caps.PullRequestSoftCapUsd is { } pullRequestCap && pullRequestSpentUsd >= pullRequestCap)
         {
@@ -77,6 +85,11 @@ public static class BudgetEvaluator
         if (caps.MonthlySoftCapUsd is { } clientCap && clientSpentUsd >= clientCap)
         {
             return new BudgetBreach(BudgetScopeKind.ClientMonthly, BudgetCapKind.Soft, clientCap, clientSpentUsd);
+        }
+
+        if (caps.TenantMonthlySoftCapUsd is { } tenantCap && tenantSpentUsd >= tenantCap)
+        {
+            return new BudgetBreach(BudgetScopeKind.TenantMonthly, BudgetCapKind.Soft, tenantCap, tenantSpentUsd);
         }
 
         return null;
@@ -91,9 +104,10 @@ public static class BudgetEvaluator
         BudgetCaps caps,
         decimal clientSpentUsd,
         decimal pullRequestSpentUsd,
-        decimal incrementSpentUsd)
+        decimal incrementSpentUsd,
+        decimal tenantSpentUsd)
     {
-        return FindHardCapBreach(caps, clientSpentUsd, pullRequestSpentUsd, incrementSpentUsd)
-               ?? FindSoftCapBreach(caps, clientSpentUsd, pullRequestSpentUsd);
+        return FindHardCapBreach(caps, clientSpentUsd, pullRequestSpentUsd, incrementSpentUsd, tenantSpentUsd)
+               ?? FindSoftCapBreach(caps, clientSpentUsd, pullRequestSpentUsd, tenantSpentUsd);
     }
 }

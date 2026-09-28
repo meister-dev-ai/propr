@@ -12,6 +12,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Runtime;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.DependencyInjection;
 
@@ -19,13 +20,16 @@ internal static class GitHubProviderServiceCollectionExtensions
 {
     public static IServiceCollection AddGitHubProviderAdapters(this IServiceCollection services)
     {
+        services.AddPostedCommentComposer();
+
         services.AddHttpClient(
-            "GitHubProvider",
-            client =>
-            {
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("MeisterDev.ProPR");
-            });
+                "GitHubProvider",
+                client =>
+                {
+                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("MeisterDev.ProPR");
+                })
+            .GuardEgress();
 
         services.TryAddSingleton<GitHubInstallationTokenCache>();
         services.TryAddScoped<GitHubAuthenticationService>();

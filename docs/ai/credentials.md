@@ -29,6 +29,35 @@ there is labelled **Add Profile**; the object it creates is what these pages cal
 More than one connection can be active at the same time, so a single client can mix providers. Which model does
 which work is decided by logical models, not by which connection was activated last.
 
+### Verified profile updates
+
+The client API provides `POST /clients/{clientId}/ai-connections/{connectionId}/verify-update` for profile edits
+that must retain working routing. It accepts the same optional settings as the profile PATCH operation.
+Only client-owned customer-writable provider and authentication combinations can use this operation;
+tenant and managed-authentication profiles remain under cell administrator control.
+Omitted or blank credential fields reuse the protected saved credential. ProPR validates and verifies the
+unsaved candidate before replacing the saved configuration and verification snapshot. A failed verification
+leaves the saved profile and active bindings unchanged. A concurrent credential, model or profile edit returns
+409; reload the connection before retrying.
+
+### Workspace model selection
+
+`POST /clients/{clientId}/ai-connections/select-purposes` accepts `default`, `high` and `embedding`, each with
+`connectionId` and `configuredModelId`. All selected connections must belong to the client and be verified.
+Default and High require chat models. Embedding requires embedding capability, a tokenizer, a positive input
+limit and dimensions between 64 and 4096. Both the configured model and its provider driver must support
+the selected chat or embeddings protocol.
+
+ProPR applies Review default, Triage, Verification, Low effort, Medium effort and Memory reconsideration to
+Default. High effort uses High, and Embedding default uses Embedding. ProPR activates selected connections and
+updates these bindings in one transaction. It preserves other purposes, logical models, tenant connections and
+client connections that use managed authentication. A conflicting logical purpose mapping or higher-priority
+managed binding returns 409 with a safe action and the affected purposes. Update those mappings in the cell
+console before applying the workspace selection.
+
+Tenant machine credentials can call these client-scoped operations after current client ownership is checked.
+They cannot modify logical-model mappings or inherited connections through these operations.
+
 ### Tenant-owned connections
 
 The steps above create a connection owned by one client. A tenant administrator can instead define one on the
@@ -91,7 +120,7 @@ exposes, not what the upstream vendor calls them.
 model attached to such a connection may claim - see [protocol mode](purposes.md#protocol-mode).
 
 A self-hosted endpoint on a private address - Ollama, vLLM, an internal gateway - is refused until
-`AI_ALLOW_PRIVATE_EGRESS` is set. What that opt-in does and does not permit is under
+`MEISTER_ALLOW_PRIVATE_EGRESS` is set. What that opt-in does and does not permit is under
 [outbound request protection](../reference/security.md#outbound-request-protection); the variable itself is in
 [configuration](../operate/configuration.md).
 

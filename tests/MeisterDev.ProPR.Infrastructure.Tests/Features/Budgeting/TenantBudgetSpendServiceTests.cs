@@ -23,8 +23,10 @@ public sealed class TenantBudgetSpendServiceTests
 
     private readonly IBudgetSpendResetRepository _resetRepository = Substitute.For<IBudgetSpendResetRepository>();
 
+    private readonly ITenantAdminService _tenantAdmin = Substitute.For<ITenantAdminService>();
+
     private TenantBudgetSpendService CreateService(DateTimeOffset now) =>
-        new(this._clientAdmin, this._usageRepository, this._resetRepository, new FixedTimeProvider(now));
+        new(this._clientAdmin, this._usageRepository, this._resetRepository, new FixedTimeProvider(now), this._tenantAdmin);
 
     private void GivenResets(params BudgetSpendReset[] resets) =>
         this._resetRepository
@@ -111,6 +113,38 @@ public sealed class TenantBudgetSpendServiceTests
         Assert.Equal(200m, spend.MonthlySoftCapUsd);
         Assert.Equal(250m, spend.MonthlyHardCapUsd);
         Assert.Equal(1, spend.ResetCount);
+    }
+
+    [Fact]
+    public async Task GetSpendAsync_ReportsTheTenantCapsBesideTheSummedClientTotal()
+    {
+        this._clientAdmin.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<ClientDto> { MakeClient("Acme", TenantId, soft: 80m, hard: 100m) });
+        this._usageRepository
+            .GetMonthlyCostForClientsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<(int, int), decimal> { [(2026, 7)] = 42m });
+        this.GivenResets();
+        this._tenantAdmin.GetByIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(
+            new TenantDto(
+                TenantId,
+                "acme",
+                "Acme",
+                IsActive: true,
+                LocalLoginEnabled: true,
+                IsEditable: true,
+                CreatedAt: DateTimeOffset.UnixEpoch,
+                UpdatedAt: DateTimeOffset.UnixEpoch,
+                InstallationDefaultCapturesReasoning: false,
+                Budget: new TenantBudgetConfigDto(MonthlySoftCapUsd: 5000m, MonthlyHardCapUsd: 6000m)));
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var spend = await service.GetSpendAsync(TenantId, monthsBack: 1);
+
+        Assert.Equal(80m, spend.MonthlySoftCapUsd);
+        Assert.Equal(100m, spend.MonthlyHardCapUsd);
+        // The summed client total stays beside the tenant caps, so both halves of the report are covered.
+        Assert.Equal(42m, spend.SpentToDateUsd);
+        Assert.Equal(5000m, spend.TenantMonthlySoftCapUsd);
+        Assert.Equal(6000m, spend.TenantMonthlyHardCapUsd);
     }
 
     private static ClientDto MakeClient(string name, Guid tenantId, decimal? soft, decimal? hard) =>

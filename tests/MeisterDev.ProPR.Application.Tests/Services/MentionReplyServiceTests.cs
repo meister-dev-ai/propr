@@ -123,7 +123,7 @@ public sealed class MentionReplyServiceTests
                 new ReviewSpendBaseline(
                     new ReviewScopeSpend(spentUsd, false),
                     new ReviewScopeSpend(0m, false),
-                    new ReviewScopeSpend(0m, false)));
+                    new ReviewScopeSpend(0m, false), ReviewScopeSpend.None));
     }
 
     private static MentionAnswer MakeAnswer(
@@ -618,6 +618,40 @@ public sealed class MentionReplyServiceTests
             4.5m,
             Arg.Any<CancellationToken>());
         await this._jobRepository.DidNotReceiveWithAnyArgs().SetFailedAsync(default, default!);
+    }
+
+    // A refusal relayed from the control plane names the condition without carrying the cap, and this answer's
+    // own scope has tripped nothing. The developer is still told the answer was stopped by budget, because a
+    // failed job says nothing and leaves the cap unrecorded. The row carries no scope, threshold or spend,
+    // because none of the three was read anywhere.
+    [Fact]
+    public async Task ProcessAsync_CapRefusedWithoutNamingTheCap_EndsTheAnswerHeldWithNoCapDetail()
+    {
+        var job = MakeJob();
+        SetupAnsweredMention(job, MakeAnswer());
+        this.SetupSpendAgainstMonthlyHardCap(0m);
+        this._answerService.AnswerAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsyncForAnyArgs(new BudgetHardCapReachedException(null));
+
+        await this.CreateService().ProcessAsync(job);
+
+        await this._jobRepository.Received(1).SetBudgetHeldAsync(
+            job.Id,
+            Arg.Any<int?>(),
+            null,
+            BudgetCapKind.Hard,
+            null,
+            null,
+            Arg.Any<CancellationToken>());
+        await this._jobRepository.DidNotReceiveWithAnyArgs().SetFailedAsync(default, default!);
+
+        // An event names a scope, a threshold and a spend; none was read, so none is published.
+        await this._budgetEventPublisher.DidNotReceiveWithAnyArgs().PublishAsync(default!, default);
     }
 
     [Fact]

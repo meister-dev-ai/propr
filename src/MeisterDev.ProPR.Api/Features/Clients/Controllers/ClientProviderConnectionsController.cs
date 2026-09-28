@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.Ai.Providers.Diagnostics;
+using MeisterDev.Ai.Providers.Egress;
 using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
@@ -31,6 +32,7 @@ public sealed partial class ClientProviderConnectionsController(
     IScmProviderRegistry providerRegistry,
     IProviderReadinessEvaluator readinessEvaluator,
     IProviderOperationalStatusService providerOperationalStatusService,
+    EgressUrlPolicy egressUrlPolicy,
     ILogger<ClientProviderConnectionsController> logger,
     IProviderActivationService? providerActivationService = null,
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
@@ -63,7 +65,7 @@ public sealed partial class ClientProviderConnectionsController(
 
     private ActionResult? ValidateSupportedAuthenticationConfiguration(AuthenticationConfigurationCandidate candidate)
     {
-        foreach (var (propertyName, message) in GetAuthenticationConfigurationErrors(candidate))
+        foreach (var (propertyName, message) in GetAuthenticationConfigurationErrors(candidate, egressUrlPolicy))
         {
             this.ModelState.AddModelError(propertyName, message);
         }
@@ -71,9 +73,11 @@ public sealed partial class ClientProviderConnectionsController(
         return this.ModelState.ErrorCount == 0 ? null : this.ValidationProblem();
     }
 
-    private static void EnsureSupportedAuthenticationConfiguration(AuthenticationConfigurationCandidate candidate)
+    private static void EnsureSupportedAuthenticationConfiguration(
+        AuthenticationConfigurationCandidate candidate,
+        EgressUrlPolicy egressUrlPolicy)
     {
-        var errors = GetAuthenticationConfigurationErrors(candidate)
+        var errors = GetAuthenticationConfigurationErrors(candidate, egressUrlPolicy)
             .Select(error => error.Message)
             .ToArray();
 
@@ -83,11 +87,13 @@ public sealed partial class ClientProviderConnectionsController(
         }
     }
 
-    private static IReadOnlyList<(string PropertyName, string Message)> GetAuthenticationConfigurationErrors(AuthenticationConfigurationCandidate candidate)
+    private static IReadOnlyList<(string PropertyName, string Message)> GetAuthenticationConfigurationErrors(
+        AuthenticationConfigurationCandidate candidate,
+        EgressUrlPolicy egressUrlPolicy)
     {
         var errors = new List<(string PropertyName, string Message)>();
 
-        AddHostUrlAndKindErrors(candidate, errors);
+        AddHostUrlAndKindErrors(candidate, egressUrlPolicy, errors);
         AddOAuthMetadataErrors(candidate, errors);
         AddAzureDevOpsAuthenticationErrors(candidate, errors);
 
@@ -102,8 +108,25 @@ public sealed partial class ClientProviderConnectionsController(
 
     private static void AddHostUrlAndKindErrors(
         AuthenticationConfigurationCandidate candidate,
+        EgressUrlPolicy egressUrlPolicy,
         List<(string PropertyName, string Message)> errors)
     {
+        // Applied where the request puts an address into effect: a create, a patch that moves the connection to a
+        // different address, and a verification the operator asked for. A patch that leaves the stored address
+        // alone is exempt, so a connection saved before the installation tightened its posture can still be
+        // deactivated or otherwise corrected. Such a connection is not reachable in the meantime: the guard on
+        // every provider request and on the mirror fetch refuses the address at connect time.
+        if (candidate.ApplyHostBaseUrlEgressCheck)
+        {
+            var egressRefusal = CreateClientProviderConnectionRequestValidator.GetHostBaseUrlRefusal(
+                egressUrlPolicy,
+                candidate.HostBaseUrl);
+            if (egressRefusal is not null)
+            {
+                errors.Add((nameof(CreateClientProviderConnectionRequest.HostBaseUrl), egressRefusal));
+            }
+        }
+
         if (CreateClientProviderConnectionRequestValidator.RequiresSecureAzureDevOpsServerCredentialHost(
                 candidate.ProviderFamily,
                 candidate.HostBaseUrl,
@@ -657,6 +680,8 @@ public sealed partial class ClientProviderConnectionsController(
         }
 
         var effective = ResolveEffectivePatchAuthentication(request, existing);
+        var hostBaseUrlChanged = request.HostBaseUrl is not null
+                                 && !string.Equals(request.HostBaseUrl, existing.HostBaseUrl, StringComparison.Ordinal);
 
         var supportedAuthenticationValidation = this.ValidateSupportedAuthenticationConfiguration(
             new AuthenticationConfigurationCandidate(
@@ -668,7 +693,8 @@ public sealed partial class ClientProviderConnectionsController(
                 effective.OAuthClientId,
                 effective.GitHubAppId,
                 effective.GitHubAppInstallationId,
-                effective.HasCompatibleSecretMaterial));
+                effective.HasCompatibleSecretMaterial,
+                hostBaseUrlChanged));
         if (supportedAuthenticationValidation is not null)
         {
             return supportedAuthenticationValidation;
@@ -831,7 +857,8 @@ public sealed partial class ClientProviderConnectionsController(
                     connection.OAuthTenantId,
                     connection.OAuthClientId,
                     connection.GitHubAppId,
-                    connection.GitHubAppInstallationId));
+                    connection.GitHubAppInstallationId),
+                egressUrlPolicy);
 
             if (connection.ProviderFamily == ScmProvider.AzureDevOps)
             {
@@ -878,7 +905,12 @@ public sealed partial class ClientProviderConnectionsController(
         return updated is null ? this.NotFound() : this.Ok(await this.EnrichConnectionAsync(clientId, updated, ct));
     }
 
-    /// <summary>The candidate authentication settings evaluated by <see cref="GetAuthenticationConfigurationErrors" />.</summary>
+    /// <summary>
+    ///     The candidate authentication settings evaluated by <see cref="GetAuthenticationConfigurationErrors" />.
+    ///     <see cref="ApplyHostBaseUrlEgressCheck" /> states whether <see cref="HostBaseUrl" /> is measured against
+    ///     the installation's egress policy. It is on for a create and for a verification, and on for a patch only
+    ///     when the patch changes the address.
+    /// </summary>
     private readonly record struct AuthenticationConfigurationCandidate(
         ScmProvider ProviderFamily,
         string HostBaseUrl,
@@ -888,7 +920,8 @@ public sealed partial class ClientProviderConnectionsController(
         string? OAuthClientId,
         long? GitHubAppId = null,
         long? GitHubAppInstallationId = null,
-        bool HasCompatibleSecretMaterial = true);
+        bool HasCompatibleSecretMaterial = true,
+        bool ApplyHostBaseUrlEgressCheck = true);
 
     /// <summary>The resolved authentication settings a PATCH request would apply, merging the request over the existing connection.</summary>
     private readonly record struct EffectivePatchAuthentication(

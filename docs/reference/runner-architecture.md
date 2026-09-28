@@ -12,7 +12,7 @@ are in [configuration.md](../operate/configuration.md), and scaling a fleet is i
 
 A review spends CPU on repository work (clones, worktrees, searches, structural analysis) and time on
 long-lived AI loops. Runners move that work onto hosts you control, so reviewing capacity is something
-you add rather than a control-plane host you resize.
+you can add by deploying more runner hosts.
 
 Three things stay on the control plane:
 
@@ -53,7 +53,7 @@ absence is recorded in the job's protocol.
 
 Three assemblies carry the feature. **Runner.Contracts** is the dependency-free wire vocabulary.
 The **runner host** composes the review pipeline from the same building blocks the control plane uses,
-which is how parity is achieved rather than by re-implementation. The **control plane** gains the lease
+so both hosts execute the same review stages. The **control plane** gains the lease
 machinery and the runner-facing surface, and its in-process execution path is unchanged.
 
 ## Where a review runs
@@ -90,7 +90,7 @@ token, is the kill switch; deletion is refused while a lease is held.
 
 **Disk.** The control plane keeps a mirror and one worktree per dispatched job under the review
 workspace root. The worktree holds the head revision; the target side of the review is read from the
-mirror's object store rather than checked out again. The worktree is removed when the job is released or
+mirror's object store. The worktree is removed when the job is released or
 published, and where that removal fails the directory stays until the retention sweep takes it, so a
 checkout can outlive its review by `REVIEW_WORKSPACE_RETENTION_MINUTES`. The mirror is not removed when
 the job ends: it is kept for the next review of that repository, and evicted only when the mirrors
@@ -107,3 +107,15 @@ If a runner disappears, its lease expires and a sweep reclaims the job and reque
 spends one of the job's reclaim budgets, three consecutive and twelve total by default. Past that the
 job fails with a reason an operator can read. The next attempt reads prior results back and pays only
 for the files that remain.
+
+A runner whose enrollment is refused keeps running and tries again. It waits ten seconds before the
+first retry and doubles the wait up to five minutes, and it logs the refusal the control plane gave
+once per attempt, together with the wait before the next one. An installation that is not licensed for
+distributed execution refuses every enrollment, and a runner started against it works from the attempt
+that follows the licence being activated. A runner started without `RUNNER_REGISTRATION_TOKEN` reports
+that on the same schedule.
+
+A runner removes working copies left by a previous process at startup, before enrollment. It logs
+filesystem cleanup failures and continues. The startup supervisor also contains unexpected cleanup failures
+so enrollment and health reporting can proceed. Give the container's user read and write access to
+`RUNNER_WORK_ROOT` so it can fetch and remove job workspaces.

@@ -122,6 +122,102 @@ describe('TenantSpendSection', () => {
     expect(wrapper.find('[data-testid="reset-note"]').exists()).toBe(false)
   })
 
+  // Both warnings measure against the caps enforcement applies to this aggregate, so they name one source.
+  // A tenant that stated one kind of cap has no ceiling of the other kind, and no warning names it.
+  describe('projection warnings with only a tenant soft cap configured', () => {
+    it('names the tenant as the source of the soft cap it was measured against', async () => {
+      capabilityAvailable = true
+      getTenantBudgetSpendMock.mockResolvedValue({
+        data: {
+          ...spend(),
+          tenantMonthlySoftCapUsd: 120,
+          tenantMonthlyHardCapUsd: null,
+          monthlySoftCapUsd: 200,
+          monthlyHardCapUsd: 300,
+          projectedPeriodSpendUsd: 130,
+        },
+      })
+
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="soft-cap-projection-warning"]').text()).toContain('tenant soft cap')
+    })
+
+    it('offers no hard-cap warning, because the tenant states no hard cap', async () => {
+      capabilityAvailable = true
+      getTenantBudgetSpendMock.mockResolvedValue({
+        data: {
+          ...spend(),
+          tenantMonthlySoftCapUsd: 120,
+          tenantMonthlyHardCapUsd: null,
+          monthlySoftCapUsd: 200,
+          monthlyHardCapUsd: 300,
+          projectedPeriodSpendUsd: 310,
+        },
+      })
+
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="hard-cap-projection-warning"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="soft-cap-projection-warning"]').text()).toContain('tenant soft cap')
+    })
+  })
+
+  describe('projection warnings with only a tenant hard cap configured', () => {
+    it('offers no soft-cap warning, because the tenant states no soft cap', async () => {
+      capabilityAvailable = true
+      getTenantBudgetSpendMock.mockResolvedValue({
+        data: {
+          ...spend(),
+          tenantMonthlySoftCapUsd: null,
+          tenantMonthlyHardCapUsd: 300,
+          monthlySoftCapUsd: 120,
+          monthlyHardCapUsd: 200,
+          projectedPeriodSpendUsd: 130,
+        },
+      })
+
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="soft-cap-projection-warning"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="hard-cap-projection-warning"]').exists()).toBe(false)
+    })
+
+    it('names the tenant as the source of the hard cap it was measured against', async () => {
+      capabilityAvailable = true
+      getTenantBudgetSpendMock.mockResolvedValue({
+        data: {
+          ...spend(),
+          tenantMonthlySoftCapUsd: null,
+          tenantMonthlyHardCapUsd: 300,
+          monthlySoftCapUsd: 120,
+          monthlyHardCapUsd: 200,
+          projectedPeriodSpendUsd: 310,
+        },
+      })
+
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="hard-cap-projection-warning"]').text()).toContain('tenant hard cap')
+    })
+  })
+
+  it('names the summed client caps when the tenant states neither cap', async () => {
+    capabilityAvailable = true
+    getTenantBudgetSpendMock.mockResolvedValue({
+      data: { ...spend(), monthlySoftCapUsd: 120, monthlyHardCapUsd: 200, projectedPeriodSpendUsd: 210 },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="hard-cap-projection-warning"]').text()).toContain('summed hard cap')
+  })
+
   it('offers no reset action, because the tenant page is an aggregate', async () => {
     capabilityAvailable = true
     getTenantBudgetSpendMock.mockResolvedValue({ data: { ...spend(), resetCount: 1 } })

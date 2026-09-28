@@ -70,6 +70,19 @@ public sealed class ReviewWorkspaceOptions : IValidatableObject
     public int MaxCacheSizeMegabytes { get; set; } = 4096;
 
     /// <summary>
+    ///     Gets or sets how long a repository mirror is kept after the last fetch into it. The cleanup sweep
+    ///     removes a mirror older than this whatever the cache holds in total, and leaves one a running review
+    ///     holds. The next review of that repository fetches it from the start.
+    /// </summary>
+    /// <remarks>
+    ///     The size bound alone keeps a mirror of a repository nobody reviews any more for as long as the
+    ///     cache stays under its budget, which on a large disk is indefinitely. This bounds how long an
+    ///     installation keeps a copy of a repository no review has asked for.
+    /// </remarks>
+    [Range(1, 365)]
+    public int MirrorRetentionDays { get; set; } = 7;
+
+    /// <summary>
     ///     Gets or sets the maximum number of concurrent workspace preparation operations. Each preparation
     ///     fetches into a mirror and writes a full checkout, so this bounds how much of the workspace disk is
     ///     being written at once.

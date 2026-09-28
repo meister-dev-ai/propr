@@ -259,11 +259,15 @@ public sealed class ThreadPassJob
     }
 
     /// <summary>Records the cap that stopped this pass, so an operator can see why it did not run.</summary>
-    /// <param name="scope">The scope whose cap was reached.</param>
+    /// <param name="scope">The scope whose cap was reached, or null where the refusal named none.</param>
     /// <param name="capKind">Whether the cap was soft or hard.</param>
-    /// <param name="thresholdUsd">The configured cap.</param>
-    /// <param name="spentUsd">What the scope had spent.</param>
-    public void SetBudgetBlock(BudgetScopeKind scope, BudgetCapKind capKind, decimal thresholdUsd, decimal spentUsd)
+    /// <param name="thresholdUsd">The configured cap, or null where the refusal named none.</param>
+    /// <param name="spentUsd">What the scope had spent, or null where the refusal named no cap.</param>
+    public void SetBudgetBlock(
+        BudgetScopeKind? scope,
+        BudgetCapKind capKind,
+        decimal? thresholdUsd,
+        decimal? spentUsd)
     {
         this.BudgetBlockScope = scope;
         this.BudgetBlockCapKind = capKind;

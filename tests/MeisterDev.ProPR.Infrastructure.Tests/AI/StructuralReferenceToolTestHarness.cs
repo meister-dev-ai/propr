@@ -86,6 +86,18 @@ internal static class StructuralReferenceToolTestHarness
             return Task.FromResult(files.TryGetValue(path, out var content) ? content : null);
         }
 
+        /// <summary>What a measurement of this workspace answers, so a test can put it either side of a bound.</summary>
+        public int ChangedLines { get; set; }
+
+        public long DiffBytes { get; set; }
+
+        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
+            Task.FromResult(this.ChangedLines);
+
+        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
+            Task.FromResult(this.DiffBytes);
+
+
         public Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
         {
             return Task.FromResult<string?>(null);

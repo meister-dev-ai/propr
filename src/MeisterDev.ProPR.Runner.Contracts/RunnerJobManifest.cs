@@ -132,13 +132,22 @@ public sealed record RunnerLinkedItemRef(
 /// <param name="IncludeLinkedItemsInContext">Whether linked work items and issues are offered to the review.</param>
 /// <param name="Temperature">The review temperature, when the job pins one.</param>
 /// <param name="ReviewPipelineProfileId">The pipeline profile the review runs under, when one is configured.</param>
+/// <param name="CaptureReasoning">
+///     Whether this job may record the model's reasoning into the trace and ask the provider for a reasoning
+///     summary. Reasoning can contain verbatim source, so the decision belongs to the tenant that owns the job
+///     and is made on the control plane. Null from an older control plane leaves the runner's own switch in
+///     charge, which is how the review behaved before the field existed.
+/// </param>
 public sealed record RunnerReviewBehaviour(
     bool EnableMultiPassUnion,
     bool EnableLanguageRobustScreening,
     bool EnableEvidenceBackedVerification,
     bool IncludeLinkedItemsInContext,
     float? Temperature,
-    string? ReviewPipelineProfileId);
+    string? ReviewPipelineProfileId,
+    bool? CaptureReasoning = null,
+    int? MaxFileSizeBytes = null,
+    int? MaxStructuralParseBytes = null);
 
 /// <summary>
 ///     One repository instruction, carried whole. Flattening these into a single blob would lose the

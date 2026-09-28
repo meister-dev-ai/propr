@@ -6,6 +6,9 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using System.Net;
+using MeisterDev.Ai.Providers.Egress;
+using MeisterDev.ProPR.Infrastructure.Egress;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Workspace;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -476,6 +479,35 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
         }
     }
 
+    // The measurements name the revisions the lease was taken for, so they describe the same pair as the
+    // diff the reviewer is sent. Reading them from the checkout's own HEAD would make them depend on what
+    // the working directory happens to point at.
+    [Fact]
+    public async Task Workspace_MeasuresTheLeasedRevisionPair_WhenTheCheckoutPointsElsewhere()
+    {
+        var manager = this.CreateManager();
+        var result = await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+        var workspace = result.Workspace!;
+
+        try
+        {
+            // The checkout is moved off the leased head, as a detached worktree can be.
+            await GitAsync(workspace.Lease.HeadWorkspacePath, "checkout", "--detach", this._baseSha);
+
+            var changed = await workspace.GetChangedFilesAsync(CancellationToken.None);
+            Assert.Equal(
+                [("added.txt", ChangeType.Add), ("changed.txt", ChangeType.Edit)],
+                changed.Select(file => (file.Path, file.ChangeType)).OrderBy(file => file.Path).ToArray());
+
+            // One line removed and one added in changed.txt, plus the one line of added.txt.
+            Assert.Equal(3, await workspace.CountChangedLinesAsync(["changed.txt", "added.txt"], CancellationToken.None));
+        }
+        finally
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
     [Fact]
     public async Task PrepareAsync_RepacksAMirrorThatHasAccumulatedPackfiles()
     {
@@ -640,7 +672,9 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(Directory.GetDirectories(this.MirrorsRoot).Single(), "shallow")));
     }
 
-    private ReviewRepositoryWorkspaceRequest CreateRequest(Guid jobId)
+    /// <param name="jobId">The job the workspace is prepared for.</param>
+    /// <param name="maxRepositoryMegabytes">The client's repository-size bound, or null for an unbounded client.</param>
+    private ReviewRepositoryWorkspaceRequest CreateRequest(Guid jobId, int? maxRepositoryMegabytes = null)
     {
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
         var repository = new RepositoryRef(host, "1", "acme", "acme/propr");
@@ -653,10 +687,45 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
             42,
             new ReviewRevision(this._headSha, this._baseSha, null, null, null),
             "feature/change",
-            "main");
+            "main",
+            MaxRepositoryMegabytes: maxRepositoryMegabytes);
     }
 
-    private GitReviewRepositoryWorkspaceManager CreateManager(ReviewWorkspaceOptions? options = null)
+    [Fact]
+    public async Task PrepareAsync_RemoteResolvingToAPrivateAddress_FailsBeforeGitRuns()
+    {
+        var git = new RecordingGitCommandRunner();
+        var resolver = new FixedHostResolver(IPAddress.Parse("10.4.1.7"));
+        var manager = this.CreateManager(
+            remoteUrl: "https://git.internal.example/acme/propr.git",
+            hostResolver: resolver,
+            gitCommandRunner: git);
+
+        var result = await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Null(result.Workspace);
+        Assert.NotNull(result.Failure);
+        Assert.Equal("blocked_egress_address", result.Failure.Code);
+        Assert.False(result.Failure.Retryable);
+        Assert.Contains(EgressUrlPolicy.PrivateEgressOptIn, result.Failure.Message, StringComparison.Ordinal);
+
+        // The remote's own host was the one classified, and git never ran.
+        Assert.Equal(["git.internal.example"], resolver.RequestedHosts);
+        Assert.Empty(git.Invocations);
+    }
+
+    /// <param name="samplingInterval">
+    ///     How often the repository-size watch measures the directory git is writing into. A case that has to
+    ///     see the watch stop a command shortens it, because the commands here run for a fraction of the
+    ///     second the composition waits between two measurements.
+    /// </param>
+    private GitReviewRepositoryWorkspaceManager CreateManager(
+        ReviewWorkspaceOptions? options = null,
+        string? remoteUrl = null,
+        IOutboundHostResolver? hostResolver = null,
+        EgressUrlPolicy? egressUrlPolicy = null,
+        GitCommandRunner? gitCommandRunner = null,
+        TimeSpan? samplingInterval = null)
     {
         var resolved = Microsoft.Extensions.Options.Options.Create(options ?? new ReviewWorkspaceOptions { RootPath = this._root });
         var remoteResolver = Substitute.For<IReviewWorkspaceRemoteResolver>();
@@ -664,19 +733,473 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
             .Returns(
                 new ReviewWorkspaceRemoteRef(
                     ScmProvider.GitHub,
-                    this._originPath,
+                    remoteUrl ?? this._originPath,
                     ["+refs/heads/*:refs/remotes/origin/*"],
                     "acme/propr",
                     "credential-scope",
                     SupportsLocalFetch: true));
 
+        // The strict posture, so the remote of every other test passes a guard that is switched on.
+        var guard = new OutboundHostGuard(
+            egressUrlPolicy ?? EgressUrlPolicy.Locked,
+            hostResolver ?? new UnreachableHostResolver());
+
         return new GitReviewRepositoryWorkspaceManager(
             resolved,
             remoteResolver,
-            new GitCommandRunner(NullLogger<GitCommandRunner>.Instance),
+            gitCommandRunner ?? new GitCommandRunner(NullLogger<GitCommandRunner>.Instance),
             new ReviewWorkspaceCleanupService(resolved, NullLogger<ReviewWorkspaceCleanupService>.Instance),
             new ReviewWorkspacePreparationThrottle(resolved),
-            NullLogger<GitReviewRepositoryWorkspaceManager>.Instance);
+            guard,
+            NullLogger<GitReviewRepositoryWorkspaceManager>.Instance)
+        {
+            SizeSamplingInterval = samplingInterval ?? TimeSpan.FromSeconds(1),
+        };
+    }
+
+    // git resolves the remote itself when it connects, so the addresses the guard classified are put in front
+    // of that resolution. Without them a name rebound between the check and the fetch reaches an address this
+    // installation refuses.
+    [Theory]
+    [InlineData("https://git.example.com/acme/propr.git", "git.example.com:443:93.184.216.34")]
+    [InlineData("https://git.example.com:8443/acme/propr.git", "git.example.com:8443:93.184.216.34")]
+    public async Task PrepareAsync_PinsTheApprovedAddressOnTheFetch(string remoteUrl, string expectedEntry)
+    {
+        var git = new RecordingGitCommandRunner();
+        var resolver = new FixedHostResolver(IPAddress.Parse("93.184.216.34"));
+        var manager = this.CreateManager(
+            remoteUrl: remoteUrl,
+            hostResolver: resolver,
+            gitCommandRunner: git);
+
+        await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        // The ordered prefix, so the configuration is shown to reach git as options of the fetch and not as
+        // arguments somewhere after the subcommand, where git would read them as refspecs.
+        var fetch = git.Invocations.Single(arguments => arguments.Contains("fetch"));
+        Assert.Equal(["git.example.com"], resolver.RequestedHosts);
+        Assert.Equal(
+            ["-c", "http.followRedirects=false", "-c", $"http.curloptResolve={expectedEntry}", "fetch"],
+            fetch.Take(5));
+    }
+
+    // A server answering with a redirect to another host would send git to an address nothing classified, so
+    // every command that reaches the remote carries the option that refuses one.
+    [Fact]
+    public async Task PrepareAsync_CarriesTheRedirectRefusalOnEveryCommandThatReachesTheRemote()
+    {
+        var git = new RecordingGitCommandRunner();
+        var manager = this.CreateManager(
+            remoteUrl: "https://git.example.com/acme/propr.git",
+            hostResolver: new FixedHostResolver(IPAddress.Parse("93.184.216.34")),
+            gitCommandRunner: git);
+
+        await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        var fetch = git.Invocations.Single(arguments => arguments.Contains("fetch"));
+        var checkout = git.Invocations.Single(arguments => arguments.Contains("add") && arguments.Contains("worktree"));
+
+        Assert.Contains("http.followRedirects=false", fetch);
+        Assert.Contains("http.followRedirects=false", checkout);
+    }
+
+    // What the option does when a server answers with a 3xx: git fails the command, and the preparation
+    // reports that failure instead of fetching from wherever the redirect pointed.
+    [Fact]
+    public async Task PrepareAsync_WhenTheRemoteAnswersTheFetchWithARedirect_Fails()
+    {
+        var git = new RecordingGitCommandRunner(RefuseARedirectOnTheFetch);
+        var manager = this.CreateManager(
+            remoteUrl: "https://git.example.com/acme/propr.git",
+            hostResolver: new FixedHostResolver(IPAddress.Parse("93.184.216.34")),
+            gitCommandRunner: git);
+
+        var result = await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Null(result.Workspace);
+        Assert.NotNull(result.Failure);
+        Assert.Contains("unable to update url base from redirection", result.Failure.Message, StringComparison.Ordinal);
+
+        // The fetch is where it stopped, so nothing reached the remote afterwards.
+        Assert.DoesNotContain(git.Invocations, arguments => arguments.Contains("worktree") && arguments.Contains("add"));
+    }
+
+    /// <summary>
+    ///     Answers a fetch the way git does when it refuses a redirect, and only where the command carries the
+    ///     option that refuses one. A runner that failed without it would leave the option untested.
+    /// </summary>
+    /// <param name="arguments">The arguments of one invocation.</param>
+    private static GitCommandResult? RefuseARedirectOnTheFetch(IReadOnlyList<string> arguments)
+    {
+        return arguments.Contains("fetch") && arguments.Contains("http.followRedirects=false")
+            ? new GitCommandResult(128, string.Empty, "fatal: unable to update url base from redirection")
+            : null;
+    }
+
+    // The scheme is not an address, so it is decided before anything is resolved: the credential git sends
+    // with every request would otherwise cross the internet in the clear.
+    [Fact]
+    public async Task PrepareAsync_APublicRemoteOverPlainHttp_FailsBeforeGitRuns()
+    {
+        var git = new RecordingGitCommandRunner();
+        var manager = this.CreateManager(
+            remoteUrl: "http://git.example.com/acme/propr.git",
+            gitCommandRunner: git);
+
+        var result = await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Null(result.Workspace);
+        Assert.NotNull(result.Failure);
+        Assert.Equal("blocked_egress_address", result.Failure.Code);
+        Assert.False(result.Failure.Retryable);
+        Assert.Contains("https", result.Failure.Message, StringComparison.Ordinal);
+        Assert.Empty(git.Invocations);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_PinsEveryAddressTheHostResolvesTo()
+    {
+        var git = new RecordingGitCommandRunner();
+        var manager = this.CreateManager(
+            remoteUrl: "https://git.example.com/acme/propr.git",
+            hostResolver: new FixedHostResolver(
+                IPAddress.Parse("93.184.216.34"),
+                IPAddress.Parse("2606:2800:220:1:248:1893:25c8:1946")),
+            gitCommandRunner: git);
+
+        await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        var fetch = git.Invocations.Single(arguments => arguments.Contains("fetch"));
+        Assert.Contains(
+            "http.curloptResolve=git.example.com:443:93.184.216.34,[2606:2800:220:1:248:1893:25c8:1946]",
+            fetch);
+    }
+
+    // The checkout of a partial clone downloads file contents from the same remote, so it connects to the
+    // same approved addresses.
+    [Fact]
+    public async Task PrepareAsync_PinsTheApprovedAddressOnTheCheckout()
+    {
+        var git = new RecordingGitCommandRunner();
+        var manager = this.CreateManager(
+            remoteUrl: "https://git.example.com/acme/propr.git",
+            hostResolver: new FixedHostResolver(IPAddress.Parse("93.184.216.34")),
+            gitCommandRunner: git);
+
+        await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        // The ordered prefix, so the configuration is shown to reach git as options of the checkout and not
+        // as arguments after the subcommand, where git would read them as paths.
+        var checkout = git.Invocations.Single(arguments => arguments.Contains("add") && arguments.Contains("worktree"));
+        Assert.Equal(
+            ["-c", "http.followRedirects=false", "-c", "http.curloptResolve=git.example.com:443:93.184.216.34", "worktree"],
+            checkout.Take(5));
+    }
+
+    // The opt-in leaves no address to pin, and a redirect off the remote still reaches a host nothing
+    // classified, so the refusal stays on the command line.
+    [Fact]
+    public async Task PrepareAsync_WithTheOptIn_PinsNothingAndStillRefusesARedirect()
+    {
+        var git = new RecordingGitCommandRunner();
+        var manager = this.CreateManager(
+            remoteUrl: "https://git.internal.example/acme/propr.git",
+            egressUrlPolicy: new EgressUrlPolicy(AllowPrivateEgress: true, AllowInsecureScheme: false),
+            gitCommandRunner: git);
+
+        await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        var fetch = git.Invocations.Single(arguments => arguments.Contains("fetch"));
+        Assert.Contains("http.followRedirects=false", fetch);
+        Assert.DoesNotContain(
+            git.Invocations.SelectMany(arguments => arguments),
+            argument => argument.StartsWith("http.curloptResolve", StringComparison.Ordinal));
+    }
+
+    // A literal address is what git connects to; there is no second resolution to put anything in front of.
+    // A redirect off it still leaves that address, so the refusal stays.
+    [Fact]
+    public async Task PrepareAsync_ARemoteOnALiteralAddress_PinsNothingAndStillRefusesARedirect()
+    {
+        var git = new RecordingGitCommandRunner();
+        var manager = this.CreateManager(
+            remoteUrl: "https://93.184.216.34/acme/propr.git",
+            hostResolver: new FixedHostResolver(IPAddress.Parse("93.184.216.34")),
+            gitCommandRunner: git);
+
+        await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        var fetch = git.Invocations.Single(arguments => arguments.Contains("fetch"));
+        Assert.Contains("http.followRedirects=false", fetch);
+        Assert.DoesNotContain(
+            git.Invocations.SelectMany(arguments => arguments),
+            argument => argument.StartsWith("http.curloptResolve", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    ///     Records what each git command was given and answers as a command that succeeded with no output, so
+    ///     the arguments a preparation builds are read without a repository or a server behind them.
+    /// </summary>
+    /// <param name="answer">
+    ///     What one invocation answers, where a case needs a command to fail. Invocations it answers
+    ///     <see langword="null" /> for succeed with no output.
+    /// </param>
+    private sealed class RecordingGitCommandRunner(Func<IReadOnlyList<string>, GitCommandResult?>? answer = null)
+        : GitCommandRunner(NullLogger<GitCommandRunner>.Instance)
+    {
+        public List<IReadOnlyList<string>> Invocations { get; } = [];
+
+        public override Task<GitCommandResult> RunAsync(
+            string workingDirectory,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string?>? environment,
+            CancellationToken ct,
+            bool preserveStandardOutput = false)
+        {
+            this.Invocations.Add([.. arguments]);
+
+            return Task.FromResult(answer?.Invoke(arguments) ?? new GitCommandResult(0, string.Empty, string.Empty));
+        }
+    }
+
+    /// <summary>
+    ///     Records what each git command was given and runs it, so a case can assert which commands a
+    ///     preparation reached while git still does the work the case reads afterwards.
+    /// </summary>
+    private sealed class TrackingGitCommandRunner() : GitCommandRunner(NullLogger<GitCommandRunner>.Instance)
+    {
+        public List<IReadOnlyList<string>> Invocations { get; } = [];
+
+        public override Task<GitCommandResult> RunAsync(
+            string workingDirectory,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string?>? environment,
+            CancellationToken ct,
+            bool preserveStandardOutput = false)
+        {
+            this.Invocations.Add([.. arguments]);
+
+            return base.RunAsync(workingDirectory, arguments, environment, ct, preserveStandardOutput);
+        }
+    }
+
+    /// <summary>A resolver that fails the test if a remote these cases use ever needs a host resolved.</summary>
+    private sealed class UnreachableHostResolver : IOutboundHostResolver
+    {
+        public Task<IPAddress[]> ResolveAsync(string host, CancellationToken ct)
+        {
+            throw new InvalidOperationException($"A local remote must not be resolved, and '{host}' was.");
+        }
+    }
+
+    /// <summary>
+    ///     A resolver answering with fixed addresses, standing in for a name server, and recording what it was
+    ///     asked for so a test can tell the remote's host from any other.
+    /// </summary>
+    private sealed class FixedHostResolver(params IPAddress[] addresses) : IOutboundHostResolver
+    {
+        public List<string> RequestedHosts { get; } = [];
+
+        public Task<IPAddress[]> ResolveAsync(string host, CancellationToken ct)
+        {
+            this.RequestedHosts.Add(host);
+
+            return Task.FromResult(addresses);
+        }
+    }
+
+    /// <summary>
+    ///     The repository-size bound is enforced where the bytes arrive: the fetch is stopped partway and what
+    ///     it had written is removed, so a repository this client will not review leaves nothing in the cache.
+    /// </summary>
+    [Fact]
+    public async Task PrepareAsync_WhenTheMirrorPassesTheRepositorySizeLimit_StopsTheFetchAndRemovesTheMirror()
+    {
+        await this.AddIncompressibleCommitAsync(24);
+        var manager = this.CreateManager(samplingInterval: TimeSpan.FromMilliseconds(5));
+
+        var result = await manager.PrepareAsync(
+            this.CreateRequest(Guid.NewGuid(), maxRepositoryMegabytes: 1),
+            CancellationToken.None);
+
+        Assert.Null(result.Workspace);
+        Assert.NotNull(result.Failure);
+        Assert.False(result.Failure.Retryable);
+
+        var breach = result.Failure.RepositorySizeBreach;
+        Assert.NotNull(breach);
+        Assert.Equal(1, breach.LimitMegabytes);
+        Assert.True(
+            breach.MeasuredMegabytes > breach.LimitMegabytes,
+            $"the measured size was {breach.MeasuredMegabytes} MB and the limit {breach.LimitMegabytes} MB");
+
+        Assert.Empty(Directory.GetDirectories(this.MirrorsRoot));
+    }
+
+    /// <summary>
+    ///     A transfer that starts and ends between two samples is never sampled. The bound holds for it
+    ///     because the directory is measured again once the command has returned.
+    /// </summary>
+    [Fact]
+    public async Task PrepareAsync_WhenTheFetchEndsBeforeTheFirstSample_RefusesTheRepository()
+    {
+        await this.AddIncompressibleCommitAsync(4);
+
+        // The sampling interval outlasts the whole preparation, so no sample can fire and the measurement
+        // taken after the fetch returned is the one that has to refuse the repository.
+        var manager = this.CreateManager(samplingInterval: TimeSpan.FromMinutes(5));
+
+        var result = await manager.PrepareAsync(
+            this.CreateRequest(Guid.NewGuid(), maxRepositoryMegabytes: 1),
+            CancellationToken.None);
+
+        Assert.Null(result.Workspace);
+        Assert.NotNull(result.Failure);
+        Assert.False(result.Failure.Retryable);
+
+        var breach = result.Failure.RepositorySizeBreach;
+        Assert.NotNull(breach);
+        Assert.Equal(1, breach.LimitMegabytes);
+        Assert.True(
+            breach.MeasuredMegabytes > breach.LimitMegabytes,
+            $"the measured size was {breach.MeasuredMegabytes} MB and the limit {breach.LimitMegabytes} MB");
+    }
+
+    /// <summary>
+    ///     A mirror fetched for a client with a higher bound stays on disk. A client whose bound the mirror
+    ///     passes is refused from the size the mirror has now, without transferring anything.
+    /// </summary>
+    [Fact]
+    public async Task PrepareAsync_WhenTheMirrorOnDiskAlreadyPassesTheLimit_RefusesBeforeTheFetch()
+    {
+        await this.AddIncompressibleCommitAsync(4);
+        var git = new TrackingGitCommandRunner();
+
+        var prepared = await this.CreateManager(gitCommandRunner: git).PrepareAsync(
+            this.CreateRequest(Guid.NewGuid(), maxRepositoryMegabytes: 64),
+            CancellationToken.None);
+        Assert.Null(prepared.Failure);
+        Assert.NotNull(prepared.Workspace);
+        await prepared.Workspace.DisposeAsync();
+
+        git.Invocations.Clear();
+        var result = await this.CreateManager(gitCommandRunner: git).PrepareAsync(
+            this.CreateRequest(Guid.NewGuid(), maxRepositoryMegabytes: 1),
+            CancellationToken.None);
+
+        Assert.Null(result.Workspace);
+        Assert.NotNull(result.Failure);
+        Assert.False(result.Failure.Retryable);
+
+        var breach = result.Failure.RepositorySizeBreach;
+        Assert.NotNull(breach);
+        Assert.Equal(1, breach.LimitMegabytes);
+        Assert.True(
+            breach.MeasuredMegabytes > breach.LimitMegabytes,
+            $"the measured size was {breach.MeasuredMegabytes} MB and the limit {breach.LimitMegabytes} MB");
+
+        // No transfer ran, and the mirror is left for the clients whose bound it fits.
+        Assert.DoesNotContain(git.Invocations, arguments => arguments.Contains("fetch"));
+        Assert.NotEmpty(Directory.GetDirectories(this.MirrorsRoot));
+    }
+
+    [Fact]
+    public async Task PrepareAsync_WithARepositoryUnderTheLimit_PreparesTheWorkspace()
+    {
+        var manager = this.CreateManager(samplingInterval: TimeSpan.FromMilliseconds(5));
+
+        var result = await manager.PrepareAsync(
+            this.CreateRequest(Guid.NewGuid(), maxRepositoryMegabytes: 64),
+            CancellationToken.None);
+
+        Assert.Null(result.Failure);
+        Assert.NotNull(result.Workspace);
+        Assert.Equal(
+            "after\n",
+            await result.Workspace.ReadFileAsync("changed.txt", RepositorySearchBranchSides.Source, CancellationToken.None));
+
+        await result.Workspace.DisposeAsync();
+    }
+
+    /// <summary>
+    ///     The checkout is the second point at which a repository's size reaches this host, and a mirror that
+    ///     passed the bound can still write a working copy that does not.
+    /// </summary>
+    [Fact]
+    public async Task PrepareAsync_WhenTheCheckoutPassesTheRepositorySizeLimit_StopsItAndRemovesTheWorktree()
+    {
+        // Text that repeats, so the fetched objects stay far under the bound and the working copy git writes
+        // from them passes it. The checkout is then the step that has to be stopped.
+        await this.AddCompressibleCommitAsync(48);
+        var manager = this.CreateManager(samplingInterval: TimeSpan.FromMilliseconds(5));
+
+        var result = await manager.PrepareAsync(
+            this.CreateRequest(Guid.NewGuid(), maxRepositoryMegabytes: 8),
+            CancellationToken.None);
+
+        Assert.Null(result.Workspace);
+        Assert.NotNull(result.Failure);
+
+        var breach = result.Failure.RepositorySizeBreach;
+        Assert.NotNull(breach);
+        Assert.Equal(8, breach.LimitMegabytes);
+        Assert.True(
+            breach.MeasuredMegabytes > breach.LimitMegabytes,
+            $"the measured size was {breach.MeasuredMegabytes} MB and the limit {breach.LimitMegabytes} MB");
+
+        // The checkout is gone, and the mirror stays: it was fetched under the bound and is the cache the
+        // next review of this repository reuses.
+        Assert.Empty(Directory.GetDirectories(this.WorkspacesRoot));
+        Assert.NotEmpty(Directory.GetDirectories(this.MirrorsRoot));
+    }
+
+    // A client that set no bound has every command run without a watch on it.
+    [Fact]
+    public async Task PrepareAsync_WithoutARepositorySizeLimit_PreparesARepositoryOfAnySize()
+    {
+        await this.AddIncompressibleCommitAsync(8);
+        var manager = this.CreateManager(samplingInterval: TimeSpan.FromMilliseconds(5));
+
+        var result = await manager.PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Null(result.Failure);
+        Assert.NotNull(result.Workspace);
+        await result.Workspace.DisposeAsync();
+    }
+
+    /// <summary>
+    ///     Commits data that does not compress, so the objects the fetch transfers are about as large as the
+    ///     file and the mirror grows past a small bound.
+    /// </summary>
+    /// <param name="megabytes">How much data to commit.</param>
+    private async Task AddIncompressibleCommitAsync(int megabytes)
+    {
+        var content = new byte[megabytes * 1024 * 1024];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(content);
+        await File.WriteAllBytesAsync(Path.Combine(this._originPath, "bulk.bin"), content);
+        await this.CommitOriginAsync("bulk");
+    }
+
+    /// <summary>
+    ///     Commits text that repeats, so the objects the fetch transfers are a fraction of the file and only
+    ///     the working copy the checkout writes passes a small bound.
+    /// </summary>
+    /// <param name="megabytes">How much text to commit.</param>
+    private async Task AddCompressibleCommitAsync(int megabytes)
+    {
+        var line = new string('a', 1023) + "\n";
+        var content = string.Concat(Enumerable.Repeat(line, megabytes * 1024));
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "bulk.txt"), content);
+        await this.CommitOriginAsync("bulk");
+    }
+
+    /// <summary>Commits what is in the origin's working tree and moves the reviewed head onto it.</summary>
+    /// <param name="message">The commit message.</param>
+    private async Task CommitOriginAsync(string message)
+    {
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", message);
+        this._headSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
     }
 
     /// <summary>Fetches one new commit at a time until the mirror holds more than <paramref name="count" /> packfiles.</summary>

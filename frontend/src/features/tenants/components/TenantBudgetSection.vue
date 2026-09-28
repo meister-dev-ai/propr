@@ -7,6 +7,92 @@
         <section class="section-card">
             <div class="section-card-header">
                 <div>
+                    <h2>Tenant caps</h2>
+                    <p class="section-subtitle">
+                        Monthly USD caps on the spend of every client in this tenant. The soft cap holds new
+                        reviews once the tenant's month-to-date spend reaches it; the hard cap cuts further model
+                        calls. Leave a field blank for no limit. A client cap that is tighter binds first, and
+                        raising a cap is how a tenant is given more room this month.
+                    </p>
+                </div>
+            </div>
+
+            <div class="section-card-body">
+                <p v-if="!isBudgetingAvailable" class="muted-hint">
+                    {{ budgetingUpgradeMessage || 'Budgeting requires a commercial license.' }}
+                </p>
+
+                <template v-else>
+                    <p v-if="caps.error.value" class="error" data-testid="tenant-caps-error">{{ caps.error.value }}</p>
+
+                    <p v-if="caps.loading.value && caps.tenant.value === null" class="muted-hint">
+                        Loading tenant caps…
+                    </p>
+
+                    <!-- No tenant was loaded, so the stored caps are unknown. The edit form would show blank
+                         fields, which read as "no limit", and the readout would show "No limit" for both. -->
+                    <template v-else-if="caps.tenant.value === null">
+                        <p class="muted-hint" data-testid="tenant-caps-unavailable">
+                            The tenant caps could not be loaded, so they cannot be shown or changed.
+                        </p>
+                        <div class="caps-actions">
+                            <button class="btn-secondary btn-sm" type="button" data-testid="tenant-caps-retry"
+                                :disabled="caps.loading.value" @click="caps.loadCaps()">
+                                Try again
+                            </button>
+                        </div>
+                    </template>
+
+                    <template v-else-if="canEditCaps">
+                        <fieldset class="caps-grid" :disabled="caps.loading.value || caps.saving.value">
+                            <div class="form-field">
+                                <label for="tenantMonthlySoftCapUsd">Monthly soft cap (USD)</label>
+                                <input id="tenantMonthlySoftCapUsd" v-model="caps.editedSoftCapUsd.value"
+                                    data-testid="tenant-soft-cap" name="tenantMonthlySoftCapUsd" type="number" min="0"
+                                    step="0.01" placeholder="No limit" />
+                            </div>
+                            <div class="form-field">
+                                <label for="tenantMonthlyHardCapUsd">Monthly hard cap (USD)</label>
+                                <input id="tenantMonthlyHardCapUsd" v-model="caps.editedHardCapUsd.value"
+                                    data-testid="tenant-hard-cap" name="tenantMonthlyHardCapUsd" type="number" min="0"
+                                    step="0.01" placeholder="No limit" />
+                            </div>
+                        </fieldset>
+
+                        <p v-if="caps.validationError.value" class="error" data-testid="tenant-caps-validation">
+                            {{ caps.validationError.value }}
+                        </p>
+
+                        <div class="caps-actions">
+                            <button class="btn-primary btn-sm" type="button" data-testid="tenant-caps-save"
+                                :disabled="!caps.isSaveEnabled()" @click="caps.saveCaps()">
+                                {{ caps.saving.value ? 'Saving…' : 'Save' }}
+                            </button>
+                        </div>
+                    </template>
+
+                    <template v-else>
+                        <p class="muted-hint" data-testid="tenant-caps-readonly">
+                            {{ capsReadOnlyReason }}
+                        </p>
+                        <dl class="caps-readout">
+                            <div>
+                                <dt>Monthly soft cap (USD)</dt>
+                                <dd data-testid="tenant-soft-cap-readout">{{ softCapReadout }}</dd>
+                            </div>
+                            <div>
+                                <dt>Monthly hard cap (USD)</dt>
+                                <dd data-testid="tenant-hard-cap-readout">{{ hardCapReadout }}</dd>
+                            </div>
+                        </dl>
+                    </template>
+                </template>
+            </div>
+        </section>
+
+        <section class="section-card">
+            <div class="section-card-header">
+                <div>
                     <h2>Budget</h2>
                     <p class="section-subtitle">
                         Current-period USD spend against budget for every client in this tenant. Spend resets each month.
@@ -91,25 +177,47 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
 import { formatUsd } from '@/components/usageDashboardFormatters'
+import { RoleLevel } from '@/composables/roles'
 import { useSession } from '@/composables/useSession'
 import BudgetMeter from '@/features/clients/components/BudgetMeter.vue'
 import {
     useTenantBudgetOverview,
     type OverviewRow,
 } from '@/features/tenants/view-models/useTenantBudgetOverview'
+import { useTenantBudgetCaps } from '@/features/tenants/view-models/useTenantBudgetCaps'
 
 const route = useRoute()
 const tenantId = String(route.params.tenantId ?? '')
 
-const { getCapability, isCapabilityAvailable } = useSession()
+const { getCapability, hasTenantRole, isCapabilityAvailable } = useSession()
 const isBudgetingAvailable = computed(() => isCapabilityAvailable('budgeting'))
 const budgetingUpgradeMessage = computed(() => getCapability('budgeting')?.message ?? '')
 
 const vm = useTenantBudgetOverview(tenantId)
+const caps = useTenantBudgetCaps(tenantId)
+
+// The patch endpoint requires the tenant-administrator role and refuses the System tenant, so a viewer who
+// cannot pass either check reads the caps instead of filling in a form whose save would be rejected.
+const isTenantAdministrator = computed(() => hasTenantRole(tenantId, RoleLevel.Administrator))
+const isTenantEditable = computed(() => caps.tenant.value?.isEditable !== false)
+const canEditCaps = computed(() => isTenantAdministrator.value && isTenantEditable.value)
+
+const capsReadOnlyReason = computed(() =>
+    isTenantAdministrator.value
+        ? 'The System tenant is managed internally, so its caps cannot be changed.'
+        : 'Changing the tenant caps requires the tenant administrator role.',
+)
+
+const softCapReadout = computed(() => formatCap(caps.tenant.value?.budget?.monthlySoftCapUsd))
+const hardCapReadout = computed(() => formatCap(caps.tenant.value?.budget?.monthlyHardCapUsd))
+
+function formatCap(value: number | null | undefined): string {
+    return value == null ? 'No limit' : formatUsd(value)
+}
 
 const pendingReset = ref<OverviewRow | null>(null)
 
@@ -150,14 +258,64 @@ function formatDate(value: string | null | undefined): string {
         : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
+// Both cards on this page are gated on the same capability, so they are read together wherever that gate
+// opens.
+function loadBudgetSections(): void {
+    vm.loadOverview().catch(console.error)
+    caps.loadCaps().catch(console.error)
+}
+
 onMounted(() => {
     if (isBudgetingAvailable.value) {
-        vm.loadOverview().catch(console.error)
+        loadBudgetSections()
+    }
+})
+
+// The capabilities are read from /auth/me after this section mounts, so on a cold load budgeting is still
+// unavailable at the mount and neither card is read. Reading both when the capability turns available shows
+// the budget overview and the stored caps without a reload.
+watch(isBudgetingAvailable, (available, wasAvailable) => {
+    if (available && !wasAvailable) {
+        loadBudgetSections()
     }
 })
 </script>
 
 <style scoped>
+.caps-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem 1rem;
+    /* Reset the fieldset defaults so the wrapper keeps behaving as a plain grid. */
+    border: 0;
+    margin: 0;
+    padding: 0;
+    min-inline-size: 0;
+}
+
+.caps-readout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem 1rem;
+    margin: 0;
+}
+
+.caps-readout dt {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+}
+
+.caps-readout dd {
+    margin: 0.15rem 0 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.caps-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
 .period-line {
     color: var(--color-text-muted);
     font-size: 0.9rem;

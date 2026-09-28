@@ -20,11 +20,15 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("clients/{clientId:guid}/logical-models")]
-public sealed class ClientLogicalModelsController(ILogicalModelCatalogRepository catalog) : ControllerBase
+public sealed class ClientLogicalModelsController(
+    ILogicalModelCatalogRepository catalog,
+    IClientRegistry clients,
+    IAiConnectionRepository connections,
+    IAiConnectionScopeGuard scopeGuard) : ControllerBase
 {
     /// <summary>
     ///     The logical models effective for this client — the client's overrides plus the tenant-catalog entries an
-    ///     override does not shadow — for the pass and purpose editors' pickers.
+    ///     override does not shadow — with authorized, nonsecret referenced model metadata for readiness checks.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<LogicalModelResponse>), 200)]
@@ -47,6 +51,36 @@ public sealed class ClientLogicalModelsController(ILogicalModelCatalogRepository
                     .Select(entry => LogicalModelResponse.From(entry, "tenant")))
             .OrderBy(entry => entry.Name, StringComparer.Ordinal)
             .ToList();
+
+        var tenantId = await clients.GetTenantIdAsync(clientId, ct);
+        var referenced = tenantId is { } resolvedTenantId && resolvedTenantId != Guid.Empty
+            ? await connections.GetByIdsAsync(effective.Select(e => e.ConnectionId).Distinct().ToArray(), ct)
+            : [];
+        var authorized = tenantId is { } scopedTenantId && scopedTenantId != Guid.Empty
+            ? await scopeGuard.ValidateManyAsync(referenced, scopedTenantId, ct)
+            : new HashSet<Guid>();
+        var byId = referenced.ToDictionary(c => c.Id);
+        for (var index = 0; index < effective.Count; index++)
+        {
+            var entry = effective[index];
+            var metadata = new LogicalModelReferenceResponse("unavailable");
+            if (tenantId is { } ownerTenantId && ownerTenantId != Guid.Empty)
+            {
+                byId.TryGetValue(entry.ConnectionId, out var connection);
+                if (connection is not null &&
+                    authorized.Contains(connection.Id) &&
+                    connection.Availability.State == AiConnectionAvailabilityState.Available &&
+                    connection.ConfiguredModels.FirstOrDefault(model => model.Id == entry.ConfiguredModelId) is { } model)
+                {
+                    metadata = new LogicalModelReferenceResponse(
+                        "available", model.RemoteModelId, connection.DisplayName, model.OperationKinds,
+                        model.SupportedProtocolModes, model.TokenizerName, model.MaxInputTokens,
+                        model.EmbeddingDimensions, connection.IsActive, connection.Verification.Status);
+                }
+            }
+
+            effective[index] = entry with { ReferencedModel = metadata };
+        }
 
         return this.Ok(effective);
     }
@@ -275,6 +309,10 @@ public sealed record LogicalModelResponse(
     string ProtocolMode,
     string Scope)
 {
+    /// <summary>Authorized referenced model metadata; unavailable references omit all model and profile fields.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public LogicalModelReferenceResponse? ReferencedModel { get; init; }
+
     /// <summary>Projects an application DTO into the response, tagging its scope (<c>client</c> or <c>tenant</c>).</summary>
     public static LogicalModelResponse From(LogicalModelDto dto, string scope)
     {
@@ -282,6 +320,29 @@ public sealed record LogicalModelResponse(
             dto.Id, dto.Name, dto.Capability, dto.ConnectionId, dto.ConfiguredModelId, dto.ReasoningEffort, dto.ProtocolMode, scope);
     }
 }
+
+/// <summary>Nonsecret model metadata for effective logical-model readiness.</summary>
+public sealed record LogicalModelReferenceResponse(
+    [property: System.ComponentModel.DataAnnotations.Required]
+    string Availability,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? RemoteModelId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? ConnectionDisplayName = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<AiOperationKind>? OperationKinds = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? SupportedProtocolModes = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? TokenizerName = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    int? MaxInputTokens = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    int? EmbeddingDimensions = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    bool? IsActive = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    AiVerificationStatus? VerificationStatus = null);
 
 /// <summary>Payload to map a purpose to a logical model.</summary>
 public sealed record SetPurposeRoleRequest(string LogicalModelName);

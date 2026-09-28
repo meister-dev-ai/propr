@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>MeisterDev.DataProtection.AzureKeyVaultAddIn</RootNamespace>
+        <!--
+            Produces the .deps.json the host's loader reads to resolve this add-in's own dependencies from this
+            add-in's folder. Without it the Azure libraries would be resolved from wherever the host happens to
+            have them, and the hosts carry none.
+        -->
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="MeisterDev.DataProtection.AzureKeyVaultAddIn.Tests"/>
+    </ItemGroup>
+
+    <!--
+        The contract assembly is compiled against and not copied: the host resolves it from its own load
+        context, so a copy beside the add-in would give this protector a different interface from the one the
+        host looks for.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.DataProtection\MeisterDev.DataProtection.csproj" Private="false"/>
+    </ItemGroup>
+
+    <!--
+        The Azure libraries stay here, so neither host carries them. The credential types in the Azure.Identity
+        namespace come from Azure.Core, which these two packages bring at a version that carries them. A
+        separate Azure.Identity package reference would define the same types a second time and the add-in
+        would not compile.
+    -->
+    <ItemGroup>
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.4"/>
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.6.4"/>
+    </ItemGroup>
+
+</Project>

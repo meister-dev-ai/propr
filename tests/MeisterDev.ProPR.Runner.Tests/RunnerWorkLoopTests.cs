@@ -21,6 +21,22 @@ namespace MeisterDev.ProPR.Runner.Tests;
 /// </summary>
 public sealed class RunnerWorkLoopTests
 {
+    [Fact]
+    public async Task StartupPurgeFailure_DoesNotPreventEnrollment()
+    {
+        var handler = new RecordingHandler();
+        handler.AlwaysNoWork();
+        var workspaceOptions = Substitute.For<IOptions<RunnerHostOptions>>();
+        workspaceOptions.Value.Returns(_ => throw new InvalidOperationException("Unexpected cleanup configuration failure."));
+        using var loop = CreateLoop(
+            handler, new NoopExecutor(), capacity: 1, credential: null,
+            registrationToken: "operator-issued", workspaceOptions: workspaceOptions);
+        await loop.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => handler.LeaseRequests.Count > 0, "The runner did not continue after startup cleanup failed.");
+        Assert.Single(handler.Enrollments);
+        await loop.StopAsync(CancellationToken.None);
+    }
+
     // Capacity belongs to the asking side. A full runner that asked anyway would make the control plane's
     // answer depend on capacity it cannot see, which is the coordination this design exists to avoid.
     [Fact]
@@ -385,6 +401,61 @@ public sealed class RunnerWorkLoopTests
         await loop.StopAsync(CancellationToken.None);
     }
 
+    /// <summary>
+    ///     An installation that is not licensed for runners refuses every enrolment until an operator
+    ///     activates the licence, which is minutes to hours away. The host stays up and spaces its attempts
+    ///     out: ten seconds before the first retry, doubling to five minutes.
+    /// </summary>
+    [Fact]
+    public async Task AnUnlicensedControlPlane_IsRetriedOnAWideningBackoff()
+    {
+        var handler = new RecordingHandler
+        {
+            EnrollmentResponder = () => RecordingHandler.Json(
+                HttpStatusCode.Unauthorized,
+                new RunnerContractError(
+                    RunnerContractError.RegistrationRevoked,
+                    "Distributed review execution is not licensed for this installation.")),
+        };
+        handler.AlwaysNoWork();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 8, 8, 9, 0, 0, TimeSpan.Zero));
+        var health = new RunnerHealthState();
+        using var loop = CreateLoop(handler, new NoopExecutor(), capacity: 1, health: health, time: time, credential: null, registrationToken: "unlicensed");
+
+        await loop.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => handler.Enrollments.Count == 1, "The runner never tried to enrol.");
+
+        // Nine seconds is not the ten the first retry waits, so the count stays where it is.
+        time.Advance(TimeSpan.FromSeconds(9));
+        await Task.Delay(100, CancellationToken.None);
+        Assert.Single(handler.Enrollments);
+
+        time.Advance(TimeSpan.FromSeconds(1));
+        await WaitUntilAsync(() => handler.Enrollments.Count == 2, "The runner did not retry after ten seconds.");
+
+        // The second wait is twice the first, so ten seconds is no longer enough.
+        time.Advance(TimeSpan.FromSeconds(10));
+        await Task.Delay(100, CancellationToken.None);
+        Assert.Equal(2, handler.Enrollments.Count);
+
+        time.Advance(TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => handler.Enrollments.Count == 3, "The runner did not retry after twenty seconds.");
+
+        // However long the refusal lasts, the wait stops widening at five minutes.
+        for (var attempt = 3; attempt < 12; attempt++)
+        {
+            var reached = attempt;
+            time.Advance(TimeSpan.FromMinutes(5));
+            await WaitUntilAsync(() => handler.Enrollments.Count == reached + 1, "The runner stopped retrying enrolment.");
+        }
+
+        // The host is still running and still saying why it is idle.
+        Assert.Equal(RunnerHealthState.Status.Refused, health.Read().Current);
+        Assert.Empty(handler.LeaseRequests);
+
+        await loop.StopAsync(CancellationToken.None);
+    }
+
     // A failure spends one of the job's reclaim attempts; a drain costs it nothing. The release has to
     // say which, or a host that fails every attempt hands back cleanly and re-leases its own failure
     // forever at full relay cost.
@@ -449,7 +520,8 @@ public sealed class RunnerWorkLoopTests
         RunnerHealthState? health = null,
         TimeProvider? time = null,
         string? credential = "already-enrolled",
-        string? registrationToken = null)
+        string? registrationToken = null,
+        IOptions<RunnerHostOptions>? workspaceOptions = null)
     {
         var http = new HttpClient(handler) { BaseAddress = new Uri("http://control-plane.invalid/") };
         var options = Options.Create(
@@ -461,6 +533,7 @@ public sealed class RunnerWorkLoopTests
                 Capacity = capacity,
                 PollIntervalSeconds = 1,
                 MaxBackoffSeconds = 5,
+                WorkRootPath = Path.Combine(Path.GetTempPath(), $"runner-loop-{Guid.NewGuid():N}"),
             });
 
         return new RunnerWorkLoop(
@@ -469,7 +542,7 @@ public sealed class RunnerWorkLoopTests
             new RunnerCredentialStore(options),
             executor,
             // Pointed at a directory of this test's own, so purging is real but touches nothing else.
-            new WorkspaceFetcher(options, NullLogger<WorkspaceFetcher>.Instance),
+            new WorkspaceFetcher(workspaceOptions ?? options, NullLogger<WorkspaceFetcher>.Instance),
             options,
             health ?? new RunnerHealthState(),
             time ?? TimeProvider.System,

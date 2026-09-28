@@ -257,7 +257,8 @@ public class AdoCommentPosterDeduplicationTests
             "/src/Foo.cs",
             42,
             "Null ref.",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.NotNull(match);
         Assert.Equal("resolved_thread_match", match.ReasonCode);
@@ -285,7 +286,8 @@ public class AdoCommentPosterDeduplicationTests
             null,
             null,
             "Two callers duplicate the retry policy; extract it into one helper.",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.Null(match);
     }
@@ -314,7 +316,8 @@ public class AdoCommentPosterDeduplicationTests
             null,
             null,
             "Configuration is read before validation runs.",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.Null(match);
     }
@@ -340,7 +343,8 @@ public class AdoCommentPosterDeduplicationTests
             null,
             null,
             "Two callers duplicate the retry policy",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.NotNull(match);
         Assert.Equal("normalized_text_match", match.ReasonCode);
@@ -366,7 +370,8 @@ public class AdoCommentPosterDeduplicationTests
             "src/Foo.cs",
             42,
             "A different concern entirely.",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.NotNull(match);
         Assert.Equal("normalized_location_match", match.ReasonCode);
@@ -392,7 +397,8 @@ public class AdoCommentPosterDeduplicationTests
             "src/Foo.cs",
             null,
             "An unrelated file-level concern.",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.NotNull(match);
         Assert.Equal("normalized_location_match", match.ReasonCode);
@@ -418,10 +424,85 @@ public class AdoCommentPosterDeduplicationTests
             "src/Foo.cs",
             42,
             "Add a null check before dereferencing the service",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.NotNull(match);
         Assert.Equal("normalized_text_match", match.ReasonCode);
+    }
+
+    [Fact]
+    public void FindDeterministicDuplicateMatch_AgainstAFindingPostedBeforeTheMarker_StillSuppresses()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                "31",
+                "/src/Foo.cs",
+                43,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "ERROR: Add a null check before dereferencing the service.", BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            "src/Foo.cs",
+            42,
+            "Add a null check before dereferencing the service",
+            BotId,
+            TestPostedCommentComposer.With("Erzeugt von ProPR."));
+
+        Assert.NotNull(match);
+        Assert.Equal("normalized_text_match", match.ReasonCode);
+    }
+
+    [Fact]
+    public void FindDeterministicDuplicateMatch_AgainstAMarkedFinding_MatchesTheSameConcern()
+    {
+        var composer = TestPostedCommentComposer.Default;
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                "32",
+                "/src/Foo.cs",
+                43,
+                new List<PrThreadComment>
+                {
+                    new("Bot", composer.Append("ERROR: Add a null check before dereferencing the service."), BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            "src/Foo.cs",
+            42,
+            "Add a null check before dereferencing the service",
+            BotId,
+            composer);
+
+        Assert.NotNull(match);
+        Assert.Equal("normalized_text_match", match.ReasonCode);
+    }
+
+    [Fact]
+    public void HasBotSummary_WithAMarkedSummaryThread_ReturnsTrue()
+    {
+        var composer = TestPostedCommentComposer.Default;
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                "1",
+                null,
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Bot", composer.Append("**AI Review Summary**\n\nLooks good."), BotId),
+                }.AsReadOnly()),
+        };
+
+        Assert.True(AdoCommentPoster.HasBotSummary(threads, BotId));
     }
 
     [Fact]
@@ -447,7 +528,8 @@ public class AdoCommentPosterDeduplicationTests
             "/src/Foo.cs",
             42,
             "Validate the config value before using it as the connection string.",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.NotNull(match);
         Assert.Equal("fallback_duplicate_match", match.ReasonCode);
@@ -476,7 +558,8 @@ public class AdoCommentPosterDeduplicationTests
             "/src/Foo.cs",
             42,
             "Dispose the HttpClient created in this helper to avoid socket exhaustion.",
-            BotId);
+            BotId,
+            TestPostedCommentComposer.Default);
 
         Assert.Null(match);
     }
@@ -568,6 +651,43 @@ public class AdoCommentPosterDeduplicationTests
 
         Assert.Single(map);
         Assert.Equal(9, map["/src/Bar.cs"]);
+    }
+
+    [Fact]
+    public void FindBotSummaryThreadId_ReturnsTheFirstSummaryThreadWithAnIdThatReadsAsANumber()
+    {
+        // A refusal is posted as a reply into the bot's summary thread. Stopping at the first summary thread
+        // and giving up on an id that does not parse leaves a usable thread behind and posts nothing.
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                "not-a-number",
+                null,
+                null,
+                new List<PrThreadComment> { new("Bot", "**AI Review Summary**\n\nFirst.", BotId) }.AsReadOnly()),
+            new(
+                "42",
+                null,
+                null,
+                new List<PrThreadComment> { new("Bot", "**AI Review Summary**\n\nSecond.", BotId) }.AsReadOnly()),
+        };
+
+        Assert.Equal(42, AdoCommentPoster.FindBotSummaryThreadId(threads, BotId));
+    }
+
+    [Fact]
+    public void FindBotSummaryThreadId_WithoutABotSummaryThread_ReturnsNull()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                "7",
+                null,
+                null,
+                new List<PrThreadComment> { new("Someone", "**AI Review Summary**\n\nNot ours.", UserId) }.AsReadOnly()),
+        };
+
+        Assert.Null(AdoCommentPoster.FindBotSummaryThreadId(threads, BotId));
     }
 
     private static GitPullRequestChange Change(string path, int trackingId, VersionControlChangeType changeType)

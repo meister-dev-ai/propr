@@ -4,6 +4,7 @@
 
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.Interfaces;
 
@@ -69,6 +70,18 @@ public interface ITenantAdminService
     ///     is what removes it, so a removal cannot happen as a side effect of saving the families. An entry the
     ///     tenant does not hold is ignored, and the returned tenant reports what remains.
     /// </param>
+    /// <param name="reasoningCapturePolicy">
+    ///     Optional replacement reasoning-capture policy; <c>null</c> leaves it unchanged and
+    ///     <see cref="ReasoningCapturePolicy.InstallationDefault" /> clears the tenant's override.
+    /// </param>
+    /// <param name="budget">
+    ///     Optional replacement monthly budget caps. Null leaves both caps unchanged; a cap set to null inside the
+    ///     supplied value clears that cap back to no limit.
+    /// </param>
+    /// <param name="reviewLimits">
+    ///     Optional replacement per-file byte limits. Null leaves both unchanged; a value set to null inside the
+    ///     supplied record puts the installation value back in force.
+    /// </param>
     /// <param name="ct">Cancellation token for the operation.</param>
     /// <returns>The updated tenant when found; otherwise <c>null</c>.</returns>
     Task<TenantDto?> PatchAsync(
@@ -79,6 +92,9 @@ public interface ITenantAdminService
         IReadOnlyList<string>? allowedAiProviderKinds = null,
         IReadOnlyList<string>? allowedAiEndpointHosts = null,
         IReadOnlyList<string>? removedUnresolvedAiProviderKinds = null,
+        ReasoningCapturePolicy? reasoningCapturePolicy = null,
+        TenantBudgetConfigDto? budget = null,
+        TenantReviewLimitsDto? reviewLimits = null,
         CancellationToken ct = default);
 
     /// <summary>

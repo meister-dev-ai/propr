@@ -86,6 +86,11 @@ public sealed class ReviewRepositoryWorkspaceContractsTests
             return Task.FromResult<string?>(null);
         }
 
+        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) => Task.FromResult(0);
+
+        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) => Task.FromResult(0L);
+
+
         public Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
         {
             return Task.FromResult<string?>(null);

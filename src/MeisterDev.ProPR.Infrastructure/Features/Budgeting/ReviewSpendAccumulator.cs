@@ -22,7 +22,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Budgeting;
 ///     The pull-request and increment scopes total every kind of job. A thread pass and a mention answer each
 ///     spend a client's money against the same pull request a review does, so a scope that saw only review
 ///     jobs would let recurring, deliberately created categories of spend run past every cap. The client
-///     month-to-date scope needs no such widening: it reads the daily usage samples, which all three write.
+///     month-to-date and tenant month-to-date scopes need no such widening: they read the daily usage samples,
+///     which all three write.
 /// </remarks>
 public sealed class ReviewSpendAccumulator(
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
@@ -41,8 +42,47 @@ public sealed class ReviewSpendAccumulator(
         await using var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var pullRequest = await SumOtherUnitCostAsync(context, subject, includeIncrementFilter: false, ct).ConfigureAwait(false);
         var increment = await SumOtherUnitCostAsync(context, subject, includeIncrementFilter: true, ct).ConfigureAwait(false);
+        var tenantMonthToDate = await SumTenantMonthToDateAsync(context, subject.ClientId, asOfDate, ct).ConfigureAwait(false);
 
-        return new ReviewSpendBaseline(clientMonthToDate, pullRequest, increment);
+        return new ReviewSpendBaseline(clientMonthToDate, pullRequest, increment, tenantMonthToDate);
+    }
+
+    /// <summary>
+    ///     Totals the current month's daily usage rows of every client in the paying client's tenant. The tenant
+    ///     is resolved from that client inside the same statement, so the widest scope costs one aggregate query
+    ///     and never lists the tenant's clients. The rows are keyed by client, so the join uses the existing
+    ///     client-leading index on the samples and the tenant index on the clients.
+    /// </summary>
+    private static async Task<ReviewScopeSpend> SumTenantMonthToDateAsync(
+        MeisterProPRDbContext context,
+        Guid clientId,
+        DateOnly asOfDate,
+        CancellationToken ct)
+    {
+        // The tenant period boundary is the client one: both are the calendar month, so a new month starts
+        // both totals at zero on the same date.
+        var monthStart = new DateOnly(asOfDate.Year, asOfDate.Month, 1);
+        var payingTenant = context.Clients.AsNoTracking()
+            .Where(paying => paying.Id == clientId)
+            .Select(paying => paying.TenantId);
+
+        var totals = await (
+                from sample in context.ClientTokenUsageSamples.AsNoTracking()
+                join client in context.Clients.AsNoTracking() on sample.ClientId equals client.Id
+                where sample.Date >= monthStart && sample.Date <= asOfDate && payingTenant.Contains(client.TenantId)
+                group sample by 1
+                into grouped
+                select new TenantSpendTotals(
+                    grouped.Sum(row => row.EstimatedCostUsd ?? 0m),
+                    grouped.Count(row => row.EstimatedCostUsd == null)))
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        // An unpriced row contributes nothing to the total and flags the scope approximate, as in every other
+        // scope, so an unpriced model cannot read as spend of zero.
+        return totals is null
+            ? ReviewScopeSpend.None
+            : new ReviewScopeSpend(totals.KnownUsd, totals.UnpricedRows > 0);
     }
 
     private async Task<ReviewScopeSpend> SumClientMonthToDateAsync(Guid clientId, DateOnly asOfDate, CancellationToken ct)
@@ -155,4 +195,6 @@ public sealed class ReviewSpendAccumulator(
     }
 
     private sealed record CostProjection(decimal? TotalEstimatedCostUsd, bool CostIsApproximate);
+
+    private sealed record TenantSpendTotals(decimal KnownUsd, int UnpricedRows);
 }

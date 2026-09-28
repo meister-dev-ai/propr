@@ -52,4 +52,19 @@ public enum JobStatus
     ///     carried forward), and it is still superseded by a newer push or cancelled when the pull request closes.
     /// </summary>
     BudgetExceeded = 8,
+
+    /// <summary>
+    ///     Job was refused before it started because the pull request exceeded a size bound the client set. No
+    ///     model call was made. The reason is stored on the job and posted on the pull request as a review
+    ///     without findings. Restarting it repeats the refusal until the pull request is split or the bound is
+    ///     raised.
+    /// </summary>
+    AdmissionRefused = 9,
+
+    /// <summary>
+    ///     Job was held before it started because the pull request had already started its hourly number of
+    ///     reviews. The job carries the time it becomes admissible again and starts by itself once that time has
+    ///     passed; no comment is posted for a hold.
+    /// </summary>
+    AdmissionHeld = 10,
 }

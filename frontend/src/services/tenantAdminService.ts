@@ -5,6 +5,42 @@
 import { tenantApiRequest } from '@/services/tenantApiClient'
 import type { AiProviderKind } from '@/services/aiConnectionsService'
 
+/**
+ * Whether a tenant's reviews capture the model's reasoning into the trace. `installationDefault` states no
+ * policy and leaves the installation switch in charge.
+ */
+export type ReasoningCapturePolicy = 'installationDefault' | 'enabled' | 'disabled'
+
+/** A tenant's per-file byte limits; a null value leaves the installation value in force. */
+export interface TenantReviewLimits {
+  maxFileSizeBytes?: number | null
+  maxStructuralParseBytes?: number | null
+}
+
+/**
+ * The per-file byte limits a patch writes. The backend stores the group as a whole, so both properties are
+ * required here and one sent as null puts the installation value back.
+ */
+export interface TenantReviewLimitsUpdate {
+  maxFileSizeBytes: number | null
+  maxStructuralParseBytes: number | null
+}
+
+/** A tenant's monthly USD caps; a null cap means no tenant-level limit. */
+export interface TenantBudgetConfig {
+  monthlySoftCapUsd?: number | null
+  monthlyHardCapUsd?: number | null
+}
+
+/**
+ * The monthly USD caps a patch writes. The backend stores the group as a whole, so both properties are required
+ * here and a cap sent as null clears it. A partial object would leave the omitted cap's fate undefined.
+ */
+export interface TenantBudgetConfigUpdate {
+  monthlySoftCapUsd: number | null
+  monthlyHardCapUsd: number | null
+}
+
 export interface TenantDto {
   id: string
   slug: string
@@ -23,6 +59,14 @@ export interface TenantDto {
    * apart from `allowedAiProviderKinds`, which carries only the entries a loaded family claims.
    */
   unresolvedAiProviderKinds?: string[]
+  /** Whether this tenant's reviews capture the model's reasoning into the trace. */
+  reasoningCapturePolicy?: ReasoningCapturePolicy
+  /** The current value of the installation-wide reasoning-capture switch, so the default can be named. */
+  installationDefaultCapturesReasoning?: boolean
+  /** The tenant's monthly USD caps. Both values are absent until a tenant administrator sets them. */
+  budget?: TenantBudgetConfig
+  /** Per-file byte limits for this tenant's reviews; an absent value leaves the installation value in force. */
+  reviewLimits?: TenantReviewLimits
 }
 
 export interface CreateTenantRequest {
@@ -44,6 +88,21 @@ export interface UpdateTenantRequest {
    * save.
    */
   removedUnresolvedAiProviderKinds?: string[]
+  /**
+   * The reasoning-capture policy to store. `installationDefault` clears the tenant's override and hands the
+   * decision back to the installation switch.
+   */
+  reasoningCapturePolicy?: ReasoningCapturePolicy
+  /**
+   * The monthly USD caps to store. Both caps are written from this value, so a cap sent as null clears it;
+   * omitting `budget` leaves both unchanged.
+   */
+  budget?: TenantBudgetConfigUpdate
+  /**
+   * The per-file byte limits to store. Both are written from this value, so one sent as null puts the
+   * installation value back; omitting `reviewLimits` leaves both unchanged.
+   */
+  reviewLimits?: TenantReviewLimitsUpdate
 }
 
 function buildTenantsPath(): string {

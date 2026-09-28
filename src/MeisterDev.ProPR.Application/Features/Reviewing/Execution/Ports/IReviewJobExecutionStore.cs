@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -166,18 +167,21 @@ public interface IReviewJobExecutionStore
     ///     scope, cap kind, threshold, and spend as the reason. No-op if the job is already terminal.
     /// </summary>
     /// <param name="id">The review job identifier.</param>
-    /// <param name="scope">The budget scope whose cap was reached.</param>
-    /// <param name="capKind">Whether the soft or the hard cap was reached.</param>
-    /// <param name="thresholdUsd">The USD threshold that was reached.</param>
-    /// <param name="spentUsd">The scope spend that reached the threshold.</param>
+    /// <param name="scope">The budget scope whose cap was reached, or null where the refusal named none.</param>
+    /// <param name="capKind">
+    ///     Whether the soft or the hard cap was reached. A refusal that names no cap is recorded as the hard
+    ///     cap, because the kind carries no null of its own.
+    /// </param>
+    /// <param name="thresholdUsd">The USD threshold that was reached, or null where the refusal named none.</param>
+    /// <param name="spentUsd">The scope spend that reached the threshold, or null where the refusal named no cap.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task SetBudgetExceededAsync(
         Guid id,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default);
 
     /// <summary>
@@ -197,6 +201,64 @@ public interface IReviewJobExecutionStore
         BudgetCapKind capKind,
         decimal thresholdUsd,
         decimal spentUsd,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Holds a queued review job until <paramref name="heldUntil" />, because its pull request has already
+    ///     started the number of reviews its client allows within the hour. No-op unless the job is pending.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="heldUntil">When the job becomes admissible again.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task SetAdmissionHeldAsync(Guid id, DateTimeOffset heldUntil, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Ends a review job without a model call, because the pull request exceeded a size bound its client
+    ///     set. The reason is stored on the job in the words posted on the pull request. No-op once the job has
+    ///     reached a terminal status.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="reason">Why the review was refused, and what the author can do about it.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Whether this call was the one that refused the job.</returns>
+    Task<bool> SetAdmissionRefusedAsync(Guid id, string reason, string? policyFingerprint, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns every job held by review admission whose wait has passed to the queue, and answers how many
+    ///     were returned.
+    /// </summary>
+    /// <param name="now">The current UTC time.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>How many held jobs were returned to the queue.</returns>
+    Task<int> ReleaseDueAdmissionHoldsAsync(DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Reports the review jobs submitted for one pull request since <paramref name="since" /> for which a
+    ///     model call was made, leaving out the job that is asking. The count feeds a bound on the reviews an
+    ///     AI performed for that pull request, so a job counts while it is processing, and afterwards in
+    ///     whatever status it reached once its token aggregates record a call; a superseded job that spent
+    ///     tokens counts too. A job still queued, a job admission refused, a job still held and a job that
+    ///     ended before its first model call are left out. The oldest submission time says when the window
+    ///     frees up again.
+    /// </summary>
+    /// <param name="clientId">The client that pays for the reviews.</param>
+    /// <param name="organizationUrl">Provider scope path the pull request lives under.</param>
+    /// <param name="projectId">Provider project, workspace, or namespace key.</param>
+    /// <param name="repositoryId">Provider-native repository identifier.</param>
+    /// <param name="pullRequestId">Provider pull request number.</param>
+    /// <param name="since">The inclusive start of the window.</param>
+    /// <param name="excludeJobId">The asking job, left out of the count.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The submissions for that pull request in the window.</returns>
+    Task<ReviewSubmissionWindow> GetSubmissionWindowAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        DateTimeOffset since,
+        Guid excludeJobId,
         CancellationToken ct = default);
 
     /// <summary>

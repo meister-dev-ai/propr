@@ -16,6 +16,7 @@ using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Infrastructure.Features.Licensing.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.Persistence;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,138 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         int iterationId = 1)
     {
         return new ReviewJob(Guid.NewGuid(), clientId ?? Guid.NewGuid(), orgUrl, projectId, repoId, prId, iterationId);
+    }
+
+    [Fact]
+    public async Task CustomerHistory_ProjectsCountsPagesTiesStatusesAndClientOwnershipInPostgres()
+    {
+        var clientId = Guid.NewGuid();
+        var otherClientId = Guid.NewGuid();
+        var submittedAt = new DateTimeOffset(2026, 9, 27, 10, 0, 0, TimeSpan.Zero);
+        var rows = Enumerable.Range(1, 10_000).Select(index => new ReviewJob(
+            Guid.NewGuid(), index % 2 == 0 ? clientId : otherClientId,
+            "https://dev.azure.com/org", "project", "repo", index, 1)
+        {
+            SubmittedAt = submittedAt,
+            Status = index % 4 == 0 ? JobStatus.Completed : JobStatus.Pending,
+        }).ToArray();
+        rows[3].ApplyResult(new ReviewResult("stored", [new ReviewComment("a.cs", 1, CommentSeverity.Warning, "finding")]));
+        this._dbContext.ReviewJobs.AddRange(rows);
+        await this._dbContext.SaveChangesAsync();
+        this._dbContext.ChangeTracker.Clear();
+        var reader = new EfCustomerReviewHistoryReader(this._dbContext);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        var first = await reader.GetAsync(clientId, 1, 25, null, default);
+        timer.Stop();
+        Console.WriteLine($"Customer history: 10,000 persisted jobs; first client page and count: {timer.Elapsed.TotalMilliseconds:F1} ms.");
+        var second = await reader.GetAsync(clientId, 2, 25, null, default);
+        Assert.Equal(5000, first.TotalCount);
+        Assert.Equal(25, first.Items.Count);
+        Assert.All(
+            first.Items, item =>
+            {
+                Assert.Equal(submittedAt, item.SubmittedAt);
+                Assert.Equal("repo", item.Repository);
+            });
+        Assert.Equal(
+            rows.Where(job => job.ClientId == clientId).OrderByDescending(job => job.Id).Take(50).Select(job => job.Id),
+            first.Items.Concat(second.Items).Select(job => job.Id));
+        var completed = await reader.GetAsync(clientId, 1, 100, JobStatus.Completed, default);
+        Assert.Equal(2500, completed.TotalCount);
+        Assert.All(completed.Items, item => Assert.Equal(JobStatus.Completed, item.Status));
+        var findingPage = await reader.GetAsync(
+            clientId,
+            Array.IndexOf(rows.Where(job => job.ClientId == clientId).OrderByDescending(job => job.Id).ToArray(), rows[3]) / 100 + 1,
+            100, null, default);
+        Assert.Equal(1, Assert.Single(findingPage.Items, item => item.Id == rows[3].Id).FindingCount);
+        Assert.All(findingPage.Items.Where(item => item.Id != rows[3].Id), item => Assert.Equal(0, item.FindingCount));
+        Assert.Equal(0, (await reader.GetAsync(clientId, 1, 25, JobStatus.Failed, default)).TotalCount);
+        Assert.Empty((await reader.GetAsync(clientId, 201, 25, null, default)).Items);
+        Assert.Empty(this._dbContext.ChangeTracker.Entries<ReviewJob>());
+    }
+
+    [Fact]
+    public async Task ScopedResult_DoesNotMaterializeMalformedForeignResult()
+    {
+        var clientId = Guid.NewGuid();
+        var foreignClientId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        this._dbContext.Tenants.Add(new TenantRecord { Id = tenantId, Slug = $"history-{tenantId:N}", DisplayName = "History" });
+        this._dbContext.Clients.AddRange(
+            new ClientRecord { Id = clientId, TenantId = tenantId, DisplayName = "Workspace" },
+            new ClientRecord { Id = foreignClientId, TenantId = tenantId, DisplayName = "Other workspace" });
+        await this._dbContext.SaveChangesAsync();
+        var job = MakeJob(foreignClientId);
+        await this._repo.AddAsync(job);
+        await this._dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE review_jobs SET result_json = '{{\"Comments\":\"invalid\"}}'::jsonb WHERE id = {job.Id}");
+        this._dbContext.ChangeTracker.Clear();
+        var store = new EfReviewJobIntakeStore(this._dbContext);
+        Assert.Null(await store.GetForClientAsync(clientId, job.Id));
+    }
+
+    [Fact]
+    public async Task CustomerDashboard_CountsPersistedFindingsForCompletedJobsInWindowAndListsEveryRunningJob()
+    {
+        var clientId = Guid.NewGuid();
+        var otherClientId = Guid.NewGuid();
+        var windowEnd = DateTimeOffset.UtcNow.AddMinutes(1);
+        var reader = new EfCustomerDashboardReader(this._dbContext);
+        var tenantId = Guid.NewGuid();
+        this._dbContext.Tenants.Add(new TenantRecord { Id = tenantId, Slug = $"dashboard-{tenantId:N}", DisplayName = "Dashboard" });
+        this._dbContext.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId,
+                TenantId = tenantId,
+                DisplayName = "Silent reviews",
+                ScmCommentPostingEnabled = false,
+            });
+        await this._dbContext.SaveChangesAsync();
+
+        var first = MakeJob(clientId, prId: 101);
+        first.Status = JobStatus.Processing;
+        var second = MakeJob(clientId, prId: 102);
+        second.Status = JobStatus.Processing;
+        var waiting = MakeJob(clientId, prId: 103);
+        var other = MakeJob(otherClientId, prId: 104);
+        other.Status = JobStatus.Processing;
+        await this._repo.AddAsync(first);
+        await this._repo.AddAsync(second);
+        await this._repo.AddAsync(waiting);
+        await this._repo.AddAsync(other);
+
+        var recent = MakeJob(clientId, prId: 105);
+        await this._repo.AddAsync(recent);
+        await this._repo.SetResultAsync(
+            recent.Id, new ReviewResult(
+                "stored", [
+                    new ReviewComment("a.cs", 1, CommentSeverity.Warning, "Finding one"),
+                    new ReviewComment("a.cs", 2, CommentSeverity.Warning, "Finding two"),
+                ]));
+        var old = MakeJob(clientId, prId: 106);
+        await this._repo.AddAsync(old);
+        await this._repo.SetResultAsync(
+            old.Id, new ReviewResult(
+                "old", [
+                    new ReviewComment("b.cs", 1, CommentSeverity.Warning, "Old finding"),
+                ]));
+        await this._dbContext.Database.ExecuteSqlRawAsync("UPDATE review_jobs SET completed_at = {0} WHERE id = {1}", windowEnd.AddDays(-31), old.Id);
+        var foreign = MakeJob(otherClientId, prId: 107);
+        await this._repo.AddAsync(foreign);
+        await this._repo.SetResultAsync(
+            foreign.Id, new ReviewResult(
+                "foreign", [
+                    new ReviewComment("c.cs", 1, CommentSeverity.Warning, "Foreign finding"),
+                ]));
+
+        var dashboard = await reader.GetAsync(clientId, windowEnd, default);
+
+        Assert.Equal(2, dashboard.RecentFindingCount);
+        Assert.Equal(windowEnd.AddDays(-30), dashboard.WindowStart);
+        Assert.Equal(windowEnd, dashboard.WindowEnd);
+        Assert.Equal(new[] { first.Id, second.Id }.Order(), dashboard.RunningReviews.Select(x => x.Id).Order());
+        Assert.DoesNotContain(dashboard.RunningReviews, x => x.Id == waiting.Id || x.Id == other.Id);
     }
 
     private static ReviewFileResult CreateCompletedFileResult(Guid jobId, string path)

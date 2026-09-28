@@ -27,10 +27,17 @@ internal sealed partial class AgentMentionAnswerService(
         "You are a PR review assistant. Answer the developer's question concisely and directly, " +
         "grounded only in the PR content provided. Do not initiate a full review. " +
         "If the question is about a specific line, focus your answer on that line and its immediate context. " +
-        "Respond in plain text (markdown is fine) — no JSON.";
+        "Respond in plain text (markdown is fine). Do not return JSON. " +
+        "A diff omitted from this request does not establish that a file is absent from the PR. " +
+        "State when the provided context is unavailable or insufficient.";
 
     private const int MaxFiles = 10;
     private const int MaxDiffLines = 200;
+
+    private static readonly Regex HunkHeaderRegex = new(
+        @"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@",
+        RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
 
     private static readonly Regex MentionPrefixRegex =
@@ -56,8 +63,7 @@ internal sealed partial class AgentMentionAnswerService(
         Guid? connectionId = runtime.Connection.Id;
         var logicalModelName = runtime.LogicalModelName;
 
-        // A mention answer is not part of a review job, so the language is resolved from the client here rather
-        // than read off a review context.
+        // Mention answers resolve the output language from the client because they have no review job.
         var outputLanguage = clientRegistry is null
             ? null
             : await clientRegistry.GetOutputLanguageAsync(clientId, cancellationToken);
@@ -79,8 +85,7 @@ internal sealed partial class AgentMentionAnswerService(
             new ChatOptions { ModelId = modelId },
             cancellationToken);
 
-        // The usage rides back with the text. The orchestrator owns the recording, so this returns what it
-        // needs to price rather than reading the number and throwing it away.
+        // The orchestrator records and prices the usage returned with the answer.
         return new MentionAnswer(
             response.Text ?? string.Empty,
             AiTokenUsageExtractor.FromResponse(response),
@@ -92,6 +97,11 @@ internal sealed partial class AgentMentionAnswerService(
     private static string BuildUserMessage(PullRequest pr, string question, string threadId)
     {
         var sb = new StringBuilder();
+        var focusThread = pr.ExistingThreads?.FirstOrDefault(t =>
+            string.Equals(t.ThreadId, threadId, StringComparison.Ordinal));
+        var focusFile = focusThread?.FilePath is { } path
+            ? pr.ChangedFiles.FirstOrDefault(file => string.Equals(file.Path.TrimStart('/'), path.TrimStart('/'), StringComparison.Ordinal))
+            : null;
         sb.AppendLine($"PR: {pr.Title}");
 
         if (!string.IsNullOrWhiteSpace(pr.Description))
@@ -101,7 +111,7 @@ internal sealed partial class AgentMentionAnswerService(
 
         if (pr.ChangedFiles.Count > 0)
         {
-            var files = pr.ChangedFiles.Take(MaxFiles).ToList();
+            var files = pr.ChangedFiles.OrderByDescending(file => ReferenceEquals(file, focusFile)).Take(MaxFiles).ToList();
             sb.AppendLine();
             sb.AppendLine($"Changed files (showing {files.Count} of {pr.ChangedFiles.Count}):");
 
@@ -109,12 +119,37 @@ internal sealed partial class AgentMentionAnswerService(
             {
                 sb.AppendLine();
                 sb.AppendLine($"=== {file.Path} [{file.ChangeType}] ===");
-                var diffLines = file.UnifiedDiff?.Split('\n') ?? [];
-                var truncated = diffLines.Take(MaxDiffLines).ToArray();
-                sb.AppendLine(string.Join('\n', truncated));
-                if (diffLines.Length > MaxDiffLines)
+                if (file.IsBinary || string.IsNullOrWhiteSpace(file.UnifiedDiff))
                 {
-                    sb.AppendLine($"... ({diffLines.Length - MaxDiffLines} lines omitted)");
+                    sb.AppendLine(
+                        ReferenceEquals(file, focusFile)
+                            ? "Referenced file diff is unavailable."
+                            : "File diff is unavailable.");
+                    continue;
+                }
+
+                var diffLines = file.UnifiedDiff.Split('\n');
+                var location = ReferenceEquals(file, focusFile) && focusThread?.LineNumber is { } line
+                    ? FindDiffLocation(diffLines, line)
+                    : null;
+                if (ReferenceEquals(file, focusFile) && focusThread?.LineNumber is not null && location is null)
+                {
+                    sb.AppendLine("Referenced line is unavailable in the provided diff.");
+                }
+
+                var start = location is { } found ? Math.Max(found.Index - MaxDiffLines / 2, found.HunkStart) : 0;
+                var includeHeader = location is { } hunk && start > hunk.HunkStart;
+                if (includeHeader)
+                {
+                    sb.AppendLine($"Diff excerpt omits {start - location!.Value.HunkStart - 1} rows after this hunk header before the displayed rows.");
+                    sb.AppendLine(diffLines[location!.Value.HunkStart]);
+                }
+
+                var window = diffLines.Skip(start).Take(MaxDiffLines - (includeHeader ? 1 : 0)).ToArray();
+                sb.AppendLine(string.Join('\n', window));
+                if (start > 0 || start + window.Length < diffLines.Length)
+                {
+                    sb.AppendLine($"... ({diffLines.Length - window.Length - (includeHeader ? 1 : 0)} diff lines omitted)");
                 }
             }
         }
@@ -133,18 +168,79 @@ internal sealed partial class AgentMentionAnswerService(
             }
         }
 
-        var focusThread = pr.ExistingThreads?.FirstOrDefault(t =>
-            string.Equals(t.ThreadId, threadId, StringComparison.Ordinal));
         if (focusThread is not null)
         {
             sb.AppendLine();
             sb.AppendLine($"The following question was asked in a comment thread at: {FormatThreadLocation(focusThread)}");
-            sb.AppendLine("Base your answer on the code at that location.");
+            if (focusThread.FilePath is not null && focusFile is null)
+            {
+                sb.AppendLine("Referenced file context is unavailable in the supplied changed-file data.");
+            }
+
+            sb.AppendLine("Use the provided context and state any missing information.");
+        }
+        else
+        {
+            sb.AppendLine("Question thread context is unavailable.");
         }
 
         sb.AppendLine();
         sb.AppendLine($"Question: {question}");
         return sb.ToString();
+    }
+
+    private static (int Index, int HunkStart)? FindDiffLocation(string[] lines, int targetLine)
+    {
+        return FindDiffLocationOnSide(lines, targetLine, false)
+               ?? FindDiffLocationOnSide(lines, targetLine, true);
+    }
+
+    private static (int Index, int HunkStart)? FindDiffLocationOnSide(string[] lines, int targetLine, bool removedOldSide)
+    {
+        var currentLine = 0;
+        var hunkStart = -1;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var header = HunkHeaderRegex.Match(lines[index]);
+            if (header.Success)
+            {
+                if (!int.TryParse(
+                        header.Groups[removedOldSide ? 1 : 2].Value, System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out currentLine))
+                {
+                    hunkStart = -1;
+                    continue;
+                }
+
+                hunkStart = index;
+                continue;
+            }
+
+            if (hunkStart < 0 || lines[index].Length == 0)
+            {
+                continue;
+            }
+
+            var prefix = lines[index][0];
+            if (prefix == ' ' || prefix == (removedOldSide ? '-' : '+'))
+            {
+                if (currentLine == targetLine && (!removedOldSide || prefix == '-'))
+                {
+                    return (index, hunkStart);
+                }
+
+                if (currentLine == int.MaxValue)
+                {
+                    hunkStart = -1;
+                }
+                else
+                {
+                    currentLine++;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static string FormatThreadLocation(PrCommentThread thread)

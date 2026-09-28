@@ -15,6 +15,7 @@ using MeisterDev.Ai.Providers.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using System.Text.Json;
 
 namespace MeisterDev.ProPR.Api.Tests.Controllers;
 
@@ -176,6 +177,107 @@ public sealed class LogicalModelsControllerTests
         Assert.Equal("client", entries.Single(e => e.Name == "deep").Scope);
         Assert.Equal("client", entries.Single(e => e.Name == "fast").Scope);
         Assert.Equal("tenant", entries.Single(e => e.Name == "wide").Scope);
+    }
+
+    [Theory]
+    [InlineData("client")]
+    [InlineData("tenant")]
+    [InlineData("foreign")]
+    [InlineData("missing")]
+    [InlineData("missing-model")]
+    [InlineData("denied")]
+    [InlineData("unavailable")]
+    [InlineData("orphan")]
+    [InlineData("empty-tenant")]
+    public async Task ListEffective_ProjectsOnlyAuthorizedReferencedModelMetadata(string state)
+    {
+        var catalog = Substitute.For<ILogicalModelCatalogRepository>();
+        var entry = Dto("embedding");
+        catalog.GetClientOverridesAsync(ClientId, Arg.Any<CancellationToken>()).Returns(state == "tenant" ? [] : new[] { entry });
+        catalog.GetTenantEntriesForClientAsync(ClientId, Arg.Any<CancellationToken>()).Returns(state == "tenant" ? new[] { entry } : []);
+        var registry = Substitute.For<IClientRegistry>();
+        registry.GetTenantIdAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(state == "orphan" ? (Guid?)null : state == "empty-tenant" ? Guid.Empty : TenantId);
+        var connections = Substitute.For<IAiConnectionRepository>();
+        var model = new AiConfiguredModelDto(
+            entry.ConfiguredModelId, "embedding-model", "Embedding", [AiOperationKind.Embedding], [ProviderDeclaredProtocolModes.Embeddings], "cl100k_base",
+            8192, 1536);
+        var connection = Connection("Shared profile", secret: "not-for-response") with
+        {
+            Id = entry.ConnectionId, ConfiguredModels = [model], IsActive = true,
+            ClientId = state == "client" ? ClientId : null,
+            TenantId = state == "client" ? null : state == "foreign" ? Guid.NewGuid() : TenantId,
+        };
+        if (state == "unavailable")
+            connection = connection with
+            {
+                Availability = new(AiConnectionAvailabilityState.Unavailable, AiConnectionUnavailableReason.ProviderFamilyAbsent, "hidden", [])
+            };
+        if (state == "missing-model") connection = connection with { ConfiguredModels = [] };
+        connections.GetByIdsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>()).Returns(state == "missing" ? [] : new[] { connection });
+        var guard = Substitute.For<IAiConnectionScopeGuard>();
+        guard.ValidateAsync(Arg.Any<AiConnectionDto>(), TenantId, Arg.Any<CancellationToken>())
+            .Returns(state is "foreign" or "denied" ? "private refusal" : null);
+        guard.ValidateManyAsync(Arg.Any<IReadOnlyList<AiConnectionDto>>(), TenantId, Arg.Any<CancellationToken>())
+            .Returns(state is "foreign" or "denied" ? new HashSet<Guid>() : new HashSet<Guid> { entry.ConnectionId });
+        var controller = ClientController(catalog, true, registry, connections, guard);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.ListEffective(ClientId));
+        var json = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(1, json.GetArrayLength());
+        Assert.Equal(entry.Id, json[0].GetProperty("id").GetGuid());
+        Assert.Equal(entry.Name, json[0].GetProperty("name").GetString());
+        Assert.Equal(entry.ConnectionId, json[0].GetProperty("connectionId").GetGuid());
+        Assert.Equal(entry.ConfiguredModelId, json[0].GetProperty("configuredModelId").GetGuid());
+        Assert.Equal(state == "tenant" ? "tenant" : "client", json[0].GetProperty("scope").GetString());
+        var metadata = json[0].GetProperty("referencedModel");
+        var allowed = state is "client" or "tenant";
+        Assert.Equal(allowed ? "available" : "unavailable", metadata.GetProperty("availability").GetString());
+        Assert.Equal(allowed, metadata.TryGetProperty("remoteModelId", out var remote));
+        if (allowed)
+        {
+            Assert.Equal("embedding-model", remote.GetString());
+            Assert.Equal("Shared profile", metadata.GetProperty("connectionDisplayName").GetString());
+            Assert.Equal(1536, metadata.GetProperty("embeddingDimensions").GetInt32());
+            Assert.Equal("cl100k_base", metadata.GetProperty("tokenizerName").GetString());
+            Assert.Equal(8192, metadata.GetProperty("maxInputTokens").GetInt32());
+            Assert.Equal(ProviderDeclaredProtocolModes.Embeddings, metadata.GetProperty("supportedProtocolModes")[0].GetString());
+            await guard.Received(1).ValidateManyAsync(Arg.Any<IReadOnlyList<AiConnectionDto>>(), TenantId, Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            Assert.Single(metadata.EnumerateObject());
+        }
+
+        Assert.DoesNotContain("not-for-response", json.GetRawText());
+        Assert.DoesNotContain("example.test", json.GetRawText());
+        Assert.DoesNotContain("private refusal", json.GetRawText());
+        if (state is "orphan" or "empty-tenant")
+        {
+            await connections.DidNotReceive().GetByIdsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+            await guard.DidNotReceive().ValidateManyAsync(Arg.Any<IReadOnlyList<AiConnectionDto>>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        }
+
+        await catalog.DidNotReceive().AddClientOverrideAsync(Arg.Any<Guid>(), Arg.Any<LogicalModelDto>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ListEffective_ReusesReferenceLookupForSharedConnection()
+    {
+        var catalog = Substitute.For<ILogicalModelCatalogRepository>();
+        var first = Dto("first");
+        var second = Dto("second") with { ConnectionId = first.ConnectionId, ConfiguredModelId = first.ConfiguredModelId };
+        catalog.GetClientOverridesAsync(ClientId, Arg.Any<CancellationToken>()).Returns(new[] { first, second });
+        catalog.GetTenantEntriesForClientAsync(ClientId, Arg.Any<CancellationToken>()).Returns(Array.Empty<LogicalModelDto>());
+        var registry = Substitute.For<IClientRegistry>();
+        registry.GetTenantIdAsync(ClientId, Arg.Any<CancellationToken>()).Returns(TenantId);
+        var connections = Substitute.For<IAiConnectionRepository>();
+        var guard = Substitute.For<IAiConnectionScopeGuard>();
+        var controller = ClientController(catalog, true, registry, connections, guard);
+        await controller.ListEffective(ClientId);
+        await connections.Received(1).GetByIdsAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 1 && ids.Contains(first.ConnectionId)), Arg.Any<CancellationToken>());
+        await guard.Received(1).ValidateManyAsync(Arg.Any<IReadOnlyList<AiConnectionDto>>(), TenantId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -518,7 +620,9 @@ public sealed class LogicalModelsControllerTests
             Guid.NewGuid(), name, AiOperationKind.Chat, Guid.NewGuid(), Guid.NewGuid(), ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Auto);
     }
 
-    private static ClientLogicalModelsController ClientController(ILogicalModelCatalogRepository catalog, bool clientAdmin)
+    private static ClientLogicalModelsController ClientController(
+        ILogicalModelCatalogRepository catalog, bool clientAdmin,
+        IClientRegistry? registry = null, IAiConnectionRepository? connections = null, IAiConnectionScopeGuard? guard = null)
     {
         var ctx = new DefaultHttpContext();
         ctx.Items["UserId"] = Guid.NewGuid().ToString();
@@ -527,7 +631,10 @@ public sealed class LogicalModelsControllerTests
             ctx.Items["ClientRoles"] = new Dictionary<Guid, ClientRole> { [ClientId] = ClientRole.ClientAdministrator };
         }
 
-        return new ClientLogicalModelsController(catalog) { ControllerContext = new ControllerContext { HttpContext = ctx } };
+        return new ClientLogicalModelsController(
+                catalog, registry ?? Substitute.For<IClientRegistry>(),
+                connections ?? Substitute.For<IAiConnectionRepository>(), guard ?? Substitute.For<IAiConnectionScopeGuard>())
+            { ControllerContext = new ControllerContext { HttpContext = ctx } };
     }
 
     private static TenantLogicalModelsController TenantController(ILogicalModelCatalogRepository catalog, bool tenantAdmin)

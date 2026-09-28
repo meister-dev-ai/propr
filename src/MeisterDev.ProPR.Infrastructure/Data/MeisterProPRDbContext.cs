@@ -101,6 +101,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>User-generated Personal Access Tokens.</summary>
     public DbSet<UserPatRecord> UserPats => this.Set<UserPatRecord>();
 
+    /// <summary>Tenant-bound credentials for hosted service callers.</summary>
+    public DbSet<TenantMachineCredentialRecord> TenantMachineCredentials => this.Set<TenantMachineCredentialRecord>();
+
     /// <summary>Server-persisted refresh tokens.</summary>
     public DbSet<RefreshTokenRecord> RefreshTokens => this.Set<RefreshTokenRecord>();
 

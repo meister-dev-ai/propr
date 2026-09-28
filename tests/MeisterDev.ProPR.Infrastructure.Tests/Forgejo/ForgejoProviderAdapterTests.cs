@@ -638,7 +638,8 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
 
         var sut = new ForgejoCodeReviewPublicationService(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -648,18 +649,17 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
             "aabbccddeeff00112233445566778899aabbccdd",
             document.RootElement.GetProperty("commit_id").GetString());
         Assert.Equal("COMMENT", document.RootElement.GetProperty("event").GetString());
-        Assert.Contains(
-            "Looks solid overall.",
-            document.RootElement.GetProperty("body").GetString(),
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "No blocking issues found.",
-            document.RootElement.GetProperty("body").GetString(),
-            StringComparison.Ordinal);
+        var summary = document.RootElement.GetProperty("body").GetString();
+        Assert.Contains("Looks solid overall.", summary, StringComparison.Ordinal);
+        Assert.Contains("No blocking issues found.", summary, StringComparison.Ordinal);
+        TestPostedCommentComposer.AssertMarkedOnce(summary, TestPostedCommentComposer.DistinctiveMarker);
         var comments = document.RootElement.GetProperty("comments");
         Assert.Equal(1, comments.GetArrayLength());
         Assert.Equal("src/file.ts", comments[0].GetProperty("path").GetString());
         Assert.Equal(18, comments[0].GetProperty("new_position").GetInt32());
+        Assert.Equal(
+            "Warning: Guard this null case.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            comments[0].GetProperty("body").GetString());
     }
 
     [Fact]
@@ -707,14 +707,19 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
 
         var sut = new ForgejoCodeReviewPublicationService(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
         Assert.NotNull(postedBody);
         using var document = JsonDocument.Parse(postedBody);
         var comments = document.RootElement.GetProperty("comments");
+        Assert.Equal(1, comments.GetArrayLength());
         Assert.Equal("src/file.ts", comments[0].GetProperty("path").GetString());
+        TestPostedCommentComposer.AssertMarkedOnce(
+            comments[0].GetProperty("body").GetString(),
+            TestPostedCommentComposer.DistinctiveMarker);
     }
 
     [Fact]
@@ -762,7 +767,8 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
 
         var sut = new ForgejoCodeReviewPublicationService(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -829,7 +835,8 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
 
         var sut = new ForgejoCodeReviewPublicationService(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -875,7 +882,8 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
 
         var sut = new ForgejoCodeReviewPublicationService(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.PublishReviewAsync(clientId, review, revision, result, reviewer));

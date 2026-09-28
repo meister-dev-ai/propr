@@ -58,7 +58,8 @@ internal sealed class FileByFileContextPrefetchStage(
             context.ChangedFile.UnifiedDiff,
             this._options,
             this._analyzer,
-            cancellationToken);
+            cancellationToken,
+            context.FileReviewContext.MaxStructuralParseBytes);
 
         if (!string.IsNullOrWhiteSpace(surrounding.RenderedContent))
         {
@@ -462,7 +463,8 @@ internal sealed class FileByFileContextPrefetchStage(
         string? unifiedDiff,
         AiReviewOptions options,
         IStructuralCodeAnalyzer? analyzer,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? maxStructuralParseBytesOverride = null)
     {
         if (string.IsNullOrWhiteSpace(fullContent))
         {
@@ -531,7 +533,15 @@ internal sealed class FileByFileContextPrefetchStage(
             return HeuristicResult(normalized, unifiedDiff, options, FallbackReason.ParseFault);
         }
 
-        if (sourceByteCount > options.MaxStructuralParseBytes)
+        // The tenant's limit when it states one, the installation's otherwise, and never above the
+        // installation's. The analyzers are built with the installation value and hold their own guard to it,
+        // so a tenant limit above it would let a file past this check and come back with no definitions and no
+        // reason. Clamped here, the file is reported as too large and the trace states why.
+        var structuralParseBound = Math.Min(
+            maxStructuralParseBytesOverride ?? options.MaxStructuralParseBytes,
+            options.MaxStructuralParseBytes);
+
+        if (sourceByteCount > structuralParseBound)
         {
             return HeuristicResult(normalized, unifiedDiff, options, FallbackReason.FileTooLarge);
         }

@@ -87,17 +87,17 @@ public interface IThreadPassJobRepository
     ///     keep their progress and the rest wait for a later pass.
     /// </summary>
     /// <param name="jobId">The pass identifier.</param>
-    /// <param name="scope">The scope whose cap was reached.</param>
+    /// <param name="scope">The scope whose cap was reached, or null where the refusal named none.</param>
     /// <param name="capKind">Whether the cap was soft or hard.</param>
-    /// <param name="thresholdUsd">The configured cap.</param>
-    /// <param name="spentUsd">What the scope had spent.</param>
+    /// <param name="thresholdUsd">The configured cap, or null where the refusal named none.</param>
+    /// <param name="spentUsd">What the scope had spent, or null where the refusal named no cap.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task SetBudgetExceededAsync(
         Guid jobId,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default);
 
     /// <summary>

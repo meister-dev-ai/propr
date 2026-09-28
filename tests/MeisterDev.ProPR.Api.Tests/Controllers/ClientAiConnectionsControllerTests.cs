@@ -171,6 +171,122 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
     // the enum names now has one, so the offered set is the whole enum — and this test is what notices if a
     // future family is named before it can be called.
     [Fact]
+    public async Task VerifyUpdate_RetainsSavedCredentialAndActiveRouting()
+    {
+        var created = await this.SeedConnectionAsync("Safe edit", verify: true);
+        var client = this.CreateAuthorizedClient();
+        await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/activate", null);
+
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}/verify-update",
+            new { displayName = "Verified edit", auth = new { mode = "apiKey", apiKey = "" } });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(updated);
+        Assert.Equal("Verified edit", updated.DisplayName);
+        Assert.True(updated.IsActive);
+        Assert.Equal(AiVerificationStatus.Verified, updated.Verification.Status);
+        Assert.DoesNotContain("secret-api-key", await response.Content.ReadAsStringAsync());
+        using var scope = factory.Services.CreateScope();
+        var stored = await scope.ServiceProvider.GetRequiredService<MeisterDev.ProPR.Application.Interfaces.IAiConnectionRepository>().GetByIdAsync(created.Id);
+        Assert.Equal("secret-api-key", stored!.Secret);
+    }
+
+    [Fact]
+    public async Task BoundedOperations_RejectForeignClientModelsWithoutChangingTheProfile()
+    {
+        var created = await this.SeedConnectionAsync("Owned profile", verify: true);
+        using var scope = factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<MeisterDev.ProPR.Application.Interfaces.IAiConnectionRepository>();
+        var before = await repository.GetByIdAsync(created.Id);
+        var client = this.CreateAuthorizedClient();
+        var foreignClientId = Guid.NewGuid();
+        var edit = await client.PostAsJsonAsync(
+            $"/clients/{foreignClientId}/ai-connections/{created.Id}/verify-update",
+            new { displayName = "Foreign edit" });
+        Assert.Equal(HttpStatusCode.NotFound, edit.StatusCode);
+        var chat = created.ConfiguredModels.Single(m => m.SupportsChat);
+        var embedding = created.ConfiguredModels.Single(m => m.SupportsEmbedding);
+        var selected = await client.PostAsJsonAsync(
+            $"/clients/{foreignClientId}/ai-connections/select-purposes", new
+            {
+                @default = new { connectionId = created.Id, configuredModelId = chat.Id },
+                high = new { connectionId = created.Id, configuredModelId = chat.Id },
+                embedding = new { connectionId = created.Id, configuredModelId = embedding.Id },
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, selected.StatusCode);
+        var stored = await repository.GetByIdAsync(created.Id);
+        Assert.Equal(created.DisplayName, stored!.DisplayName);
+        Assert.Equal(before!.UpdatedAt, stored.UpdatedAt);
+        Assert.Equal(before.PurposeBindings, stored.PurposeBindings);
+    }
+
+    [Fact]
+    public async Task VerifyUpdate_FailedVerificationPreservesSavedProfileAndVerification()
+    {
+        var profile = await this.SeedProviderProfileAsync(
+            "meisterdev/googleVertex", "gcpAdc",
+            "https://europe-west4-aiplatform.googleapis.com?project=meister-dev-test",
+            new Dictionary<string, string> { ["serviceAccountJson"] = ServiceAccountDocument }, "gemini-test");
+        using (var scope = factory.Services.CreateScope())
+        {
+            var repository = scope.ServiceProvider.GetRequiredService<MeisterDev.ProPR.Application.Interfaces.IAiConnectionRepository>();
+            await repository.SaveVerificationAsync(profile.Id, new(AiVerificationStatus.Verified, CheckedAt: DateTimeOffset.UtcNow));
+            await repository.ActivateAsync(profile.Id);
+        }
+
+        var client = this.CreateAuthorizedClient();
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{profile.Id}/verify-update",
+            new { displayName = "Refused candidate" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.DoesNotContain("client_email", await response.Content.ReadAsStringAsync());
+        using var readScope = factory.Services.CreateScope();
+        var saved = await readScope.ServiceProvider.GetRequiredService<MeisterDev.ProPR.Application.Interfaces.IAiConnectionRepository>()
+            .GetByIdAsync(profile.Id);
+        Assert.Equal(profile.DisplayName, saved!.DisplayName);
+        Assert.True(saved.IsActive);
+        Assert.Equal(AiVerificationStatus.Verified, saved.Verification.Status);
+    }
+
+    [Fact]
+    public async Task SelectPurposes_AppliesAllSlotsAcrossConnections()
+    {
+        var first = await this.SeedConnectionAsync("Default selection", verify: true);
+        var second = await this.SeedConnectionAsync("High selection", verify: true);
+        var client = this.CreateAuthorizedClient();
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/select-purposes", new
+            {
+                @default = new { connectionId = first.Id, configuredModelId = first.ConfiguredModels.Single(m => m.SupportsChat).Id },
+                high = new { connectionId = second.Id, configuredModelId = second.ConfiguredModels.Single(m => m.SupportsChat).Id },
+                embedding = new { connectionId = first.Id, configuredModelId = first.ConfiguredModels.Single(m => m.SupportsEmbedding).Id },
+            });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<MeisterDev.ProPR.Application.Interfaces.IAiConnectionRepository>();
+        foreach (var purpose in new[]
+                 {
+                     AiPurpose.ReviewDefault, AiPurpose.ReviewTriage, AiPurpose.ReviewVerification, AiPurpose.ReviewLowEffort, AiPurpose.ReviewMediumEffort,
+                     AiPurpose.MemoryReconsideration, AiPurpose.EmbeddingDefault
+                 })
+        {
+            var resolved = (await repository.GetActiveBindingForPurposeAsync(ClientId, purpose))!;
+            Assert.Equal(first.Id, resolved.Connection.Id);
+            Assert.Equal(purpose, resolved.Binding.Purpose);
+            Assert.Equal(
+                first.ConfiguredModels.Single(m => purpose == AiPurpose.EmbeddingDefault ? m.SupportsEmbedding : m.SupportsChat).Id,
+                resolved.Binding.ConfiguredModelId);
+        }
+
+        var high = (await repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewHighEffort))!;
+        Assert.Equal(second.Id, high.Connection.Id);
+        Assert.Equal(AiPurpose.ReviewHighEffort, high.Binding.Purpose);
+        Assert.Equal(second.ConfiguredModels.Single(m => m.SupportsChat).Id, high.Binding.ConfiguredModelId);
+    }
+
+    [Fact]
     public async Task PermittedProviders_OffersEveryFamilyThisBuildCanCall()
     {
         var client = this.CreateAuthorizedClient();

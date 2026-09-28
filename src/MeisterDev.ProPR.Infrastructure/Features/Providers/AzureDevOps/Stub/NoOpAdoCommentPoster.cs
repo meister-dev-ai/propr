@@ -27,6 +27,7 @@ public sealed partial class NoOpAdoCommentPoster(ILogger<NoOpAdoCommentPoster> l
         IReadOnlyList<PrCommentThread>? existingThreads = null,
         AzureDevOpsPublicationContext? publicationContext = null,
         ReviewerIdentity? publicationIdentity = null,
+        bool replyInExistingSummaryThread = false,
         CancellationToken cancellationToken = default)
     {
         LogSkippingCommentPost(logger, pullRequestId, result.Summary);

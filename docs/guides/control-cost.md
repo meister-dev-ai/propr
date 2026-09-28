@@ -65,6 +65,18 @@ on - see [what you can tune](../concepts/reviews.md#what-you-can-tune).
 - **Iteration budgets.** They bound how long one file's review may keep gathering context before it must
   conclude - see [review loop budgets](../operate/configuration.md#review-loop-budgets).
 
+- **Review limits.** They bound the size of a review before it starts. A pull request measured past the
+  changed-file, changed-line or diff-size bound is not reviewed at all: ProPR ends the job before any model
+  call and posts the measured value, the bound and the way forward on the pull request, when the client's
+  comment-posting setting permits a comment at all. ProPR applies the repository-size bound while it fetches
+  the repository and checks out the reviewed revision: it stops git once the transfer passes the bound,
+  deletes what that transfer wrote, and refuses the review with the measured size and the bound. A refusal
+  costs one fetch and no model call, and it is not repeated: ProPR counts the refused review as the review of
+  that pull request head and starts no further review of the same head until the head changes or an
+  administrator changes a limit. When the client has reached its hourly review limit for a pull request, the
+  review waits for the next hourly window and then runs. Set them on the client's Budget tab; they need no
+  licence.
+
 The minimum severity to post and disabling SCM comment posting save no money. Both act after every model
 call has been made and paid for. They control publication - see
 [run reviews without posting them](review-without-posting.md).
@@ -75,6 +87,21 @@ Budget caps stop spend, they do not reduce it. Read
 [what you can tune](../concepts/reviews.md#what-you-can-tune) before you set one, because the scopes do not
 behave alike. Setting a cap needs a commercial license. Once set, a cap is enforced in every edition - see
 [editions](../reference/editions.md).
+
+## 7. Cap what a whole tenant can spend
+
+A tenant carries a monthly soft cap and a monthly hard cap in USD, covering the spend of every client in
+it. Set them on the tenant's Budget section. Both caps hold a new review at admission once the tenant's
+month-to-date spend reaches them; the hard cap also cuts further model calls in work that is already
+running. Leave a field blank for no limit.
+
+ProPR evaluates the tenant caps after the client caps, so a client cap that is reached first is the one
+reported on the held job. A tenant cap catches the spend a per-client cap misses: ten clients each under
+their own monthly cap can still take the tenant past what you planned for the month.
+
+The caps are not topped up. Raising a cap is how a tenant is given more room for the rest of the month.
+The Spend section measures the tenant's aggregate spend against the tenant caps once one is set, and keeps
+reporting the sum of the client caps beside them.
 
 If you run ProCursor, its indexing and querying spend embedding tokens reported separately from review
 usage. Read [what it costs](../concepts/how-it-works.md#what-it-costs) before widening a source's root path

@@ -86,7 +86,7 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
         builder.Property(x => x.CredentialAuthorizedAt).HasColumnName("credential_authorized_at");
         builder.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(false).IsRequired();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
-        builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
+        builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired().IsConcurrencyToken();
 
         builder.HasOne(x => x.Client)
             .WithMany()

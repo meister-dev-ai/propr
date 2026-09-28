@@ -62,6 +62,8 @@ If you have not had a successful review yet, start from
 | Reviews cost more than expected | No prompt caching on the route you chose, list prices instead of yours, or effort and pass settings | [control cost](../guides/control-cost.md) |
 | A model shows no context window or no price | Its id matched no catalog entry | [a model is missing its context window or price](../ai/models-and-catalog.md#a-model-is-missing-its-context-window-or-price) |
 | A job is held before it starts | A budget cap was already reached; a held job needs an operator to restart it | [what you can tune](../concepts/reviews.md#what-you-can-tune) |
+| A job ends as **Not started** and the pull request carries a notice instead of a review | The pull request is larger than a review limit the client sets; the notice names the measured value and the bound | [what you can tune](../concepts/reviews.md#what-you-can-tune) |
+| A job sits in **Waiting** and no comment appears | The pull request has already started its hourly number of reviews; it starts by itself at the time on the job | [what you can tune](../concepts/reviews.md#what-you-can-tune) |
 
 ## Licensing time and the installation identifier
 

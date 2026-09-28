@@ -143,6 +143,16 @@ internal sealed class ReviewWorkspaceCleanupService(
         }
     }
 
+    /// <summary>
+    ///     Removes mirrors the cache no longer needs, by age and then by total size.
+    /// </summary>
+    /// <remarks>
+    ///     Every fetch writes into the mirror directory, so its last write time is when a review last used
+    ///     it. The age rule removes a mirror nobody has fetched into within the retention period whatever the
+    ///     cache holds in total, and the size rule then removes the least recently used of what is left until
+    ///     the total is within the budget. Both rules skip a mirror a running review holds, and the next sweep
+    ///     weighs it again once that review has released it.
+    /// </remarks>
     private void CleanupMirrorCache()
     {
         var mirrorsRoot = Path.Combine(this.RootPath, "mirrors");
@@ -158,6 +168,7 @@ internal sealed class ReviewWorkspaceCleanupService(
         }
 
         var budgetBytes = Math.Max(128, options.Value.MaxCacheSizeMegabytes) * 1024L * 1024L;
+        var retentionCutoff = DateTime.UtcNow.AddDays(-Math.Max(1, options.Value.MirrorRetentionDays));
         var measured = new HashSet<string>(StringComparer.Ordinal);
         var mirrors = Directory.EnumerateDirectories(mirrorsRoot)
             .Select(path => new DirectoryInfo(path))
@@ -166,13 +177,29 @@ internal sealed class ReviewWorkspaceCleanupService(
             .ToList();
         this.ForgetUnmeasuredDirectories(measured);
 
-        var totalBytes = mirrors.Sum(entry => entry.SizeBytes);
+        var kept = new List<MirrorEntry>(mirrors.Count);
+        foreach (var mirror in mirrors)
+        {
+            if (mirror.LastWriteTimeUtc > retentionCutoff || IsReferenced(snapshot, mirror.Directory.FullName))
+            {
+                kept.Add(mirror);
+                continue;
+            }
+
+            logger.LogInformation(
+                "Removing mirror {MirrorPath}: the last fetch into it was at {LastWriteTimeUtc} and the retention period has passed.",
+                mirror.Directory.FullName,
+                mirror.LastWriteTimeUtc);
+            this.TryDeleteDirectory(mirror.Directory.FullName);
+        }
+
+        var totalBytes = kept.Sum(entry => entry.SizeBytes);
         if (totalBytes <= budgetBytes)
         {
             return;
         }
 
-        foreach (var mirror in mirrors)
+        foreach (var mirror in kept)
         {
             if (IsReferenced(snapshot, mirror.Directory.FullName))
             {

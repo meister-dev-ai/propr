@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Runtime;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Security;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.DependencyInjection;
 
@@ -18,7 +19,9 @@ internal static class ForgejoProviderServiceCollectionExtensions
 {
     public static IServiceCollection AddForgejoProviderAdapters(this IServiceCollection services)
     {
-        services.AddHttpClient("ForgejoProvider");
+        services.AddPostedCommentComposer();
+
+        services.AddHttpClient("ForgejoProvider").GuardEgress();
 
         services.TryAddScoped<ForgejoConnectionVerifier>();
         services.TryAddScoped<ForgejoWebhookSignatureVerifier>();

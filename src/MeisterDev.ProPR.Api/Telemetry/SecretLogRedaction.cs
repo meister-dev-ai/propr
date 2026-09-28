@@ -1,9 +1,11 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.IdentityAndAccess.Authentication.Models;
 using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
+using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterDev.ProPR.Application.Telemetry;
 using Serilog;
@@ -39,6 +41,26 @@ public static class SecretLogRedaction
         ArgumentNullException.ThrowIfNull(configuration);
 
         return AiConnectionLogRedaction.Apply(configuration)
+            .Destructure.ByTransforming<TenantMachineCredential>(credential => new
+            {
+                credential.Id,
+                credential.TenantId,
+                credential.Label,
+                TokenHash = "[REDACTED]",
+                TokenLookupHash = "[REDACTED]",
+                credential.CreatedAt,
+                credential.ExpiresAt,
+                credential.IssuedByUserId,
+            })
+            .Destructure.ByTransforming<IssuedTenantMachineCredential>(credential => new
+            {
+                credential.Id,
+                credential.TenantId,
+                credential.Label,
+                Token = "[REDACTED]",
+                credential.CreatedAt,
+                credential.ExpiresAt,
+            })
             // Scrub secrets from log output: X-Ado-Token, X-User-Pat, AZURE_CLIENT_SECRET, AdoClientSecret
             .Destructure.ByTransforming<CreateAiConnectionRequest>(request => new
             {

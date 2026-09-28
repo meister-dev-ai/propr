@@ -45,6 +45,31 @@
         </div>
 
         <div
+            v-if="vm.admissionState === 'refused'"
+            class="budget-banner budget-banner--stopped"
+            data-testid="admission-refusal-banner"
+        >
+            <span class="budget-banner-icon">◼</span>
+            <div class="budget-banner-body">
+                <strong>Not started</strong>
+                <!-- The banner reports the admission state. A job that carries no reason still shows it. -->
+                <p v-if="vm.admissionMessage" class="budget-banner-message">{{ vm.admissionMessage }}</p>
+            </div>
+        </div>
+
+        <div
+            v-else-if="vm.admissionState === 'held'"
+            class="budget-banner budget-banner--held"
+            data-testid="admission-hold-banner"
+        >
+            <span class="budget-banner-icon">⏸</span>
+            <div class="budget-banner-body">
+                <strong>Waiting</strong>
+                <p v-if="vm.admissionMessage" class="budget-banner-message">{{ vm.admissionMessage }}</p>
+            </div>
+        </div>
+
+        <div
             v-if="vm.budgetSoftCapMessage"
             class="budget-banner budget-banner--soft-capped"
             data-testid="budget-soft-cap-banner"

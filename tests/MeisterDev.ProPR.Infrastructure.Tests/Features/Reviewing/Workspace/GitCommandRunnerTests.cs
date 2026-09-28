@@ -1,9 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Workspace;
-using Microsoft.Extensions.Logging.Abstractions;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Workspace;
 
@@ -228,6 +232,204 @@ public sealed class GitCommandRunnerTests
         {
             TryDelete(root);
         }
+    }
+
+    /// <summary>
+    ///     Cancelling the measurement of a diff has to end the command, not only stop reading it. Disposing
+    ///     the wrapper releases the pipes and leaves the child running, and a review that was cancelled would
+    ///     keep a git process working and the workspace open behind it.
+    /// </summary>
+    /// <remarks>
+    ///     The command is a shell alias, so git owns a process tree and not a single child, and the kill has
+    ///     to cover the whole tree. It writes to standard output so the read loop keeps running and observes
+    ///     the cancellation, and it appends to a file so the test can see whether it is still alive
+    ///     afterwards. The alias ignores SIGPIPE, so closing the pipe alone would not end it.
+    /// </remarks>
+    [SkippableFact]
+    public async Task CountStandardOutputBytesAsync_Cancelled_EndsTheCommandItWasReading()
+    {
+        // The alias below is a POSIX shell script, and git runs an alias through the platform's shell.
+        Skip.IfNot(
+            OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(),
+            "The command under test is written for a POSIX shell.");
+
+        var root = CreateRoot();
+        var repositoryPath = Path.Combine(root, "repository");
+        Directory.CreateDirectory(repositoryPath);
+        var ticksPath = Path.Combine(repositoryPath, "ticks");
+        var runner = new GitCommandRunner(NullLogger<GitCommandRunner>.Instance);
+
+        try
+        {
+            (await runner.RunAsync(repositoryPath, ["init"], null, CancellationToken.None))
+                .EnsureSuccess("init repository");
+
+            using var cts = new CancellationTokenSource();
+            var measuring = runner.CountStandardOutputBytesAsync(
+                repositoryPath,
+                [
+                    "-c",
+                    $"alias.writeforever=!trap '' PIPE; while true; do echo tick; echo tick >> \"{ticksPath}\"; sleep 0.05; done",
+                    "writeforever",
+                ],
+                null,
+                cts.Token);
+
+            var started = await WaitForAsync(() => File.Exists(ticksPath), TimeSpan.FromSeconds(20));
+            Assert.True(started, "the command under test never started writing");
+
+            await cts.CancelAsync();
+
+            // Bounded: a cancellation that does not end the command is the regression under test, and an
+            // unbounded await would hang here with the process and the workspace still alive.
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => measuring.WaitAsync(TimeSpan.FromSeconds(30)));
+
+            var ended = await WaitForStableLengthAsync(ticksPath, TimeSpan.FromSeconds(10));
+            Assert.True(ended, "the command went on writing after the cancellation, so it was still running");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    /// <summary>
+    ///     A tree kill that could not end every member reports an <see cref="AggregateException" /> of the
+    ///     failures it collected. It used to escape the cancellation handler that called the kill, so a
+    ///     cancelled review surfaced as a failed one. The command itself is gone, so nothing is reported.
+    /// </summary>
+    [Fact]
+    public async Task EndAsync_AKillThatEndedTheCommandAndReportedAFailedTree_IsNotReported()
+    {
+        using var process = StartABlockingGitCommand();
+        var logged = new List<string>();
+
+        await GitCommandRunner.EndAsync(
+            process,
+            () =>
+            {
+                process.Kill();
+                process.WaitForExit();
+                throw new AggregateException(new Win32Exception(1, "a member of the tree could not be ended"));
+            },
+            new CapturingLogger(logged));
+
+        Assert.True(process.HasExited);
+        Assert.Empty(logged);
+    }
+
+    /// <summary>
+    ///     A kill the platform refused leaves the command running and the workspace it was started in held.
+    ///     The caller is unwinding on cancellation and cannot end it, so what it left behind is reported.
+    /// </summary>
+    [Fact]
+    public async Task EndAsync_AKillThatLeftTheCommandRunning_ReportsTheProcessStillHoldingItsWorkspace()
+    {
+        using var process = StartABlockingGitCommand();
+        var logged = new List<string>();
+
+        try
+        {
+            await GitCommandRunner.EndAsync(
+                process,
+                () => throw new AggregateException(new Win32Exception(1, "a member of the tree could not be ended")),
+                new CapturingLogger(logged));
+
+            Assert.False(process.HasExited);
+            Assert.Contains(
+                logged,
+                line => line.Contains(process.Id.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal));
+        }
+        finally
+        {
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+        }
+    }
+
+    /// <summary>Keeps every line that was written to it.</summary>
+    private sealed class CapturingLogger(List<string> lines) : ILogger<GitCommandRunner>
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            lines.Add(formatter(state, exception));
+        }
+    }
+
+    /// <summary>A git command that blocks on standard input until it is ended.</summary>
+    private static Process StartABlockingGitCommand()
+    {
+        var startInfo = new ProcessStartInfo(OperatingSystem.IsWindows() ? "git" : "/usr/bin/git")
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add("hash-object");
+        startInfo.ArgumentList.Add("--stdin");
+
+        var process = Process.Start(startInfo);
+        Assert.NotNull(process);
+
+        return process;
+    }
+
+    /// <summary>
+    ///     Waits for the file to stop growing, up to <paramref name="timeout" />. The command under test
+    ///     appends a line every 50 ms while it runs, so a length that is unchanged across a window many times
+    ///     that long is the process having ended. This tolerates a write that was in flight when the kill
+    ///     landed, and reports a command that is still running instead of waiting on it.
+    /// </summary>
+    private static async Task<bool> WaitForStableLengthAsync(string path, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        var previousLength = -1L;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var length = new FileInfo(path).Length;
+            if (length == previousLength)
+            {
+                return true;
+            }
+
+            previousLength = length;
+            await Task.Delay(TimeSpan.FromMilliseconds(300));
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> WaitForAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return true;
+            }
+
+            await Task.Delay(25);
+        }
+
+        return condition();
     }
 
     private static string CreateRoot()

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -147,10 +148,10 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
 
     public Task SetBudgetExceededAsync(
         Guid id,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default)
     {
         return inner.SetBudgetExceededAsync(id, scope, capKind, thresholdUsd, spentUsd, ct);
@@ -165,6 +166,34 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         CancellationToken ct = default)
     {
         return inner.SetBudgetHeldAsync(id, scope, capKind, thresholdUsd, spentUsd, ct);
+    }
+
+    public Task SetAdmissionHeldAsync(Guid id, DateTimeOffset heldUntil, CancellationToken ct = default)
+    {
+        return inner.SetAdmissionHeldAsync(id, heldUntil, ct);
+    }
+
+    public Task<bool> SetAdmissionRefusedAsync(Guid id, string reason, string? policyFingerprint, CancellationToken ct = default)
+    {
+        return inner.SetAdmissionRefusedAsync(id, reason, policyFingerprint, ct);
+    }
+
+    public Task<int> ReleaseDueAdmissionHoldsAsync(DateTimeOffset now, CancellationToken ct = default)
+    {
+        return inner.ReleaseDueAdmissionHoldsAsync(now, ct);
+    }
+
+    public Task<ReviewSubmissionWindow> GetSubmissionWindowAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        DateTimeOffset since,
+        Guid excludeJobId,
+        CancellationToken ct = default)
+    {
+        return inner.GetSubmissionWindowAsync(clientId, organizationUrl, projectId, repositoryId, pullRequestId, since, excludeJobId, ct);
     }
 
     public Task UpdateAiConfigAsync(

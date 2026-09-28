@@ -231,7 +231,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             ModelId = effectiveModelId,
             Temperature = systemContext.Temperature,
             Tools = transportTools.Count > 0 ? [.. transportTools] : null,
-        }.ApplyReasoning(opts.CaptureReasoningInProtocol, systemContext.ActiveReasoningEffort);
+        }.ApplyReasoning(systemContext.CapturesReasoning(opts), systemContext.ActiveReasoningEffort);
 
         // Pre-flight context-window budgeting: estimate the assembled payload against the model's context
         // window and degrade to diff-only, or skip, rather than send the provider a context that is too large.
@@ -590,7 +590,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         // their calls (rather than collapsing to a bare name list) and carry no text.
         var outputSample = AssistantTurnOutputRecord.Build(
             responseMessage,
-            opts.CaptureReasoningInProtocol,
+            systemContext.CapturesReasoning(opts),
             opts.MaxReasoningSummaryChars);
         await systemContext.ProtocolRecorder.RecordAiCallAsync(
             systemContext.ActiveProtocolId.Value,
@@ -730,7 +730,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 "The response must start with '{' and end with '}'."));
         var finalOptions = new ChatOptions
                 { MaxOutputTokens = setup.ChatOptions.MaxOutputTokens, ModelId = setup.EffectiveModelId, Temperature = systemContext.Temperature }
-            .ApplyReasoning(opts.CaptureReasoningInProtocol, systemContext.ActiveReasoningEffort);
+            .ApplyReasoning(systemContext.CapturesReasoning(opts), systemContext.ActiveReasoningEffort);
         ChatResponse finalResponse;
         try
         {
@@ -840,7 +840,7 @@ internal sealed partial class ToolAwareAiReviewCore(
 
         var correctionOptions = new ChatOptions
                 { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature }
-            .ApplyReasoning(options.Value.CaptureReasoningInProtocol, systemContext.ActiveReasoningEffort);
+            .ApplyReasoning(systemContext.CapturesReasoning(options.Value), systemContext.ActiveReasoningEffort);
 
         // Apply the same context-window budget to the schema-repair call, which sends the accumulated transcript
         // directly rather than through the loop's choke point.

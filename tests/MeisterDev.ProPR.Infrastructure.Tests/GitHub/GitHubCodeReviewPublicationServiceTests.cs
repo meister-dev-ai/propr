@@ -80,7 +80,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -142,7 +143,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -202,7 +204,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -253,7 +256,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer, publicationContext: publicationContext);
 
@@ -303,7 +307,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
 
@@ -343,7 +348,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -390,7 +396,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
 
@@ -442,7 +449,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var publicationService = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await publicationService.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -500,7 +508,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -555,7 +564,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -612,7 +622,8 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -736,5 +747,74 @@ public sealed class GitHubCodeReviewPublicationServiceTests
                 base.Dispose(false);
             }
         }
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_EndsTheReviewBodyAndEveryInlineCommentWithTheMarker()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [
+                new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case."),
+                new ReviewComment(null, null, CommentSeverity.Info, "No blocking issues found."),
+            ]);
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    Guid.NewGuid(),
+                    clientId,
+                    ScmProvider.GitHub,
+                    host.HostBaseUrl,
+                    ScmAuthenticationKind.PersonalAccessToken,
+                    "GitHub",
+                    "ghp_test",
+                    true));
+
+        string? postedBody = null;
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(async request =>
+            {
+                if (request.RequestUri!.AbsoluteUri == UserUri)
+                {
+                    return CreateJsonResponse(new { login = "meister-dev" });
+                }
+
+                if (request.RequestUri.AbsoluteUri == ReviewsUri)
+                {
+                    postedBody = await request.Content!.ReadAsStringAsync();
+                    return CreateJsonResponse(new { id = 1 });
+                }
+
+                return CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound);
+            }));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        Assert.NotNull(postedBody);
+        const string marker = TestPostedCommentComposer.DistinctiveMarker;
+        using var payload = JsonDocument.Parse(postedBody);
+        TestPostedCommentComposer.AssertMarkedOnce(payload.RootElement.GetProperty("body").GetString(), marker);
+
+        // One inline comment for the one comment anchored to a file; the comment without a file belongs in the
+        // review body. A count assertion is what keeps a dropped inline comment from reading as success.
+        var comments = payload.RootElement.GetProperty("comments").EnumerateArray().ToList();
+        var comment = Assert.Single(comments);
+        Assert.Equal("src/file.ts", comment.GetProperty("path").GetString());
+        Assert.Equal("Warning: Guard this null case.\n\n" + marker, comment.GetProperty("body").GetString());
     }
 }

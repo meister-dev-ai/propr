@@ -915,6 +915,174 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(5m, updated.IncrementBudgetHardCapUsd);
     }
 
+    public static IEnumerable<object[]> AdmissionIntegerBoundaries()
+    {
+        foreach (var field in new[] { "maxChangedFiles", "maxChangedLines", "maxDiffBytes", "maxReviewsPerPullRequestPerHour", "maxRepositoryMegabytes" })
+        {
+            foreach (var value in new[] { "0", "-1", "1.5", "2147483648", "null", "2147483647" })
+            {
+                yield return [field, value, value is "null" or "2147483647"];
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AdmissionIntegerBoundaries))]
+    public async Task PatchClient_AdmissionBounds_EnforceHttpIntegerContract(string field, string value, bool accepted)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(), TenantId = factory.TenantId, DisplayName = "Integer boundary",
+            IsActive = true, CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = new StringContent("{\"admissionPolicy\":{\"" + field + "\":" + value + "}}", System.Text.Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(request);
+        Assert.Equal(accepted ? HttpStatusCode.OK : HttpStatusCode.BadRequest, response.StatusCode);
+        if (accepted)
+        {
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var bound = body.RootElement.GetProperty("admissionPolicy").GetProperty(field);
+            if (value == "null")
+            {
+                Assert.Equal(JsonValueKind.Null, bound.ValueKind);
+            }
+            else
+            {
+                Assert.Equal(int.MaxValue, bound.GetInt32());
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PatchClient_AdmissionPolicy_PersistedAndReturned()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "admission-set", "Admission Set Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Admission Set",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                admissionPolicy = new
+                {
+                    maxChangedFiles = 150,
+                    maxChangedLines = 20_000,
+                    maxDiffBytes = 4_000_000,
+                    maxReviewsPerPullRequestPerHour = 4,
+                    maxRepositoryMegabytes = 2_048,
+                },
+            });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var policy = body.RootElement.GetProperty("admissionPolicy");
+        // Every bound the request set is asserted on the response as well as in the database, so a mapping or
+        // serializer that drops one is caught where the caller would see it.
+        Assert.Equal(150, policy.GetProperty("maxChangedFiles").GetInt32());
+        Assert.Equal(20_000, policy.GetProperty("maxChangedLines").GetInt32());
+        Assert.Equal(4_000_000, policy.GetProperty("maxDiffBytes").GetInt32());
+        Assert.Equal(4, policy.GetProperty("maxReviewsPerPullRequestPerHour").GetInt32());
+        Assert.Equal(2_048, policy.GetProperty("maxRepositoryMegabytes").GetInt32());
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.Equal(150, updated.AdmissionMaxChangedFiles);
+        Assert.Equal(20_000, updated.AdmissionMaxChangedLines);
+        Assert.Equal(4_000_000, updated.AdmissionMaxDiffBytes);
+        Assert.Equal(4, updated.AdmissionMaxReviewsPerPullRequestPerHour);
+        Assert.Equal(2_048, updated.AdmissionMaxRepositoryMegabytes);
+    }
+
+    [Fact]
+    public async Task PatchClient_AdmissionPolicyWithOmittedBound_ClearsThatBound()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "admission-clear", "Admission Clear Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Admission Clear",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            AdmissionMaxChangedFiles = 150,
+            AdmissionMaxRepositoryMegabytes = 2_048,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { admissionPolicy = new { maxChangedFiles = 200 } });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.Equal(200, updated.AdmissionMaxChangedFiles);
+        Assert.Null(updated.AdmissionMaxRepositoryMegabytes);
+    }
+
+    [Fact]
+    public async Task PatchClient_AdmissionPolicy_FromAUserWithoutClientAccess_Returns403()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "admission-403", "Admission Forbidden Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Admission Forbidden",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken());
+        request.Content = JsonContent.Create(new { admissionPolicy = new { maxChangedFiles = 150 } });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        // The refusal has to come before the patch, so nothing of the request reached the record.
+        db.ChangeTracker.Clear();
+        var untouched = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.Null(untouched.AdmissionMaxChangedFiles);
+    }
+
     [Fact]
     public async Task PatchClient_BudgetConfigWithOmittedCap_ClearsThatCap()
     {
@@ -1327,6 +1495,26 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 [
                     new Claim("sub", Guid.NewGuid().ToString()),
                     new Claim("global_role", "Admin"),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
+
+        /// <summary>A token for an authenticated user with no client assignment, for the authorization checks.</summary>
+        public string GenerateUserToken()
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(
+                [
+                    new Claim("sub", Guid.NewGuid().ToString()),
+                    new Claim("global_role", "User"),
                 ]),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),

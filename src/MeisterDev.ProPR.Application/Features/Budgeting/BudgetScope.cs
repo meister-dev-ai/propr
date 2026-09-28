@@ -7,10 +7,10 @@ using MeisterDev.ProPR.Application.Features.Budgeting.Models;
 namespace MeisterDev.ProPR.Application.Features.Budgeting;
 
 /// <summary>
-///     The ambient budget state for one in-flight review job: the client's caps, the per-scope spend baseline
+///     The ambient budget state for one in-flight review job: the caps of its client and tenant, the per-scope spend baseline
 ///     captured at job start, and a thread-safe running total of the spend this job has metered since. The same
-///     running total contributes to every scope (a job's spend counts toward its client, pull request, and
-///     increment at once), so the effective spend for each scope is its baseline plus the running total.
+///     running total contributes to every scope (a job's spend counts toward its client, pull request, increment
+///     and tenant at once), so the effective spend for each scope is its baseline plus the running total.
 /// </summary>
 public sealed class BudgetScope(BudgetCaps caps, ReviewSpendBaseline baseline)
 {
@@ -20,7 +20,7 @@ public sealed class BudgetScope(BudgetCaps caps, ReviewSpendBaseline baseline)
     private BudgetBreach? _trippedBreach;
     private BudgetBreach? _incrementSoftCapBreach;
 
-    /// <summary>The client's resolved caps.</summary>
+    /// <summary>The resolved caps of the job's client and of the tenant that client belongs to.</summary>
     public BudgetCaps Caps { get; } = caps;
 
     /// <summary>The per-scope spend already accumulated before this job's in-run spend.</summary>
@@ -123,7 +123,8 @@ public sealed class BudgetScope(BudgetCaps caps, ReviewSpendBaseline baseline)
             this.Caps,
             this.Baseline.ClientMonthToDate.KnownUsd + running,
             this.Baseline.PullRequest.KnownUsd + running,
-            this.Baseline.Increment.KnownUsd + running);
+            this.Baseline.Increment.KnownUsd + running,
+            this.Baseline.TenantMonthToDate.KnownUsd + running);
 
         if (breach is not null)
         {

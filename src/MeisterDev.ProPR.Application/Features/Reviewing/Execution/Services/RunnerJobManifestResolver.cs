@@ -43,7 +43,8 @@ public sealed partial class RunnerJobManifestResolver(
     IScmProviderRegistry? providerRegistry = null,
     AiReviewOptions? reviewOptions = null,
     ILicensingCapabilityService? licensing = null,
-    IReviewJobExecutionStore? executionStore = null) : IRunnerJobManifestResolver
+    IReviewJobExecutionStore? executionStore = null,
+    ITenantReasoningCapturePolicyProvider? reasoningCapturePolicies = null) : IRunnerJobManifestResolver
 {
     /// <inheritdoc />
     public async Task<RunnerJobManifestResolution> ResolveAsync(
@@ -135,6 +136,7 @@ public sealed partial class RunnerJobManifestResolver(
             // Read once and used twice: the flag is carried in the manifest for the executor's tool gating, and it
             // decides here whether linked items are discovered at all.
             var includeLinkedItems = await clientRegistry.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, ct);
+            var tenantReviewLimits = await clientRegistry.GetTenantReviewLimitsAsync(job.ClientId, ct) ?? TenantReviewLimits.None;
             var linkedItems = includeLinkedItems
                 ? await this.DiscoverLinkedItemsAsync(job, request.Conversation, ct)
                 : null;
@@ -193,7 +195,18 @@ public sealed partial class RunnerJobManifestResolver(
                     await clientRegistry.GetEvidenceBackedVerificationEnabledAsync(job.ClientId, ct),
                     includeLinkedItems,
                     job.ReviewTemperature,
-                    job.ReviewPipelineProfileId),
+                    job.ReviewPipelineProfileId,
+
+                    // Stated by the control plane so a runner's own switch does not decide what a tenant's
+                    // reasoning is allowed to leave behind. Null only where this host has no review options
+                    // composed, which is the offline harness; the runner then keeps its own default.
+                    await this.ResolveCaptureReasoningAsync(job.ClientId, ct),
+
+                    // Resolved here so a runner applies the tenant's limits without reading the tenant itself.
+                    // A runner that does not know these fields keeps its own configured values, which is the
+                    // installation default it was started with.
+                    tenantReviewLimits.MaxFileSizeBytes,
+                    tenantReviewLimits.MaxStructuralParseBytes),
                 linkedItems,
 
                 // Resolved here and not on the executor because the license lives in this database. A host
@@ -448,6 +461,7 @@ public sealed partial class RunnerJobManifestResolver(
         Narrow(ref headroom, caps.MonthlyHardCapUsd, baseline.ClientMonthToDate.KnownUsd);
         Narrow(ref headroom, caps.PullRequestHardCapUsd, baseline.PullRequest.KnownUsd);
         Narrow(ref headroom, caps.IncrementHardCapUsd, baseline.Increment.KnownUsd);
+        Narrow(ref headroom, caps.TenantMonthlyHardCapUsd, baseline.TenantMonthToDate.KnownUsd);
         return headroom;
     }
 
@@ -474,4 +488,15 @@ public sealed partial class RunnerJobManifestResolver(
         Level = LogLevel.Information,
         Message = "Linked items for review job {JobId} could not be discovered at dispatch; the review proceeds without them")]
     private static partial void LogLinkedItemsSkipped(ILogger logger, Guid jobId, Exception ex);
+
+    // The tenant's policy over the installation switch, resolved to the value the runner is to honour. Same
+    // rule as the in-process path, so a review does not mean one thing locally and another remotely.
+    private async Task<bool?> ResolveCaptureReasoningAsync(Guid clientId, CancellationToken ct)
+    {
+        var stated = reasoningCapturePolicies is null
+            ? null
+            : (await reasoningCapturePolicies.GetForClientAsync(clientId, ct)).AsOverride();
+
+        return stated ?? reviewOptions?.CaptureReasoningInProtocol;
+    }
 }

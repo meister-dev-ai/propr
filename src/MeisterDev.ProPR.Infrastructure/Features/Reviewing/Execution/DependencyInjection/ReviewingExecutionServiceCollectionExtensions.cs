@@ -81,6 +81,9 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // whichever request thread happens to serve a runner's completion.
         services.AddSingleton<IRunnerJobBudgetRegistry, RunnerJobBudgetRegistry>();
         services.AddScoped<IRunnerIngestLedger, RunnerIngestLedger>();
+        // Asked on both routes a runner's text arrives by: the relay it asks for a completion through, and
+        // the trace it spools back. The runner's own switch decides neither.
+        services.AddScoped<IRunnerJobReasoningCapturePolicy, RunnerJobReasoningCapturePolicy>();
         services.AddScoped<IRunnerIngestWriter, RunnerIngestWriter>();
         services.AddScoped<IRunnerIngestService, RunnerIngestService>();
         services.AddScoped<IRunnerRegistry, RunnerRegistry>();

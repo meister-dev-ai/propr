@@ -29,6 +29,24 @@ namespace MeisterDev.ProPR.Api.Tests.Features.Reviewing.Intake;
 public sealed class ReviewJobsControllerTests
 {
     [Fact]
+    public async Task GetClientReview_RefusesForeignClientEvenWhenCallerHasBothClientRoles()
+    {
+        var clientId = Guid.NewGuid();
+        var foreignClientId = Guid.NewGuid();
+        var job = new ReviewJob(Guid.NewGuid(), foreignClientId, "https://dev.azure.com/org", "project", "repo", 7, 1);
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetForClientAsync(foreignClientId, job.Id, Arg.Any<CancellationToken>()).Returns(job);
+        var controller = CreateController(store, clientId, ClientRole.ClientUser);
+        controller.HttpContext.Items["ClientRoles"] = new Dictionary<Guid, ClientRole>
+        {
+            [clientId] = ClientRole.ClientUser, [foreignClientId] = ClientRole.ClientUser
+        };
+        Assert.IsType<NotFoundResult>(await controller.GetClientReview(clientId, job.Id, default));
+        Assert.IsType<OkObjectResult>(await controller.GetClientReview(foreignClientId, job.Id, default));
+        await store.DidNotReceiveWithAnyArgs().GetByIdAsync(default, default);
+    }
+
+    [Fact]
     public async Task SubmitReview_WithoutRequiredRole_ReturnsForbidden()
     {
         var store = Substitute.For<IReviewJobIntakeStore>();

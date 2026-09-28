@@ -8,6 +8,7 @@ using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Clients.Contracts;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -21,7 +22,7 @@ using Microsoft.EntityFrameworkCore;
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
 
 /// <summary>Database-backed repository for provider-neutral AI connection profiles.</summary>
-public sealed class AiConnectionRepository(
+public sealed partial class AiConnectionRepository(
     MeisterProPRDbContext dbContext,
     ISecretProtectionCodec secretProtectionCodec,
     ITenantProviderPolicyProvider providerPolicies,
@@ -207,6 +208,14 @@ public sealed class AiConnectionRepository(
             return false;
         }
 
+        await this.ApplyUpdateAsync(record, request, ct);
+        await dbContext.SaveChangesAsync(ct);
+        await this.AuditAsync("updated", record, CarriesCredentialMaterial(request), ct);
+        return true;
+    }
+
+    private async Task ApplyUpdateAsync(AiConnectionProfileRecord record, AiConnectionWriteRequestDto request, CancellationToken ct)
+    {
         // An update can change the provider family, so the policy is checked here too rather than only on create.
         if (record.TenantId is { } ownerTenantId)
         {
@@ -306,12 +315,8 @@ public sealed class AiConnectionRepository(
 
         if (shouldInvalidateVerification)
         {
-            record.VerificationSnapshot = ToVerificationRecord(connectionId, AiVerificationResultDto.NeverVerified);
+            record.VerificationSnapshot = ToVerificationRecord(record.Id, AiVerificationResultDto.NeverVerified);
         }
-
-        await dbContext.SaveChangesAsync(ct);
-        await this.AuditAsync("updated", record, CarriesCredentialMaterial(request), ct);
-        return true;
     }
 
     /// <inheritdoc />
@@ -455,7 +460,7 @@ public sealed class AiConnectionRepository(
         AiPurpose purpose,
         CancellationToken ct = default)
     {
-        var record = await this.WithReadDbAsync(
+        var records = await this.WithReadDbAsync(
             db => db.AiConnectionProfiles
                 .Include(profile => profile.ConfiguredModels)
                 .Include(profile => profile.PurposeBindings)
@@ -463,23 +468,36 @@ public sealed class AiConnectionRepository(
                 .Where(profile => profile.ClientId == clientId && profile.IsActive)
                 .OrderBy(profile => profile.DisplayName)
                 .ThenBy(profile => profile.Id)
-                .FirstOrDefaultAsync(ct),
+                .ToListAsync(ct),
             ct);
 
-        if (record is null)
+        AiConnectionProfileRecord? record = null;
+        AiPurposeBindingRecord? bindingRecord = null;
+        for (AiPurpose? candidatePurpose = purpose; candidatePurpose is { } current; candidatePurpose = FallbackPurpose(current))
         {
-            return null;
+            foreach (var profile in records)
+            {
+                var binding = profile.PurposeBindings.FirstOrDefault(candidate =>
+                    candidate.IsEnabled &&
+                    string.Equals(candidate.Purpose, current.ToString(), StringComparison.Ordinal) &&
+                    profile.ConfiguredModels.Any(model => model.Id == candidate.ConfiguredModelId));
+                if (binding is null)
+                {
+                    continue;
+                }
+
+                record = profile;
+                bindingRecord = binding;
+                break;
+            }
+
+            if (bindingRecord is not null)
+            {
+                break;
+            }
         }
 
-        var bindingRecord = FindActiveBindingRecord(record, purpose);
-
-        if (bindingRecord is null)
-        {
-            return null;
-        }
-
-        var modelRecord = record.ConfiguredModels.FirstOrDefault(model => model.Id == bindingRecord.ConfiguredModelId);
-        if (modelRecord is null)
+        if (record is null || bindingRecord is null)
         {
             return null;
         }
@@ -496,7 +514,7 @@ public sealed class AiConnectionRepository(
 
         return new AiResolvedPurposeBindingDto(
             connection,
-            connection.ConfiguredModels.First(model => model.Id == modelRecord.Id),
+            connection.ConfiguredModels.First(model => model.Id == bindingRecord.ConfiguredModelId),
             connection.PurposeBindings.First(binding => binding.Id == bindingRecord.Id));
     }
 
@@ -1386,6 +1404,7 @@ public sealed class AiConnectionRepository(
             storedSecret is null ? null : storedSecret.SingleValue ?? ResolveFallbackSecret(storedSecret),
             record.TenantId)
         {
+            ConfigurationStamp = SnapshotStamp(record),
             Availability = this.DescribeAvailability(identity, policy, record.BaseUrl, unresolvedValues),
             ProviderSettings = EffectiveDeclaredValues(record.ProviderSettings, this.StoredDeclaredFields(providerKind)),
             DeclaredSecrets = this.ReadDeclaredSecrets(storedSecret, providerKind),
@@ -1602,22 +1621,6 @@ public sealed class AiConnectionRepository(
                 };
             })
             .ToList();
-    }
-
-    private static AiPurposeBindingRecord? FindActiveBindingRecord(AiConnectionProfileRecord record, AiPurpose purpose)
-    {
-        var binding = record.PurposeBindings.FirstOrDefault(candidate =>
-            string.Equals(candidate.Purpose, purpose.ToString(), StringComparison.Ordinal) && candidate.IsEnabled);
-
-        if (binding is not null)
-        {
-            return binding;
-        }
-
-        // Walk the fallback chain so an unbound purpose resolves to its cheaper relative rather than nothing.
-        return FallbackPurpose(purpose) is { } fallbackPurpose
-            ? FindActiveBindingRecord(record, fallbackPurpose)
-            : null;
     }
 
     private static AiPurpose? FallbackPurpose(AiPurpose purpose)

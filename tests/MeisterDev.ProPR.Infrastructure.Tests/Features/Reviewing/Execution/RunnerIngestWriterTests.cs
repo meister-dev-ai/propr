@@ -2,7 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Declaration;
+using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -21,8 +23,14 @@ public sealed class RunnerIngestWriterTests
 {
     private static readonly Guid JobId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
+    /// <summary>What an operator reading the trace sees in place of a sample that was not stored.</summary>
+    private const string WithheldNote = "[withheld: this tenant does not capture model reasoning]";
+
     private readonly IJobRepository _jobs = Substitute.For<IJobRepository>();
     private readonly IProtocolRecorder _protocols = Substitute.For<IProtocolRecorder>();
+
+    private readonly IRunnerJobReasoningCapturePolicy _reasoningCapture =
+        Substitute.For<IRunnerJobReasoningCapturePolicy>();
 
     private static ReviewJob Job(params ReviewFileResult[] rows)
     {
@@ -38,7 +46,7 @@ public sealed class RunnerIngestWriterTests
     private RunnerIngestWriter CreateWriter(ReviewJob job)
     {
         this._jobs.GetByIdWithFileResultsAsync(JobId, Arg.Any<CancellationToken>()).Returns(job);
-        return new RunnerIngestWriter(this._jobs, this._protocols);
+        return new RunnerIngestWriter(this._jobs, this._protocols, this._reasoningCapture);
     }
 
     // The comments are the checkpoint's substance: without them a reclaimed job's synthesis reasons over
@@ -128,7 +136,7 @@ public sealed class RunnerIngestWriterTests
                     runtime, "reviewer-medium",
                     MeisterDev.ProPR.Domain.Enums.LogicalModelLayer.TenantCatalog,
                     MeisterDev.ProPR.Domain.Enums.ReviewReasoningEffort.None));
-        var writer = new RunnerIngestWriter(this._jobs, this._protocols, logicalModels);
+        var writer = new RunnerIngestWriter(this._jobs, this._protocols, this._reasoningCapture, logicalModels);
 
         await writer.WriteSpendAsync(JobId, [new RunnerSpendRecord("reviewer-medium", 100, 20, null)]);
 
@@ -153,7 +161,7 @@ public sealed class RunnerIngestWriterTests
                 Arg.Any<Guid>(), Arg.Any<string>(),
                 Arg.Any<MeisterDev.ProPR.Application.Interfaces.IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns<MeisterDev.ProPR.Application.DTOs.ResolvedLogicalModelChatRuntime>(_ => throw new InvalidOperationException("binding deleted"));
-        var writer = new RunnerIngestWriter(this._jobs, this._protocols, logicalModels);
+        var writer = new RunnerIngestWriter(this._jobs, this._protocols, this._reasoningCapture, logicalModels);
 
         await writer.WriteSpendAsync(JobId, [new RunnerSpendRecord("reviewer-medium", 100, 20, null)]);
 
@@ -180,7 +188,7 @@ public sealed class RunnerIngestWriterTests
                 Arg.Any<Guid>(), Arg.Any<string>(),
                 Arg.Any<MeisterDev.ProPR.Application.Interfaces.IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns<MeisterDev.ProPR.Application.DTOs.ResolvedLogicalModelChatRuntime>(_ => throw new InvalidOperationException("binding deleted"));
-        var writer = new RunnerIngestWriter(this._jobs, this._protocols, logicalModels);
+        var writer = new RunnerIngestWriter(this._jobs, this._protocols, this._reasoningCapture, logicalModels);
 
         await writer.WriteSpendAsync(
             JobId,
@@ -206,5 +214,156 @@ public sealed class RunnerIngestWriterTests
 
         await this._jobs.DidNotReceive().UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>());
         await this._jobs.DidNotReceive().AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>());
+    }
+
+    // A runner decides for itself what to spool, so an outdated or hostile one can send reasoning a tenant has
+    // forbidden. It is removed here, where the text is about to be stored, and it goes from both columns the
+    // event is replayed into.
+    [Fact]
+    public async Task ATenantThatWithholdsReasoning_GetsItRemovedFromAnIngestedAiCall()
+    {
+        this._reasoningCapture.CapturesReasoningAsync(JobId, Arg.Any<CancellationToken>()).Returns(false);
+        var written = await this.WriteAiCallAsync(SpooledAiCall(AssistantTurn(withReasoning: true)));
+
+        Assert.NotNull(written);
+        var details = JsonDocument.Parse(written!).RootElement;
+        var turn = JsonDocument.Parse(details.GetProperty("outputTextSample").GetString()!).RootElement;
+        Assert.False(turn.TryGetProperty("reasoning", out _));
+        Assert.Equal("Done.", turn.GetProperty("assistantText").GetString());
+        Assert.DoesNotContain("private chain of thought", written!, StringComparison.Ordinal);
+
+        // Budgets are computed from the counts, so they stay where they are.
+        Assert.Equal(128, details.GetProperty("reasoningTokens").GetInt64());
+    }
+
+    [Fact]
+    public async Task ATenantThatCapturesReasoning_GetsTheIngestedAiCallUnchanged()
+    {
+        this._reasoningCapture.CapturesReasoningAsync(JobId, Arg.Any<CancellationToken>()).Returns(true);
+        var spooled = SpooledAiCall(AssistantTurn(withReasoning: true));
+
+        var written = await this.WriteAiCallAsync(spooled);
+
+        Assert.Equal(spooled, written);
+    }
+
+    // The sample cannot be read into its parts, so it cannot be shown to hold no reasoning.
+    [Fact]
+    public async Task ATenantThatWithholdsReasoning_GetsAnUnreadableSampleReplacedByANote()
+    {
+        this._reasoningCapture.CapturesReasoningAsync(JobId, Arg.Any<CancellationToken>()).Returns(false);
+
+        var written = await this.WriteAiCallAsync(SpooledAiCall("the model answered in prose"));
+
+        Assert.NotNull(written);
+        Assert.DoesNotContain("the model answered in prose", written!, StringComparison.Ordinal);
+        var sample = JsonDocument.Parse(written!).RootElement.GetProperty("outputTextSample").GetString();
+        Assert.Equal(WithheldNote, sample);
+    }
+
+    [Fact]
+    public async Task ATenantThatWithholdsReasoning_GetsAnUnreadableEventReplacedByANote()
+    {
+        this._reasoningCapture.CapturesReasoningAsync(JobId, Arg.Any<CancellationToken>()).Returns(false);
+
+        var written = await this.WriteAiCallAsync("not json at all");
+
+        Assert.Equal(WithheldNote, written);
+    }
+
+    // A runner that spooled the assistant turn as structured JSON instead of a serialized string. The sample
+    // cannot be read into its parts here, so it cannot be shown to hold no reasoning and the whole sample goes.
+    [Fact]
+    public async Task ATenantThatWithholdsReasoning_GetsANonStringSampleReplacedByANote()
+    {
+        this._reasoningCapture.CapturesReasoningAsync(JobId, Arg.Any<CancellationToken>()).Returns(false);
+        var spooled = JsonSerializer.Serialize(
+            new
+            {
+                protocolId = Guid.Empty,
+                iteration = 1,
+                inputTokens = 2048,
+                outputTokens = 50,
+                inputTextSample = "[system] …",
+                outputTextSample = new { assistantText = "Done.", reasoning = "private chain of thought" },
+                reasoningTokens = 128,
+            });
+
+        var written = await this.WriteAiCallAsync(spooled);
+
+        Assert.NotNull(written);
+        var details = JsonDocument.Parse(written!).RootElement;
+
+        // The whole sample is replaced, so neither the reasoning nor the answer beside it survives: a sample
+        // this side cannot read into its parts cannot be trimmed field by field.
+        Assert.DoesNotContain("private chain of thought", written!, StringComparison.Ordinal);
+        Assert.DoesNotContain("Done.", written!, StringComparison.Ordinal);
+        Assert.Equal(WithheldNote, details.GetProperty("outputTextSample").GetString());
+
+        // Budgets are computed from the counts, so they stay where they are.
+        Assert.Equal(128, details.GetProperty("reasoningTokens").GetInt64());
+    }
+
+    // Only the AI calls carry the model's reasoning; the rest of the trace is left alone.
+    [Fact]
+    public async Task ATenantThatWithholdsReasoning_GetsOtherTraceEventsUnchanged()
+    {
+        this._reasoningCapture.CapturesReasoningAsync(JobId, Arg.Any<CancellationToken>()).Returns(false);
+        const string spooled = """{"stage":"planning","note":"not an ai call"}""";
+
+        var written = await this.WriteAiCallAsync(spooled, eventName: "protocol.strategy_event");
+
+        Assert.Equal(spooled, written);
+    }
+
+    private async Task<string?> WriteAiCallAsync(string details, string eventName = "protocol.ai_call")
+    {
+        var protocolId = Guid.NewGuid();
+        this._protocols
+            .BeginAsync(
+                JobId, 1, "runner-trace", Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(), Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(),
+                Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(protocolId);
+
+        string? outputSummary = null;
+        string? inputSample = null;
+        await this._protocols.RecordReviewStrategyEventAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Do<string?>(value => inputSample = value),
+            Arg.Do<string?>(value => outputSummary = value),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+
+        var writer = new RunnerIngestWriter(this._jobs, this._protocols, this._reasoningCapture);
+        await writer.WriteEventsAsync(JobId, [new RunnerTraceEvent(DateTimeOffset.UtcNow, eventName, details)]);
+
+        // Both columns carry the same replayed blob, so a strip that reached only one of them would still
+        // leave the text on the row.
+        Assert.Equal(outputSummary, inputSample);
+        return outputSummary;
+    }
+
+    private static string AssistantTurn(bool withReasoning)
+    {
+        return withReasoning
+            ? """{"assistantText":"Done.","reasoning":"private chain of thought"}"""
+            : """{"assistantText":"Done."}""";
+    }
+
+    private static string SpooledAiCall(string outputTextSample)
+    {
+        return JsonSerializer.Serialize(
+            new
+            {
+                protocolId = Guid.Empty,
+                iteration = 1,
+                inputTokens = 2048,
+                outputTokens = 50,
+                inputTextSample = "[system] …",
+                outputTextSample,
+                reasoningTokens = 128,
+            });
     }
 }

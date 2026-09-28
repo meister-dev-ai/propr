@@ -147,6 +147,36 @@ describe('PrReviewView thread passes', () => {
     expect(getPrViewMock).toHaveBeenCalledTimes(2)
   })
 
+  it('says the cap details are unavailable for a pass stopped by a cap nothing named', async () => {
+    getPrViewMock.mockResolvedValue(prView(
+      [
+        {
+          threadPassId: 'pass-1',
+          status: 6,
+          createdAt: '2026-08-03T10:00:00Z',
+          completedAt: '2026-08-03T10:00:05Z',
+          threadCount: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalEstimatedCostUsd: null,
+          costIsApproximate: false,
+          budgetBlockScope: null,
+          budgetBlockCapKind: 0,
+          budgetBlockThresholdUsd: null,
+          budgetBlockSpentUsd: null,
+        },
+      ],
+      null,
+    ))
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Budget exceeded')
+    expect(wrapper.text()).toContain('the cap details are unavailable')
+    expect(wrapper.text()).not.toContain('$0.00')
+  })
+
   it('names a pass that ended having done nothing, and offers no restart for it', async () => {
     getPrViewMock.mockResolvedValue(prView(
       [

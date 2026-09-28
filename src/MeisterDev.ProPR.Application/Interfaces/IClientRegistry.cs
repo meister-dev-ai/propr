@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -173,4 +174,36 @@ public interface IClientRegistry
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<Guid?> GetTenantIdAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the size bounds the given client puts on a review before it starts. Defaults to
+    ///     <see cref="ReviewAdmissionPolicy.None" /> when the client does not exist, so an unknown client is
+    ///     bounded by nothing and admission decides nothing for it.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ReviewAdmissionPolicy> GetReviewAdmissionPolicyAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the per-file byte limits the client's tenant sets for reviews. A null value means the tenant
+    ///     states none and the installation value stays in force, which is also the answer for an unknown client.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<TenantReviewLimits> GetTenantReviewLimitsAsync(Guid clientId, CancellationToken ct = default);
+}
+
+/// <summary>
+///     The per-file byte limits a tenant states for its reviews. A null value leaves the installation value in
+///     force, so a tenant that states nothing reviews exactly as the installation does.
+/// </summary>
+/// <param name="MaxFileSizeBytes">Largest file the reviewer may read, or null for the installation value.</param>
+/// <param name="MaxStructuralParseBytes">Largest source the structural analyzer accepts, or null for the installation value.</param>
+public sealed record TenantReviewLimits(int? MaxFileSizeBytes = null, int? MaxStructuralParseBytes = null)
+{
+    /// <summary>Limits stating nothing, so the installation values stay in force.</summary>
+    public static TenantReviewLimits None { get; } = new();
+
+    /// <summary>True when the tenant states at least one limit of its own.</summary>
+    public bool AnyStated => this.MaxFileSizeBytes is not null || this.MaxStructuralParseBytes is not null;
 }

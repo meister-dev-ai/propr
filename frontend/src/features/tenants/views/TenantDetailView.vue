@@ -89,6 +89,7 @@
         </div>
         <div v-if="activeSection === 'compliance'">
           <TenantProviderAllowListSection :tenant-id="vm.tenantId" />
+          <TenantReasoningCaptureSection :tenant-id="vm.tenantId" />
         </div>
       </template>
 
@@ -133,6 +134,7 @@ import TenantLogicalModelsSection from '@/features/tenants/components/TenantLogi
 import TenantMembersSection from '@/features/tenants/components/TenantMembersSection.vue'
 import TenantModelCatalogSection from '@/features/tenants/components/TenantModelCatalogSection.vue'
 import TenantProviderAllowListSection from '@/features/tenants/components/TenantProviderAllowListSection.vue'
+import TenantReasoningCaptureSection from '@/features/tenants/components/TenantReasoningCaptureSection.vue'
 import TenantSpendSection from '@/features/tenants/components/TenantSpendSection.vue'
 import TenantSsoSection from '@/features/tenants/components/TenantSsoSection.vue'
 import { useTenantSettingsViewModel } from '@/features/tenants/view-models/useTenantSettingsViewModel'

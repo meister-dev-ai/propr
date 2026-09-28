@@ -2,7 +2,10 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.Features.Admission;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
@@ -61,7 +64,9 @@ public sealed partial class ReviewOrchestrationService(
     IBudgetEventPublisher? budgetEventPublisher = null,
     IPostedFindingIndex? postedFindingIndex = null,
     IReviewJobLeaseStore? leaseStore = null,
-    IOptions<PublicApplicationOptions>? publicApplicationOptions = null) : IReviewJobProcessor, IReviewResultPublisher
+    IOptions<PublicApplicationOptions>? publicApplicationOptions = null,
+    ITenantReasoningCapturePolicyProvider? reasoningCapturePolicies = null,
+    IReviewAdmissionNotice? admissionNotice = null) : IReviewJobProcessor, IReviewResultPublisher
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -122,7 +127,10 @@ public sealed partial class ReviewOrchestrationService(
         }
         catch (BudgetHardCapReachedException ex)
         {
-            await this.HandleBudgetCutAsync(job, ex.Breach, ct);
+            // A refusal relayed from the control plane names the cap condition without carrying the cap, and
+            // the scope this replica holds then names it. The job is finalised as budget-exceeded either way,
+            // because a retry of it meets the same cap.
+            await this.HandleBudgetCutAsync(job, ex.ResolveBreach(budgetScope?.TrippedBreach), ct);
             return;
         }
         catch (PartialReviewFailureException ex)
@@ -193,10 +201,30 @@ public sealed partial class ReviewOrchestrationService(
         return true;
     }
 
-    private async Task HandleBudgetCutAsync(ReviewJob job, BudgetBreach breach, CancellationToken ct)
+    /// <summary>
+    ///     Finalises the job as budget-exceeded. A null <paramref name="breach" /> means the refusal reached
+    ///     this replica without naming a cap, and the job then records that a budget stopped it with no scope,
+    ///     threshold or spend beside it.
+    /// </summary>
+    private async Task HandleBudgetCutAsync(ReviewJob job, BudgetBreach? breach, CancellationToken ct)
     {
-        LogBudgetHardCapReached(logger, job.Id, breach.Scope, breach.ThresholdUsd, breach.SpentUsd);
-        await jobs.SetBudgetExceededAsync(job.Id, breach.Scope, breach.CapKind, breach.ThresholdUsd, breach.SpentUsd, ct);
+        LogBudgetHardCapReached(logger, job.Id, breach?.Scope, breach?.ThresholdUsd, breach?.SpentUsd);
+        await jobs.SetBudgetExceededAsync(
+            job.Id,
+            breach?.Scope,
+            breach?.CapKind ?? BudgetCapKind.Hard,
+            breach?.ThresholdUsd,
+            breach?.SpentUsd,
+            ct);
+
+        if (breach is null)
+        {
+            // No event for a cap nothing here read. An event row names a scope, a threshold and a spend, and
+            // inventing the three would report a cap the client never configured. The replica that refused
+            // enforces the cap it holds and records the event for it.
+            return;
+        }
+
         await this.EmitBudgetEventAsync(job, breach, ct);
     }
 
@@ -230,8 +258,16 @@ public sealed partial class ReviewOrchestrationService(
         // full content fetch — avoids N GetItemAsync calls for ADO-backed reviews.
         var prRef = await this.FetchPullRequestRefAsync(job, ct);
 
-        // Prepare workspace early using branch names; full content fetch uses it below.
+        // Prepare workspace early using branch names; full content fetch uses it below. Preparation carries
+        // the client's repository-size bound and stops the transfer that passes it, which is reported here as
+        // the refusal that bound stands for.
         var workspacePreparation = await this.PrepareWorkspaceForFetchAsync(job, prRef, ct);
+        if (workspacePreparation.Failure?.RepositorySizeBreach is { } sizeBreach)
+        {
+            await this.RefuseOversizedRepositoryAsync(job, sizeBreach, ct);
+            return null;
+        }
+
         var earlyWorkspace = workspacePreparation.Workspace;
 
         // The workspace is released in one place, covering every exit from the pipeline below: a skip, a
@@ -286,6 +322,14 @@ public sealed partial class ReviewOrchestrationService(
                     job,
                     () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
                     ct);
+            }
+
+            // The last point on this path at which nothing has been spent: the workspace is prepared, prior work
+            // is adopted, and the next step reads files for the model. What the review would take on is measured
+            // here and weighed against the bounds the client set.
+            if (await this.RefuseOversizedReviewAsync(job, pr, systemContext, carriedForwardPaths, ct))
+            {
+                return null;
             }
 
             pr = await this.AttachLinkedItemsAsync(job, pr, systemContext, ct);
@@ -375,7 +419,7 @@ public sealed partial class ReviewOrchestrationService(
     private bool IsJobStopped(ReviewJob job)
     {
         return jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.BudgetExceeded
-            or JobStatus.BudgetHeld;
+            or JobStatus.BudgetHeld or JobStatus.AdmissionRefused or JobStatus.AdmissionHeld;
     }
 
     // Passive archive observer: when the producing connection opted in to diff retention, persist the
@@ -1049,6 +1093,8 @@ public sealed partial class ReviewOrchestrationService(
             throw new InvalidOperationException("No workspace manager is registered. Local review workspace support is required.");
         }
 
+        var policy = await clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, ct) ?? ReviewAdmissionPolicy.None;
+
         return await workspaceManager.PrepareAsync(
             new ReviewRepositoryWorkspaceRequest(
                 job.Id,
@@ -1059,7 +1105,8 @@ public sealed partial class ReviewOrchestrationService(
                 job.PullRequestId,
                 job.ReviewRevisionReference ?? throw new InvalidOperationException("A review revision is required for local workspace preparation."),
                 prRef.SourceBranch,
-                prRef.TargetBranch),
+                prRef.TargetBranch,
+                MaxRepositoryMegabytes: policy.MaxRepositoryMegabytes),
             ct);
     }
 
@@ -1175,11 +1222,16 @@ public sealed partial class ReviewOrchestrationService(
         var includeLinkedItemsInContext = await clientRegistry.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, ct);
         var reviewPasses = await clientRegistry.GetReviewPassesAsync(job.ClientId, ct);
         var baselineReasoningEffort = await clientRegistry.GetBaselineReasoningEffortAsync(job.ClientId, ct);
+        var captureReasoning = await this.ResolveTenantReasoningCaptureAsync(job.ClientId, ct);
 
         // The output language is resolved once for the job and carried on the context, so every prose stage of this
         // review states the same language rather than each call inheriting whatever language its own input happened
         // to be in.
         var outputLanguage = await clientRegistry.GetOutputLanguageAsync(job.ClientId, ct);
+
+        // The tenant's per-file limits, resolved once for the job so every stage of this review reads the same
+        // numbers whether it runs here or on a runner.
+        var tenantReviewLimits = await clientRegistry.GetTenantReviewLimitsAsync(job.ClientId, ct) ?? TenantReviewLimits.None;
 
         var workspacePreparation = preparedWorkspace;
 
@@ -1203,6 +1255,7 @@ public sealed partial class ReviewOrchestrationService(
                 job.OrganizationUrl,
                 pr.TargetBranch,
                 pr.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly(),
+                MaxFileSizeBytes: tenantReviewLimits.MaxFileSizeBytes,
                 Workspace: workspacePreparation.Workspace,
                 WorkspaceLease: workspacePreparation.Workspace?.Lease,
                 WorkspaceFailure: workspacePreparation.Failure));
@@ -1236,9 +1289,27 @@ public sealed partial class ReviewOrchestrationService(
             PromptOverrides = await LoadPromptOverridesAsync(job.ClientId, promptOverrideService, logger, ct),
             ReviewWorkspace = workspacePreparation.Workspace,
             OutputLanguage = outputLanguage,
+            CaptureReasoning = captureReasoning,
+            MaxFileSizeBytes = tenantReviewLimits.MaxFileSizeBytes,
+            MaxStructuralParseBytes = tenantReviewLimits.MaxStructuralParseBytes,
         };
 
         return (systemContext, carriedForwardPaths);
+    }
+
+    // Reasoning can contain verbatim source, so the tenant owning the job's client decides whether it is written
+    // into the protocol. Resolved once per job and carried on the context, because the installation options are a
+    // process singleton and two tenants' jobs run in the same process. A tenant that states no policy, and a
+    // wiring that composes no policy provider, leave the value unstated: the installation switch then decides
+    // where the reasoning summary is requested and where the turn is recorded.
+    private async Task<bool?> ResolveTenantReasoningCaptureAsync(Guid clientId, CancellationToken ct)
+    {
+        if (reasoningCapturePolicies is null)
+        {
+            return null;
+        }
+
+        return (await reasoningCapturePolicies.GetForClientAsync(clientId, ct)).AsOverride();
     }
 
     // Discovers the work items / issues linked to the pull request (when the client opted in) and attaches a
@@ -2027,6 +2098,88 @@ public sealed partial class ReviewOrchestrationService(
             LogScanSaveFailed(logger, job.Id, ex);
         }
     }
+
+    /// <summary>
+    ///     Measures what this review would take on and refuses it when a bound the client set is exceeded. The
+    ///     job ends without a model call, carries the reason, and the reason is posted on the pull request.
+    ///     Returns whether the review was refused.
+    /// </summary>
+    private async Task<bool> RefuseOversizedReviewAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext systemContext,
+        IReadOnlyList<string> carriedForwardPaths,
+        CancellationToken ct)
+    {
+        var policy = await clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, ct) ?? ReviewAdmissionPolicy.None;
+        if (!policy.AnyDiffBoundConfigured)
+        {
+            return false;
+        }
+
+        var carriedForward = new HashSet<string>(carriedForwardPaths, StringComparer.OrdinalIgnoreCase);
+        var toReview = pr.ChangedFiles
+            .Where(file => !systemContext.ExclusionRules.Matches(file.Path) && !carriedForward.Contains(file.Path))
+            .ToList();
+
+        var measurement = new ReviewAdmissionMeasurement(
+            toReview.Count,
+            toReview.Sum(file => ReviewDiffProcessor.CountChangedLines(file.UnifiedDiff)),
+            // The bound is on bytes, and a diff is sent as UTF-8, so the count is of UTF-8 bytes. A string's
+            // length counts UTF-16 code units, which under-reports every diff carrying a non-ASCII character.
+            toReview.Sum(file => (long)Encoding.UTF8.GetByteCount(file.UnifiedDiff ?? string.Empty)));
+
+        var decision = ReviewAdmissionEvaluator.Evaluate(policy, measurement, DateTimeOffset.UtcNow);
+        if (decision.Outcome != ReviewAdmissionOutcome.Refuse)
+        {
+            return false;
+        }
+
+        // The refusal is recorded before the notice goes out, so a provider that refuses the comment leaves a
+        // job that still says why it did not run. The store answers whether this call was the one that refused
+        // the job, which keeps a re-dispatch of the same revision from posting a second notice.
+        if (await jobs.SetAdmissionRefusedAsync(job.Id, decision.Reason!, policy.Fingerprint, ct) && admissionNotice is not null)
+        {
+            await admissionNotice.PostAsync(job, decision.Reason!, pr.ExistingThreads, ct);
+        }
+
+        LogReviewRefusedBySize(logger, job.Id, job.PullRequestId, decision.Reason!);
+        return true;
+    }
+
+    /// <summary>
+    ///     Refuses a job whose repository passed the client's repository-size bound while workspace
+    ///     preparation was transferring it. The job ends without a model call, carries the reason, and the
+    ///     reason is posted on the pull request.
+    /// </summary>
+    /// <param name="job">The refused job.</param>
+    /// <param name="breach">The size measured when the transfer was stopped, and the bound it passed.</param>
+    /// <param name="ct">The cancellation token.</param>
+    private async Task RefuseOversizedRepositoryAsync(ReviewJob job, ReviewRepositorySizeBreach breach, CancellationToken ct)
+    {
+        var decision = ReviewAdmissionEvaluator.RefuseOversizedRepository(breach.MeasuredMegabytes, breach.LimitMegabytes);
+
+        // The breach carries the measured size and the limit only, so the client's bounds are read here. The
+        // refusal records the bounds it was decided under. An automatic trigger compares them with the client's
+        // current bounds before it reviews this head again.
+        var policy = await clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, ct) ?? ReviewAdmissionPolicy.None;
+
+        // The refusal is recorded before the notice goes out, so a provider that refuses the comment leaves a
+        // job that still says why it did not run. The store answers whether this call was the one that refused
+        // the job, which keeps a re-dispatch of the same revision from posting a second notice.
+        if (await jobs.SetAdmissionRefusedAsync(job.Id, decision.Reason!, policy.Fingerprint, ct) && admissionNotice is not null)
+        {
+            // Preparation is stopped before the pull request is fetched, so there are no threads to reply into.
+            await admissionNotice.PostAsync(job, decision.Reason!, existingThreads: null, ct);
+        }
+
+        LogReviewRefusedBySize(logger, job.Id, job.PullRequestId, decision.Reason!);
+    }
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Review job {JobId} for pull request {PullRequestId} was refused before it started: {Reason}")]
+    private static partial void LogReviewRefusedBySize(ILogger logger, Guid jobId, int pullRequestId, string reason);
 
     private static ReviewerIdentity ResolvePublicationIdentity(ReviewJob job, PullRequest pr)
     {

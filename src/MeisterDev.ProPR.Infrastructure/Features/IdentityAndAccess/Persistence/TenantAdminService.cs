@@ -10,10 +10,13 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Persistence;
 
@@ -22,12 +25,15 @@ public sealed class TenantAdminService(
     MeisterProPRDbContext dbContext,
     IHttpContextAccessor? httpContextAccessor = null,
     ILicensingCapabilityService? licensingCapabilityService = null,
-    IAiProviderDriverRegistry? providerDrivers = null) : ITenantAdminService
+    IAiProviderDriverRegistry? providerDrivers = null,
+    IOptions<AiReviewOptions>? aiReviewOptions = null) : ITenantAdminService
 {
     // A composition always supplies the registry. The fallback is for a caller that constructs this without one:
     // no family is loaded, so every stored allow-list entry reads as one nothing claims and the tenant permits
     // nothing, which is the fail-closed side of the same rule.
     private static readonly IAiProviderDriverRegistry NoFamilies = new AiProviderRegistry([]);
+
+    private static readonly bool DefaultCapturesReasoning = new AiReviewOptions().CaptureReasoningInProtocol;
 
     public async Task<IReadOnlyList<TenantDto>> GetAllAsync(CancellationToken ct = default)
     {
@@ -111,6 +117,9 @@ public sealed class TenantAdminService(
         IReadOnlyList<string>? allowedAiProviderKinds = null,
         IReadOnlyList<string>? allowedAiEndpointHosts = null,
         IReadOnlyList<string>? removedUnresolvedAiProviderKinds = null,
+        ReasoningCapturePolicy? reasoningCapturePolicy = null,
+        TenantBudgetConfigDto? budget = null,
+        TenantReviewLimitsDto? reviewLimits = null,
         CancellationToken ct = default)
     {
         var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
@@ -188,6 +197,26 @@ public sealed class TenantAdminService(
                 .ToArray();
         }
 
+        if (reasoningCapturePolicy.HasValue)
+        {
+            tenant.ReasoningCapturePolicy = reasoningCapturePolicy.Value;
+        }
+
+        if (budget is not null)
+        {
+            // Both caps are written from the supplied value, so a cap left null there clears it. Leaving the caps
+            // alone is stated by omitting the value entirely, which matches how the client caps are patched.
+            tenant.MonthlyBudgetSoftCapUsd = budget.MonthlySoftCapUsd;
+            tenant.MonthlyBudgetHardCapUsd = budget.MonthlyHardCapUsd;
+        }
+
+        if (reviewLimits is not null)
+        {
+            // Written as a group like the caps, so a value left null there puts the installation value back.
+            tenant.AiMaxFileSizeBytes = reviewLimits.MaxFileSizeBytes;
+            tenant.AiMaxStructuralParseBytes = reviewLimits.MaxStructuralParseBytes;
+        }
+
         tenant.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct);
         await this.AddAuditEntryAsync(
@@ -196,7 +225,12 @@ public sealed class TenantAdminService(
             $"Updated tenant '{tenant.DisplayName}' policy.",
             $"displayName={tenant.DisplayName}; isActive={tenant.IsActive}; localLoginEnabled={tenant.LocalLoginEnabled}; "
             + $"allowedAiProviderKinds={(tenant.AllowedAiProviderKinds.Length == 0 ? "(unrestricted)" : string.Join(",", tenant.AllowedAiProviderKinds))}; "
-            + $"allowedAiEndpointHosts={(tenant.AllowedAiEndpointHosts.Length == 0 ? "(unrestricted)" : string.Join(",", tenant.AllowedAiEndpointHosts))}",
+            + $"allowedAiEndpointHosts={(tenant.AllowedAiEndpointHosts.Length == 0 ? "(unrestricted)" : string.Join(",", tenant.AllowedAiEndpointHosts))}; "
+            + $"reasoningCapturePolicy={tenant.ReasoningCapturePolicy}; "
+            + $"monthlyBudgetSoftCapUsd={FormatCap(tenant.MonthlyBudgetSoftCapUsd)}; "
+            + $"monthlyBudgetHardCapUsd={FormatCap(tenant.MonthlyBudgetHardCapUsd)}; "
+            + $"aiMaxFileSizeBytes={tenant.AiMaxFileSizeBytes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(installation value)"}; "
+            + $"aiMaxStructuralParseBytes={tenant.AiMaxStructuralParseBytes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(installation value)"}",
             ct);
 
         return this.ToDto(tenant);
@@ -259,10 +293,20 @@ public sealed class TenantAdminService(
             TenantCatalog.IsEditable(tenant.Id),
             tenant.CreatedAt,
             tenant.UpdatedAt,
+            // Reported alongside the policy so a console can name what "installation default" does here. A
+            // caller that composes this without the review options sees the shipped default: the value an
+            // installation that has not set the switch runs with.
+            aiReviewOptions?.Value.CaptureReasoningInProtocol ?? DefaultCapturesReasoning,
             policy.AllowedKinds,
             tenant.AllowedAiEndpointHosts,
-            policy.UnresolvedProviderEntries);
+            policy.UnresolvedProviderEntries,
+            tenant.ReasoningCapturePolicy,
+            new TenantBudgetConfigDto(tenant.MonthlyBudgetSoftCapUsd, tenant.MonthlyBudgetHardCapUsd),
+            new TenantReviewLimitsDto(tenant.AiMaxFileSizeBytes, tenant.AiMaxStructuralParseBytes));
     }
+
+    private static string FormatCap(decimal? capUsd) =>
+        capUsd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(no limit)";
 
     // Without the licensing module there is no installation state to read, which a deployment with no
     // database configured looks like. Tenancy is left unrestricted there.

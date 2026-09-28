@@ -348,6 +348,29 @@ public sealed class ReviewJob
     public decimal? BudgetBlockSpentUsd { get; private set; }
 
     /// <summary>
+    ///     Why review admission refused this job, in the words posted on the pull request. Null when admission
+    ///     did not refuse it.
+    /// </summary>
+    public string? AdmissionRefusalReason { get; private set; }
+
+    /// <summary>
+    ///     The client's admission bounds as they stood when review admission refused this job. Null when
+    ///     admission did not refuse it, and on a job refused before the bounds were recorded.
+    /// </summary>
+    /// <remarks>
+    ///     An automatic trigger reads this to decide whether to review the same pull request head again. The
+    ///     head measures the same on every attempt, so a second job is created once an administrator has
+    ///     changed the bounds.
+    /// </remarks>
+    public string? AdmissionPolicyFingerprint { get; private set; }
+
+    /// <summary>
+    ///     When a job held by review admission becomes admissible again. Null when the job is not held. The
+    ///     worker starts the job by itself once this time has passed.
+    /// </summary>
+    public DateTimeOffset? HeldUntil { get; private set; }
+
+    /// <summary>
     ///     The number of in-scope changed files after exclusions for this iteration, fixed once at dispatch
     ///     planning. Null until dispatch planning runs. Denominator of the "files reviewed" progress metric.
     /// </summary>
@@ -577,13 +600,52 @@ public sealed class ReviewJob
     /// <summary>
     ///     Records why a budget held or stopped this job: the binding scope, whether the soft or hard cap was
     ///     reached, the USD threshold, and the scope spend that reached it. Surfaced to operators as the reason.
+    ///     The scope, threshold and spend are null where a refusal reached this job without naming the cap
+    ///     behind it, and the cap kind alone then says the job was stopped by a budget nothing here can detail.
     /// </summary>
-    public void SetBudgetBlock(BudgetScopeKind scope, BudgetCapKind capKind, decimal thresholdUsd, decimal spentUsd)
+    public void SetBudgetBlock(
+        BudgetScopeKind? scope,
+        BudgetCapKind capKind,
+        decimal? thresholdUsd,
+        decimal? spentUsd)
     {
         this.BudgetBlockScope = scope;
         this.BudgetBlockCapKind = capKind;
         this.BudgetBlockThresholdUsd = thresholdUsd;
         this.BudgetBlockSpentUsd = spentUsd;
+    }
+
+    /// <summary>
+    ///     Records why review admission refused this job. The reason is written in the words an author reads on
+    ///     the pull request, because it is posted there as well as shown in the review record.
+    /// </summary>
+    /// <param name="reason">Why review admission refused this job.</param>
+    /// <param name="policyFingerprint">
+    ///     The client's admission bounds as they stood at the refusal, so a later trigger can tell whether they
+    ///     have changed since.
+    /// </param>
+    public void SetAdmissionRefusal(string reason, string? policyFingerprint = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        this.AdmissionRefusalReason = reason;
+        this.AdmissionPolicyFingerprint = policyFingerprint;
+        this.HeldUntil = null;
+    }
+
+    /// <summary>
+    ///     Records when a job held by review admission becomes admissible again. No reason is stored: a hold is
+    ///     not reported on the pull request and resolves on its own.
+    /// </summary>
+    public void SetAdmissionHold(DateTimeOffset heldUntil)
+    {
+        this.HeldUntil = heldUntil;
+        this.AdmissionRefusalReason = null;
+    }
+
+    /// <summary>Clears an admission hold, which returns the job to the queue.</summary>
+    public void ClearAdmissionHold()
+    {
+        this.HeldUntil = null;
     }
 
     /// <summary>

@@ -30,7 +30,8 @@ internal abstract class ProviderReviewContextToolsBase(
     string? targetBranch = null,
     IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots = null,
     IStructuralCodeAnalyzer? structuralAnalyzer = null,
-    IScmProviderRegistry? providerRegistry = null) : IReviewContextTools, IProCursorAvailabilityAware
+    IScmProviderRegistry? providerRegistry = null,
+    int? maxFileSizeBytes = null) : IReviewContextTools, IProCursorAvailabilityAware
 {
     private readonly IScmProviderRegistry? _providerRegistry = providerRegistry;
     private int _linkedItemToolCallsUsed;
@@ -47,6 +48,10 @@ internal abstract class ProviderReviewContextToolsBase(
 
     private readonly ILogger _logger = logger;
     private readonly AiReviewOptions _options = options.Value;
+
+    // The tenant's limit when it states one, the installation's otherwise. Resolved once per review's tools so
+    // every read this object serves answers to the same number.
+    private readonly int _maxFileSizeBytes = maxFileSizeBytes ?? options.Value.MaxFileSizeBytes;
     private readonly IProCursorGateway _proCursorGateway = proCursorGateway;
     private readonly ScmProvider _provider = review.Repository.Host.Provider;
 
@@ -130,9 +135,9 @@ internal abstract class ProviderReviewContextToolsBase(
             }
 
             var byteSize = Encoding.UTF8.GetByteCount(rawContent);
-            if (byteSize > this._options.MaxFileSizeBytes)
+            if (byteSize > this._maxFileSizeBytes)
             {
-                return $"[File too large: {byteSize} bytes exceeds limit of {this._options.MaxFileSizeBytes} bytes]";
+                return $"[File too large: {byteSize} bytes exceeds limit of {this._maxFileSizeBytes} bytes]";
             }
 
             content = rawContent;
@@ -196,7 +201,7 @@ internal abstract class ProviderReviewContextToolsBase(
             this.FetchRawFileContentAsync,
             this.NormalizeBranch,
             this.NormalizePath,
-            this._options.MaxFileSizeBytes,
+            this._maxFileSizeBytes,
             ct,
             this._structuralAnalyzer,
             this._options.EnableStructuralReferenceTools);
@@ -815,7 +820,7 @@ internal abstract class ProviderReviewContextToolsBase(
             this.FetchRawFileContentAsync,
             this.NormalizeBranch,
             this.NormalizePath,
-            this._options.MaxFileSizeBytes,
+            this._maxFileSizeBytes,
             ct);
     }
 

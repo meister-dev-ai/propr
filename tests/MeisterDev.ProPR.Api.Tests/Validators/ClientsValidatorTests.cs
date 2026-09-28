@@ -1,9 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Api.Validators;
+using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Api.Tests.Validators;
@@ -13,8 +16,21 @@ public sealed class ClientsValidatorTests
 {
     private static readonly CreateClientRequestValidator CreateClientValidator = new();
     private static readonly PatchClientRequestValidator PatchClientValidator = new();
-    private static readonly CreateClientProviderConnectionRequestValidator CreateProviderConnectionValidator = new();
-    private static readonly PatchClientProviderConnectionRequestValidator PatchProviderConnectionValidator = new();
+
+    /// <summary>The posture of an installation whose operator opted in to private egress.</summary>
+    private static readonly EgressUrlPolicy PrivateEgressPermitted = new(AllowPrivateEgress: true, AllowInsecureScheme: false);
+
+    private static readonly CreateClientProviderConnectionRequestValidator CreateProviderConnectionValidator =
+        new(PrivateEgressPermitted);
+
+    private static readonly PatchClientProviderConnectionRequestValidator PatchProviderConnectionValidator =
+        new(PrivateEgressPermitted);
+
+    private static readonly CreateClientProviderConnectionRequestValidator StrictCreateProviderConnectionValidator =
+        new(EgressUrlPolicy.Locked);
+
+    private static readonly PatchClientProviderConnectionRequestValidator StrictPatchProviderConnectionValidator =
+        new(EgressUrlPolicy.Locked);
 
     [Fact]
     public void CreateClient_ValidRequest_Passes()
@@ -240,6 +256,144 @@ public sealed class ClientsValidatorTests
         Assert.True(result.IsValid);
     }
 
+    [Theory]
+    [InlineData("https://10.0.0.5")]
+    [InlineData("https://172.16.4.2")]
+    [InlineData("https://192.168.1.10")]
+    [InlineData("https://169.254.169.254")]
+    [InlineData("https://100.64.0.1")]
+    [InlineData("https://127.0.0.1")]
+    [InlineData("https://localhost")]
+    [InlineData("https://[fd00::1]")]
+    [InlineData("https://[fe80::1]")]
+    public void CreateProviderConnection_PrivateHostWithoutTheOptIn_FailsAndNamesTheOptIn(string hostBaseUrl)
+    {
+        var result = StrictCreateProviderConnectionValidator.Validate(ForgejoRequest(hostBaseUrl));
+
+        Assert.False(result.IsValid);
+        var error = Assert.Single(
+            result.Errors,
+            candidate => candidate.PropertyName == nameof(CreateClientProviderConnectionRequest.HostBaseUrl));
+        Assert.Contains(EgressUrlPolicy.PrivateEgressOptIn, error.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("https://10.0.0.5")]
+    [InlineData("http://10.0.0.5")]
+    [InlineData("https://169.254.169.254")]
+    [InlineData("http://100.64.0.1")]
+    [InlineData("http://127.0.0.1")]
+    [InlineData("http://localhost")]
+    [InlineData("http://[fd00::1]")]
+    public void CreateProviderConnection_PrivateHostWithTheOptIn_Passes(string hostBaseUrl)
+    {
+        var result = CreateProviderConnectionValidator.Validate(ForgejoRequest(hostBaseUrl));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void CreateProviderConnection_PublicHostOverHttp_FailsUnderBothPostures()
+    {
+        var request = ForgejoRequest("http://forgejo.example.com");
+
+        Assert.False(CreateProviderConnectionValidator.Validate(request).IsValid);
+        Assert.False(StrictCreateProviderConnectionValidator.Validate(request).IsValid);
+    }
+
+    [Fact]
+    public void CreateProviderConnection_PublicHostOverHttps_PassesUnderBothPostures()
+    {
+        var request = ForgejoRequest("https://forgejo.example.com");
+
+        Assert.True(CreateProviderConnectionValidator.Validate(request).IsValid);
+        Assert.True(StrictCreateProviderConnectionValidator.Validate(request).IsValid);
+    }
+
+    [Fact]
+    public void CreateProviderConnection_HostCarryingACredential_Fails()
+    {
+        var result = CreateProviderConnectionValidator.Validate(ForgejoRequest("https://user:token@forgejo.example.com"));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.PropertyName == nameof(CreateClientProviderConnectionRequest.HostBaseUrl));
+    }
+
+    [Fact]
+    public void PatchProviderConnection_PrivateHostWithoutTheOptIn_FailsAndNamesTheOptIn()
+    {
+        var result = StrictPatchProviderConnectionValidator.Validate(new PatchClientProviderConnectionRequest("http://127.0.0.1"));
+
+        Assert.False(result.IsValid);
+        var error = Assert.Single(
+            result.Errors,
+            candidate => candidate.PropertyName == nameof(PatchClientProviderConnectionRequest.HostBaseUrl));
+        Assert.Contains(EgressUrlPolicy.PrivateEgressOptIn, error.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    // What the opt-in relaxes for a patch, and what it does not: a private host is reached, over https or
+    // plain http, and a public host still has to use https.
+    [Theory]
+    [InlineData("https://192.168.4.10", true)]
+    [InlineData("http://192.168.4.10", true)]
+    [InlineData("http://forgejo.example.com", false)]
+    public void PatchProviderConnection_UnderThePermittedPosture(string hostBaseUrl, bool expected)
+    {
+        var result = PatchProviderConnectionValidator.Validate(new PatchClientProviderConnectionRequest(hostBaseUrl));
+
+        Assert.Equal(expected, result.IsValid);
+    }
+
+    [Fact]
+    public void PatchProviderConnection_PrivateHostOverHttp_NeedsTheOptIn()
+    {
+        var result = StrictPatchProviderConnectionValidator.Validate(new PatchClientProviderConnectionRequest("http://192.168.4.10"));
+
+        Assert.False(result.IsValid);
+        var error = Assert.Single(
+            result.Errors,
+            candidate => candidate.PropertyName == nameof(PatchClientProviderConnectionRequest.HostBaseUrl));
+        Assert.Contains(EgressUrlPolicy.PrivateEgressOptIn, error.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    // "https:forgejo.example.com" is an absolute URI with an empty host: nothing classifies it, and provider
+    // code meets it as a base address it cannot build a request from.
+    [Theory]
+    [InlineData("https:forgejo.example.com")]
+    [InlineData("https:/forgejo.example.com")]
+    [InlineData("https://:443")]
+    public void ProviderConnection_AnAbsoluteUrlWithNoHost_Fails(string hostBaseUrl)
+    {
+        var created = CreateProviderConnectionValidator.Validate(ForgejoRequest(hostBaseUrl));
+        var patched = PatchProviderConnectionValidator.Validate(new PatchClientProviderConnectionRequest(hostBaseUrl));
+
+        Assert.False(created.IsValid);
+        Assert.False(patched.IsValid);
+
+        // Named on both, so it is the address rule that refused the value and not an unrelated check.
+        Assert.Contains(
+            created.Errors,
+            error => error.PropertyName == nameof(CreateClientProviderConnectionRequest.HostBaseUrl));
+        Assert.Contains(
+            patched.Errors,
+            error => error.PropertyName == nameof(PatchClientProviderConnectionRequest.HostBaseUrl));
+    }
+
+    private static CreateClientProviderConnectionRequest ForgejoRequest(string hostBaseUrl)
+    {
+        return new CreateClientProviderConnectionRequest(
+            ScmProvider.Forgejo,
+            hostBaseUrl,
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            null,
+            "Forgejo",
+            "forgejo-token-value");
+    }
+
     // The provider-specific "credential auth requires an HTTPS host" rule is enforced by the controller
     // (which knows the existing connection's provider), not the request-only patch validator, so a patch
     // with PAT on an http host is provider-agnostic here. Controller coverage lives in the controller tests.
@@ -253,8 +407,6 @@ public sealed class ClientsValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.ErrorMessage.Contains("UserName", StringComparison.Ordinal));
     }
-
-    // T035 — PatchClientRequest.CustomSystemMessage validation
 
     [Fact]
     public void PatchClient_NullCustomSystemMessage_Passes()
@@ -664,5 +816,63 @@ public sealed class ClientsValidatorTests
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.PropertyName == nameof(PatchClientRequest.OutputLanguage));
+    }
+
+    [Fact]
+    public void PatchClient_AdmissionPolicyWithPositiveBounds_Passes()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(AdmissionPolicy: new ReviewAdmissionPolicyDto(MaxChangedFiles: 150, MaxChangedLines: 20_000)));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_AdmissionPolicyWithOnlyClearedBounds_Passes()
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(AdmissionPolicy: new ReviewAdmissionPolicyDto()));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void PatchClient_AdmissionBoundAtOrBelowZero_FailsOnAdmissionPolicy(int bound)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(AdmissionPolicy: new ReviewAdmissionPolicyDto(MaxRepositoryMegabytes: bound)));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.AdmissionPolicy));
+    }
+
+    [Theory]
+    // The ends of the storable range: zero, the largest magnitude the numeric(18,6) column holds, and a value
+    // at exactly the scale it keeps.
+    [InlineData("0")]
+    [InlineData("999999999999.999999")]
+    [InlineData("1.234567")]
+    public void PatchClient_CapAtTheEdgesOfTheStorableRange_Passes(string cap)
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(BudgetConfig: new BudgetConfigDto(MonthlyHardCapUsd: decimal.Parse(cap, CultureInfo.InvariantCulture))));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    // Beyond the magnitude the numeric(18,6) cap column holds, and finer than the scale it keeps.
+    [InlineData("1000000000000")]
+    [InlineData("0.0000001")]
+    // Below zero: spend is never negative, so a cap under it would stop every review of the client.
+    [InlineData("-0.000001")]
+    [InlineData("-999999999999.999999")]
+    public void PatchClient_CapOutsideTheStorableRange_FailsOnBudgetConfig(string cap)
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(BudgetConfig: new BudgetConfigDto(MonthlyHardCapUsd: decimal.Parse(cap, CultureInfo.InvariantCulture))));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.BudgetConfig));
     }
 }

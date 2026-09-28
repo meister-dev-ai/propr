@@ -25,6 +25,11 @@ public sealed class LogicalModelCapabilityValidator(IAiConnectionRepository conn
                              entry.Name,
                              $"connection '{entry.ConnectionId}' does not exist.");
 
+        ValidateMapping(entry, connection);
+    }
+
+    internal static void ValidateMapping(LogicalModelDto entry, AiConnectionDto connection)
+    {
         var model = connection.ConfiguredModels.FirstOrDefault(m => m.Id == entry.ConfiguredModelId)
                     ?? throw new LogicalModelReferenceInvalidException(
                         entry.Name,

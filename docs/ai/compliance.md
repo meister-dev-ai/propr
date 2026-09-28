@@ -1,9 +1,11 @@
 # Tenant compliance
 
-Restricting which AI provider families and which endpoint hosts a tenant's clients may reach.
+Restricting which AI provider families and which endpoint hosts a tenant's clients may reach, and whether its
+reviews keep the model's reasoning.
 
-**Commercial only.** These restrictions are set on a tenant, and a Community installation has no editable tenant -
-so in Community both lists stay empty and AI traffic is unrestricted. See [editions](../reference/editions.md).
+**Commercial only.** These settings live on a tenant, and a Community installation has no editable tenant, so in
+Community both lists stay empty, AI traffic is unrestricted, and reasoning capture follows the installation
+switch. See [editions](../reference/editions.md).
 
 Under **Tenant → Compliance**, a tenant can state where its AI traffic may go. Both lists are independent and
 both are empty by default, and **empty means unrestricted** - a tenant that states no policy is unaffected.
@@ -18,6 +20,38 @@ Host entries match exactly, or match any subdomain when written with a leading d
 
 The host list answers where traffic actually goes. The provider family answers how it is shaped, and a
 `meisterdev/openAiCompatible` connection can point anywhere, so on its own the family constrains no destination.
+
+## Model reasoning in the job trace
+
+A reasoning model can return a summary of how it reached its answer, and that summary can quote the code under
+review. ProPR keeps it in the job trace beside the assistant text and the tool calls.
+
+Under **Tenant → Compliance**, a tenant states one of three values.
+
+| Value | Meaning |
+|---|---|
+| `installationDefault` | The installation switch `AI_CAPTURE_REASONING_IN_PROTOCOL` decides |
+| `enabled` | Reviews of this tenant keep the reasoning |
+| `disabled` | Newly started reviews of this tenant keep no reasoning |
+
+`disabled` also stops the review asking the provider for a reasoning summary, so less text crosses the wire.
+Reasoning token counts arrive in the provider's usage report, which is sent whether or not a summary was asked
+for, so the counts are recorded under all three values and spend and budgets stay accurate. The control names
+what the installation switch is currently set to, so an operator can see what `installationDefault` does here.
+
+### When a change takes effect
+
+A review that runs inside ProPR resolves the policy once, as the job starts, and records the whole review under
+that decision.
+
+A review that runs on an enrolled runner is checked again at every crossing. The control plane resolves the
+policy at dispatch and carries it in the job manifest, and it applies the policy in force at the moment it
+serves each relayed completion and stores each spooled trace batch. Saving a policy while such a job is running
+therefore governs the rest of that job, and not only the jobs started after the save.
+
+Each stored batch keeps the decision that applied when it was stored. Serving that batch back to a reader
+applies no second check, and a policy saved afterwards redacts nothing that is already written. A trace
+written earlier keeps what it holds; ProPR deletes no protocol rows.
 
 ## Host list verification
 

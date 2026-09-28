@@ -61,6 +61,12 @@ public sealed class OfflineReviewJobIntakeStore(InMemoryReviewJobRepository jobs
         return Task.FromResult(jobs.GetById(jobId));
     }
 
+    public Task<ReviewJob?> GetForClientAsync(Guid clientId, Guid jobId, CancellationToken cancellationToken = default)
+    {
+        var job = jobs.GetById(jobId);
+        return Task.FromResult(job?.ClientId == clientId ? job : null);
+    }
+
     public Task UpdatePrContextAsync(
         Guid jobId,
         string? title,

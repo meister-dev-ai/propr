@@ -66,6 +66,11 @@ public sealed class LocalGitReviewContextToolsTests
             return Task.FromResult<string?>("line1\nline2\nline3\nline4");
         }
 
+        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) => Task.FromResult(0);
+
+        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) => Task.FromResult(0L);
+
+
         public Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
         {
             return Task.FromResult<string?>("@@ -1,1 +1,2 @@\n-line1\n+line1\n+line2");

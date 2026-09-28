@@ -273,12 +273,15 @@ public sealed class JobsController(
         // denominator from the job's snapshotted column.
         var filesReviewed = await jobRepository.CountReviewedFilesAsync(id, cancellationToken);
 
-        var budgetStatus = job.BudgetBlockScope is { } budgetScope
+        // Keyed off the cap kind, because that is what a budget block always records. A stop whose cap was
+        // never named carries the kind alone, and reporting no budget status at all for it would read as a
+        // job no budget touched.
+        var budgetStatus = job.BudgetBlockCapKind is not null || job.BudgetBlockScope is not null
             ? new BudgetStatusDto(
-                budgetScope,
+                job.BudgetBlockScope,
                 job.BudgetBlockCapKind ?? BudgetCapKind.Hard,
-                job.BudgetBlockThresholdUsd ?? 0m,
-                job.BudgetBlockSpentUsd ?? 0m)
+                job.BudgetBlockThresholdUsd,
+                job.BudgetBlockSpentUsd)
             : null;
 
         return this.Ok(
@@ -301,7 +304,9 @@ public sealed class JobsController(
                 job.TotalEstimatedCostUsd,
                 job.CostIsApproximate,
                 budgetStatus,
-                job.ResultSummary));
+                job.ResultSummary,
+                job.AdmissionRefusalReason,
+                job.HeldUntil));
     }
 
     /// <summary>Returns the review result (summary and comments) for a completed job.</summary>
@@ -589,11 +594,16 @@ public sealed class JobsController(
     ///     Why a budget held or stopped a review: the binding scope, whether the soft or hard cap was reached, the
     ///     USD threshold, and the scope spend that reached it. Null when no budget blocked the job.
     /// </summary>
+    /// <remarks>
+    ///     The scope, threshold and spend are null on a review stopped by a refusal that named no cap, which is
+    ///     what a hard-cap refusal relayed from another replica can be. The cap kind is then all the job knows,
+    ///     and the console says a cap was reached with the detail unavailable.
+    /// </remarks>
     public sealed record BudgetStatusDto(
-        BudgetScopeKind Scope,
+        BudgetScopeKind? Scope,
         BudgetCapKind CapKind,
-        decimal ThresholdUsd,
-        decimal SpentUsd);
+        decimal? ThresholdUsd,
+        decimal? SpentUsd);
 
     /// <summary>Detailed response for a single job, including the per-tier token breakdown.</summary>
     public sealed record JobDetailResponse(
@@ -615,7 +625,9 @@ public sealed class JobsController(
         decimal? TotalEstimatedCostUsd = null,
         bool CostIsApproximate = false,
         BudgetStatusDto? BudgetStatus = null,
-        string? ResultSummary = null);
+        string? ResultSummary = null,
+        string? AdmissionRefusalReason = null,
+        DateTimeOffset? HeldUntil = null);
 
     /// <summary>Response for the job result endpoint, combining status metadata with the review result.</summary>
     public sealed record ReviewJobResultDto(

@@ -173,6 +173,36 @@ public sealed class ClientRecord
     /// </summary>
     public decimal? IncrementBudgetHardCapUsd { get; set; }
 
+    /// <summary>
+    ///     Optional bound on the number of changed files one review may take on, counted after exclusions and
+    ///     after files carried forward from a previous review are removed. Null means no bound.
+    /// </summary>
+    public int? AdmissionMaxChangedFiles { get; set; }
+
+    /// <summary>
+    ///     Optional bound on the added and removed lines across the changed files of one review. Null means no
+    ///     bound.
+    /// </summary>
+    public int? AdmissionMaxChangedLines { get; set; }
+
+    /// <summary>
+    ///     Optional bound on the total size, in bytes, of the unified diffs of one review's changed files. Null
+    ///     means no bound.
+    /// </summary>
+    public int? AdmissionMaxDiffBytes { get; set; }
+
+    /// <summary>
+    ///     Optional bound on how many reviews one pull request may start within an hour. A push burst past it
+    ///     holds the job until the window has passed. Null means no bound.
+    /// </summary>
+    public int? AdmissionMaxReviewsPerPullRequestPerHour { get; set; }
+
+    /// <summary>
+    ///     Optional bound, in megabytes, on the repository mirror a review may be run against. Null means no
+    ///     bound.
+    /// </summary>
+    public int? AdmissionMaxRepositoryMegabytes { get; set; }
+
     public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];

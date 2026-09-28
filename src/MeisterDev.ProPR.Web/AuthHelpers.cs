@@ -52,7 +52,7 @@ public static class AuthHelpers
     /// </summary>
     public static IActionResult? RequireAuthenticated(HttpContext ctx)
     {
-        return IsAdmin(ctx) || GetUserId(ctx).HasValue
+        return IsAdmin(ctx) || GetUserId(ctx).HasValue || ctx.Items["TenantMachineAuthorized"] is true
             ? null
             : CreateError(StatusCodes.Status401Unauthorized, "Valid credentials required.");
     }
@@ -68,7 +68,7 @@ public static class AuthHelpers
             return null;
         }
 
-        return GetUserId(ctx).HasValue
+        return GetUserId(ctx).HasValue || ctx.Items["TenantMachineTenantId"] is Guid
             ? CreateError(StatusCodes.Status403Forbidden, "Admin role required.")
             : CreateError(StatusCodes.Status401Unauthorized, "Valid credentials required.");
     }
@@ -93,7 +93,7 @@ public static class AuthHelpers
             return null;
         }
 
-        if (!GetUserId(ctx).HasValue)
+        if (!GetUserId(ctx).HasValue && ctx.Items["TenantMachineAuthorized"] is not true)
         {
             return CreateError(StatusCodes.Status401Unauthorized, "Authentication required.");
         }
@@ -118,7 +118,7 @@ public static class AuthHelpers
             return null;
         }
 
-        if (!GetUserId(ctx).HasValue)
+        if (!GetUserId(ctx).HasValue && ctx.Items["TenantMachineAuthorized"] is not true)
         {
             return CreateError(StatusCodes.Status401Unauthorized, "Authentication required.");
         }

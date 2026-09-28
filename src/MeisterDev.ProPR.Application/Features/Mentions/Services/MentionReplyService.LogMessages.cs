@@ -36,9 +36,9 @@ public sealed partial class MentionReplyService
     private static partial void LogAnswerHeldByBudget(
         ILogger logger,
         Guid jobId,
-        BudgetScopeKind budgetScope,
-        decimal thresholdUsd,
-        decimal spentUsd);
+        BudgetScopeKind? budgetScope,
+        decimal? thresholdUsd,
+        decimal? spentUsd);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

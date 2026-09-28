@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Runtime;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Security;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.DependencyInjection;
 
@@ -18,7 +19,9 @@ internal static class GitLabProviderServiceCollectionExtensions
 {
     public static IServiceCollection AddGitLabProviderAdapters(this IServiceCollection services)
     {
-        services.AddHttpClient("GitLabProvider");
+        services.AddPostedCommentComposer();
+
+        services.AddHttpClient("GitLabProvider").GuardEgress();
 
         services.TryAddScoped<GitLabConnectionVerifier>();
         services.TryAddScoped<GitLabWebhookTokenVerifier>();

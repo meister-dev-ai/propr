@@ -52,13 +52,16 @@ internal sealed class GitReviewRepositoryWorkspace(
         // -z separates every field with NUL and prints paths literally, so a filename carrying spaces
         // survives. Splitting lines on tabs and trimming them renamed " leading.cs " here while the tree
         // listing and the reads reported it as stored, and the review then read a path that does not exist.
+        //
+        // The leased head commit is named, not HEAD: the range then covers the revision pair the lease was
+        // taken for whatever the checkout in the workspace directory points at.
         var result = await gitCommandRunner.RunAsync(
             this.Lease.HeadWorkspacePath,
-            ["diff", "--name-status", "-z", $"{this.Lease.MergeBaseSha}...HEAD"],
+            ["diff", "--name-status", "-z", $"{this.Lease.MergeBaseSha}...{this.Lease.HeadSha}"],
             authEnvironment,
             ct,
             preserveStandardOutput: true);
-        result.EnsureSuccess("list changed files", "git diff --name-status -z <merge-base>...HEAD");
+        result.EnsureSuccess("list changed files", "git diff --name-status -z <merge-base>...<head>");
 
         var fields = result.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
         var summaries = new List<ChangedFileSummary>();
@@ -118,6 +121,98 @@ internal sealed class GitReviewRepositoryWorkspace(
             : await this.ReadHeadFileAsync(normalizedPath, ct);
     }
 
+    /// <inheritdoc />
+    public async Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        var measured = DistinctPaths(paths);
+        if (measured.Count == 0)
+        {
+            return 0;
+        }
+
+        // One numstat over the named paths: the output is two numbers and a path per file, so the size of the
+        // change is read without the diff itself ever entering this process. --literal-pathspecs turns off
+        // pathspec magic, so a repository file actually named ":(exclude)large" selects that file instead of
+        // being read as an exclusion that removes it from the measurement.
+        List<string> arguments = ["--literal-pathspecs", "diff", "--numstat", "-z", $"{this.Lease.MergeBaseSha}...{this.Lease.HeadSha}", "--"];
+        arguments.AddRange(measured);
+
+        var result = await gitCommandRunner.RunAsync(
+            this.Lease.HeadWorkspacePath,
+            arguments,
+            authEnvironment,
+            ct,
+            preserveStandardOutput: true);
+        result.EnsureSuccess("count changed lines", "git diff --numstat -z <merge-base>...<head> -- <paths>");
+
+        // With -z each record is "added\tdeleted\t" followed by the NUL-terminated path, and a rename adds two
+        // more NUL-terminated path fields. Only the counts are read, so the path fields are stepped over.
+        var fields = result.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+
+        // Accumulated in long: a pull request of a few million changed lines overflows an int total and the
+        // negative number that comes out reads as a change well under any bound.
+        var total = 0L;
+        foreach (var field in fields)
+        {
+            var columns = field.Split('\t');
+            if (columns.Length < 2)
+            {
+                continue;
+            }
+
+            // A binary file is reported as "-" in both columns and counts as no lines.
+            if (int.TryParse(columns[0], out var added))
+            {
+                total += added;
+            }
+
+            if (int.TryParse(columns[1], out var deleted))
+            {
+                total += deleted;
+            }
+        }
+
+        return (int)Math.Min(int.MaxValue, total);
+    }
+
+    /// <inheritdoc />
+    public async Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        var measured = DistinctPaths(paths);
+        if (measured.Count == 0)
+        {
+            return 0;
+        }
+
+        // The same diff the reviewer would be sent, counted as it streams out of git. Loading it to measure it
+        // would take on exactly the memory the bound exists to refuse.
+        List<string> arguments =
+        [
+            "--literal-pathspecs", "diff", "--no-ext-diff", "--unified=3", this.Lease.MergeBaseSha, this.Lease.HeadSha, "--",
+        ];
+        arguments.AddRange(measured);
+
+        var result = await gitCommandRunner.CountStandardOutputBytesAsync(
+            this.Lease.HeadWorkspacePath,
+            arguments,
+            authEnvironment,
+            ct);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Failed to measure the unified diff (git diff <merge-base> <head> -- <paths>): {result.StandardError.Trim()}");
+        }
+
+        return result.StandardOutputBytes;
+    }
+
+    // The contract counts each path once: a caller that repeats one would otherwise inflate the change it is
+    // measured at and have the review refused for a size it does not have.
+    private static IReadOnlyList<string> DistinctPaths(IReadOnlyCollection<string> paths) =>
+        paths.Distinct(StringComparer.Ordinal).ToList();
+
+    /// <inheritdoc />
     public async Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
     {
         var normalizedPath = NormalizePath(path);

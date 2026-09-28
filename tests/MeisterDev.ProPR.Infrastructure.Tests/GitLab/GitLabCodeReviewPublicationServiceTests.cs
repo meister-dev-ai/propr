@@ -62,7 +62,8 @@ public sealed class GitLabPublicationContextContractTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer, publicationContext: publicationContext);
 
@@ -104,7 +105,8 @@ public sealed class GitLabPublicationContextContractTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -138,7 +140,8 @@ public sealed class GitLabPublicationContextContractTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -197,7 +200,8 @@ public sealed class GitLabPublicationContextContractTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -248,7 +252,8 @@ public sealed class GitLabPublicationContextContractTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<ReviewCommentPublicationFailedException>(() => sut.PublishReviewAsync(
             clientId, review, revision, result, reviewer));
@@ -297,7 +302,8 @@ public sealed class GitLabPublicationContextContractTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -307,5 +313,71 @@ public sealed class GitLabPublicationContextContractTests
         Assert.Equal("inline", failure.ThreadKind);
         Assert.Equal("src/a.ts", failure.FilePath);
         Assert.Contains("version", failure.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_EndsTheSummaryAndEveryInlineDiscussionWithTheMarker()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case.")]);
+
+        var postedBodies = new List<string>();
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(async request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            if (uri == "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions")
+            {
+                postedBodies.Add(await request.Content!.ReadAsStringAsync());
+                return GitLabTestHelpers.CreateJsonResponse(
+                    new { id = "discussion-abc", notes = new[] { new { id = 9100L } } },
+                    HttpStatusCode.Created);
+            }
+
+            return uri switch
+            {
+                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/versions" =>
+                    GitLabTestHelpers.CreateJsonResponse(
+                        new[]
+                        {
+                            new { id = 7L, base_commit_sha = "base-sha", head_commit_sha = "head-sha", start_commit_sha = "start-sha" },
+                        }),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+
+        var sut = new GitLabCodeReviewPublicationService(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        // One discussion for the summary and one for the single inline comment. The marker has to be the last
+        // line of each posted body and has to survive the encoding GitLab applies to the body field.
+        Assert.Equal(2, postedBodies.Count);
+        var decodedBodies = postedBodies
+            .Select(body => GitLabTestHelpers.ReadMultipartField(body, "body"))
+            .ToList();
+        Assert.All(
+            decodedBodies,
+            body => TestPostedCommentComposer.AssertMarkedOnce(body, TestPostedCommentComposer.DistinctiveMarker));
+
+        // Identified by its own text, not by posting order: which discussion GitLab reports back first is not
+        // part of the contract this test is verifying.
+        var inlineBody = Assert.Single(
+            decodedBodies,
+            body => body.Contains("Guard this null case", StringComparison.Ordinal));
+        Assert.Equal(
+            "Warning: Guard this null case.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            inlineBody);
     }
 }

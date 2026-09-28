@@ -263,8 +263,52 @@ keeps its operational data - indexes, snapshots, token usage - in its own databa
 a separate endpoint, which the API surfaces as the `procursor-remote` check - see
 [what the health checks mean](observability.md#what-the-health-checks-mean).
 
-Point both services at the same encryption key ring - see
-[the encryption key ring](../reference/security.md#the-encryption-key-ring).
+Point both services at the same encryption key ring, and give them the same key-ring protector and its
+settings. See [the encryption key ring](../reference/security.md#the-encryption-key-ring). A service reading
+a ring protected differently from the way it was written cannot open it.
+
+## Key-ring compatibility during upgrades
+
+Preserve the database, the existing key ring, and the `MeisterProPR` data-protection application identity
+when upgrading. An existing installation does not need a certificate or Azure Key Vault configuration
+unless the operator selects that protector. Keep the configured key path unchanged. Relative paths resolve
+against the process working directory, and surrounding whitespace is part of the path. Keep the working
+directory unchanged or configure the absolute path to the existing ring.
+
+The built-in certificate protector is available in both service images. Keep the previous certificates
+or Azure Key Vault key versions needed to decrypt existing keys when rotating protection settings.
+Selecting a protector or a different key repository is an explicit deployment operation.
+
+## Protecting the key ring with Azure Key Vault
+
+Both service images carry the `azure-key-vault` key-ring protector in their own add-in directory, so an
+installation on Azure selects it with `MEISTER_DATA_PROTECTION_PROTECTOR=azure-key-vault` and needs no
+rebuild. Set `MEISTER_DATA_PROTECTION_AZURE_KEY_VAULT_KEY_ID` to the key identifier on both services and leave
+the key path as it is. Wrap and unwrap on that key go to the identity each service runs under, which is not
+the deployment identity where the two differ; both services open the ring at start-up and both need it. With
+`MEISTER_DATA_PROTECTION_AZURE_BLOB_URI` set as well, the services use the blob as their key repository; the same runtime identities need read and write on the blob. Each URL you set must use
+`https`. The variables are under
+[the Azure Key Vault protector](configuration.md#the-azure-key-vault-protector).
+
+**Setting the blob URI on an installation that already holds keys does not transfer them.** An empty
+destination creates a new ring, which cannot decrypt values protected with the existing ring. A destination
+containing another installation's ring selects those keys. For an upgrade, transfer the existing ring before
+changing the repository setting.
+
+For a new installation, use a dedicated blob. To transfer an existing filesystem ring, stop both services, build
+one XML document whose `<repository>` root element holds the `<key>` element of every file in the key
+directory, and upload it to the blob the variable names. Check two things before you start the services
+again: the uploaded document carries one `<key>` element per file in the key directory, with the same `id`
+attributes, and the identity both services run under can read and write the blob. Read access alone passes
+this check and starts the services, then fails when Data Protection creates or rotates a key. Keep the key
+directory until a review has run on the new setting, so a key the upload omitted can still be recovered.
+Then set the variable and start both services.
+
+To restore such an installation: restore the databases, restore the key ring from the volume or from the blob
+where the ring lives there, and give the identity both running services use wrap and unwrap on the same vault
+key, and read and write on the blob where the ring is blob-backed. The key files alone read nothing. A vault
+key that was deleted takes the key ring with it, so treat the key's own backup and its soft-delete and
+purge-protection settings as part of the installation backup.
 
 For what ProCursor does and what indexing costs, see [ProCursor](../concepts/how-it-works.md#procursor).
 

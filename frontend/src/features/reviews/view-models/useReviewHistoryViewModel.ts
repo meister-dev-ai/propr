@@ -99,14 +99,20 @@ const ITEMS_VISIBLE_DEFAULT = 3
 const ITEMS_PER_PAGE = 10
 
 /**
- * The states a review can be restarted from, which the server accepts.
+ * The states a review can be restarted from. The set matches what the restart handler accepts, so every
+ * button offered here sends a request the server acts on.
  *
- * Budget-blocked work belongs here as much as a failure does: a soft cap holds a review before it starts
- * and a hard cap stops one part-way, and both are resumed by restarting once budget is freed. Offering the
- * button for those states while the action recognised only a failure made the click do nothing at all, with
- * no request sent and no error shown to say that budget was the thing to sort out first.
+ * Budget-blocked work belongs here as much as a failure does: a soft cap holds a review before it starts and
+ * a hard cap stops one part-way, and both are resumed by restarting once budget is freed. A refused review
+ * restarts once what the bound measured comes down or the bound is raised, and is refused again otherwise,
+ * which the server decides on the measurement of the moment.
  */
-const RESTARTABLE_STATUSES: ReadonlySet<string> = new Set(['failed', 'budgetHeld', 'budgetExceeded'])
+const RESTARTABLE_STATUSES: ReadonlySet<string> = new Set([
+  'failed',
+  'budgetHeld',
+  'budgetExceeded',
+  'admissionRefused',
+])
 
 async function defaultListPullRequestHistory(
   params: ListPullRequestHistoryParams,

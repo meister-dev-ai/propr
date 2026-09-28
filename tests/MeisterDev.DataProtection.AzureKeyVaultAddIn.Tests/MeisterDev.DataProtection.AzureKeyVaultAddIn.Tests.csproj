@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>MeisterDev.DataProtection.AzureKeyVaultAddIn.Tests</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="8.0.1">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0"/>
+        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit"/>
+    </ItemGroup>
+
+    <!--
+        One set of cases for a contract two assemblies implement. The file's own remarks say why the two
+        resolvers cannot be compiled into one test project.
+    -->
+    <ItemGroup>
+        <Compile Include="..\Shared\AzureCredentialResolutionContract.cs" Link="AzureCredentialResolutionContract.cs"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\MeisterDev.DataProtection\MeisterDev.DataProtection.csproj"/>
+        <ProjectReference Include="..\..\src\MeisterDev.DataProtection.AzureKeyVaultAddIn\MeisterDev.DataProtection.AzureKeyVaultAddIn.csproj"/>
+    </ItemGroup>
+
+    <!--
+        Stages the add-in's own publish layout as a folder the loader is pointed at, the way an image holds one.
+        The output directory is asked of the add-in project itself, so the two projects can target different
+        frameworks without the copy silently finding nothing. The staged folder is emptied first: a file left
+        there by an earlier build is one the loader can still read and select.
+    -->
+    <Target Name="StageAzureKeyVaultAddInForTests" AfterTargets="Build">
+        <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\src\MeisterDev.DataProtection.AzureKeyVaultAddIn\MeisterDev.DataProtection.AzureKeyVaultAddIn.csproj"
+                 Targets="GetTargetPath"
+                 Properties="Configuration=$(Configuration)">
+            <Output TaskParameter="TargetOutputs" ItemName="_AzureKeyVaultAddInAssembly"/>
+        </MSBuild>
+        <PropertyGroup>
+            <_AzureKeyVaultAddInOutputDirectory>%(_AzureKeyVaultAddInAssembly.RootDir)%(_AzureKeyVaultAddInAssembly.Directory)</_AzureKeyVaultAddInOutputDirectory>
+            <_AzureKeyVaultAddInStagingDirectory>$(OutDir)add-in-builds\MeisterDev.DataProtection.AzureKeyVaultAddIn</_AzureKeyVaultAddInStagingDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_AzureKeyVaultAddInFile Include="$(_AzureKeyVaultAddInOutputDirectory)*.*"/>
+        </ItemGroup>
+        <RemoveDir Directories="$(_AzureKeyVaultAddInStagingDirectory)"/>
+        <Copy SourceFiles="@(_AzureKeyVaultAddInFile)" DestinationFolder="$(_AzureKeyVaultAddInStagingDirectory)"/>
+    </Target>
+
+</Project>

@@ -160,6 +160,26 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasPrecision(18, 6)
             .IsRequired(false);
 
+        builder.Property(c => c.AdmissionMaxChangedFiles)
+            .HasColumnName("admission_max_changed_files")
+            .IsRequired(false);
+
+        builder.Property(c => c.AdmissionMaxChangedLines)
+            .HasColumnName("admission_max_changed_lines")
+            .IsRequired(false);
+
+        builder.Property(c => c.AdmissionMaxDiffBytes)
+            .HasColumnName("admission_max_diff_bytes")
+            .IsRequired(false);
+
+        builder.Property(c => c.AdmissionMaxReviewsPerPullRequestPerHour)
+            .HasColumnName("admission_max_reviews_per_pull_request_per_hour")
+            .IsRequired(false);
+
+        builder.Property(c => c.AdmissionMaxRepositoryMegabytes)
+            .HasColumnName("admission_max_repository_megabytes")
+            .IsRequired(false);
+
         builder.HasIndex(c => c.TenantId)
             .HasDatabaseName("ix_clients_tenant_id");
 

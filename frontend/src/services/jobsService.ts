@@ -73,12 +73,16 @@ export interface JobListResponse {
   items: JobListItem[]
 }
 
-/** Why a budget held or stopped a review. Enum values mirror the backend BudgetScopeKind / BudgetCapKind. */
+/**
+ * Why a budget held or stopped a review. Enum values mirror the backend BudgetScopeKind / BudgetCapKind.
+ * A refusal relayed from another replica names the stop without naming the cap behind it, and the scope,
+ * threshold and spend are then absent.
+ */
 export interface BudgetStatus {
-  scope: number // 0 = client monthly, 1 = pull request, 2 = increment
+  scope?: number | null // 0 = client monthly, 1 = pull request, 2 = increment
   capKind: number // 0 = soft, 1 = hard
-  thresholdUsd: number
-  spentUsd: number
+  thresholdUsd?: number | null
+  spentUsd?: number | null
 }
 
 export interface JobDetailResponse {
@@ -100,6 +104,10 @@ export interface JobDetailResponse {
   budgetStatus?: BudgetStatus | null
   /** Full review summary. The history list carries only an excerpt, so this is the source for the modal. */
   resultSummary?: string | null
+  /** Why review admission refused this job, in the words posted on the pull request. */
+  admissionRefusalReason?: string | null
+  /** When the review-admission hold expires and the job may start by itself. */
+  heldUntil?: string | null
 }
 
 export interface GetJobProtocolOptions {

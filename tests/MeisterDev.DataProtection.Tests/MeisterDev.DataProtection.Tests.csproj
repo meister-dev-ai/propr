@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>MeisterDev.DataProtection.Tests</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="8.0.1">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0"/>
+        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\MeisterDev.DataProtection\MeisterDev.DataProtection.csproj"/>
+        <!--
+            The example add-in, referenced only so it is built before these tests run. Its assembly is never
+            compiled against. The loader reads it, from a staged folder on disk.
+        -->
+        <ProjectReference Include="..\MeisterDev.DataProtection.ExampleAddIn\MeisterDev.DataProtection.ExampleAddIn.csproj"
+                          ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+    <!--
+        Stages the add-in's own build output as a folder these tests point the loader at, the way a deployment
+        holds one. The output directory is asked of the add-in project itself, so the two projects can target
+        different frameworks without the copy silently finding nothing. The staged folder is emptied first: a
+        file left there by an earlier build is one the loader can still read and select.
+    -->
+    <Target Name="StageDataProtectionAddInForTests" AfterTargets="Build">
+        <MSBuild Projects="$(MSBuildThisFileDirectory)..\MeisterDev.DataProtection.ExampleAddIn\MeisterDev.DataProtection.ExampleAddIn.csproj"
+                 Targets="GetTargetPath"
+                 Properties="Configuration=$(Configuration)">
+            <Output TaskParameter="TargetOutputs" ItemName="_ExampleAddInAssembly"/>
+        </MSBuild>
+        <PropertyGroup>
+            <_ExampleAddInOutputDirectory>%(_ExampleAddInAssembly.RootDir)%(_ExampleAddInAssembly.Directory)</_ExampleAddInOutputDirectory>
+            <_ExampleAddInStagingDirectory>$(OutDir)add-in-builds\MeisterDev.DataProtection.ExampleAddIn</_ExampleAddInStagingDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_ExampleAddInFile Include="$(_ExampleAddInOutputDirectory)*.*"/>
+        </ItemGroup>
+        <RemoveDir Directories="$(_ExampleAddInStagingDirectory)"/>
+        <Copy SourceFiles="@(_ExampleAddInFile)" DestinationFolder="$(_ExampleAddInStagingDirectory)"/>
+    </Target>
+
+</Project>

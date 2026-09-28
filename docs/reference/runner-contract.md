@@ -48,7 +48,7 @@ renewal naming the skew. A runner old enough not to send it is gated at its next
 `runner.register`, `runner.credential.renew` and `runner.lease` run before the caller holds a job. Every
 other operation carries the caller's job identity and lease generation and is authorized against them. A caller presenting a superseded generation is refused even for its own job.
 
-## Which runner gets which job
+## Runner dispatch eligibility
 
 A runner requests a lease only when it has a free slot, and reports how many it has. The control plane
 keeps no view of runner capacity.
@@ -92,12 +92,12 @@ made mid-review from altering a review already in progress.
 | `repositoryInstructions` | Repository instructions, already fetched |
 | `budgetHeadroomUsd` | Remaining spend before the hard cap, when one is configured |
 | `traceContext` | W3C trace context, so one review is followable across both processes |
-| `behaviour` | The per-client decisions that change what the review does, not which model runs it |
+| `behaviour` | The per-client decisions that change what the review does, not which model runs it, and whether the review may record the model's reasoning |
 | `linkedItems` | The work items linked to the review, discovered and bounded at dispatch |
 | `servedBy` | The granting replica's advertised base URL, when the operator sets one; every job-scoped call goes there |
 | `parallelReviewExecutionLicensed` | Whether files may fan out in parallel, resolved at dispatch |
 
-### No field can carry a secret
+### Secret handling
 
 The manifest has no field for a credential, a connection string, or a key. A test walks the whole schema
 graph and fails if one is added.
@@ -110,44 +110,65 @@ prompt and budget its context before it makes the call.
 A client whose review purpose resolves to a connection, not to a named model, cannot be dispatched to a
 runner. The refusal names what to configure.
 
-The same applies to a pass list with a publishing pr_wide-scope entry. The executor composes no PR-wide
-generator yet, so the offer skips such a job before claiming anything, and the manifest refusal backstops
-the race. The in-process worker runs it, the one named exception to leaving a runner-eligible job for a
-runner, and logs a warning per job so an operator relying on runner isolation sees each review that stayed
-local. A shadow pr_wide entry still dispatches. It publishes nothing, so skipping it remotely changes
-telemetry, not the review.
+A pass list containing a publishing `pr_wide` entry runs in-process because runners do not compose a
+PR-wide generator. Lease dispatch skips those jobs before claiming them, and manifest preparation also
+checks eligibility. The in-process worker logs a warning for each such job. Shadow `pr_wide` entries
+remain eligible for runner dispatch because they do not publish findings.
 
-`behaviour` carries the settings a runner cannot read for itself, because they live on the client record
-and a runner has no database: whether the pass list is unioned, whether the semantic screener and
-evidence-backed verification run, whether linked items are offered, the review temperature, and the
-pipeline profile. Omitting the field sends every one of them to its default, and the pass list above does
-nothing unless the union is on. The field is optional so a manifest from an older control plane still
-deserializes; a runner reading one without it behaves as it did before the field existed.
+`behaviour` contains client settings unavailable to a runner without database access: multi-pass union,
+semantic screening, evidence-backed verification, linked-item context, temperature, pipeline profile, and
+reasoning capture. The field is optional. An omitted field uses the runner defaults, including disabled
+multi-pass union.
 
-`budgetHeadroomUsd` is an optimisation, not an enforcement point. It lets a runner wind down instead of
-being refused mid-pass, and it is stale the moment it is written. The AI relay is where the cap is enforced.
+`behaviour.captureReasoning` contains the tenant policy combined with the installation setting at dispatch.
+It overrides the runner's `AI_CAPTURE_REASONING_IN_PROTOCOL` environment setting when present. A manifest
+without this value uses the runner's environment setting.
 
-### Holding a job open
+The control plane reads the tenant's reasoning policy again when serving an AI relay response and when
+persisting a spooled batch. A policy change during a lease applies to each subsequent operation. Persisted
+trace events follow the policy active when the control plane accepted them.
 
-The replica that grants a lease registers a **budget scope** for the job before the manifest leaves, and
-drops it when the job publishes, when the runner hands the lease back, or when the lease is reclaimed.
+The AI relay replaces the runner's reasoning-summary option with the effective tenant policy. It applies
+that policy to fresh responses and cached responses. When capture is disabled, it removes reasoning content,
+provider metadata from messages and responses, and raw provider representations that may contain reasoning.
+A response whose reasoning exists only in metadata remains usable after that metadata is removed.
+Reasoning token counts remain available for budget accounting.
 
-The relay charges every completion against that scope and refuses when it cannot find one. The scope both
-records what a cap is enforced against and marks the job as this replica's to serve. A runner fetches its
-workspace from the replica that granted its lease for the same reason: the mirror is local disk, not shared
-storage.
+The relay cache retains the original provider response in the memory of the replica that made the call.
+If the tenant enables capture before an authorized retry, the relay can return reasoning from that cached
+response. The cache is not persisted or shared between replicas. Entries expire when findings are submitted,
+the lease is released, the abandoned-state sweep observes a terminal job, or the process stops. A retry
+requires authorization against the original lease generation.
 
-On a multi-replica installation the runner finds that replica through the manifest's `servedBy` field. Each
-replica advertises its own reachable address (`RUNNER_ADVERTISED_URL`) and the lease carries it. The runner
-directs everything job-scoped there: the execution surface, the workspace fetch, the heartbeat, and the
-release. The configured control-plane URL keeps serving what is not job-scoped: enrollment, credential
-renewal, and asking for work. A manifest without the field means the configured URL serves the job, which is
-the single-replica case. The runner hands the lease back when the advertised address is not https (loopback
-exempt), for the same reason it refuses such a configured URL: the credential rides on every call.
+The ingest writer removes reasoning from spooled `protocol.ai_call` events when capture is disabled.
+If a sample cannot be parsed into its components, the writer replaces the whole sample with a short note.
+For example, an object where a serialized string is required cannot be redacted by component. Usage counts
+remain unchanged.
 
-**A scope is registered for every leased job, including one belonging to a client that configures no
-caps.** That client gets a scope with nothing to trip: metered, never stopped, exactly as the in-process
-path behaves.
+When capture is disabled and no reasoning effort is configured, the relay removes provider request options
+that the review pipeline did not create. Evaluating such options would execute caller code against a relay
+client with different provider semantics, so the relay cannot verify their reasoning settings. It logs a
+warning with the job and logical model and removes the request from a copy of the options. The caller's
+original options remain unchanged.
+
+`budgetHeadroomUsd` lets the runner stop before another call would exceed its captured estimate. The AI relay
+enforces the current hard cap for every completion.
+
+### Lease-scoped state
+
+The granting replica registers a budget scope before returning the manifest. It removes the scope when
+findings are published, the runner releases the lease, or the lease is reclaimed. The relay charges
+completions to that scope and refuses calls without a registered scope. Uncapped clients still receive a
+scope for usage accounting.
+
+The replica also owns the repository mirror used for workspace fetches. On installations with multiple
+replicas, each replica sets `RUNNER_ADVERTISED_URL`. The manifest's `servedBy` field contains that address,
+and the runner sends execution, workspace, heartbeat, and release calls there. Enrollment, credential renewal,
+and lease requests use the configured control-plane URL.
+
+A manifest without `servedBy` uses the configured URL, as in a single-replica deployment. The runner releases
+the lease and reports a refusal when the advertised URL fails the HTTPS requirement. Loopback URLs are
+exempt. This protects the runner credential sent on job-scoped calls.
 
 ## Error shapes
 
@@ -170,7 +191,7 @@ An installation that has reached its concurrent-review limit is not refused. Pro
 the same as an empty queue, so the runner keeps polling and takes the next review when a running one
 finishes.
 
-## Where this lives
+## Contract assembly
 
 `src/MeisterDev.ProPR.Runner.Contracts` holds the version rule, the manifest schema, the operation names,
 and the error shapes. It references nothing else in the solution, so the runner host cannot reach the domain

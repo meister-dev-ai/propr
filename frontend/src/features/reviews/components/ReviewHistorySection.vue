@@ -151,7 +151,7 @@
                                 v-if="isRestartable(item) && item.id && canInspectClient(props.clientId || item.clientId)"
                                 class="btn-ghost restart-btn"
                                 :disabled="restartingJobs.has(item.id)"
-                                :title="item.status === 'failed' ? 'Restart this failed review' : 'Restart this budget-blocked review after freeing budget'"
+                                :title="restartTitle(item.status)"
                                 @click="restartJob(item)"
                             >
                                 {{ restartingJobs.has(item.id) ? 'Restarting…' : 'Restart ↻' }}
@@ -286,7 +286,9 @@ function formatItemDate(item: JobListItem): string {
         const since = item.processingStartedAt ? ` since ${formatDate(item.processingStartedAt)}` : ''
         return `In progress${since}`
     }
-    if (item.status === 'pending') {
+    // A held review is waiting for its hour to pass and has no completion time, so it reads as queued from
+    // when it was submitted, as a pending review does.
+    if (item.status === 'pending' || item.status === 'admissionHeld') {
         return item.submittedAt ? `Queued ${formatDate(item.submittedAt)}` : 'Queued'
     }
     return formatDate(item.completedAt)
@@ -317,12 +319,27 @@ function rowClass(item: JobListItem): string {
     return ''
 }
 
+// What a restart of this review needs first. A size refusal is not a budget matter, and telling its author to
+// free budget sends them to the wrong setting. The row carries no refusal reason, so the refusal title names
+// both remedies: the measured value can come down, or the bound that refused it can go up.
+function restartTitle(status: JobStatus | undefined): string {
+    switch (status) {
+        case 'failed': return 'Restart this failed review'
+        case 'budgetHeld': return 'Restart this held review after freeing budget'
+        case 'budgetExceeded': return 'Restart this budget-stopped review after freeing budget'
+        case 'admissionRefused': return 'Restart this review after reducing what the review limit measured, or raising that limit'
+        default: return 'Restart this review'
+    }
+}
+
 // Human-readable status label; the raw enum name is shown for statuses without a friendlier form.
 function statusLabel(status: JobStatus | undefined): string {
     switch (status) {
         case 'processing': return 'Reviewing'
         case 'budgetHeld': return 'Budget held'
         case 'budgetExceeded': return 'Budget stopped'
+        case 'admissionRefused': return 'Not started'
+        case 'admissionHeld': return 'Waiting'
         default: return status ?? ''
     }
 }
@@ -342,6 +359,8 @@ function statusBadgeClass(status: JobStatus | undefined): string {
         case 'superseded': return 'status-badge status-superseded'
         case 'budgetHeld': return 'status-badge status-budget-held'
         case 'budgetExceeded': return 'status-badge status-budget-exceeded'
+        case 'admissionRefused': return 'status-badge status-admission-refused'
+        case 'admissionHeld': return 'status-badge status-admission-held'
         default: return 'status-badge'
     }
 }
@@ -663,6 +682,16 @@ function prReviewLink(group: PrGroup): object {
 }
 
 .status-soft-capped {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--color-warning);
+}
+
+.status-admission-refused {
+    background: rgba(249, 115, 22, 0.18);
+    color: var(--color-budget-exceeded);
+}
+
+.status-admission-held {
     background: rgba(245, 158, 11, 0.15);
     color: var(--color-warning);
 }

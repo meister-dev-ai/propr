@@ -8,6 +8,7 @@ using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Clients.Contracts;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -80,12 +81,13 @@ public sealed class AiConnectionRepositoryTests
         return policies;
     }
 
-    private static AiConnectionRepository CreateRepository(
+    internal static AiConnectionRepository CreateRepository(
         MeisterProPRDbContext db,
         IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
         ISecretProtectionCodec? codec = null,
         ITenantProviderPolicyProvider? providerPolicies = null,
-        IAiProviderDriverRegistry? providerDrivers = null)
+        IAiProviderDriverRegistry? providerDrivers = null,
+        IAiProviderConfigAuditWriter? configAudit = null)
     {
         return new AiConnectionRepository(
             db,
@@ -93,7 +95,8 @@ public sealed class AiConnectionRepositoryTests
             providerPolicies ?? UnrestrictedPolicies(),
             providerDrivers ?? StoredFamily(),
             EgressUrlPolicy.Locked,
-            contextFactory);
+            contextFactory,
+            configAudit);
     }
 
     // The family the fixture profiles are stored against: it declares the key those rows would carry after its
@@ -115,7 +118,428 @@ public sealed class AiConnectionRepositoryTests
         return new MeisterProPRDbContext(options);
     }
 
-    private static AiConnectionProfileRecord MakeProfile(
+    [Theory]
+    [InlineData(AiPurpose.EmbeddingDefault, AiPurpose.ReviewDefault, AiPurpose.EmbeddingDefault)]
+    [InlineData(AiPurpose.ReviewHighEffort, AiPurpose.ReviewDefault, AiPurpose.ReviewHighEffort)]
+    [InlineData(AiPurpose.ReviewTriage, AiPurpose.ReviewDefault, AiPurpose.ReviewLowEffort)]
+    [InlineData(AiPurpose.ReviewVerification, AiPurpose.ReviewDefault, AiPurpose.ReviewTriage)]
+    [InlineData(AiPurpose.ReviewVerification, AiPurpose.ReviewLowEffort, AiPurpose.ReviewTriage)]
+    public async Task GetActiveBindingForPurposeAsync_SearchesAllProfilesBeforeLowerPriorityPurposes(
+        AiPurpose requested, AiPurpose firstPurpose, AiPurpose secondPurpose)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var first = MakeProfile(clientId, true, true, "A Chat", firstPurpose);
+        var second = MakeProfile(clientId, true, true, "B Other", secondPurpose);
+        db.AiConnectionProfiles.AddRange(first, second);
+        await db.SaveChangesAsync();
+
+        var result = await CreateRepository(db).GetActiveBindingForPurposeAsync(clientId, requested);
+
+        Assert.NotNull(result);
+        Assert.Equal(second.Id, result.Connection.Id);
+        Assert.Equal(secondPurpose, result.Binding.Purpose);
+    }
+
+    [Theory]
+    [InlineData("disabled")]
+    [InlineData("missing")]
+    [InlineData("inactive")]
+    [InlineData("foreign")]
+    public async Task GetActiveBindingForPurposeAsync_SkipsUnavailableExactMatches(string unavailable)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var first = MakeProfile(unavailable == "foreign" ? Guid.NewGuid() : clientId, true, true, "A", AiPurpose.ReviewHighEffort);
+        var second = MakeProfile(clientId, true, true, "B", AiPurpose.ReviewHighEffort);
+        if (unavailable == "disabled") first.PurposeBindings.Single().IsEnabled = false;
+        if (unavailable == "missing") first.ConfiguredModels.Clear();
+        if (unavailable == "inactive") first.IsActive = false;
+        db.AiConnectionProfiles.AddRange(first, second);
+        await db.SaveChangesAsync();
+
+        var result = await CreateRepository(db).GetActiveBindingForPurposeAsync(clientId, AiPurpose.ReviewHighEffort);
+
+        Assert.NotNull(result);
+        Assert.Equal(second.Id, result.Connection.Id);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetActiveBindingForPurposeAsync_ExactMatchesKeepDisplayNameAndIdPriority(bool equalNames)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var first = MakeProfile(clientId, true, true, "A", AiPurpose.ReviewDefault);
+        var second = MakeProfile(clientId, true, true, equalNames ? "A" : "B", AiPurpose.ReviewDefault);
+        var expected = equalNames ? new[] { first, second }.OrderBy(profile => profile.Id).First() : first;
+        db.AiConnectionProfiles.AddRange(second, first);
+        await db.SaveChangesAsync();
+
+        var result = await CreateRepository(db).GetActiveBindingForPurposeAsync(clientId, AiPurpose.ReviewDefault);
+
+        Assert.Equal(expected.Id, result!.Connection.Id);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VerifyUpdateAsync_PromotesOnlySuccessfulVerification(bool successful)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true, true);
+        profile.AuthMode = "ApiKey";
+        db.Add(profile);
+        await db.SaveChangesAsync();
+        var repository = CreateRepository(db);
+        var original = (await repository.GetByIdAsync(profile.Id))!;
+        var request = new AiConnectionWriteRequestDto(
+            "Candidate", original.ProviderKind, original.BaseUrl,
+            original.AuthMode, original.DiscoveryMode, original.ConfiguredModels, original.PurposeBindings);
+        var result = await repository.VerifyUpdateAsync(
+            clientId, original, request, (candidate, _) =>
+            {
+                Assert.Equal("Candidate", candidate.DisplayName);
+                Assert.Equal("Test Connection", db.AiConnectionProfiles.AsNoTracking().Single().DisplayName);
+                return Task.FromResult(successful ? original.Verification : AiVerificationResultDto.NeverVerified);
+            });
+        Assert.Equal(successful, result.Applied);
+        var stored = (await repository.GetByIdAsync(profile.Id))!;
+        Assert.Equal(successful ? "Candidate" : original.DisplayName, stored.DisplayName);
+        Assert.Equal(AiVerificationStatus.Verified, stored.Verification.Status);
+        Assert.True(stored.IsActive);
+    }
+
+    [Theory]
+    [InlineData("auth")]
+    [InlineData("model")]
+    [InlineData("timestamp")]
+    [InlineData("owner")]
+    public async Task VerifyUpdateAsync_RejectsMutationDuringProviderCall(string mutation)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true, true);
+        profile.AuthMode = "ApiKey";
+        var clientOwner = new ClientRecord { Id = clientId, TenantId = Guid.NewGuid(), DisplayName = "Owner" };
+        db.Clients.Add(clientOwner);
+        db.Add(profile);
+        await db.SaveChangesAsync();
+        var repository = CreateRepository(db);
+        var original = (await repository.GetByIdAsync(profile.Id))!;
+        var request = new AiConnectionWriteRequestDto(
+            "Candidate", original.ProviderKind, original.BaseUrl,
+            original.AuthMode, original.DiscoveryMode, original.ConfiguredModels, original.PurposeBindings);
+        var result = await repository.VerifyUpdateAsync(
+            clientId, original, request, async (_, _) =>
+            {
+                if (mutation == "auth") profile.AuthMode = "AzureIdentity";
+                if (mutation == "model") profile.ConfiguredModels.First().SupportsToolUse = false;
+                if (mutation == "timestamp") profile.UpdatedAt = profile.UpdatedAt.AddSeconds(1);
+                if (mutation == "owner") clientOwner.TenantId = Guid.NewGuid();
+                await db.SaveChangesAsync();
+                return original.Verification;
+            });
+        Assert.False(result.Applied);
+        Assert.True(result.Conflict);
+        Assert.Equal(original.DisplayName, (await repository.GetByIdAsync(profile.Id))!.DisplayName);
+    }
+
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("foreign")]
+    [InlineData("unverified")]
+    [InlineData("capability")]
+    [InlineData("logical")]
+    [InlineData("inherited")]
+    [InlineData("managed")]
+    public async Task SelectPurposesAsync_ValidatesEverySelectionBeforeApplying(string scenario)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var first = MakeProfile(clientId, true, true, "First");
+        var second = MakeProfile(
+            scenario == "foreign" ? Guid.NewGuid() : clientId,
+            false, scenario != "unverified", "Second");
+        first.AuthMode = "ApiKey";
+        second.AuthMode = "ApiKey";
+        if (scenario == "inherited")
+        {
+            second.ClientId = null;
+            second.TenantId = Guid.NewGuid();
+        }
+
+        if (scenario == "managed") second.AuthMode = "AzureIdentity";
+        db.AddRange(first, second);
+        if (scenario == "logical")
+            db.ClientPurposeLogicalModels.Add(
+                new() { Id = Guid.NewGuid(), ClientId = clientId, Purpose = AiPurpose.ReviewDefault, LogicalModelName = "missing-role" });
+        await db.SaveChangesAsync();
+        var before = first.PurposeBindings.ToDictionary(b => b.Purpose, b => b.ConfiguredModelId);
+        var chat = second.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        var embedding = second.ConfiguredModels.Single(m => m.OperationKinds.Contains("Embedding"));
+        var selected = new AiWorkspaceModelSelection(second.Id, chat.Id);
+        var result = await CreateRepository(db).SelectPurposesAsync(
+            clientId, new(
+                selected, selected,
+                new(second.Id, scenario == "capability" ? chat.Id : embedding.Id)));
+        Assert.Equal(scenario == "valid", result.Applied);
+        if (scenario == "valid")
+        {
+            foreach (var purpose in new[]
+                     {
+                         AiPurpose.ReviewDefault, AiPurpose.ReviewTriage, AiPurpose.ReviewVerification, AiPurpose.ReviewLowEffort, AiPurpose.ReviewMediumEffort,
+                         AiPurpose.ReviewHighEffort, AiPurpose.MemoryReconsideration, AiPurpose.EmbeddingDefault
+                     })
+                Assert.Equal(second.Id, (await CreateRepository(db).GetActiveBindingForPurposeAsync(clientId, purpose))!.Connection.Id);
+            Assert.Equal(
+                before[AiPurpose.ProRVPrefilter.ToString()],
+                first.PurposeBindings.Single(b => b.Purpose == AiPurpose.ProRVPrefilter.ToString()).ConfiguredModelId);
+        }
+        else
+        {
+            Assert.Equal(before, first.PurposeBindings.ToDictionary(b => b.Purpose, b => b.ConfiguredModelId));
+            Assert.False(second.IsActive);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, "unsupported_reasoning", false)]
+    [InlineData(true, "unsupported_reasoning", false)]
+    [InlineData(false, "reasoning_content", true)]
+    [InlineData(true, "REASONING_CONTENT", true)]
+    [InlineData(false, null, true)]
+    [InlineData(true, " ", true)]
+    public async Task SelectPurposesAsync_RequiresSupportedChatReasoningFieldBeforeChangingConfiguration(
+        bool highSlot, string? reasoningField, bool expectedApplied)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var first = MakeProfile(clientId, true, true, "First");
+        var second = MakeProfile(clientId, false, true, "Second");
+        first.AuthMode = second.AuthMode = "ApiKey";
+        var firstChat = first.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        var secondChat = second.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        secondChat.ReasoningContentField = reasoningField;
+        var embedding = first.ConfiguredModels.Single(m => m.OperationKinds.Contains("Embedding"));
+        db.AddRange(first, second);
+        await db.SaveChangesAsync();
+        var repository = CreateRepository(db);
+        var beforeFirst = (await repository.GetByIdAsync(first.Id))!;
+        var beforeSecond = (await repository.GetByIdAsync(second.Id))!;
+        var firstSelection = new AiWorkspaceModelSelection(first.Id, firstChat.Id);
+        var secondSelection = new AiWorkspaceModelSelection(second.Id, secondChat.Id);
+
+        var result = await repository.SelectPurposesAsync(
+            clientId, new(
+                highSlot ? firstSelection : secondSelection,
+                highSlot ? secondSelection : firstSelection, new(first.Id, embedding.Id)));
+
+        Assert.Equal(expectedApplied, result.Applied);
+        if (!expectedApplied)
+        {
+            var savedFirst = (await repository.GetByIdAsync(first.Id))!;
+            var savedSecond = (await repository.GetByIdAsync(second.Id))!;
+            Assert.Equal(beforeFirst.ConfigurationStamp, savedFirst.ConfigurationStamp);
+            Assert.Equal(beforeSecond.ConfigurationStamp, savedSecond.ConfigurationStamp);
+            Assert.Equal(beforeFirst.PurposeBindings, savedFirst.PurposeBindings);
+            Assert.Equal(beforeSecond.PurposeBindings, savedSecond.PurposeBindings);
+            Assert.True(savedFirst.IsActive);
+            Assert.False(savedSecond.IsActive);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SelectPurposesAsync_PreservesUnrelatedEditableProfileConfiguration(bool active)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var selected = MakeProfile(clientId, false, true, "Selected");
+        var unrelated = MakeProfile(clientId, active, true, "Unrelated", AiPurpose.ProRVPrefilter);
+        selected.AuthMode = unrelated.AuthMode = "ApiKey";
+        db.AddRange(selected, unrelated);
+        await db.SaveChangesAsync();
+        var audit = Substitute.For<IAiProviderConfigAuditWriter>();
+        var repository = CreateRepository(db, configAudit: audit);
+        var before = (await repository.GetByIdAsync(unrelated.Id))!;
+        var chat = selected.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        var embedding = selected.ConfiguredModels.Single(m => m.OperationKinds.Contains("Embedding"));
+        var chatSelection = new AiWorkspaceModelSelection(selected.Id, chat.Id);
+
+        Assert.True((await repository.SelectPurposesAsync(clientId, new(chatSelection, chatSelection, new(selected.Id, embedding.Id)))).Applied);
+
+        var saved = (await repository.GetByIdAsync(unrelated.Id))!;
+        Assert.Equal(before.UpdatedAt, saved.UpdatedAt);
+        Assert.Equal(before.ConfigurationStamp, saved.ConfigurationStamp);
+        Assert.Equal(before.ConfiguredModels.Select(m => (m.Id, m.RemoteModelId)), saved.ConfiguredModels.Select(m => (m.Id, m.RemoteModelId)));
+        Assert.Equal(before.PurposeBindings, saved.PurposeBindings);
+        Assert.Equal(active, saved.IsActive);
+        await audit.Received(1).RecordAsync(
+            Arg.Is<AiProviderConfigAuditEntry>(entry => entry.ConnectionId == selected.Id && entry.Action == "workspace-purposes-selected"),
+            Arg.Any<CancellationToken>());
+        await audit.DidNotReceive().RecordAsync(Arg.Is<AiProviderConfigAuditEntry>(entry => entry.ConnectionId == unrelated.Id), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SelectPurposesAsync_RefusesEmbeddingWhenTheDriverDoesNotSupportItsProtocol()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true, true);
+        profile.ProviderKind = AzureKey;
+        profile.AuthMode = AzureApiKey;
+        foreach (var model in profile.ConfiguredModels)
+            model.SupportedProtocolModes = model.OperationKinds.Contains("Embedding") ? ["Auto", "Embeddings"] : ["Auto"];
+        db.Add(profile);
+        await db.SaveChangesAsync();
+        var drivers = DeclaringProviderFamilies.Declaring(
+            AzureKey,
+            DeclaringProviderFamilies.DeclarationWith(AzureKey) with { ProtocolModes = new ProviderDeclaredProtocolModes(["Auto"]) });
+        var chat = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        var embed = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Embedding"));
+        var result = await CreateRepository(db, providerDrivers: drivers).SelectPurposesAsync(
+            clientId,
+            new(new(profile.Id, chat.Id), new(profile.Id, chat.Id), new(profile.Id, embed.Id)));
+        Assert.False(result.Applied);
+    }
+
+    [Fact]
+    public async Task SelectPurposesAsync_RefusesStaleMachineTenantWithoutChangingBindings()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        db.Clients.Add(new ClientRecord { Id = clientId, TenantId = Guid.NewGuid(), DisplayName = "Owner" });
+        var profile = MakeProfile(clientId, true, true);
+        profile.AuthMode = "ApiKey";
+        db.Add(profile);
+        await db.SaveChangesAsync();
+        var chat = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        var embedding = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Embedding"));
+        var before = profile.PurposeBindings.Select(b => b.Id).ToArray();
+        var result = await CreateRepository(db).SelectPurposesAsync(
+            clientId,
+            new(new(profile.Id, chat.Id), new(profile.Id, chat.Id), new(profile.Id, embedding.Id)), authorizedTenantId: Guid.NewGuid());
+        Assert.False(result.Applied);
+        Assert.True(result.Conflict);
+        Assert.Equal(before, profile.PurposeBindings.Select(b => b.Id));
+    }
+
+    [Fact]
+    public async Task SelectPurposesAsync_PreservesManagedBindingsAndRefusesTheirPriorityConflict()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var managed = MakeProfile(clientId, true, true, "A Managed");
+        var selected = MakeProfile(clientId, false, true, "B BYOK");
+        selected.AuthMode = "ApiKey";
+        db.AddRange(managed, selected);
+        await db.SaveChangesAsync();
+        var before = managed.PurposeBindings.Select(b => b.Id).ToArray();
+        var chat = selected.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        var embed = selected.ConfiguredModels.Single(m => m.OperationKinds.Contains("Embedding"));
+        var result = await CreateRepository(db).SelectPurposesAsync(
+            clientId,
+            new(new(selected.Id, chat.Id), new(selected.Id, chat.Id), new(selected.Id, embed.Id)));
+        Assert.False(result.Applied);
+        Assert.True(result.Conflict);
+        Assert.Equal(before, managed.PurposeBindings.Select(b => b.Id));
+        Assert.False(selected.IsActive);
+    }
+
+    [Fact]
+    public async Task VerifyUpdateAsync_RefusesCapabilityChangeUsedByLogicalModelBeforeVerification()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true, true);
+        profile.AuthMode = "ApiKey";
+        db.Add(profile);
+        var chat = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        db.LogicalModelOverrides.Add(
+            new()
+            {
+                Id = Guid.NewGuid(), ClientId = clientId, Name = "chat-role",
+                ConnectionId = profile.Id, ConfiguredModelId = chat.Id, Capability = AiOperationKind.Chat, ProtocolMode = "Auto"
+            });
+        await db.SaveChangesAsync();
+        var repository = CreateRepository(db);
+        var original = (await repository.GetByIdAsync(profile.Id))!;
+        var models = original.ConfiguredModels.Select(m => m.Id == chat.Id ? m with { OperationKinds = [AiOperationKind.Embedding] } : m).ToArray();
+        var request = new AiConnectionWriteRequestDto(
+            original.DisplayName, original.ProviderKind, original.BaseUrl,
+            original.AuthMode, original.DiscoveryMode, models, original.PurposeBindings);
+        var called = false;
+        await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => repository.VerifyUpdateAsync(
+            clientId, original, request,
+            (_, _) =>
+            {
+                called = true;
+                return Task.FromResult(original.Verification);
+            }));
+        Assert.False(called);
+        Assert.True((await repository.GetByIdAsync(profile.Id))!.ConfiguredModels.Single(m => m.Id == chat.Id).SupportsChat);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task VerifyUpdateAsync_RefusesManagedProfileOrCandidateWithoutVerification(bool existingManaged)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true, true);
+        profile.AuthMode = existingManaged ? "AzureIdentity" : "ApiKey";
+        db.Add(profile);
+        await db.SaveChangesAsync();
+        var repository = CreateRepository(db);
+        var original = (await repository.GetByIdAsync(profile.Id))!;
+        var request = new AiConnectionWriteRequestDto(
+            "Candidate", original.ProviderKind, original.BaseUrl,
+            AzureIdentityAuth, original.DiscoveryMode, original.ConfiguredModels, original.PurposeBindings);
+        var called = false;
+        var result = await repository.VerifyUpdateAsync(
+            clientId, original, request,
+            (_, _) =>
+            {
+                called = true;
+                return Task.FromResult(original.Verification);
+            });
+        Assert.False(result.Applied);
+        Assert.False(called);
+        Assert.Equal(original.DisplayName, (await repository.GetByIdAsync(profile.Id))!.DisplayName);
+    }
+
+    [Fact]
+    public async Task SelectPurposesAsync_AllowsMatchingLogicalRoleAndReselectionWithoutChangingIt()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true, true);
+        profile.AuthMode = "ApiKey";
+        var chat = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        var embed = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Embedding"));
+        db.Add(profile);
+        var role = new LogicalModelOverrideRecord
+        {
+            Id = Guid.NewGuid(), ClientId = clientId, Name = "matching",
+            ConnectionId = profile.Id, ConfiguredModelId = chat.Id, Capability = AiOperationKind.Chat, ProtocolMode = "Auto"
+        };
+        db.LogicalModelOverrides.Add(role);
+        db.ClientPurposeLogicalModels.Add(new() { Id = Guid.NewGuid(), ClientId = clientId, Purpose = AiPurpose.ReviewDefault, LogicalModelName = role.Name });
+        await db.SaveChangesAsync();
+        var selection = new AiWorkspacePurposeSelection(new(profile.Id, chat.Id), new(profile.Id, chat.Id), new(profile.Id, embed.Id));
+        var repository = CreateRepository(db);
+        Assert.True((await repository.SelectPurposesAsync(clientId, selection)).Applied);
+        Assert.True((await repository.SelectPurposesAsync(clientId, selection)).Applied);
+        Assert.Equal(role.Id, db.LogicalModelOverrides.Single().Id);
+        Assert.Equal(role.Name, db.ClientPurposeLogicalModels.Single().LogicalModelName);
+    }
+
+    internal static AiConnectionProfileRecord MakeProfile(
         Guid clientId,
         bool isActive = false,
         bool verified = true,

@@ -14,13 +14,14 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Budgeting;
 ///     Composes a tenant's aggregate spend from the caps in force for its clients (manual-reset allowance included)
 ///     and a single per-month cost rollup across those clients, projecting the current-period aggregate with
 ///     <see cref="BudgetForecastCalculator" />. The caps reported are the sum of the clients' monthly caps (a
-///     reference total, since budgets are per client).
+///     reference total, since a client cap binds a single client). The tenant's own caps are reported beside it.
 /// </summary>
 public sealed class TenantBudgetSpendService(
     IClientAdminService clientAdminService,
     IClientTokenUsageRepository usageRepository,
     IBudgetSpendResetRepository resetRepository,
-    TimeProvider timeProvider) : ITenantBudgetSpendService
+    TimeProvider timeProvider,
+    ITenantAdminService tenantAdminService) : ITenantBudgetSpendService
 {
     private const int MinHistoryMonths = 1;
     private const int MaxHistoryMonths = 24;
@@ -102,6 +103,10 @@ public sealed class TenantBudgetSpendService(
         var (currentSoft, currentHard) = SumCapsFor(currentMonthStart);
         var resetsThisPeriod = resetsInRange.Where(reset => reset.PeriodStart == currentMonthStart).ToList();
 
+        // The tenant's own caps are reported beside the summed client caps: the sum is a reference total, the
+        // tenant caps are what enforcement applies to the aggregate.
+        var tenantBudget = (await tenantAdminService.GetByIdAsync(tenantId, ct).ConfigureAwait(false))?.Budget;
+
         return new TenantSpendDto(
             tenantId,
             currentMonthStart,
@@ -113,6 +118,8 @@ public sealed class TenantBudgetSpendService(
             BudgetForecastCalculator.ProjectPeriodSpend(spentToDate, today.Day, daysInPeriod),
             months,
             resetsThisPeriod.Count,
-            resetsThisPeriod.Count == 0 ? null : resetsThisPeriod.Max(reset => reset.PerformedAt));
+            resetsThisPeriod.Count == 0 ? null : resetsThisPeriod.Max(reset => reset.PerformedAt),
+            tenantBudget?.MonthlySoftCapUsd,
+            tenantBudget?.MonthlyHardCapUsd);
     }
 }

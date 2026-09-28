@@ -693,7 +693,11 @@ function canRestartThreadPass(status: number): boolean {
 
 function threadPassBlockReason(pass: PrThreadPassSummaryDto): string {
     if (pass.budgetBlockThresholdUsd == null) {
-        return ''
+        // A refusal relayed from another replica names the stop without naming the cap behind it. The pass
+        // still has to say why it ended, because the row is terminal and only an operator restarts it.
+        return pass.budgetBlockCapKind == null
+            ? ''
+            : 'A budget cap was reached; the cap details are unavailable. Restart it after freeing budget.'
     }
 
     const spent = formatCost(pass.budgetBlockSpentUsd, false)

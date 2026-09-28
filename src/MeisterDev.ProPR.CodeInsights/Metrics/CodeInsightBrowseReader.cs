@@ -29,11 +29,33 @@ namespace MeisterDev.ProPR.CodeInsights.Metrics;
 public sealed class CodeInsightBrowseReader(
     MeisterProPRDbContext dbContext,
     ISecretProtectionCodec secretProtectionCodec,
-    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : ICodeInsightBrowseReader
+    IPostedCommentComposer postedCommentComposer,
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
+    int maxScannedMisses = CodeInsightBrowseReader.DefaultMaxScannedMisses) : ICodeInsightBrowseReader
 {
     private const string FindingMessagePurpose = "code-insight-finding-message";
     private const string MissDiscussionPurpose = "code-insight-miss-discussion";
     private const int MaxLimit = 500;
+
+    /// <summary>
+    ///     How many stored misses one page of the eligibility scan reads. Large enough that a run of ProPR's own
+    ///     comments does not cost a round trip each, small enough that the common case of a first page that is
+    ///     already eligible does not decrypt far more rows than the caller asked for.
+    /// </summary>
+    private const int PageSize = 200;
+
+    /// <summary>
+    ///     The production default for <c>maxScannedMisses</c>, the ceiling on how many stored misses the
+    ///     eligibility scan reads before it returns what it has. A window whose newest misses are nearly all
+    ///     ProPR's own comments would otherwise walk the whole table to fill a page that cannot be filled, so the
+    ///     scan stops here instead. Because of that ceiling, a returned page can be shorter than the caller's
+    ///     limit, or empty, even while eligible human threads still exist further back in the window: the result
+    ///     carries no truncation marker, so a caller distinguishes "no more misses" from "the scan hit its
+    ///     ceiling" only by paging again and checking whether another page still has rows. The ceiling is a
+    ///     constructor parameter precisely so a test can set it low enough to reach without seeding thousands of
+    ///     rows.
+    /// </summary>
+    private const int DefaultMaxScannedMisses = 5_000;
 
     public Task<IReadOnlyList<CodeInsightFindingRow>> ListFindingsAsync(
         CodeInsightBrowseQuery query,
@@ -212,38 +234,84 @@ public sealed class CodeInsightBrowseReader(
                     misses = misses.Where(miss => miss.FilePath == query.FilePath);
                 }
 
-                var rows = await misses
-                    .OrderByDescending(miss => miss.HarvestedAt)
-                    .ThenBy(miss => miss.Id)
-                    .Take(Limit(query))
-                    .ToListAsync(ct);
+                var limit = Limit(query);
+                var eligible = new List<CodeInsightMissRow>(limit);
+                var read = 0;
 
-                return rows
-                    .Select(miss =>
+                // Keyset paging on the same (HarvestedAt, Id) order the page is read in: each page's WHERE
+                // carries the previous page's last row forward, instead of an OFFSET that would make every later
+                // page walk further into rows the database has already discarded.
+                DateTimeOffset? cursorHarvestedAt = null;
+                Guid? cursorId = null;
+
+                // Rows harvested under older rules are already stored, and nothing re-judges them: they are read
+                // back as they were written. A list that presents ProPR's own summary as a thread a person opened
+                // is wrong on its face, whatever the recall number beside it does, so those rows are dropped. The
+                // records stay, because deleting evidence is a separate decision.
+                //
+                // The discussion is stored encrypted, so the database cannot decide eligibility and the pages
+                // have to be read and decrypted here. Reading only as far as the requested number of eligible
+                // rows keeps a page of ProPR's own comments from consuming the caller's limit and returning less
+                // than was asked for, or nothing at all.
+                while (eligible.Count < limit && read < maxScannedMisses)
+                {
+                    var pageQuery = misses;
+                    if (cursorHarvestedAt is { } afterHarvestedAt && cursorId is { } afterId)
                     {
+                        pageQuery = pageQuery.Where(miss =>
+                            miss.HarvestedAt < afterHarvestedAt
+                            || (miss.HarvestedAt == afterHarvestedAt && miss.Id > afterId));
+                    }
+
+                    var page = await pageQuery
+                        .OrderByDescending(miss => miss.HarvestedAt)
+                        .ThenBy(miss => miss.Id)
+                        .Take(Math.Min(PageSize, maxScannedMisses - read))
+                        .ToListAsync(ct);
+                    if (page.Count == 0)
+                    {
+                        break;
+                    }
+
+                    read += page.Count;
+                    var lastOfPage = page[^1];
+                    cursorHarvestedAt = lastOfPage.HarvestedAt;
+                    cursorId = lastOfPage.Id;
+
+                    foreach (var miss in page)
+                    {
+                        var discussion = secretProtectionCodec.Unprotect(miss.EncryptedDiscussion, MissDiscussionPurpose);
+                        if (!HarvestedThreadEligibility.IsHumanThread(discussion, postedCommentComposer.Text))
+                        {
+                            continue;
+                        }
+
                         var scope = scopes[miss.CodeInsightPullRequestId];
-                        return new CodeInsightMissRow(
-                            miss.Id,
-                            scope.ClientId,
-                            scope.RepositoryId,
-                            scope.PullRequestId,
-                            miss.ProviderThreadId,
-                            miss.FilePath,
-                            miss.LineNumber,
-                            secretProtectionCodec.Unprotect(miss.EncryptedDiscussion, MissDiscussionPurpose),
-                            miss.IsSubstantive,
-                            miss.WasActedOn,
-                            miss.IsInScope,
-                            miss.CountsAsMiss,
-                            miss.ClassifierConfidence,
-                            miss.HarvestedAt);
-                    })
-                    // Rows harvested under older rules are already stored, and nothing re-judges them: they are
-                    // read back as they were written. A list that presents ProPR's own summary as a thread a
-                    // person opened is wrong on its face, whatever the recall number beside it does, so those
-                    // rows are dropped here. The records stay, because deleting evidence is a separate decision.
-                    .Where(miss => HarvestedThreadEligibility.IsHumanThread(miss.Discussion))
-                    .ToList();
+                        eligible.Add(
+                            new CodeInsightMissRow(
+                                miss.Id,
+                                scope.ClientId,
+                                scope.RepositoryId,
+                                scope.PullRequestId,
+                                miss.ProviderThreadId,
+                                miss.FilePath,
+                                miss.LineNumber,
+                                discussion,
+                                miss.IsSubstantive,
+                                miss.WasActedOn,
+                                miss.IsInScope,
+                                miss.CountsAsMiss,
+                                miss.ClassifierConfidence,
+                                miss.HarvestedAt));
+
+                        if (eligible.Count == limit)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                return eligible;
             },
             ct);
     }

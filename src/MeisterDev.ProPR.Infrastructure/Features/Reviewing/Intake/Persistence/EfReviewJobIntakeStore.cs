@@ -108,6 +108,12 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
         return dbContext.ReviewJobs.FirstOrDefaultAsync(job => job.Id == jobId, cancellationToken);
     }
 
+    public Task<ReviewJob?> GetForClientAsync(Guid clientId, Guid jobId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.ReviewJobs.AsNoTracking()
+            .FirstOrDefaultAsync(job => job.Id == jobId && job.ClientId == clientId, cancellationToken);
+    }
+
     /// <inheritdoc />
     public async Task UpdatePrContextAsync(
         Guid jobId,

@@ -4,7 +4,11 @@
 
 import { computed, ref } from 'vue'
 import type { ChartData } from 'chart.js'
-import { getTenantBudgetSpend, type TenantSpend } from '@/services/tenantBudgetOverviewService'
+import {
+  getTenantBudgetSpend,
+  type TenantSpend,
+  type TenantSpendMonth,
+} from '@/services/tenantBudgetOverviewService'
 
 export interface TenantSpendLoadResult {
   data?: TenantSpend | null
@@ -79,7 +83,19 @@ export function useTenantBudgetSpend(tenantId: string, options: UseTenantBudgetS
   const hardCapUsd = computed(() => spend.value?.monthlyHardCapUsd ?? null)
   const projectedPeriodSpendUsd = computed(() => spend.value?.projectedPeriodSpendUsd ?? null)
 
-  const hasBudget = computed(() => softCapUsd.value != null || hardCapUsd.value != null)
+  // The tenant's own caps, which enforcement applies to this aggregate. The summed client caps above stay a
+  // reference total, so both are reported and the meter fills toward the tenant cap when one is set.
+  const tenantSoftCapUsd = computed(() => spend.value?.tenantMonthlySoftCapUsd ?? null)
+  const tenantHardCapUsd = computed(() => spend.value?.tenantMonthlyHardCapUsd ?? null)
+  const hasTenantCap = computed(() => tenantSoftCapUsd.value != null || tenantHardCapUsd.value != null)
+
+  // The caps enforcement applies to this aggregate. A tenant that states either kind is measured against its
+  // own caps alone, so the kind it left blank has no ceiling here; the summed client caps are a reference
+  // total that binds a single client each, and they stand in only for a tenant that states neither kind.
+  const effectiveSoftCapUsd = computed(() => (hasTenantCap.value ? tenantSoftCapUsd.value : softCapUsd.value))
+  const effectiveHardCapUsd = computed(() => (hasTenantCap.value ? tenantHardCapUsd.value : hardCapUsd.value))
+
+  const hasBudget = computed(() => effectiveSoftCapUsd.value != null || effectiveHardCapUsd.value != null)
 
   // Manual spend resets this period across the tenant's clients. The summed caps above already include their
   // allowance, so this exists to explain a raised total rather than to adjust it.
@@ -87,17 +103,31 @@ export function useTenantBudgetSpend(tenantId: string, options: UseTenantBudgetS
   const hasResets = computed(() => resetCount.value > 0)
   const lastResetAt = computed(() => spend.value?.lastResetAt ?? null)
 
-  const isOverSoftCap = computed(() => softCapUsd.value != null && spentToDateUsd.value >= softCapUsd.value)
-  const isOverHardCap = computed(() => hardCapUsd.value != null && spentToDateUsd.value >= hardCapUsd.value)
+  const isOverSoftCap = computed(
+    () => effectiveSoftCapUsd.value != null && spentToDateUsd.value >= effectiveSoftCapUsd.value,
+  )
+  const isOverHardCap = computed(
+    () => effectiveHardCapUsd.value != null && spentToDateUsd.value >= effectiveHardCapUsd.value,
+  )
   const projectedToExceedSoftCap = computed(
-    () => softCapUsd.value != null && projectedPeriodSpendUsd.value != null && projectedPeriodSpendUsd.value > softCapUsd.value,
+    () =>
+      effectiveSoftCapUsd.value != null &&
+      projectedPeriodSpendUsd.value != null &&
+      projectedPeriodSpendUsd.value > effectiveSoftCapUsd.value,
   )
   const projectedToExceedHardCap = computed(
-    () => hardCapUsd.value != null && projectedPeriodSpendUsd.value != null && projectedPeriodSpendUsd.value > hardCapUsd.value,
+    () =>
+      effectiveHardCapUsd.value != null &&
+      projectedPeriodSpendUsd.value != null &&
+      projectedPeriodSpendUsd.value > effectiveHardCapUsd.value,
   )
 
-  /** The cap the progress meter fills toward: the summed hard cap when set, otherwise the summed soft cap. */
-  const meterCapUsd = computed(() => hardCapUsd.value ?? softCapUsd.value)
+  /**
+   * The cap the progress meter fills toward: the effective hard cap, or the effective soft cap when no hard
+   * cap is in force. Both come from the same source as the status above, so the meter and the status cannot
+   * report against caps of different origins.
+   */
+  const meterCapUsd = computed(() => effectiveHardCapUsd.value ?? effectiveSoftCapUsd.value)
   const meterPercent = computed(() => {
     const cap = meterCapUsd.value
     if (cap == null || cap <= 0) {
@@ -119,6 +149,16 @@ export function useTenantBudgetSpend(tenantId: string, options: UseTenantBudgetS
     return 'ok'
   })
 
+  /** Whether the trend point covers the period the current tenant caps are in force for. */
+  function isCurrentMonth(month: TenantSpendMonth): boolean {
+    const periodStart = spend.value?.periodStart
+    if (!periodStart) {
+      return false
+    }
+    const [year, monthNumber] = periodStart.split('-')
+    return month.year === Number(year) && month.month === Number(monthNumber)
+  }
+
   const trendChartData = computed<ChartData<'line'>>(() => {
     const months = spend.value?.months
     if (!months?.length) {
@@ -139,10 +179,21 @@ export function useTenantBudgetSpend(tenantId: string, options: UseTenantBudgetS
       },
     ]
 
+    // The API carries per-month cap history for the client caps only, so a tenant cap is drawn on the current
+    // month alone. Stretching today's tenant cap back over earlier months would show them breaching a ceiling
+    // that was not in force then.
     appendCapSeries(
       datasets,
-      months.map((m) => m.effectiveSoftCapUsd ?? softCapUsd.value),
-      months.map((m) => m.effectiveHardCapUsd ?? hardCapUsd.value),
+      months.map((m) =>
+        isCurrentMonth(m)
+          ? (tenantSoftCapUsd.value ?? m.effectiveSoftCapUsd ?? softCapUsd.value)
+          : (m.effectiveSoftCapUsd ?? softCapUsd.value),
+      ),
+      months.map((m) =>
+        isCurrentMonth(m)
+          ? (tenantHardCapUsd.value ?? m.effectiveHardCapUsd ?? hardCapUsd.value)
+          : (m.effectiveHardCapUsd ?? hardCapUsd.value),
+      ),
     )
     return { labels, datasets }
   })
@@ -194,6 +245,11 @@ export function useTenantBudgetSpend(tenantId: string, options: UseTenantBudgetS
     spentToDateUsd,
     softCapUsd,
     hardCapUsd,
+    tenantSoftCapUsd,
+    tenantHardCapUsd,
+    hasTenantCap,
+    effectiveSoftCapUsd,
+    effectiveHardCapUsd,
     projectedPeriodSpendUsd,
     hasBudget,
     resetCount,

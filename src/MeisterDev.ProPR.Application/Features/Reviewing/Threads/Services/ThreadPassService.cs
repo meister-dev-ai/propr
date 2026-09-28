@@ -95,7 +95,11 @@ public sealed partial class ThreadPassService(
         }
         catch (BudgetHardCapReachedException ex)
         {
-            await this.HandleBudgetCutAsync(job, ex.Breach, ct);
+            // Terminal whichever cap it was: a hard-cap refusal is a budget stop, and a pass recorded as a
+            // retryable failure would be retried into the same cap. A refusal relayed from the control plane
+            // names the condition without carrying the cap, and the scope this pass holds then names it.
+            // Where neither names it, the stop is recorded with no cap detail and nothing is misreported.
+            await this.HandleBudgetCutAsync(job, ex.ResolveBreach(budgetScope?.TrippedBreach), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -116,7 +120,8 @@ public sealed partial class ThreadPassService(
             budgetScope.Caps,
             budgetScope.Baseline.ClientMonthToDate.KnownUsd,
             budgetScope.Baseline.PullRequest.KnownUsd,
-            budgetScope.Baseline.Increment.KnownUsd);
+            budgetScope.Baseline.Increment.KnownUsd,
+            budgetScope.Baseline.TenantMonthToDate.KnownUsd);
     }
 
     private async Task<BudgetScope?> TryCreateBudgetScopeAsync(ThreadPassJob job, CancellationToken ct)
@@ -139,18 +144,30 @@ public sealed partial class ThreadPassService(
         return new BudgetScope(caps, baseline);
     }
 
-    private async Task HandleBudgetCutAsync(ThreadPassJob job, BudgetBreach breach, CancellationToken ct)
+    /// <summary>
+    ///     Records the pass as stopped by a budget. A null <paramref name="breach" /> means the refusal reached
+    ///     this pass without naming a cap, and the row then carries no scope, threshold or spend.
+    /// </summary>
+    private async Task HandleBudgetCutAsync(ThreadPassJob job, BudgetBreach? breach, CancellationToken ct)
     {
         // Terminal, as a cut review is. Threads this pass already answered keep their per-thread progress, and
         // the watermark stays where it was, so the rest are picked up by a later pass.
-        LogPassCutByBudget(logger, job.Id, breach.Scope, breach.ThresholdUsd, breach.SpentUsd);
+        LogPassCutByBudget(logger, job.Id, breach?.Scope, breach?.ThresholdUsd, breach?.SpentUsd);
         await threadPassJobs.SetBudgetExceededAsync(
             job.Id,
-            breach.Scope,
-            breach.CapKind,
-            breach.ThresholdUsd,
-            breach.SpentUsd,
+            breach?.Scope,
+            breach?.CapKind ?? BudgetCapKind.Hard,
+            breach?.ThresholdUsd,
+            breach?.SpentUsd,
             ct);
+
+        if (breach is null)
+        {
+            // No event for a cap nothing here read. An event row names a scope, a threshold and a spend, and
+            // inventing the three would report a cap the client never configured.
+            return;
+        }
+
         await this.EmitBudgetEventAsync(job, breach, ct);
     }
 
@@ -1180,9 +1197,9 @@ public sealed partial class ThreadPassService(
     private static partial void LogPassCutByBudget(
         ILogger logger,
         Guid threadPassJobId,
-        BudgetScopeKind budgetScope,
-        decimal thresholdUsd,
-        decimal spentUsd);
+        BudgetScopeKind? budgetScope,
+        decimal? thresholdUsd,
+        decimal? spentUsd);
 
     [LoggerMessage(
         EventId = 6412,

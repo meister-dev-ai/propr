@@ -66,7 +66,8 @@ public static class AiReviewOptionsBinder
         opts.EnableAcceptanceForecast =
             TryGetBool(configuration, "AI_ACCEPTANCE_FORECAST") ?? opts.EnableAcceptanceForecast;
 
-        // Reasoning capture into recorded assistant-turn output (off by default; data-retention gate).
+        // Reasoning capture into recorded assistant-turn output (on by default; data-retention gate). A tenant
+        // can override this per job; see the reasoning-capture policy on the tenant.
         opts.CaptureReasoningInProtocol =
             TryGetBool(configuration, "AI_CAPTURE_REASONING_IN_PROTOCOL") ?? opts.CaptureReasoningInProtocol;
 

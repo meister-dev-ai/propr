@@ -178,10 +178,10 @@ public sealed partial class EfMentionReplyJobRepository(
     public async Task SetBudgetHeldAsync(
         Guid jobId,
         int? iterationId,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default)
     {
         var job = await dbContext.MentionReplyJobs.FindAsync([jobId], ct);

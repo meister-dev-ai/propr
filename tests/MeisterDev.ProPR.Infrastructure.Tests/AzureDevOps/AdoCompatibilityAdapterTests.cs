@@ -279,6 +279,7 @@ public sealed class AdoCompatibilityAdapterTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == null),
                 Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
                 Arg.Is<ReviewerIdentity?>(identity => identity == null),
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromException<ReviewCommentPostingDiagnosticsDto>(new InvalidOperationException("Scope mismatch.")));
         commentPoster.PostAsync(
@@ -292,6 +293,7 @@ public sealed class AdoCompatibilityAdapterTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == null),
                 Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
                 Arg.Is<ReviewerIdentity?>(identity => identity == null),
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
 
@@ -315,6 +317,7 @@ public sealed class AdoCompatibilityAdapterTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == null),
                 Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
                 Arg.Is<ReviewerIdentity?>(identity => identity == null),
+                false,
                 Arg.Any<CancellationToken>());
     }
 
@@ -345,6 +348,7 @@ public sealed class AdoCompatibilityAdapterTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == null),
                 Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
                 Arg.Is<ReviewerIdentity?>(identity => identity == null),
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
 
@@ -368,6 +372,7 @@ public sealed class AdoCompatibilityAdapterTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == null),
                 Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
                 Arg.Is<ReviewerIdentity?>(identity => identity == null),
+                false,
                 Arg.Any<CancellationToken>());
     }
 
@@ -403,6 +408,7 @@ public sealed class AdoCompatibilityAdapterTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
                 Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
                 Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
 
@@ -426,6 +432,75 @@ public sealed class AdoCompatibilityAdapterTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
                 Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
                 Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
+                false,
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_ForwardsTheReplyRequestCarriedByAnAdmissionRefusalContext()
+    {
+        var clientId = Guid.NewGuid();
+        var repositoryId = Guid.NewGuid().ToString("D");
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org-one");
+        var repository = new RepositoryRef(host, repositoryId, "project-1", "project-1");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "base-sha", "7", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "reviewer-guid", "meister-bot", "Meister Bot", true);
+        var result = new ReviewResult("Review not started: 312 changed files exceed the limit of 150.", []);
+        IReadOnlyList<PrCommentThread> existingThreads =
+        [
+            new("12", null, null, [new PrThreadComment("Meister Bot", "**AI Review Summary**")]),
+        ];
+
+        // An admission refusal carries its whole message in the summary, so the context asks for it to join an
+        // existing bot summary thread as a reply.
+        var publicationContext = new ReviewPublicationContext(
+            review,
+            revision,
+            reviewer,
+            existingThreads,
+            ReplyInExistingSummaryThread: true);
+        var (connectionRepository, scopeRepository) = CreateProviderRepositories(
+            clientId,
+            CreateScope(clientId, "https://dev.azure.com/org-one"));
+        var commentPoster = Substitute.For<IAdoCommentPoster>();
+
+        commentPoster.PostAsync(
+                "https://dev.azure.com/org-one",
+                "project-1",
+                repositoryId,
+                review.Number,
+                7,
+                result,
+                clientId,
+                Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
+                Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
+                Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
+                true,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
+
+        var sut = new AdoCodeReviewPublicationService(
+            connectionRepository,
+            scopeRepository,
+            CreateConnectionFactory(),
+            commentPoster);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer, CancellationToken.None, publicationContext);
+
+        await commentPoster.Received(1)
+            .PostAsync(
+                "https://dev.azure.com/org-one",
+                "project-1",
+                repositoryId,
+                review.Number,
+                7,
+                result,
+                clientId,
+                Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
+                Arg.Is<AzureDevOpsPublicationContext?>(context => context == null),
+                Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
+                true,
                 Arg.Any<CancellationToken>());
     }
 

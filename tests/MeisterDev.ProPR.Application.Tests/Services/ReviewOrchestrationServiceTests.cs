@@ -3,7 +3,10 @@
 
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Admission;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Exceptions;
+using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
@@ -255,7 +258,8 @@ public partial class ReviewOrchestrationServiceTests
         IAiRuntimeResolver? aiRuntimeResolver = null,
         IClientScmConnectionRepository? scmConnectionRepository = null,
         IPostedCommentOriginStore? postedCommentOriginStore = null,
-        IReviewRepositoryWorkspaceManager? workspaceManager = null)
+        IReviewRepositoryWorkspaceManager? workspaceManager = null,
+        IReviewAdmissionNotice? admissionNotice = null)
     {
         var fetcher = instructionFetcher ?? CreateDefaultInstructionFetcher();
         var evaluator = instructionEvaluator ?? CreateDefaultInstructionEvaluator();
@@ -286,7 +290,8 @@ public partial class ReviewOrchestrationServiceTests
             providerActivationService: providerActivationService,
             workspaceManager: workspaceManager ?? CreateDefaultWorkspaceManager(),
             scmConnectionRepository: scmConnectionRepository,
-            postedCommentOriginStore: postedCommentOriginStore);
+            postedCommentOriginStore: postedCommentOriginStore,
+            admissionNotice: admissionNotice);
     }
 
     private static IReviewRepositoryWorkspaceManager CreateDefaultWorkspaceManager()
@@ -463,6 +468,240 @@ public partial class ReviewOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ProcessAsync_PullRequestOverTheChangedFileBound_RefusesBeforeAnyModelCallAndPostsTheReason()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest() with
+        {
+            ChangedFiles = new List<ChangedFile>
+            {
+                new("a.cs", ChangeType.Edit, "a", "+a"),
+                new("b.cs", ChangeType.Edit, "b", "+b"),
+                new("c.cs", ChangeType.Edit, "c", "+c"),
+            }.AsReadOnly(),
+        };
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxChangedFiles: 1));
+        jobs.SetAdmissionRefusedAsync(job.Id, Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+
+        var notice = Substitute.For<IReviewAdmissionNotice>();
+        var service = CreateService(
+            jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger,
+            admissionNotice: notice);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await orchestrator.DidNotReceiveWithAnyArgs().ReviewAsync(default!, default!, default!, default, default);
+        await jobs.Received(1).SetAdmissionRefusedAsync(
+            job.Id,
+            Arg.Is<string>(reason => reason.Contains("3 changed files", StringComparison.Ordinal)
+                                     && reason.Contains("limit of 1", StringComparison.Ordinal)),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        await notice.Received(1).PostAsync(
+            Arg.Is<ReviewJob>(refused => refused.Id == job.Id),
+            Arg.Is<string>(reason => reason.Contains("3 changed files", StringComparison.Ordinal)),
+            Arg.Any<IReadOnlyList<PrCommentThread>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // The bound rides on the preparation request, because the transfer it stops happens there. Nothing on this
+    // path can weigh a repository before it is fetched.
+    [Fact]
+    public async Task ProcessAsync_CarriesTheClientsRepositorySizeBoundOnTheWorkspaceRequest()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest() with
+        {
+            ChangedFiles = new List<ChangedFile> { new("a.cs", ChangeType.Edit, "a", "+a") }.AsReadOnly(),
+        };
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxRepositoryMegabytes: 2_048));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>(), Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var workspaceManager = CreateDefaultWorkspaceManager();
+        var service = CreateService(
+            jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger,
+            workspaceManager: workspaceManager);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await workspaceManager.Received(1).PrepareAsync(
+            Arg.Is<ReviewRepositoryWorkspaceRequest>(request => request.MaxRepositoryMegabytes == 2_048),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RepositoryPassedTheBoundWhileItWasFetched_RefusesItAndPostsTheReason()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxRepositoryMegabytes: 2_048));
+        jobs.SetAdmissionRefusedAsync(job.Id, Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var workspaceManager = Substitute.For<IReviewRepositoryWorkspaceManager>();
+        workspaceManager.PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewRepositoryWorkspacePreparationResult(
+                    null,
+                    new ReviewWorkspaceFailure(
+                        "fetch",
+                        "repository_over_size_limit",
+                        "The repository is larger than the client allows.",
+                        Retryable: false,
+                        FallbackApplied: false,
+                        new ReviewRepositorySizeBreach(4_096, 2_048))));
+        var notice = Substitute.For<IReviewAdmissionNotice>();
+
+        var service = CreateService(
+            jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger,
+            workspaceManager: workspaceManager,
+            admissionNotice: notice);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1).SetAdmissionRefusedAsync(
+            job.Id,
+            Arg.Is<string>(reason => reason.Contains("4,096 MB", StringComparison.Ordinal)
+                                     && reason.Contains("2,048 MB", StringComparison.Ordinal)),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        await notice.Received(1).PostAsync(
+            Arg.Is<ReviewJob>(refused => refused.Id == job.Id),
+            Arg.Is<string>(reason => reason.Contains("4,096 MB", StringComparison.Ordinal)),
+            Arg.Any<IReadOnlyList<PrCommentThread>?>(),
+            Arg.Any<CancellationToken>());
+
+        // Preparation is where the review ended, so nothing fetched the pull request's content and no model
+        // call was made.
+        await prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(default!, default!, default!, default, default, default, default, default, default, default);
+        await orchestrator.DidNotReceiveWithAnyArgs().ReviewAsync(default!, default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DiffCarryingNonAsciiText_IsMeasuredInUtf8Bytes()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        // 100 accented characters are 100 UTF-16 code units and 200 UTF-8 bytes. A bound of 150 binds only
+        // when the measurement counts the bytes the diff is sent as.
+        var unifiedDiff = new string('\u00e9', 100);
+        var pr = CreatePullRequest() with
+        {
+            ChangedFiles = new List<ChangedFile> { new("a.cs", ChangeType.Edit, "a", unifiedDiff) }.AsReadOnly(),
+        };
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxDiffBytes: 150));
+        jobs.SetAdmissionRefusedAsync(job.Id, Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>(), Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1).SetAdmissionRefusedAsync(
+            job.Id,
+            Arg.Is<string>(reason => reason.Contains("200 bytes", StringComparison.Ordinal)
+                                     && reason.Contains("limit of 150 bytes", StringComparison.Ordinal)),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        await orchestrator.DidNotReceiveWithAnyArgs().ReviewAsync(default!, default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PullRequestUnderEveryBound_ReviewsAsUsual()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest() with
+        {
+            ChangedFiles = new List<ChangedFile> { new("a.cs", ChangeType.Edit, "a", "+a") }.AsReadOnly(),
+        };
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        // Every bound the in-process path measures, each one comfortably above what this pull request is.
+        clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewAdmissionPolicy(
+                    MaxChangedFiles: 150,
+                    MaxChangedLines: 20_000,
+                    MaxDiffBytes: 4_000_000,
+                    MaxReviewsPerPullRequestPerHour: 4,
+                    MaxRepositoryMegabytes: 2_048));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.DidNotReceive().SetAdmissionRefusedAsync(job.Id, Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await orchestrator.Received(1).ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
+    }
+
+    [Fact]
     public async Task ProcessAsync_AiException_TransitionsJobToFailed()
     {
         // Arrange
@@ -510,6 +749,67 @@ public partial class ReviewOrchestrationServiceTests
         // Assert
         await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("AI error")));
         await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
+    }
+
+    // A hard-cap refusal relayed from the control plane names the condition without carrying the cap, and
+    // this replica holds no scope to name it either. The job is still finalised as budget-exceeded, because a
+    // retry of a failed job meets the same cap and spends another attempt reaching it. The cap detail stays
+    // empty: a threshold and a spend written here would report a cap the client never configured.
+    [Fact]
+    public async Task ProcessAsync_HardCapRefusedWithoutNamingTheCap_FinalisesTheJobAsBudgetExceededWithNoCapDetail()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Throws(new BudgetHardCapReachedException(null));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1).SetBudgetExceededAsync(
+            job.Id,
+            null,
+            BudgetCapKind.Hard,
+            null,
+            null,
+            Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().SetFailedAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        // A budget-exceeded job that also records a result would read as a review that finished, and the
+        // partial findings would be published as a complete answer.
+        await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

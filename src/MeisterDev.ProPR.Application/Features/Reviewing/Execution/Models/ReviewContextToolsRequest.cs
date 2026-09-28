@@ -19,4 +19,5 @@ public sealed record ReviewContextToolsRequest(
     bool EnableRepositoryDiscoveryCache = true,
     IReviewRepositoryWorkspace? Workspace = null,
     ReviewRepositoryWorkspaceLease? WorkspaceLease = null,
-    ReviewWorkspaceFailure? WorkspaceFailure = null);
+    ReviewWorkspaceFailure? WorkspaceFailure = null,
+    int? MaxFileSizeBytes = null);

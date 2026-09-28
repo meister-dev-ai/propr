@@ -26,6 +26,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
 internal sealed partial class GitLabReviewThreadReplyPublisher(
     GitLabConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory,
+    IPostedCommentComposer composer,
     ILogger<GitLabReviewThreadReplyPublisher>? logger = null) : IReviewThreadReplyPublisher
 {
     // Commenting is open to Guest and above, so a refusal is far more often a token scope than a role.
@@ -74,7 +75,7 @@ internal sealed partial class GitLabReviewThreadReplyPublisher(
         // parameter, and keeping it out of the request line keeps it out of every proxy and access log.
         request.Content = new FormUrlEncodedContent(
         [
-            new KeyValuePair<string, string>("body", FormatReplyText(replyText)),
+            new KeyValuePair<string, string>("body", FormatReplyText(replyText, composer)),
         ]);
 
         using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
@@ -85,9 +86,12 @@ internal sealed partial class GitLabReviewThreadReplyPublisher(
         return noteId;
     }
 
-    internal static string FormatReplyText(string replyText)
+    internal static string FormatReplyText(string replyText, IPostedCommentComposer composer)
     {
-        return HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText;
+        ArgumentNullException.ThrowIfNull(composer);
+
+        // The marker goes on after the rendering, so nothing in it is rewritten on its way to the provider.
+        return composer.Append(HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText);
     }
 
     private static async Task<string> ReadCreatedNoteIdAsync(

@@ -1002,6 +1002,33 @@ public sealed class ThreadPassServiceTests
     }
 
     [Fact]
+    public async Task ProcessAsync_TenantAlreadyOverItsCap_HoldsThePassOnTheTenantScope()
+    {
+        var harness = new Harness();
+        harness.WithReviewerThread(observedNonReviewerComments: 0);
+        harness.WithBudget(
+            new BudgetCaps(null, null, null, null, null, null, 4_000m, 5_000m),
+            alreadySpentUsd: 10m,
+            tenantAlreadySpentUsd: 4_001m);
+        harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
+
+        await harness.RunAsync();
+
+        // The hold names the cap that bound and the spend that was observed, which are not the same number
+        // once the tenant is past the cap.
+        await harness.ThreadPassJobs.Received(1).SetBudgetHeldAsync(
+            harness.Job.Id,
+            BudgetScopeKind.TenantMonthly,
+            BudgetCapKind.Soft,
+            4_000m,
+            4_001m,
+            Arg.Any<CancellationToken>());
+        await harness.ThreadPassJobs.DidNotReceive().TryBeginAttemptAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ProcessAsync_HardCapReachedPartWay_StopsThePassAndKeepsTheThreadItAlreadyAnswered()
     {
         var harness = new Harness();
@@ -1036,6 +1063,38 @@ public sealed class ThreadPassServiceTests
             Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // A hard-cap refusal relayed from the control plane names the condition without carrying the cap, and a
+    // pass whose client has no caps configured holds no scope to name it either. The pass still ends as
+    // budget-exceeded: recorded as an attempt failure it would be retried, and the retry meets the same cap.
+    // The row carries no scope, threshold or spend, because none of the three was read anywhere.
+    [Fact]
+    public async Task ProcessAsync_HardCapRefusedWithoutNamingTheCap_EndsThePassAsBudgetExceededWithNoCapDetail()
+    {
+        var harness = new Harness();
+        harness.WithReviewerThread(observedNonReviewerComments: 0);
+        harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
+        harness.WithUnnamedHardCapRefusalOnThread(ThreadId);
+
+        await harness.RunAsync();
+
+        await harness.ThreadPassJobs.Received(1).SetBudgetExceededAsync(
+            harness.Job.Id,
+            null,
+            BudgetCapKind.Hard,
+            null,
+            null,
+            Arg.Any<CancellationToken>());
+        await harness.ThreadPassJobs.DidNotReceive().RecordAttemptFailureAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+
+        // An event names a scope, a threshold and a spend; none was read, so none is published.
+        await harness.BudgetEventPublisher.DidNotReceive().PublishAsync(
+            Arg.Any<BudgetEventNotification>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -1229,8 +1288,12 @@ public sealed class ThreadPassServiceTests
         /// <summary>The increment baseline the ambient budget scope carried while the model was being called.</summary>
         public decimal? ObservedScopeBaselineUsd { get; private set; }
 
-        /// <summary>Gives the client caps and a baseline spend, so the pass meters itself against them.</summary>
-        public void WithBudget(BudgetCaps caps, decimal alreadySpentUsd)
+        /// <summary>
+        ///     Gives the caps and a baseline spend, so the pass meters itself against them. The tenant baseline is
+        ///     stated apart from the client, pull-request and increment scopes because a tenant cap is compared
+        ///     against the total of every client in the tenant, which is a different figure.
+        /// </summary>
+        public void WithBudget(BudgetCaps caps, decimal alreadySpentUsd, decimal tenantAlreadySpentUsd = 0m)
         {
             this.BudgetCapsProvider.GetCapsAsync(ClientId, Arg.Any<CancellationToken>()).Returns(caps);
             this.SpendAccumulator.GetBaselineAsync(
@@ -1241,7 +1304,8 @@ public sealed class ThreadPassServiceTests
                     new ReviewSpendBaseline(
                         new ReviewScopeSpend(alreadySpentUsd, false),
                         new ReviewScopeSpend(alreadySpentUsd, false),
-                        new ReviewScopeSpend(alreadySpentUsd, false)));
+                        new ReviewScopeSpend(alreadySpentUsd, false),
+                        new ReviewScopeSpend(tenantAlreadySpentUsd, false)));
         }
 
         /// <summary>Makes the model call for one thread trip a hard cap, as the enforcing chat client does.</summary>
@@ -1258,6 +1322,21 @@ public sealed class ThreadPassServiceTests
                     Arg.Any<bool>(),
                     Arg.Any<ThreadEvidenceAccess?>())
                 .ThrowsAsync(new BudgetHardCapReachedException(breach));
+        }
+
+        /// <summary>Makes the model call for one thread refuse on a hard cap without naming which cap.</summary>
+        public void WithUnnamedHardCapRefusalOnThread(string threadId)
+        {
+            this.ResolutionCore.EvaluateCodeChangeAsync(
+                    Arg.Is<PrCommentThread>(thread => thread.ThreadId == threadId),
+                    Arg.Any<PullRequest>(),
+                    Arg.Any<IChatClient>(),
+                    Arg.Any<string>(),
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<string?>(),
+                    Arg.Any<bool>(),
+                    Arg.Any<ThreadEvidenceAccess?>())
+                .ThrowsAsync(new BudgetHardCapReachedException(null));
         }
 
         /// <summary>Gives the recorder a trace record to hand back, and returns its identifier.</summary>

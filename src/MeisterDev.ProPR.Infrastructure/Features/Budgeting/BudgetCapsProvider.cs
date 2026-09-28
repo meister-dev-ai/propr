@@ -11,8 +11,11 @@ using Microsoft.EntityFrameworkCore;
 namespace MeisterDev.ProPR.Infrastructure.Features.Budgeting;
 
 /// <summary>
-///     Reads a client's configured USD budget caps from its persisted record and raises the monthly caps by the
-///     allowance any manual spend resets granted in the period. Caps exist to protect an installation from spend, so
+///     Reads a client's configured USD budget caps from its persisted record and the caps of the tenant it belongs to and raises the monthly caps by the
+///     allowance any manual spend resets granted in the period. A tenant cap travels on every client's caps because
+///     a review is evaluated from one client, but it stays tenant-scoped: the evaluator compares it against the
+///     tenant month-to-date baseline, which totals the usage of every client in the tenant, so several clients
+///     cannot each spend the full tenant allowance. Caps exist to protect an installation from spend, so
 ///     this read path does not consult the Budgeting capability: a cap already configured keeps blocking spend in
 ///     every edition and at every licensing stage, including after a license has expired. Setting, editing and
 ///     viewing budgets stay licensed and are gated on their own surfaces.
@@ -28,7 +31,8 @@ public sealed class BudgetCapsProvider(
         var configured = await this.GetConfiguredCapsAsync(clientId, ct).ConfigureAwait(false);
 
         // An uncapped monthly scope cannot be topped up, so an opted-out client costs no reset lookup on the
-        // per-review hot path.
+        // per-review hot path. The tenant caps are not topped up either: raising a tenant cap is how a tenant is
+        // given more room.
         if (configured.MonthlySoftCapUsd is null && configured.MonthlyHardCapUsd is null)
         {
             return configured;
@@ -54,7 +58,9 @@ public sealed class BudgetCapsProvider(
                 client.PullRequestBudgetSoftCapUsd,
                 client.PullRequestBudgetHardCapUsd,
                 client.IncrementBudgetSoftCapUsd,
-                client.IncrementBudgetHardCapUsd))
+                client.IncrementBudgetHardCapUsd,
+                client.Tenant!.MonthlyBudgetSoftCapUsd,
+                client.Tenant!.MonthlyBudgetHardCapUsd))
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
 

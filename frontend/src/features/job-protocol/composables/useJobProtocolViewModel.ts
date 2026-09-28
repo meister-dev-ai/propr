@@ -9,7 +9,12 @@ import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
 import { restartJob, stopJob } from '@/services/jobsService'
 import { fetchFindingClassifications, type CodeInsightFindingClassification } from '@/services/codeInsightFindingsService'
-import { formatBudgetBlockMessage, formatBudgetSoftCapMessage } from './budgetBlock'
+import {
+    formatAdmissionHoldMessage,
+    formatAdmissionRefusalMessage,
+    formatBudgetBlockMessage,
+    formatBudgetSoftCapMessage,
+} from './budgetBlock'
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 import { formatTriageDecision } from './formatTriageDecision'
@@ -328,7 +333,34 @@ export function useJobProtocolViewModel() {
     const canRestart = computed(() =>
         jobStatus.value === 'failed'
         || jobStatus.value === 'budgetHeld'
-        || jobStatus.value === 'budgetExceeded')
+        || jobStatus.value === 'budgetExceeded'
+        // A refused review restarts once what the bound measured comes down or the bound is raised; it refuses
+        // again otherwise, which is the same rule the server applies.
+        || jobStatus.value === 'admissionRefused')
+
+    const admissionRefusalMessage = computed<string | null>(() =>
+        formatAdmissionRefusalMessage(jobStatus.value, jobDetail.value?.admissionRefusalReason ?? null))
+
+    const admissionHoldMessage = computed<string | null>(() =>
+        formatAdmissionHoldMessage(jobStatus.value, jobDetail.value?.heldUntil ?? null))
+
+    /**
+     * The admission state the banners render from. Derived once so a refusal and a hold cannot both be shown:
+     * a job is refused or waiting, never both.
+     */
+    const admissionState = computed<'refused' | 'held' | null>(() => {
+        if (admissionRefusalMessage.value !== null) {
+            return 'refused'
+        }
+        return admissionHoldMessage.value !== null ? 'held' : null
+    })
+
+    /**
+     * The text of the banner the state above selects, so a consumer cannot pair one state with the other
+     * state's message. It is null when admission neither refused nor held the job.
+     */
+    const admissionMessage = computed<string | null>(() =>
+        admissionRefusalMessage.value ?? admissionHoldMessage.value)
 
     const isBudgetBlocked = computed(() =>
         jobStatus.value === 'budgetHeld' || jobStatus.value === 'budgetExceeded')
@@ -347,12 +379,52 @@ export function useJobProtocolViewModel() {
 
         restarting.value = true
         try {
-            await restartJob(jobId)
+            // The restart and the navigation to the queued review fail for different reasons and need
+            // different messages: a failed restart leaves nothing queued, while a failed navigation leaves a
+            // queued review the operator can still reach.
+            let restarted: Awaited<ReturnType<typeof restartJob>>
+            try {
+                restarted = await restartJob(jobId)
+            } catch (err) {
+                dismissToast.value = {
+                    message: err instanceof Error ? err.message : 'Failed to restart review.',
+                    isError: true,
+                }
+                return
+            }
+
             dismissToast.value = { message: 'Review restarted.', isError: false }
-            await loadProtocol(true)
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to restart review.'
-            dismissToast.value = { message, isError: true }
+            // A restart queues a new job. The source job keeps the status it ended on, so reloading this route
+            // would show the failure or the refusal again and never the review that was just queued.
+            let openedQueuedReview = false
+            if (restarted?.jobId && restarted.jobId !== jobId) {
+                try {
+                    await router.push({ name: 'job-protocol', params: { id: restarted.jobId }, query: route.query })
+                    openedQueuedReview = true
+                } catch {
+                    dismissToast.value = {
+                        message: 'Review restarted, but opening it failed. It is listed in the review history.',
+                        isError: true,
+                    }
+                }
+            }
+
+            // The route watcher resets the state and loads the job the navigation moved to, so loading here as
+            // well would fetch the protocol, the result and the detail of that job a second time.
+            if (openedQueuedReview) {
+                return
+            }
+
+            try {
+                await loadProtocol(true)
+            } catch {
+                // The restart itself succeeded, so it is not reported as failed. Only the view on screen is
+                // stale, and the operator is told which part to repeat.
+                dismissToast.value = {
+                    message: 'Review restarted, but this view could not be refreshed. Reload the page to see its state.',
+                    isError: true,
+                }
+            }
         } finally {
             restarting.value = false
             setTimeout(() => {
@@ -1868,8 +1940,15 @@ export function useJobProtocolViewModel() {
     // undefined/error status (e.g. a transient job-detail fetch miss on a poll tick, since
     // the client returns { data: undefined } rather than throwing) must NOT stop an active
     // poll, or one network blip would permanently freeze the live view.
+    // 'admissionRefused' is terminal: the job ended before any model call and only a restart
+    // changes it. 'admissionHeld' is not, because the worker releases the job once its hour
+    // has passed and it then runs, which the poll has to pick up. A job that is already held
+    // when the view opens therefore arms the poll too; armed only from 'processing' and
+    // 'pending', the view would stay on the hold for as long as it is open.
     function updatePollingLifecycle(jobLifecycleStatus: string | null | undefined): void {
-        const isProcessing = jobLifecycleStatus === 'processing' || jobLifecycleStatus === 'pending'
+        const isLive = jobLifecycleStatus === 'processing'
+            || jobLifecycleStatus === 'pending'
+            || jobLifecycleStatus === 'admissionHeld'
         const isTerminal = jobLifecycleStatus === 'completed'
             || jobLifecycleStatus === 'failed'
             || jobLifecycleStatus === 'cancelled'
@@ -1877,7 +1956,8 @@ export function useJobProtocolViewModel() {
             || jobLifecycleStatus === 'stopped'
             || jobLifecycleStatus === 'budgetHeld'
             || jobLifecycleStatus === 'budgetExceeded'
-        if (isProcessing && !pollInterval) {
+            || jobLifecycleStatus === 'admissionRefused'
+        if (isLive && !pollInterval) {
             pollInterval = setInterval(() => {
                 void loadProtocol(false)
             }, 3000)
@@ -1944,6 +2024,8 @@ export function useJobProtocolViewModel() {
                     filesReviewed: detail.filesReviewed ?? 0,
                     filesInScope: detail.filesInScope ?? null,
                     budgetStatus: detail.budgetStatus ?? null,
+                    admissionRefusalReason: detail.admissionRefusalReason ?? null,
+                    heldUntil: detail.heldUntil ?? null,
                 }
             }
             if (!activePassId.value && normalizedProtocols.length > 0 && normalizedProtocols[0].id) {
@@ -2339,6 +2421,8 @@ export function useJobProtocolViewModel() {
         isBudgetBlocked,
         budgetBlockMessage,
         budgetSoftCapMessage,
+        admissionState,
+        admissionMessage,
         restarting,
         restart,
         canStop,

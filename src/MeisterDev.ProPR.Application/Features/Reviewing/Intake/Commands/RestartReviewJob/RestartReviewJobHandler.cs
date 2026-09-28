@@ -11,11 +11,12 @@ using Microsoft.Extensions.Logging;
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
 
 /// <summary>
-///     Handles manual restart of a failed or budget-blocked review job. Automatic re-review is suppressed to
-///     avoid cost-inducing loops on deterministic failures and to keep budget recovery a deliberate operator
-///     action; this explicit request clones the source job's coordinates into a fresh pending job and queues it
-///     for execution. A budget-held or budget-exceeded source is retired first so the clone is not rejected as an
-///     active duplicate.
+///     Handles manual restart of a review job that failed, was blocked by a budget cap, or was refused by
+///     review admission. Automatic re-review is suppressed to avoid cost-inducing loops on deterministic
+///     failures and to keep budget recovery a deliberate operator action; this explicit request clones the
+///     source job's coordinates into a fresh pending job and queues it for execution. A budget-held or
+///     budget-exceeded source is retired first so the clone is not rejected as an active duplicate, once no
+///     other live job for the same pull request has been found, and it is put back if the clone is not added.
 /// </summary>
 public sealed partial class RestartReviewJobHandler(
     IJobRepository jobs,
@@ -33,19 +34,56 @@ public sealed partial class RestartReviewJobHandler(
             return new RestartReviewJobResult(RestartReviewJobOutcome.NotFound);
         }
 
-        if (source.Status is not (JobStatus.Failed or JobStatus.BudgetHeld or JobStatus.BudgetExceeded))
+        if (source.Status is not (JobStatus.Failed or JobStatus.BudgetHeld or JobStatus.BudgetExceeded or JobStatus.AdmissionRefused))
         {
             LogRestartRejectedNotFailed(logger, source.Id, source.Status);
             return new RestartReviewJobResult(RestartReviewJobOutcome.NotFailed, ClientId: source.ClientId);
         }
 
+        // What the source has to be put back to when the restart does not happen, set only when this call is
+        // the one that retired it. A concurrent restart that retired it first owns that decision instead.
+        SupersededReviewJobState? retiredState = null;
         if (source.Status is JobStatus.BudgetHeld or JobStatus.BudgetExceeded)
         {
             // A budget-blocked source is still considered live for its pull request, so retire it before adding
             // the restart; otherwise the clone would be rejected as an active duplicate at the same revision. Any
             // findings the source already produced are carried forward into the restart the same way a superseded
             // job's results are.
-            await jobs.SetSupersededAsync(source.Id, cancellationToken);
+            //
+            // Another live job for the same pull request decides the outcome before that, because superseding
+            // the source and then reporting a duplicate would retire the operator's only restartable job and
+            // leave nothing to restart.
+            var active = jobs.FindActiveJob(
+                source.OrganizationUrl,
+                source.ProjectId,
+                source.RepositoryId,
+                source.PullRequestId,
+                source.IterationId);
+            if (active is not null && active.Id != source.Id)
+            {
+                LogRestartDuplicateActiveJob(logger, source.Id, source.PullRequestId, source.IterationId);
+                return new RestartReviewJobResult(RestartReviewJobOutcome.DuplicateActiveJob, ClientId: source.ClientId);
+            }
+
+            // The state the supersede would report, read off the source before the call. A supersede that
+            // changed the row and then failed on the way back returns nothing, and the row no longer says
+            // what the job was; this copy does. Putting it back is conditional on the job still being
+            // superseded, so it does nothing when the supersede never landed.
+            var expectedRetiredState = new SupersededReviewJobState(
+                source.Status,
+                source.CompletedAt,
+                source.LeaseOwner,
+                source.LeaseExpiresAt,
+                source.LastHeartbeatAt);
+            try
+            {
+                retiredState = await jobs.TrySupersedeAsync(source.Id, source.Status, cancellationToken);
+            }
+            catch
+            {
+                await this.TryRestoreSupersededSourceAsync(source, expectedRetiredState);
+                throw;
+            }
         }
 
         var restarted = new ReviewJob(
@@ -70,9 +108,27 @@ public sealed partial class RestartReviewJobHandler(
         // is the one thing a restart must never do.
         restarted.SetAllowUnchangedResubmission(source.AllowUnchangedResubmission);
 
-        var addResult = await jobs.TryAddIfNoActiveDuplicateAsync(restarted, cancellationToken);
+        TryAddReviewJobResult addResult;
+        try
+        {
+            addResult = await jobs.TryAddIfNoActiveDuplicateAsync(restarted, cancellationToken);
+        }
+        catch
+        {
+            // An insert can commit and still fail on the way back. The restart row then exists, it is the
+            // clone the source was retired for, and putting the source back would leave two live jobs for
+            // one pull request.
+            if (!this.WasRestartAdded(restarted.Id))
+            {
+                await this.TryRestoreSupersededSourceAsync(source, retiredState);
+            }
+
+            throw;
+        }
+
         if (!addResult.WasAdded)
         {
+            await this.TryRestoreSupersededSourceAsync(source, retiredState);
             LogRestartDuplicateActiveJob(logger, source.Id, source.PullRequestId, source.IterationId);
             return new RestartReviewJobResult(RestartReviewJobOutcome.DuplicateActiveJob, ClientId: source.ClientId);
         }
@@ -86,6 +142,51 @@ public sealed partial class RestartReviewJobHandler(
             source.ClientId);
     }
 
+    /// <summary>
+    ///     Puts a superseded source back into the state it was restarted from, when the restart it was retired
+    ///     for did not happen. Without this the operator is left with a job that is neither running nor
+    ///     restartable. Only the call that retired the source has a state to put back, and the restore is
+    ///     conditional on the source still being superseded, so a status another writer decided stands.
+    ///     A failed restore is logged and not raised: it is an undo, and every caller has an outcome of its
+    ///     own to report.
+    /// </summary>
+    private async Task TryRestoreSupersededSourceAsync(ReviewJob source, SupersededReviewJobState? retiredState)
+    {
+        if (retiredState is not { } previous)
+        {
+            return;
+        }
+
+        try
+        {
+            // Not the caller's token: this undoes a write that already happened, and a cancelled restore
+            // would leave the source retired.
+            await jobs.TryRestoreSupersededAsync(source.Id, previous, CancellationToken.None);
+        }
+        catch (Exception restoreException)
+        {
+            LogRestoreFailed(logger, restoreException, source.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Whether the restart row reached the store. Read after an insert that failed, to tell a call that
+    ///     committed before the failure from one that added nothing. A store that cannot answer is read as
+    ///     nothing added, the outcome the failed insert itself reported.
+    /// </summary>
+    private bool WasRestartAdded(Guid restartedJobId)
+    {
+        try
+        {
+            return jobs.GetById(restartedJobId) is not null;
+        }
+        catch (Exception lookupException)
+        {
+            LogRestartLookupFailed(logger, lookupException, restartedJobId);
+            return false;
+        }
+    }
+
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Restarted failed review job {SourceJobId} as new job {NewJobId} for PR #{PrId} iteration {IterationId}.")]
@@ -93,11 +194,21 @@ public sealed partial class RestartReviewJobHandler(
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "Refused to restart review job {SourceJobId} because its status is {Status}, not Failed.")]
+        Message = "Refused to restart review job {SourceJobId} because its status is {Status}, which is not a restartable one.")]
     private static partial void LogRestartRejectedNotFailed(ILogger logger, Guid sourceJobId, JobStatus status);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Skipped restart of review job {SourceJobId} for PR #{PrId} iteration {IterationId} because an active job already exists.")]
     private static partial void LogRestartDuplicateActiveJob(ILogger logger, Guid sourceJobId, int prId, int iterationId);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Failed to put review job {SourceJobId} back after its restart was not added; it remains superseded.")]
+    private static partial void LogRestoreFailed(ILogger logger, Exception exception, Guid sourceJobId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Could not read review job {RestartedJobId} after its insert failed; the restart is treated as not added.")]
+    private static partial void LogRestartLookupFailed(ILogger logger, Exception exception, Guid restartedJobId);
 }

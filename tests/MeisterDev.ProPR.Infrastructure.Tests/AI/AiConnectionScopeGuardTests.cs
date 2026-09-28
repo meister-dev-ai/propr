@@ -52,6 +52,42 @@ public sealed class AiConnectionScopeGuardTests
     }
 
     [Fact]
+    public async Task ReferenceBatch_CachesOwnersAndPolicyAndRefusesForeignReferences()
+    {
+        var first = Connection(clientId: ClientInA) with { Id = Guid.NewGuid() };
+        var second = Connection(clientId: ClientInA) with { Id = Guid.NewGuid() };
+        var foreign = Connection(clientId: ClientInB) with { Id = Guid.NewGuid() };
+        var orphan = Connection() with { Id = Guid.NewGuid() };
+        var allowed = await this.Sut().ValidateManyAsync([first, second, foreign, orphan], TenantA);
+        Assert.Equal(new[] { first.Id, second.Id }.Order(), allowed.Order());
+        await this._clients.Received(1).GetTenantIdAsync(ClientInA, Arg.Any<CancellationToken>());
+        await this._clients.Received(1).GetTenantIdAsync(ClientInB, Arg.Any<CancellationToken>());
+        await this._policies.Received(1).GetForTenantAsync(TenantA, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("provider")]
+    [InlineData("base-host")]
+    [InlineData("declared-host")]
+    public async Task ReferenceBatch_RefusesSameTenantConnectionsOutsideProviderOrEndpointPolicy(string restriction)
+    {
+        var connection = Connection(tenantId: TenantA);
+        var policy = restriction switch
+        {
+            "provider" => new TenantProviderPolicy(["meisterdev/openAiCompatible"]),
+            "base-host" => new TenantProviderPolicy([], ["opencode.ai"]),
+            _ => new TenantProviderPolicy([], ["test.openai.azure.com"]),
+        };
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>()).Returns(policy);
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies, this._drivers);
+
+        var allowed = await guard.ValidateManyAsync([connection], TenantA);
+
+        Assert.DoesNotContain(connection.Id, allowed);
+        Assert.NotNull(await guard.ValidateAsync(connection, TenantA));
+    }
+
+    [Fact]
     public async Task TenantScopedConnection_ReferencedByOwningTenant_IsPermitted()
     {
         var connection = Connection(tenantId: TenantA);

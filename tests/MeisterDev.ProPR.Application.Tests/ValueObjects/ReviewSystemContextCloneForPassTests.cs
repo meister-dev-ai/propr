@@ -33,6 +33,8 @@ public sealed class ReviewSystemContextCloneForPassTests
             ReviewPasses = [new ReviewPassSpec(Guid.NewGuid(), "security")],
             Aggressiveness = ReviewAggressiveness.Assertive,
             OutputLanguage = "de",
+            MaxFileSizeBytes = 262_144,
+            MaxStructuralParseBytes = 131_072,
         };
 
         var clone = source.CloneForPass();
@@ -48,6 +50,9 @@ public sealed class ReviewSystemContextCloneForPassTests
         Assert.Equal("security", clone.ReviewPasses![0].Lens);
         Assert.Equal(ReviewAggressiveness.Assertive, clone.Aggressiveness);
         Assert.Equal("de", clone.OutputLanguage);
+        // The tenant's per-file limits: a pass that lost them would read files the tenant meant to keep out.
+        Assert.Equal(262_144, clone.MaxFileSizeBytes);
+        Assert.Equal(131_072, clone.MaxStructuralParseBytes);
     }
 
     [Fact]

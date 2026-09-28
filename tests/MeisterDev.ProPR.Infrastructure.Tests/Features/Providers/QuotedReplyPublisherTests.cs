@@ -32,7 +32,8 @@ public sealed class QuotedReplyPublisherTests
 
         var sut = new ForgejoReviewThreadReplyPublisher(
             new ForgejoConnectionVerifier(Connections(ScmProvider.Forgejo, host), factory),
-            factory);
+            factory,
+            TestPostedCommentComposer.Distinctive);
 
         var commentId = await sut.ReplyAsync(
             ClientId,
@@ -48,9 +49,12 @@ public sealed class QuotedReplyPublisherTests
         var posted = Assert.Single(requests, request => request.Uri.Contains("/pulls/42/reviews", StringComparison.Ordinal));
 
         // The blockquote marker has to reach the provider as a marker. Escaped, the answer would open with a
-        // literal "&gt;" and quote nothing.
-        Assert.StartsWith("> @propr why does this sort ascending?", ReadPostedBody(posted.Body), StringComparison.Ordinal);
-        Assert.EndsWith("It sorts ascending and then takes three.", ReadPostedBody(posted.Body), StringComparison.Ordinal);
+        // literal "&gt;" and quote nothing. The whole body is asserted, so the quote stays first, the answer
+        // stays immediately before the AI-generated marker, and nothing is inserted between them.
+        Assert.Equal(
+            "> @propr why does this sort ascending?\n\nIt sorts ascending and then takes three.\n\n"
+            + TestPostedCommentComposer.DistinctiveMarker,
+            ReadPostedBody(posted.Body));
     }
 
     /// <summary>
@@ -67,7 +71,8 @@ public sealed class QuotedReplyPublisherTests
 
         var sut = new ForgejoReviewThreadReplyPublisher(
             new ForgejoConnectionVerifier(Connections(ScmProvider.Forgejo, host), factory),
-            factory);
+            factory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.ReplyAsync(
             ClientId,
@@ -99,7 +104,8 @@ public sealed class QuotedReplyPublisherTests
 
         var sut = new ForgejoReviewThreadReplyPublisher(
             new ForgejoConnectionVerifier(Connections(ScmProvider.Forgejo, host), factory),
-            factory);
+            factory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.ReplyAsync(
             ClientId,
@@ -126,7 +132,8 @@ public sealed class QuotedReplyPublisherTests
 
         var sut = new GitHubReviewThreadReplyPublisher(
             new GitHubConnectionVerifier(Connections(ScmProvider.GitHub, host), factory),
-            factory);
+            factory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.ReplyAsync(
             ClientId,
@@ -154,7 +161,8 @@ public sealed class QuotedReplyPublisherTests
 
         var sut = new ForgejoReviewThreadReplyPublisher(
             new ForgejoConnectionVerifier(Connections(ScmProvider.Forgejo, host), factory),
-            factory);
+            factory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.ReplyAsync(
             ClientId,
@@ -183,7 +191,8 @@ public sealed class QuotedReplyPublisherTests
 
         var sut = new GitHubReviewThreadReplyPublisher(
             new GitHubConnectionVerifier(Connections(ScmProvider.GitHub, host), factory),
-            factory);
+            factory,
+            TestPostedCommentComposer.Distinctive);
 
         var commentId = await sut.ReplyAsync(
             ClientId,
@@ -195,7 +204,10 @@ public sealed class QuotedReplyPublisherTests
         Assert.Equal("9001", commentId);
         Assert.DoesNotContain(requests, request => request.Uri.Contains("graphql", StringComparison.Ordinal));
         var posted = Assert.Single(requests, request => request.Uri.Contains("/issues/42/comments", StringComparison.Ordinal));
-        Assert.StartsWith("> @propr why does this sort ascending?", ReadPostedBody(posted.Body), StringComparison.Ordinal);
+        Assert.Equal(
+            "> @propr why does this sort ascending?\n\nIt sorts ascending and then takes three.\n\n"
+            + TestPostedCommentComposer.DistinctiveMarker,
+            ReadPostedBody(posted.Body));
     }
 
     /// <summary>
@@ -211,7 +223,8 @@ public sealed class QuotedReplyPublisherTests
 
         var sut = new GitHubReviewThreadReplyPublisher(
             new GitHubConnectionVerifier(Connections(ScmProvider.GitHub, host), factory),
-            factory);
+            factory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.ReplyAsync(
             ClientId,
@@ -221,7 +234,7 @@ public sealed class QuotedReplyPublisherTests
             "Question?");
 
         var posted = Assert.Single(requests, request => request.Uri.Contains("graphql", StringComparison.Ordinal));
-        Assert.Equal("Answered.", ReadPostedBody(posted.Body));
+        Assert.Equal("Answered.\n\n" + TestPostedCommentComposer.DistinctiveMarker, ReadPostedBody(posted.Body));
         Assert.DoesNotContain(requests, request => request.Uri.Contains("/issues/", StringComparison.Ordinal));
     }
 

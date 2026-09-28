@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Admission;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
@@ -231,6 +233,153 @@ public sealed class RunnerJobDispatchPreparerTests
         Assert.Same(tools, this._toolsRegistry.Find(JobId)!.Tools);
     }
 
+    // The runner path measures the diff it would send, so the same bound decides the same way wherever the
+    // review runs. A client that set only this bound used to be admitted here without any evaluation.
+    [Fact]
+    public async Task PreparingAJob_OverTheDiffByteBound_RefusesTheDispatch()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace(["src/a.cs"]);
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+        this._preparedWorkspace!.CountDiffBytesAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(9_000_000L);
+        var clients = Substitute.For<IClientRegistry>();
+        clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxDiffBytes: 4_000_000));
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        jobs.SetAdmissionRefusedAsync(job.Id, Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var preparation = await this.CreatePreparer(jobs: jobs, clientRegistry: clients).PrepareAsync(job, MakeLease());
+
+        Assert.False(preparation.Succeeded);
+        await jobs.Received(1).SetAdmissionRefusedAsync(
+            job.Id,
+            Arg.Is<string>(reason => reason.Contains("9,000,000 bytes", StringComparison.Ordinal)),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // The refusal is recorded on the job and shown there. A provider that refuses the comment must not turn
+    // the refusal into a failed preparation, which would return the job to the queue and dispatch it again.
+    [Fact]
+    public async Task PreparingAJob_WhenTheRefusalNoticeCannotBePosted_StillRefusesTheDispatch()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace(["src/a.cs"]);
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+        this._preparedWorkspace!.CountDiffBytesAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(9_000_000L);
+        var clients = Substitute.For<IClientRegistry>();
+        clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxDiffBytes: 4_000_000));
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        jobs.SetAdmissionRefusedAsync(job.Id, Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+        var notice = Substitute.For<IReviewAdmissionNotice>();
+        notice.PostAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<PrCommentThread>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("the provider refused the comment")));
+
+        var preparation = await this.CreatePreparer(jobs: jobs, clientRegistry: clients, admissionNotice: notice)
+            .PrepareAsync(job, MakeLease());
+
+        Assert.False(preparation.Succeeded);
+        Assert.NotNull(preparation.Failure);
+        await jobs.Received(1).SetAdmissionRefusedAsync(job.Id, Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    // The bound rides on the preparation request, because the transfer that has to be stopped happens there
+    // and nothing here can weigh a repository that has not been fetched.
+    [Fact]
+    public async Task PreparingAJob_CarriesTheClientsRepositorySizeBoundOnTheWorkspaceRequest()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace();
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+        var clients = Substitute.For<IClientRegistry>();
+        clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxRepositoryMegabytes: 2_048));
+
+        var preparation = await this.CreatePreparer(clientRegistry: clients).PrepareAsync(job, MakeLease());
+
+        Assert.True(preparation.Succeeded);
+        await this._workspaces.Received(1).PrepareAsync(
+            Arg.Is<ReviewRepositoryWorkspaceRequest>(request => request.MaxRepositoryMegabytes == 2_048),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PreparingAJob_WhoseRepositoryPassedTheBoundWhileItWasFetched_RefusesItAndPostsTheReason()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace();
+        this.GivenTheRepositoryPassedTheSizeBound(measuredMegabytes: 4_096, limitMegabytes: 2_048);
+        var clients = Substitute.For<IClientRegistry>();
+        clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxRepositoryMegabytes: 2_048));
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        jobs.SetAdmissionRefusedAsync(job.Id, Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
+        var notice = Substitute.For<IReviewAdmissionNotice>();
+
+        var preparation = await this.CreatePreparer(jobs: jobs, clientRegistry: clients, admissionNotice: notice)
+            .PrepareAsync(job, MakeLease());
+
+        Assert.False(preparation.Succeeded);
+        Assert.Contains("4,096 MB", preparation.Failure, StringComparison.Ordinal);
+        Assert.Contains("2,048 MB", preparation.Failure, StringComparison.Ordinal);
+        await jobs.Received(1).SetAdmissionRefusedAsync(
+            job.Id,
+            Arg.Is<string>(reason => reason.Contains("4,096 MB", StringComparison.Ordinal)
+                                     && reason.Contains("2,048 MB", StringComparison.Ordinal)),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        await notice.Received(1).PostAsync(
+            job,
+            Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<PrCommentThread>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // The runner never sees the job, so nothing on this replica is registered for it either.
+    [Fact]
+    public async Task PreparingAJob_WhoseRepositoryPassedTheBound_RegistersNoWorkspaceAndNoTools()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace();
+        this.GivenTheRepositoryPassedTheSizeBound(measuredMegabytes: 4_096, limitMegabytes: 2_048);
+        var clients = Substitute.For<IClientRegistry>();
+        clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxRepositoryMegabytes: 2_048));
+
+        await this.CreatePreparer(clientRegistry: clients).PrepareAsync(job, MakeLease());
+
+        Assert.Null(this._workspaceRegistry.Find(JobId));
+        Assert.Null(this._toolsRegistry.Find(JobId));
+    }
+
+    // An empty set has a measured size of zero. Left unmeasured, the evaluator reads the dimension as one this
+    // point could not answer and leaves the bound to a point that never comes.
+    [Fact]
+    public async Task PreparingAJob_WithNothingLeftToReview_MeasuresZeroInsteadOfLeavingItUnmeasured()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace();
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+        var clients = Substitute.For<IClientRegistry>();
+        clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxChangedLines: 1, MaxDiffBytes: 1));
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+
+        var preparation = await this.CreatePreparer(jobs: jobs, clientRegistry: clients).PrepareAsync(job, MakeLease());
+
+        Assert.True(preparation.Succeeded);
+        await this._preparedWorkspace!.DidNotReceiveWithAnyArgs().CountChangedLinesAsync(default!, default);
+        await this._preparedWorkspace.DidNotReceiveWithAnyArgs().CountDiffBytesAsync(default!, default);
+        await jobs.DidNotReceiveWithAnyArgs().SetAdmissionRefusedAsync(default, default!, default, default);
+    }
+
     private void GivenAConversation(PullRequestAuthor? author)
     {
         this._pullRequests
@@ -328,10 +477,35 @@ public sealed class RunnerJobDispatchPreparerTests
             .Returns(Task.FromResult(new ReviewRepositoryWorkspacePreparationResult(workspace, null)));
     }
 
+    /// <summary>
+    ///     Makes workspace preparation report that it stopped the transfer at the client's repository-size
+    ///     bound, which is what the manager reports when its watch cancels a fetch or a checkout.
+    /// </summary>
+    /// <param name="measuredMegabytes">The size measured when the transfer was stopped.</param>
+    /// <param name="limitMegabytes">The client's bound.</param>
+    private void GivenTheRepositoryPassedTheSizeBound(int measuredMegabytes, int limitMegabytes)
+    {
+        this._workspaces
+            .PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new ReviewRepositoryWorkspacePreparationResult(
+                        null,
+                        new ReviewWorkspaceFailure(
+                            "fetch",
+                            "repository_over_size_limit",
+                            "The repository is larger than the client allows.",
+                            Retryable: false,
+                            FallbackApplied: false,
+                            new ReviewRepositorySizeBreach(measuredMegabytes, limitMegabytes)))));
+    }
+
     private RunnerJobDispatchPreparer CreatePreparer(
         ReviewJobReuse? reuse = null,
         IReviewFileResultStore? priorRows = null,
-        IReviewJobExecutionStore? jobs = null)
+        IReviewJobExecutionStore? jobs = null,
+        IClientRegistry? clientRegistry = null,
+        IReviewAdmissionNotice? admissionNotice = null)
     {
         return new RunnerJobDispatchPreparer(
             this._workspaces,
@@ -342,6 +516,11 @@ public sealed class RunnerJobDispatchPreparerTests
             Microsoft.Extensions.Options.Options.Create(new ReviewWorkspaceOptions()),
             jobs ?? Substitute.For<IReviewJobExecutionStore>(),
             reuse: reuse,
-            priorRows: priorRows);
+            priorRows: priorRows,
+            // A logger as dependency injection supplies one, so the paths that log a failure and carry on are
+            // exercised as they run in the application.
+            logger: NullLogger<RunnerJobDispatchPreparer>.Instance,
+            clientRegistry: clientRegistry,
+            admissionNotice: admissionNotice);
     }
 }

@@ -67,6 +67,10 @@ A dropped finding also has to leave the summary. ProPR writes the summary before
 summary can describe a finding the gate then rules out. Where that happens, ProPR replaces the narrative
 with a short note saying how many candidates were dropped.
 
+The client dashboard's 30-day finding count uses findings in persisted completed review results whose
+completion time is at or after the window start and before the window end. It does
+not count SCM comments, so disabling comment posting does not remove reviewed findings from the metric.
+
 The review's protocol records every one of these decisions - see
 [what to look at when a review misbehaves](../operate/observability.md#what-to-look-at-when-a-review-misbehaves).
 
@@ -97,15 +101,26 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | SCM comment posting | Per client | Run reviews without publishing anything |
 | Review every pushed update | Per client | Whether pushes after the first one start another automatic review. Off by default - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
 | Budget caps | Per client | Monthly, per-pull-request and per-increment soft and hard USD caps |
+| Tenant budget caps | Per tenant | A monthly soft and hard USD cap over the spend of every client in the tenant |
+| Review limits | Per client | Bounds on the size of a review: changed files, changed lines, diff bytes, reviews per pull request per hour, and repository size |
 
 **Budget caps in detail.** ProPR holds a job at admission when a hard cap has already been reached, or
 when the monthly or per-pull-request soft cap has. A held job does not resume by itself: an operator
 restarts it once budget is free. The per-increment soft cap does not hold a job at admission. It stops a
 running job from scanning further files and concludes it with a summary. A hard cap cuts further model
-calls in all three scopes. The tenant Budget and Spend views roll up the tenant's clients for reporting
-and forecasting, and enforce no cap. Setting caps and the Budget and Spend views require a commercial
-license. Caps already set are enforced in every edition - see
+calls in all three scopes. Setting caps and the Budget and Spend views require a commercial license. Caps
+already set are enforced in every edition - see
 [editions and licensed features](../reference/editions.md).
+
+**The tenant scope.** A tenant carries its own monthly soft and hard cap over the spend of every client in
+it. ProPR evaluates it after the three client scopes, so a client cap that is also reached is the one
+reported on the held job. A tenant soft cap holds a not-yet-started job at admission, on the same terms as
+the client monthly soft cap, and leaves running work alone: a review, a thread pass or a mention answer
+already under way finishes. A tenant hard cap holds every client of the tenant at admission and also cuts
+further model calls in a running review, a thread pass and a mention answer alike. A tenant administrator sets the
+caps on the tenant's Budget section. Raising a cap is what gives the tenant more room for the rest of the
+month. The tenant Spend view measures the aggregate against these caps and reports the sum of the client
+caps beside them.
 
 Every scope totals all three units of work over a pull request: the file review, the thread pass that
 answers the conversation, and the answer to an `@propr` mention. A thread pass is held, cut and restarted
@@ -117,6 +132,50 @@ and records that it was written past the threshold. A hard cap makes ProPR post 
 budget for the period is used up, without calling the model. A stopped answer is not held for a restart.
 The job ends there; ask again once an administrator raises the cap. An answer whose increment cannot be
 determined counts toward the client and pull-request totals, and toward no per-increment cap.
+
+**Review limits in detail.** ProPR measures a review after the repository is fetched and the files carried
+forward from an earlier review are removed, and before any model call. A review over the changed-file,
+changed-line or diff-size bound ends in the **Not started** state. The job carries the reason, and ProPR
+posts it on the pull request as a review without findings, naming the measured value, the bound and what to
+do: split the pull request, or raise the bound. A review refused on the repository-size bound has a different
+remedy, because splitting the pull request leaves the repository the size it is: make the repository smaller,
+or raise that bound. The per-client comment-posting setting governs that notice like every other comment.
+Restarting a refused review refuses it again until the measurement is at or below the bound, either because
+the pull request or the repository is smaller than it was, or because the bound was raised to at least the
+measured value.
+
+ProPR counts a refused review as the review of that pull request head. A crawl or a webhook therefore starts
+no second review of the same head while the client's review limits are unchanged: the head measures the same
+on every attempt, and every attempt fetches the repository again and posts the notice again. ProPR reviews
+the head again once the head changes, once an administrator changes a review limit, or once somebody restarts
+the refused review from the review record.
+
+The diff-size bound counts the bytes of the unified diff exactly as ProPR obtains it, from the SCM host or
+from the mirror the review runs against. An SCM host also renders the diff for reading in its web interface,
+and that rendering can differ in size from the payload, so the size a pull request shows there is not the
+measured one.
+
+A pull request that has already started its hourly number of reviews is held in the **Waiting** state
+instead, carrying the time it becomes admissible. It starts by itself once that time has passed, and no
+comment is posted for a wait. This is what a push burst meets: the pushes are reviewed, one per window.
+
+ProPR counts the reviews it ran for that pull request in the hour: a review that is running, and a review
+that made at least one model call, in whatever state that review ended. A review that made no model call is
+left out of the count, so a queued review, a review refused on a size bound and a review waiting here leave
+the hour free.
+
+ProPR applies the repository-size bound while it transfers the repository onto the host that runs the
+review. About once a second it measures what git has written so far: the mirror during the fetch, and the
+working copy during the checkout. At the first measurement past the bound it stops git and deletes what that
+transfer wrote, because a partial mirror or checkout cannot back a review. ProPR measures the directory once
+more after each transfer has ended, so the bound also holds for a repository that arrives between two
+measurements. Before it fetches into a mirror it already keeps, ProPR measures that mirror and refuses the
+review without transferring anything when the mirror is already larger than the bound.
+
+Every review measures the repository as it stands at that moment, and ProPR stores no size between reviews.
+Making a repository smaller leaves the pull request head as it was, so ProPR starts a review refused on this
+bound again from a restart or from a raised bound. Setting these bounds needs no licence: they protect the
+installation.
 
 ### Output language
 

@@ -10,10 +10,10 @@
         "tags": [
           "AdminAiProviderAddIns"
         ],
-        "summary": "Returns every assembly the loader saw, loaded and rejected.",
+        "summary": "Returns every assembly the host saw, and every activation this installation holds.",
         "responses": {
           "200": {
-            "description": "The loaded families and the rejected assemblies.",
+            "description": "The loaded families, the passed-over assemblies, and the ones awaiting activation.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -28,6 +28,270 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProviderAddInInventoryDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/ai-provider-add-ins/activations": {
+      "get": {
+        "tags": [
+          "AdminAiProviderAddIns"
+        ],
+        "summary": "The decisions this installation's administrators have made, newest first.",
+        "responses": {
+          "200": {
+            "description": "The activations, each with whether the host is running it now.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderAddInActivationDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderAddInActivationDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderAddInActivationDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/ai-provider-add-ins/{contentHash}/activate": {
+      "post": {
+        "tags": [
+          "AdminAiProviderAddIns"
+        ],
+        "summary": "Lets this host run the add-in whose bytes hash to contentHash.",
+        "description": "The add-in is loaded by this call, so the family serves before the administrator leaves the page. It\nis refused where the file has changed since the host read it, where what its driver declares\ndisagrees with what its assembly states, and where the identity is one this host already serves.",
+        "parameters": [
+          {
+            "name": "contentHash",
+            "in": "path",
+            "description": "The bytes being approved, as the page listed them.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The add-in was loaded and is serving.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadedProviderAddInDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadedProviderAddInDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadedProviderAddInDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The add-in was not activated; the body says why.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AdminAiProviderAddIns"
+        ],
+        "summary": "Withdraws the activation of one add-in.",
+        "description": "The add-in stays loaded until this host restarts. An assembly cannot be unloaded from under the\nconnections using it, and a review holding a client that family built is in flight. What this does is\nstop the next start taking it.",
+        "parameters": [
+          {
+            "name": "contentHash",
+            "in": "path",
+            "description": "The bytes whose activation is being withdrawn.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The activation was withdrawn."
+          },
+          "404": {
+            "description": "No activation holds those bytes.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -2267,7 +2531,7 @@
         "tags": [
           "AdminRunners"
         ],
-        "summary": "Issues a registration token. The value is returned here and never again. Single-use unless the\nrequest asks for more, which is what a scaling group needs: its replicas start without an\noperator present to issue each of them one.",
+        "summary": "Issues a registration token. The value is returned here and never again. Single-use unless the\nrequest asks for more, which a scaling group needs: its replicas start without an\noperator present to issue each of them one.",
         "requestBody": {
           "description": "Which tenant and clients the enrolled runner will be scoped to.",
           "content": {
@@ -6792,6 +7056,320 @@
         }
       }
     },
+    "/clients/{clientId}/ai-connections/{connectionId}/verify-update": {
+      "post": {
+        "tags": [
+          "ClientAiConnections"
+        ],
+        "summary": "Verifies proposed client profile changes before atomically replacing the saved configuration.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "The owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "The client-owned connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Proposed configuration. Blank credentials retain the protected saved values.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiConnectionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiConnectionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiConnectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The verified configuration was applied.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConnectionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConnectionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConnectionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Configuration or provider verification failed; the saved profile is unchanged.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication is required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Client administrator access is required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The client-owned profile does not exist.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The saved configuration changed during verification.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/ai-connections/select-purposes": {
+      "post": {
+        "tags": [
+          "ClientAiConnections"
+        ],
+        "summary": "Applies the Default, High and Embedding workspace purposes together using verified client-owned models.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "The owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "All three configured model and connection selections.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiWorkspacePurposeSelection"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiWorkspacePurposeSelection"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiWorkspacePurposeSelection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "All selected purposes were applied together.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConfigurationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConfigurationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConfigurationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A selection is invalid or unverified; existing routing is unchanged.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication is required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Client administrator access is required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A logical or managed binding conflicts, or configuration changed concurrently.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConfigurationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConfigurationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConfigurationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/clients/{clientId}/budget/consumption": {
       "get": {
         "tags": [
@@ -7688,7 +8266,7 @@
         "tags": [
           "ClientLogicalModels"
         ],
-        "summary": "The logical models effective for this client — the client's overrides plus the tenant-catalog entries an\noverride does not shadow — for the pass and purpose editors' pickers.",
+        "summary": "The logical models effective for this client — the client's overrides plus the tenant-catalog entries an\noverride does not shadow — with authorized, nonsecret referenced model metadata for readiness checks.",
         "parameters": [
           {
             "name": "clientId",
@@ -10819,6 +11397,538 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-targets/repositories": {
+      "get": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Lists repositories reachable through a verified client connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "query",
+            "description": "Verified provider connection identifier.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scopePath",
+            "in": "query",
+            "description": "Provider scope to inspect.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Repositories returned by the provider.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientReviewTargetRepositoryResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientReviewTargetRepositoryResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientReviewTargetRepositoryResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection or scope is invalid, or the provider refused discovery.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot administer this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Repository discovery is unavailable for the provider.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The crawl configuration capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-targets": {
+      "get": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Lists configured repository review targets for the client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The configured review targets.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot access this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The crawl configuration capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Creates an inactive review target for one repository.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Verified connection and repository coordinates.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientReviewTargetRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientReviewTargetRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientReviewTargetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The identical target already exists.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The target was created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The coordinates or connection state are invalid.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot administer this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The project already has a different configuration or the capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-targets/{targetId}/open-reviews": {
+      "get": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Lists open pull requests for one configured repository review target.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "targetId",
+            "in": "path",
+            "description": "Configured repository review target identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "query",
+            "description": "Active, verified provider connection identifier.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Up to 100 open pull requests from the provider.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientOpenReviewResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientOpenReviewResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientOpenReviewResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection is invalid or does not cover the target.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot access this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The target or provider adapter is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The crawl configuration capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The provider could not list pull requests."
           }
         }
       }
@@ -18357,6 +19467,118 @@
         }
       }
     },
+    "/clients/{clientId}/reviewing/jobs/{jobId}/status": {
+      "get": {
+        "tags": [
+          "ReviewJobs"
+        ],
+        "summary": "Returns a review result only when the specified client owns the job.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "The owning client.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "description": "The review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewStatusResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewStatusResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reviewing/jobs/{jobId}/status": {
       "get": {
         "tags": [
@@ -19718,6 +20940,219 @@
         }
       }
     },
+    "/clients/{clientId}/reviewing/history": {
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Reads a bounded page of persisted review metadata for the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "The owning client.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "One-based page number.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows, between 1 and 100.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Optional named job status.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerReviewHistory"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerReviewHistory"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerReviewHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/reviewing/dashboard": {
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Get processing reviews and findings from jobs completed in the previous 30 days.",
+        "description": "The completion-time window includes `windowStart` and excludes `windowEnd`.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "ID of the client whose dashboard is read.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Review activity for the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDashboard"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDashboard"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDashboard"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks the required role for this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runners/execution/tools/changed-files": {
       "post": {
         "tags": [
@@ -20784,7 +22219,7 @@
         "tags": [
           "TenantAiConnections"
         ],
-        "summary": "Lists the provider families this build has a driver for, each flagged with whether this tenant's own\npolicy permits it, and described well enough to configure one: its name, the shapes it speaks and\nauthenticates with, the fields each credential shape needs, and what it declares about the connection\nform.",
+        "summary": "Lists the provider families this build has a driver for, each flagged with whether this tenant's own\npolicy permits it, and described well enough to configure one: its name, the shapes it speaks and\nauthenticates with, the fields each authentication mode needs, and what it declares about the connection\nform.",
         "description": "The same answer the client-scoped endpoint gives, read against the tenant's policy directly. It is\nserved here so the tenant screens — the connection editor and the provider allow-list — describe\nfamilies from the installation rather than from a table of their own, which would name only the\nfamilies that existed when the console shipped.",
         "parameters": [
           {
@@ -21803,6 +23238,327 @@
         }
       }
     },
+    "/admin/tenants/{tenantId}/machine-credentials": {
+      "post": {
+        "tags": [
+          "TenantMachineCredentials"
+        ],
+        "summary": "Issues a credential and returns its secret once to the platform administrator.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueTenantMachineCredentialRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueTenantMachineCredentialRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueTenantMachineCredentialRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedTenantMachineCredential"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedTenantMachineCredential"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedTenantMachineCredential"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "TenantMachineCredentials"
+        ],
+        "summary": "Lists credential metadata without token hashes or secret material.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantMachineCredentialSummary"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantMachineCredentialSummary"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantMachineCredentialSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/tenants/{tenantId}/machine-credentials/{id}": {
+      "delete": {
+        "tags": [
+          "TenantMachineCredentials"
+        ],
+        "summary": "Revokes a credential so subsequent requests cannot authenticate.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/tenants/{tenantId}/clients": {
       "get": {
         "tags": [
@@ -22331,6 +24087,164 @@
       }
     },
     "/admin/tenants/{tenantId}/memberships": {
+      "post": {
+        "tags": [
+          "TenantMemberships"
+        ],
+        "summary": "Creates a tenant membership for an existing user. Only platform administrators may call this endpoint.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantMembershipRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantMembershipRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantMembershipRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantMembershipDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantMembershipDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantMembershipDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "TenantMemberships"
@@ -25511,7 +27425,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "One credential shape a provider family authenticates with, with what an operator sees where it is offered."
+        "description": "One authentication mode a provider family authenticates with, with what an operator sees where it is offered."
       },
       "AiComputedFieldDto": {
         "type": "object",
@@ -25534,6 +27448,30 @@
         },
         "additionalProperties": false,
         "description": "The current value of one read-only computed field, as of this read."
+      },
+      "AiConfigurationResult": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "conflict": {
+            "type": "boolean"
+          },
+          "conflictingPurposes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiPurpose"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The bounded configuration operation outcome without credential material."
       },
       "AiConfiguredModelDto": {
         "type": "object",
@@ -25917,7 +27855,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Which secret-marked declared fields hold a stored value. A console renders a field as set or not set\nfrom this and offers to replace it, which is what the credential fields already do.",
+            "description": "Which secret-marked declared fields hold a stored value. A console renders a field as set or not set\nfrom this and offers to replace it, which the credential fields already do.",
             "nullable": true,
             "readOnly": true
           },
@@ -26403,7 +28341,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "One wire shape a provider family speaks, with what an operator sees where it is offered."
+        "description": "One protocol mode a provider family speaks, with what an operator sees where it is offered."
       },
       "AiProviderActionDispatchDto": {
         "type": "object",
@@ -26711,6 +28649,37 @@
         "type": "string",
         "description": "Latest verification state for one AI connection profile."
       },
+      "AiWorkspaceModelSelection": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "configuredModelId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A configured model and its owning connection selected for a workspace slot."
+      },
+      "AiWorkspacePurposeSelection": {
+        "type": "object",
+        "properties": {
+          "default": {
+            "$ref": "#/components/schemas/AiWorkspaceModelSelection"
+          },
+          "high": {
+            "$ref": "#/components/schemas/AiWorkspaceModelSelection"
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/AiWorkspaceModelSelection"
+          }
+        },
+        "additionalProperties": false,
+        "description": "The complete workspace selection applied in one operation."
+      },
       "AnnotatedRegion": {
         "type": "object",
         "additionalProperties": false
@@ -26880,6 +28849,75 @@
         },
         "additionalProperties": false,
         "description": "The busiest of the twelve calendar months ending with the current one, and how many authors it held."
+      },
+      "AwaitingProviderAddInDto": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "The assembly that was found.",
+            "nullable": true
+          },
+          "contentHash": {
+            "type": "string",
+            "description": "The SHA-256 of that file, which an activation is bound to.",
+            "nullable": true
+          },
+          "key": {
+            "type": "string",
+            "description": "The identity key it states, or null when it states no manifest.",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "What it calls itself, or null when it states no manifest.",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "description": "The version it states, or null when it states no manifest.",
+            "nullable": true
+          },
+          "contractVersion": {
+            "type": "string",
+            "description": "The contract version it was built against, or null when it states no manifest.",
+            "nullable": true
+          },
+          "reachedHosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The hosts it says it will contact.",
+            "nullable": true
+          },
+          "requiredCapability": {
+            "type": "string",
+            "description": "The premium capability it needs, or null for none.",
+            "nullable": true
+          },
+          "assemblyName": {
+            "type": "string",
+            "description": "The assembly's own name, readable whether or not it states a manifest.",
+            "nullable": true
+          },
+          "assemblyVersion": {
+            "type": "string",
+            "description": "The assembly's own version.",
+            "nullable": true
+          },
+          "refusal": {
+            "type": "string",
+            "description": "Why it cannot be activated as it stands, or null when it can.",
+            "nullable": true
+          },
+          "canBeActivated": {
+            "type": "boolean",
+            "description": "Whether an administrator can activate it as it stands."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One add-in found in the external directory that nobody has activated, so none of it has run."
       },
       "BlockPullRequestRequest": {
         "type": "object",
@@ -27079,7 +29117,8 @@
         "enum": [
           "clientMonthly",
           "pullRequest",
-          "increment"
+          "increment",
+          "tenantMonthly"
         ],
         "type": "string",
         "description": "The granularity at which a USD budget cap is enforced."
@@ -27157,18 +29196,25 @@
         "type": "object",
         "properties": {
           "scope": {
-            "$ref": "#/components/schemas/BudgetScopeKind"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BudgetScopeKind"
+              }
+            ],
+            "nullable": true
           },
           "capKind": {
             "$ref": "#/components/schemas/BudgetCapKind"
           },
           "thresholdUsd": {
             "type": "number",
-            "format": "double"
+            "format": "double",
+            "nullable": true
           },
           "spentUsd": {
             "type": "number",
-            "format": "double"
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -27391,6 +29437,29 @@
         "additionalProperties": false,
         "description": "Response DTO for `GET /admin/clients/{clientId}/budget/history`: the client's estimated USD spend per\ncalendar month over a trailing window, plus the currently configured monthly caps for comparison. Because\ncaps are not snapshotted historically, the caps describe the current configuration, not the caps that were\nin effect in each past month."
       },
+      "ClientOpenReviewResponse": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "webUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Open pull request details available to a review target."
+      },
       "ClientResponse": {
         "type": "object",
         "properties": {
@@ -27493,6 +29562,9 @@
           },
           "withholdOutOfScopeFindings": {
             "type": "boolean"
+          },
+          "admissionPolicy": {
+            "$ref": "#/components/schemas/ReviewAdmissionPolicyDto"
           }
         },
         "additionalProperties": false,
@@ -27520,6 +29592,63 @@
         },
         "additionalProperties": false,
         "description": "Client-scoped review profile response."
+      },
+      "ClientReviewTargetRepositoryResponse": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "ownerOrNamespace": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerProjectDisplayName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A repository reachable through a verified provider connection."
+      },
+      "ClientReviewTargetResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerScopePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Client review target details."
       },
       "ClientReviewerIdentityDto": {
         "type": "object",
@@ -29560,6 +31689,33 @@
         "additionalProperties": false,
         "description": "Request body for creating a client."
       },
+      "CreateClientReviewTargetRequest": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerScopePath": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Repository coordinates for a client review target."
+      },
       "CreateMentionConfigRequest": {
         "type": "object",
         "properties": {
@@ -29642,6 +31798,21 @@
         },
         "additionalProperties": false,
         "description": "Request to create a prompt override."
+      },
+      "CreateTenantMembershipRequest": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Creates a membership for an existing user."
       },
       "CreateTenantRequest": {
         "type": "object",
@@ -29730,6 +31901,125 @@
         },
         "additionalProperties": false,
         "description": "Create-user request."
+      },
+      "CustomerDashboard": {
+        "type": "object",
+        "properties": {
+          "windowStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "windowEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recentFindingCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "runningReviews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerRunningReview"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Client review activity in a fixed 30-day window. The start is inclusive and the end is exclusive;\nthe finding count uses the completion time of each review job."
+      },
+      "CustomerReviewHistory": {
+        "type": "object",
+        "properties": {
+          "totalCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerReviewHistoryItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A page of persisted client reviews."
+      },
+      "CustomerReviewHistoryItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "repository": {
+            "type": "string",
+            "nullable": true
+          },
+          "pullRequestNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "findingCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Scalar persisted review metadata and its finding count."
+      },
+      "CustomerRunningReview": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "repository": {
+            "type": "string",
+            "nullable": true
+          },
+          "pullRequestNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A review currently processing for the selected client."
       },
       "DiscoverModelsRequest": {
         "required": [
@@ -29916,6 +32206,54 @@
         "additionalProperties": false,
         "description": "A request to mint a registration token."
       },
+      "IssueTenantMachineCredentialRequest": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Metadata required to issue a tenant machine credential."
+      },
+      "IssuedTenantMachineCredential": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "token": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A newly issued credential whose token is returned once."
+      },
       "JobDetailResponse": {
         "type": "object",
         "properties": {
@@ -30000,6 +32338,15 @@
           },
           "resultSummary": {
             "type": "string",
+            "nullable": true
+          },
+          "admissionRefusalReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "heldUntil": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -30148,7 +32495,9 @@
           "superseded",
           "stopped",
           "budgetHeld",
-          "budgetExceeded"
+          "budgetExceeded",
+          "admissionRefused",
+          "admissionHeld"
         ],
         "type": "string",
         "description": "Status of a review job."
@@ -30414,7 +32763,7 @@
         "properties": {
           "key": {
             "type": "string",
-            "description": "The family's identity key, which is what a connection is stored against.",
+            "description": "The family's identity key, which a connection is stored against.",
             "nullable": true
           },
           "label": {
@@ -30464,6 +32813,63 @@
         "additionalProperties": false,
         "description": "One provider family the host loaded from an add-in directory."
       },
+      "LogicalModelReferenceResponse": {
+        "required": [
+          "availability"
+        ],
+        "type": "object",
+        "properties": {
+          "availability": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "remoteModelId": {
+            "type": "string",
+            "nullable": true
+          },
+          "connectionDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "operationKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiOperationKind"
+            },
+            "nullable": true
+          },
+          "supportedProtocolModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "tokenizerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxInputTokens": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "embeddingDimensions": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "verificationStatus": {
+            "$ref": "#/components/schemas/AiVerificationStatus"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Nonsecret model metadata for effective logical-model readiness."
+      },
       "LogicalModelResponse": {
         "type": "object",
         "properties": {
@@ -30496,6 +32902,9 @@
           "scope": {
             "type": "string",
             "nullable": true
+          },
+          "referencedModel": {
+            "$ref": "#/components/schemas/LogicalModelReferenceResponse"
           }
         },
         "additionalProperties": false,
@@ -31046,6 +33455,9 @@
           "withholdOutOfScopeFindings": {
             "type": "boolean",
             "nullable": true
+          },
+          "admissionPolicy": {
+            "$ref": "#/components/schemas/ReviewAdmissionPolicyDto"
           }
         },
         "additionalProperties": false,
@@ -31152,7 +33564,7 @@
             "items": {
               "$ref": "#/components/schemas/AiProtocolModeOptionDto"
             },
-            "description": "The wire shapes this provider's driver can speak, each with the name an operator sees. Sent so the\nconfiguration UI offers only shapes that can actually be called, rather than keeping a second copy of the\ndrivers' knowledge.",
+            "description": "The protocol modes this provider's driver can speak, each with the name an operator sees. Sent so the\nconfiguration UI offers only shapes that can actually be called, rather than keeping a second copy of the\ndrivers' knowledge.",
             "nullable": true
           },
           "authModes": {
@@ -31160,7 +33572,7 @@
             "items": {
               "$ref": "#/components/schemas/AiAuthModeOptionDto"
             },
-            "description": "The credential shapes this provider's driver can authenticate with, each with the name an operator sees.\nSent for the same reason as the wire shapes. Families differ here — an Azure resource takes a managed\nidentity, Bedrock signs with an access key, Anthropic reads an `x-api-key` header — and a UI holding\nits own copy of that offers modes the family cannot read.",
+            "description": "The authentication modes this provider's driver can authenticate with, each with the name an operator sees.\nSent for the same reason as the protocol modes. Families differ here — an Azure resource takes a managed\nidentity, Bedrock signs with an access key, Anthropic reads an `x-api-key` header — and a UI holding\nits own copy of that offers modes the family cannot read.",
             "nullable": true
           },
           "credentialFields": {
@@ -31171,7 +33583,7 @@
                 "$ref": "#/components/schemas/ProviderCredentialField"
               }
             },
-            "description": "The fields each of those credential shapes needs, keyed by mode. A credential is one key for most\nfamilies and several values for some — an access key id and a secret access key, a service-account\ndocument — so a form that assumed one input could not configure them at all. Sent with the modes because\nthe two are answered together: choosing a mode is choosing which of these to fill in.",
+            "description": "The fields each of those authentication modes needs, keyed by mode. A credential is one key for most\nfamilies and several values for some — an access key id and a secret access key, a service-account\ndocument — so a form that assumed one input could not configure them at all. Sent with the modes because\nthe two are answered together: choosing a mode is choosing which of these to fill in.",
             "nullable": true
           },
           "declaredFields": {
@@ -33308,6 +35720,52 @@
         "additionalProperties": false,
         "description": "Global provider-family activation status for installation-wide administration."
       },
+      "ProviderAddInActivationDto": {
+        "type": "object",
+        "properties": {
+          "contentHash": {
+            "type": "string",
+            "description": "The bytes that were activated.",
+            "nullable": true
+          },
+          "key": {
+            "type": "string",
+            "description": "The identity the add-in stated at the time.",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "What it called itself at the time.",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "description": "The version it stated at the time.",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Where the file sat at the time.",
+            "nullable": true
+          },
+          "activatedByDisplayName": {
+            "type": "string",
+            "description": "The administrator who decided.",
+            "nullable": true
+          },
+          "activatedAt": {
+            "type": "string",
+            "description": "When they decided.",
+            "format": "date-time"
+          },
+          "isServing": {
+            "type": "boolean",
+            "description": "Whether that add-in is one this host is running now. False for an activation whose file has since been\nreplaced or removed, and for one revoked since the host started."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One decision an administrator made to let this host run an add-in binary."
+      },
       "ProviderAddInInventoryDto": {
         "type": "object",
         "properties": {
@@ -33325,6 +35783,13 @@
               "$ref": "#/components/schemas/RejectedProviderAddInDto"
             },
             "description": "The assemblies that were skipped, each with why.",
+            "nullable": true
+          },
+          "awaiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AwaitingProviderAddInDto"
+            },
             "nullable": true
           }
         },
@@ -33806,6 +36271,15 @@
         "additionalProperties": false,
         "description": "A queue that has work nothing is taking."
       },
+      "ReasoningCapturePolicy": {
+        "enum": [
+          "installationDefault",
+          "enabled",
+          "disabled"
+        ],
+        "type": "string",
+        "description": "Whether a tenant's review jobs capture the model's reasoning into the protocol. Reasoning can contain\nverbatim source excerpts, so a processor operating one installation for several controllers needs the\nchoice per tenant instead of only installation-wide."
+      },
       "RefreshRequest": {
         "type": "object",
         "properties": {
@@ -34133,6 +36607,38 @@
         },
         "additionalProperties": false,
         "description": "A retained discussion thread for a pull request, with its comments, for the in-app PR view."
+      },
+      "ReviewAdmissionPolicyDto": {
+        "type": "object",
+        "properties": {
+          "maxChangedFiles": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxChangedLines": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxDiffBytes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxReviewsPerPullRequestPerHour": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxRepositoryMegabytes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A client's review admission bounds. Every bound is optional; a null bound means that dimension is\nunbounded. A review measured past a bound is refused before any model call, with the measured value and\nthe bound named in the notice posted on the pull request. The reviews-per-hour bound holds a job instead\nof refusing it, and releases it once the window has passed."
       },
       "ReviewByCoordinatesResponse": {
         "type": "object",
@@ -34967,7 +37473,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "The portable slice of a relayed completion's options.\n\nThe review pipeline shapes every call with tools, a temperature, an output ceiling, and reasoning\n    settings. On the runner those live in an in-memory options object that cannot be serialized,\n    because the tools carry their implementations. This record therefore carries the parts the\n    provider needs to see: each tool as a declaration (name, description, parameter schema) and the\n    reasoning settings in neutral terms. A relay that dropped any of this would turn a tool-using\n    review into a single-turn review, which is what happened before the options were sent."
+        "description": "The portable slice of a relayed completion's options.\n\nThe review pipeline shapes every call with tools, a temperature, an output ceiling, and reasoning\n    settings. On the runner those live in an in-memory options object that cannot be serialized,\n    because the tools carry their implementations. This record therefore carries the parts the\n    provider needs to see: each tool as a declaration (name, description, parameter schema) and the\n    reasoning settings in neutral terms. A relay that dropped any of this would turn a tool-using\n    review into a single-turn review, which happened before the options were sent."
       },
       "RunnerChatRequest": {
         "type": "object",
@@ -35803,7 +38309,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "A model the executor may call, named rather than connected.\n\nThe relay resolves LogicalModelName to a connection and a credential on the\n    control-plane side, which is what keeps the key off the executor. Everything else here is\n    non-secret description the pipeline needs before it makes a call: which tokenizer counts the\n    prompt, what fits in the context window, and which behaviours the model supports."
+        "description": "A model the executor may call, named rather than connected.\n\nThe relay resolves LogicalModelName to a connection and a credential on the\n    control-plane side, and that keeps the key off the executor. Everything else here is\n    non-secret description the pipeline needs before it makes a call: which tokenizer counts the\n    prompt, what fits in the context window, and which behaviours the model supports."
       },
       "RunnerPromptConfiguration": {
         "type": "object",
@@ -36103,6 +38609,21 @@
           "reviewPipelineProfileId": {
             "type": "string",
             "description": "The pipeline profile the review runs under, when one is configured.",
+            "nullable": true
+          },
+          "captureReasoning": {
+            "type": "boolean",
+            "description": "Whether this job may record the model's reasoning into the trace and ask the provider for a reasoning\nsummary. Reasoning can contain verbatim source, so the decision belongs to the tenant that owns the job\nand is made on the control plane. Null from an older control plane leaves the runner's own switch in\ncharge, which is how the review behaved before the field existed.",
+            "nullable": true
+          },
+          "maxFileSizeBytes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxStructuralParseBytes": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         },
@@ -36765,6 +39286,23 @@
         "additionalProperties": false,
         "description": "Tenant-authenticated session payload returned by tenant login endpoints."
       },
+      "TenantBudgetConfigDto": {
+        "type": "object",
+        "properties": {
+          "monthlySoftCapUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "monthlyHardCapUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A tenant's monthly USD budget caps, covering the month-to-date spend of every client in the tenant. Both\nvalues are optional; a null cap means no limit. The soft cap stops admitting new review jobs, the hard cap\ncuts further model calls. The tenant scope is evaluated after the client scopes, so a tighter client cap\nbinds first."
+      },
       "TenantBudgetOverviewClientDto": {
         "type": "object",
         "properties": {
@@ -36903,6 +39441,10 @@
             "description": "When the tenant was last updated.",
             "format": "date-time"
           },
+          "installationDefaultCapturesReasoning": {
+            "type": "boolean",
+            "description": "The current value of the installation-wide reasoning-capture switch, so a console can name what the\ninstallation default does for this tenant. Stated on every construction and carrying no default of its\nown: a caller that omitted it would report a switch value it never read."
+          },
           "allowedAiProviderKinds": {
             "type": "array",
             "items": {
@@ -36926,6 +39468,15 @@
             },
             "description": "Permitted-family entries no loaded family claims, as they are stored. They permit no family, so a tenant\nwith entries here and none in AllowedAiProviderKinds refuses every provider. Reported\nso an operator can see which entry has to be corrected, and named on a write to remove one.",
             "nullable": true
+          },
+          "reasoningCapturePolicy": {
+            "$ref": "#/components/schemas/ReasoningCapturePolicy"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/TenantBudgetConfigDto"
+          },
+          "reviewLimits": {
+            "$ref": "#/components/schemas/TenantReviewLimitsDto"
           }
         },
         "additionalProperties": false,
@@ -36990,6 +39541,39 @@
         "additionalProperties": false,
         "description": "Public metadata for an enabled tenant-owned sign-in provider."
       },
+      "TenantMachineCredentialSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Credential metadata returned without the issued token or verifier."
+      },
       "TenantMemberClientAccessDto": {
         "type": "object",
         "properties": {
@@ -37052,6 +39636,23 @@
         },
         "additionalProperties": false,
         "description": "Tenant membership data returned by administration flows."
+      },
+      "TenantReviewLimitsDto": {
+        "type": "object",
+        "properties": {
+          "maxFileSizeBytes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxStructuralParseBytes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A tenant's per-file byte limits for reviews. Both values are optional; a null value leaves the\ninstallation value in force. They bound what one file may contribute to a review, so they protect the\nhost that runs it."
       },
       "TenantRole": {
         "enum": [
@@ -37124,6 +39725,18 @@
             "type": "string",
             "description": "When the most recent manual spend reset in this period was performed (UTC), or null when none.",
             "format": "date-time",
+            "nullable": true
+          },
+          "tenantMonthlySoftCapUsd": {
+            "type": "number",
+            "description": "The tenant's own monthly soft cap, or null when the tenant has no soft cap. Unlike\nMonthlySoftCapUsd this is a ceiling enforcement applies to the tenant's aggregate spend.",
+            "format": "double",
+            "nullable": true
+          },
+          "tenantMonthlyHardCapUsd": {
+            "type": "number",
+            "description": "The tenant's own monthly hard cap, or null when the tenant has no hard cap.",
+            "format": "double",
             "nullable": true
           }
         },
@@ -37611,6 +40224,15 @@
             },
             "description": "Permitted-family entries no loaded family claims, to remove from the policy. They are reported on the\ntenant as `unresolvedAiProviderKinds`, and AllowedAiProviderKinds carries only\nentries a loaded family claims, so naming one here is how it is removed. Anything not named here survives\nthe write, so a removal cannot happen as a side effect of saving the families. An entry the tenant does\nnot hold is ignored.",
             "nullable": true
+          },
+          "reasoningCapturePolicy": {
+            "$ref": "#/components/schemas/ReasoningCapturePolicy"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/TenantBudgetConfigDto"
+          },
+          "reviewLimits": {
+            "$ref": "#/components/schemas/TenantReviewLimitsDto"
           }
         },
         "additionalProperties": false,
@@ -38148,6 +40770,9 @@
       "name": "ClientReviewerIdentities"
     },
     {
+      "name": "ClientReviewTargets"
+    },
+    {
       "name": "Clients"
     },
     {
@@ -38230,6 +40855,9 @@
     },
     {
       "name": "TenantLogicalModels"
+    },
+    {
+      "name": "TenantMachineCredentials"
     },
     {
       "name": "TenantMemberClientAccess"

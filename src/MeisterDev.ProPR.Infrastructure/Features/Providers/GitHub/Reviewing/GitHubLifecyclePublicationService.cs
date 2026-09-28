@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -22,6 +23,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 internal sealed partial class GitHubLifecyclePublicationService(
     GitHubConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory,
+    IPostedCommentComposer composer,
     ILogger<GitHubLifecyclePublicationService>? logger = null)
 {
     // Read across pages from pageInfo, matching the thread read path. A pull request past a hundred threads
@@ -50,7 +52,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
         activity?.SetTag("publication.author.login", author.Login);
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
-        var payload = BuildPayload(review, revision, result, author);
+        var payload = BuildPayload(review, revision, result, author, composer);
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             GitHubConnectionVerifier.BuildApiUri(
@@ -299,8 +301,11 @@ internal sealed partial class GitHubLifecyclePublicationService(
         CodeReviewRef review,
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity author)
+        ReviewerIdentity author,
+        IPostedCommentComposer composer)
     {
+        ArgumentNullException.ThrowIfNull(composer);
+
         var summaryBuilder = new StringBuilder();
         summaryBuilder.AppendLine($"## {author.DisplayName} Review");
         summaryBuilder.AppendLine();
@@ -317,7 +322,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
                         NormalizePath(comment.FilePath),
                         comment.LineNumber.Value,
                         "RIGHT",
-                        $"{FormatSeverity(comment.Severity)}: {comment.Message}"));
+                        composer.Append($"{FormatSeverity(comment.Severity)}: {comment.Message}")));
             }
             else
             {
@@ -330,7 +335,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
         return new GitHubReviewRequest(
             revision.HeadSha,
-            summaryBuilder.ToString().Trim(),
+            composer.Append(summaryBuilder.ToString().Trim()),
             "COMMENT",
             inlineComments);
     }

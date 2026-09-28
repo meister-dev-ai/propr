@@ -276,12 +276,13 @@ public sealed class AiReviewOptions
     public int StructuralParseTimeoutMs { get; set; } = 200;
 
     /// <summary>
-    ///     Maximum source size, in bytes, the structural analyzer will accept (R8 step 1).
+    ///     Maximum source size, in bytes, the structural analyzer will accept.
     ///     Files larger than this skip parsing with <see cref="FallbackReason.FileTooLarge" />.
-    ///     Bound to <c>AI_MAX_STRUCTURAL_PARSE_BYTES</c>.
+    ///     The default matches the default of <see cref="MaxFileSizeBytes" />, so the analyzer parses every
+    ///     file the reviewer may read. Bound to <c>AI_MAX_STRUCTURAL_PARSE_BYTES</c>.
     /// </summary>
     [Range(1024, 5_242_880, ErrorMessage = "MaxStructuralParseBytes must be between 1024 and 5242880.")]
-    public int MaxStructuralParseBytes { get; set; } = 524_288;
+    public int MaxStructuralParseBytes { get; set; } = 1_048_576;
 
     /// <summary>
     ///     Kill-switch for the cross-file structural reference surface: the

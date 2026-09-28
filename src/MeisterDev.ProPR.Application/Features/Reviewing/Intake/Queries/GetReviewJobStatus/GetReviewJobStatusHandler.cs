@@ -16,7 +16,9 @@ public sealed class GetReviewJobStatusHandler(IReviewJobIntakeStore intakeStore)
         GetReviewJobStatusQuery query,
         CancellationToken cancellationToken = default)
     {
-        var job = await intakeStore.GetByIdAsync(query.JobId, cancellationToken);
+        var job = query.ExpectedClientId is { } clientId
+            ? await intakeStore.GetForClientAsync(clientId, query.JobId, cancellationToken)
+            : await intakeStore.GetByIdAsync(query.JobId, cancellationToken);
         if (job is null)
         {
             return null;

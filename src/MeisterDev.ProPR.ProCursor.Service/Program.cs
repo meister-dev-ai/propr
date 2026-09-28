@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.DataProtection;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterDev.ProPR.Observability;
 using MeisterDev.ProPR.ProCursor.HealthChecks;
@@ -78,14 +79,8 @@ try
 
     builder.Services.AddHostedService<ProCursorRuntimeConfigurationWarmupService>();
 
-    var dataProtectionBuilder = builder.Services.AddDataProtection()
-        .SetApplicationName("MeisterProPR");
-    var dataProtectionKeysPath = builder.Configuration["MEISTER_DATA_PROTECTION_KEYS_PATH"];
-    if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
-    {
-        Directory.CreateDirectory(dataProtectionKeysPath);
-        dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
-    }
+    // The same set-up the API composes, so both hosts read the key ring the other protected.
+    builder.Services.AddMeisterDataProtection(builder.Configuration);
 
     builder.Services.AddAuthentication(ProCursorSharedKeyAuthenticationDefaults.Scheme)
         .AddScheme<AuthenticationSchemeOptions, ProCursorSharedKeyAuthenticationHandler>(

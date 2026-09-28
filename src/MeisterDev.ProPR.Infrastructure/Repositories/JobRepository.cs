@@ -4,6 +4,7 @@
 
 using System.Linq.Expressions;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -14,6 +15,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Logging;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
@@ -78,7 +80,57 @@ public sealed partial class JobRepository(
     // cancels them, and intake treats them as an existing job rather than creating a duplicate. Budget-held and
     // budget-exceeded jobs are waiting on a manual restart, so they remain live for these purposes.
     private static readonly JobStatus[] ActiveJobStatuses =
-        [JobStatus.Pending, JobStatus.Processing, JobStatus.BudgetHeld, JobStatus.BudgetExceeded];
+        [JobStatus.Pending, JobStatus.Processing, JobStatus.BudgetHeld, JobStatus.BudgetExceeded, JobStatus.AdmissionHeld];
+
+    // The columns each conditional statement below decides. A tracked copy takes these from the row the
+    // statement wrote even when its caller has edited them, because an edit left in place is saved back
+    // afterwards and undoes the transition.
+    private static readonly string[] StatusStatementProperties = [nameof(ReviewJob.Status)];
+
+    private static readonly string[] ClaimStatementProperties =
+        [nameof(ReviewJob.Status), nameof(ReviewJob.ProcessingStartedAt)];
+
+    private static readonly string[] RequeueStatementProperties =
+    [
+        nameof(ReviewJob.Status),
+        nameof(ReviewJob.LeaseOwner),
+        nameof(ReviewJob.LeaseExpiresAt),
+        nameof(ReviewJob.LastHeartbeatAt),
+    ];
+
+    private static readonly string[] AdmissionHoldStatementProperties =
+    [
+        nameof(ReviewJob.Status),
+        nameof(ReviewJob.HeldUntil),
+        nameof(ReviewJob.AdmissionRefusalReason),
+        nameof(ReviewJob.LeaseOwner),
+        nameof(ReviewJob.LeaseExpiresAt),
+        nameof(ReviewJob.LastHeartbeatAt),
+    ];
+
+    private static readonly string[] AdmissionRefusalStatementProperties =
+    [
+        nameof(ReviewJob.Status),
+        nameof(ReviewJob.AdmissionRefusalReason),
+        nameof(ReviewJob.AdmissionPolicyFingerprint),
+        nameof(ReviewJob.HeldUntil),
+        nameof(ReviewJob.CompletedAt),
+        nameof(ReviewJob.LeaseOwner),
+        nameof(ReviewJob.LeaseExpiresAt),
+        nameof(ReviewJob.LastHeartbeatAt),
+    ];
+
+    private static readonly string[] HoldReleaseStatementProperties =
+        [nameof(ReviewJob.Status), nameof(ReviewJob.HeldUntil)];
+
+    private static readonly string[] SupersedeStatementProperties =
+    [
+        nameof(ReviewJob.Status),
+        nameof(ReviewJob.CompletedAt),
+        nameof(ReviewJob.LeaseOwner),
+        nameof(ReviewJob.LeaseExpiresAt),
+        nameof(ReviewJob.LastHeartbeatAt),
+    ];
 
     /// <inheritdoc />
     public async Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
@@ -99,23 +151,35 @@ public sealed partial class JobRepository(
             candidates = candidates.Where(j => j.PublishingStartedAt == null);
         }
 
-        var affected = to == JobStatus.Processing
-            ? await candidates.ExecuteUpdateAsync(
+        int affected;
+        string[] statementProperties;
+        if (to == JobStatus.Processing)
+        {
+            affected = await candidates.ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(j => j.Status, to)
                     .SetProperty(j => j.ProcessingStartedAt, DateTimeOffset.UtcNow),
-                ct)
-            : from == JobStatus.Processing && to == JobStatus.Pending
-                // A requeued job goes back to the pool clean. Left stamped, the lease columns make a
-                // Pending job read as held, and the next claim inherits state from an attempt that is over.
-                ? await candidates.ExecuteUpdateAsync(
-                    setters => setters
-                        .SetProperty(j => j.Status, to)
-                        .SetProperty(j => j.LeaseOwner, (string?)null)
-                        .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
-                        .SetProperty(j => j.LastHeartbeatAt, (DateTimeOffset?)null),
-                    ct)
-                : await candidates.ExecuteUpdateAsync(setters => setters.SetProperty(j => j.Status, to), ct);
+                ct);
+            statementProperties = ClaimStatementProperties;
+        }
+        else if (from == JobStatus.Processing && to == JobStatus.Pending)
+        {
+            // A requeued job goes back to the pool clean. Left stamped, the lease columns make a
+            // Pending job read as held, and the next claim inherits state from an attempt that is over.
+            affected = await candidates.ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.Status, to)
+                    .SetProperty(j => j.LeaseOwner, (string?)null)
+                    .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                    .SetProperty(j => j.LastHeartbeatAt, (DateTimeOffset?)null),
+                ct);
+            statementProperties = RequeueStatementProperties;
+        }
+        else
+        {
+            affected = await candidates.ExecuteUpdateAsync(setters => setters.SetProperty(j => j.Status, to), ct);
+            statementProperties = StatusStatementProperties;
+        }
 
         if (affected == 0)
         {
@@ -124,12 +188,7 @@ public sealed partial class JobRepository(
 
         // That statement went straight to the database, so a copy this context happens to be tracking still
         // holds the old status, and callers hand exactly that instance on to execution.
-        var tracked = dbContext.ChangeTracker.Entries<ReviewJob>()
-            .FirstOrDefault(entry => entry.Entity.Id == id);
-        if (tracked is not null)
-        {
-            await tracked.ReloadAsync(ct).ConfigureAwait(false);
-        }
+        await this.ReloadTrackedAsync(id, statementProperties, ct).ConfigureAwait(false);
 
         if (from == JobStatus.Processing && to == JobStatus.Pending)
         {
@@ -660,7 +719,7 @@ public sealed partial class JobRepository(
     public async Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (job is null || job.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.AdmissionRefused)
         {
             // Never overwrite a deliberate terminal decision (a manual stop, a PR-abandoned cancel, or a
             // supersede) with a late failure from an execution that had already passed its status checkpoints.
@@ -692,7 +751,7 @@ public sealed partial class JobRepository(
     public async Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (job is null || job.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.AdmissionRefused)
         {
             // Never overwrite a deliberate terminal decision (a manual stop, a PR-abandoned cancel, or a
             // supersede) with a late completion — in a multi-instance deployment the running instance may not
@@ -981,7 +1040,8 @@ public sealed partial class JobRepository(
     public async Task SetCancelledAsync(Guid id, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped
+                or JobStatus.AdmissionRefused)
         {
             return;
         }
@@ -997,7 +1057,8 @@ public sealed partial class JobRepository(
     public async Task SetSupersededAsync(Guid id, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped
+                or JobStatus.AdmissionRefused)
         {
             return;
         }
@@ -1010,10 +1071,122 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
+    public async Task<SupersededReviewJobState?> TrySupersedeAsync(
+        Guid id,
+        JobStatus expectedStatus,
+        CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null || job.Status != expectedStatus)
+        {
+            return null;
+        }
+
+        // Read before the write: once the job is retired the row no longer says what it is to be put back to.
+        var previous = new SupersededReviewJobState(
+            job.Status,
+            job.CompletedAt,
+            job.LeaseOwner,
+            job.LeaseExpiresAt,
+            job.LastHeartbeatAt);
+
+        if (!dbContext.Database.IsRelational())
+        {
+            job.Status = JobStatus.Superseded;
+            job.CompletedAt = DateTimeOffset.UtcNow;
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
+            await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+            return previous;
+        }
+
+        // The status the retirement depends on is carried in the statement's predicate, so of two callers that
+        // both read the same job exactly one is told it retired it, and the other leaves it alone.
+        var affected = await dbContext.ReviewJobs
+            .Where(j => j.Id == id && j.Status == expectedStatus)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.Status, JobStatus.Superseded)
+                    .SetProperty(j => j.CompletedAt, DateTimeOffset.UtcNow)
+                    .SetProperty(j => j.LeaseOwner, (string?)null)
+                    .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                    .SetProperty(j => j.LastHeartbeatAt, (DateTimeOffset?)null),
+                ct)
+            .ConfigureAwait(false);
+        if (affected == 0)
+        {
+            return null;
+        }
+
+        await this.ReloadTrackedAsync(id, SupersedeStatementProperties, ct).ConfigureAwait(false);
+        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+        return previous;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryRestoreSupersededAsync(
+        Guid id,
+        SupersededReviewJobState state,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        if (!dbContext.Database.IsRelational())
+        {
+            var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+            if (job is null || job.Status != JobStatus.Superseded)
+            {
+                return false;
+            }
+
+            job.Status = state.Status;
+            job.CompletedAt = state.CompletedAt;
+            RestoreLease(job, state);
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+
+        // Conditional on the job still being superseded: a webhook that cancelled it in the meantime decided a
+        // status of its own, and putting the old one back would bring the job to life again.
+        var affected = await dbContext.ReviewJobs
+            .Where(j => j.Id == id && j.Status == JobStatus.Superseded)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.Status, state.Status)
+                    .SetProperty(j => j.CompletedAt, state.CompletedAt)
+                    .SetProperty(j => j.LeaseOwner, state.LeaseOwner)
+                    .SetProperty(j => j.LeaseExpiresAt, state.LeaseExpiresAt)
+                    .SetProperty(j => j.LastHeartbeatAt, state.LastHeartbeatAt),
+                ct)
+            .ConfigureAwait(false);
+        if (affected == 0)
+        {
+            return false;
+        }
+
+        await this.ReloadTrackedAsync(id, SupersedeStatementProperties, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    private static void RestoreLease(ReviewJob job, SupersededReviewJobState state)
+    {
+        if (state.LeaseOwner is { } owner
+            && state.LeaseExpiresAt is { } expiresAt
+            && state.LastHeartbeatAt is { } lastHeartbeatAt)
+        {
+            job.ApplyLease(owner, Math.Max(job.LeaseGeneration, 1), expiresAt, lastHeartbeatAt);
+            return;
+        }
+
+        job.ClearLease();
+    }
+
+    /// <inheritdoc />
     public async Task SetStoppedAsync(Guid id, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped
+                or JobStatus.AdmissionRefused)
         {
             return;
         }
@@ -1028,14 +1201,15 @@ public sealed partial class JobRepository(
     /// <inheritdoc />
     public async Task SetBudgetExceededAsync(
         Guid id,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped
+                or JobStatus.AdmissionRefused)
         {
             // Never overwrite a deliberate terminal decision with a late budget cut.
             return;
@@ -1069,6 +1243,196 @@ public sealed partial class JobRepository(
         job.Status = JobStatus.BudgetHeld;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
         await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SetAdmissionHeldAsync(Guid id, DateTimeOffset heldUntil, CancellationToken ct = default)
+    {
+        if (!dbContext.Database.IsRelational())
+        {
+            // The in-memory provider, which nothing but the controller tests are composed with: the
+            // application is configured with PostgreSQL. It has no statement form and no second writer to
+            // race, so reading the job, checking its status and saving it back stands in for the conditional
+            // statement below. The refusal and the hold release further down take the same path for the same
+            // reason.
+            var tracked = await dbContext.ReviewJobs.FindAsync([id], ct);
+            if (tracked is null || tracked.Status != JobStatus.Pending)
+            {
+                return;
+            }
+
+            tracked.SetAdmissionHold(heldUntil);
+            tracked.Status = JobStatus.AdmissionHeld;
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            await this.ClearLeaseAsync(tracked, ct).ConfigureAwait(false);
+            return;
+        }
+
+        // A job is held only from the queued state, before it is claimed for processing, and the status the
+        // hold depends on is carried in the statement's predicate. Reading the row, comparing its status here
+        // and saving it back would let this write land on a job another worker had already claimed, and the
+        // lease clear below would then take that worker's lease away.
+        var affected = await dbContext.ReviewJobs
+            .Where(j => j.Id == id && j.Status == JobStatus.Pending)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.Status, JobStatus.AdmissionHeld)
+                    .SetProperty(j => j.HeldUntil, heldUntil)
+                    .SetProperty(j => j.AdmissionRefusalReason, (string?)null)
+                    .SetProperty(j => j.LeaseOwner, (string?)null)
+                    .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                    .SetProperty(j => j.LastHeartbeatAt, (DateTimeOffset?)null),
+                ct)
+            .ConfigureAwait(false);
+        if (affected == 1)
+        {
+            await this.ReloadTrackedAsync(id, AdmissionHoldStatementProperties, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetAdmissionRefusedAsync(Guid id, string reason, string? policyFingerprint, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        if (!dbContext.Database.IsRelational())
+        {
+            var tracked = await dbContext.ReviewJobs.FindAsync([id], ct);
+            if (tracked is null || !ActiveJobStatuses.Contains(tracked.Status))
+            {
+                return false;
+            }
+
+            tracked.SetAdmissionRefusal(reason, policyFingerprint);
+            tracked.Status = JobStatus.AdmissionRefused;
+            tracked.CompletedAt = DateTimeOffset.UtcNow;
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            await this.ClearLeaseAsync(tracked, ct).ConfigureAwait(false);
+
+            // A refusal is a terminal transition, and every terminal transition closes the protocols the job
+            // still has open, so no pass is left recorded as running.
+            await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+            return true;
+        }
+
+        // A job that already reached a terminal status keeps the outcome it reached, and the statement decides
+        // that: exactly one caller sees a row change, so a re-dispatch of the same revision posts no second
+        // notice.
+        var affected = await dbContext.ReviewJobs
+            .Where(j => j.Id == id && ActiveJobStatuses.Contains(j.Status))
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.Status, JobStatus.AdmissionRefused)
+                    .SetProperty(j => j.AdmissionRefusalReason, reason)
+                    .SetProperty(j => j.AdmissionPolicyFingerprint, policyFingerprint)
+                    .SetProperty(j => j.HeldUntil, (DateTimeOffset?)null)
+                    .SetProperty(j => j.CompletedAt, DateTimeOffset.UtcNow)
+                    .SetProperty(j => j.LeaseOwner, (string?)null)
+                    .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                    .SetProperty(j => j.LastHeartbeatAt, (DateTimeOffset?)null),
+                ct)
+            .ConfigureAwait(false);
+        if (affected != 1)
+        {
+            return false;
+        }
+
+        await this.ReloadTrackedAsync(id, AdmissionRefusalStatementProperties, ct).ConfigureAwait(false);
+        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ReleaseDueAdmissionHoldsAsync(DateTimeOffset now, CancellationToken ct = default)
+    {
+        if (!dbContext.Database.IsRelational())
+        {
+            var due = await dbContext.ReviewJobs
+                .Where(j => j.Status == JobStatus.AdmissionHeld && j.HeldUntil != null && j.HeldUntil <= now)
+                .ToListAsync(ct);
+            if (due.Count == 0)
+            {
+                return 0;
+            }
+
+            foreach (var job in due)
+            {
+                job.ClearAdmissionHold();
+                job.Status = JobStatus.Pending;
+            }
+
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            return due.Count;
+        }
+
+        // The jobs this context tracks that the statement below is about to change. Read first, because once
+        // the statement has run their stored status no longer says which ones it covered.
+        var held = dbContext.ChangeTracker.Entries<ReviewJob>()
+            .Where(entry => entry.Entity.Status == JobStatus.AdmissionHeld
+                            && entry.Entity.HeldUntil is { } heldUntil
+                            && heldUntil <= now)
+            .ToList();
+
+        // One conditional statement, so a job a webhook cancelled or superseded between the read and the write
+        // is no longer AdmissionHeld and stays out of the update. Materialising the due jobs and saving them
+        // back would write Pending over that terminal status and bring the job back to life.
+        var released = await dbContext.ReviewJobs
+            .Where(j => j.Status == JobStatus.AdmissionHeld && j.HeldUntil != null && j.HeldUntil <= now)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.Status, JobStatus.Pending)
+                    .SetProperty(j => j.HeldUntil, (DateTimeOffset?)null),
+                ct)
+            .ConfigureAwait(false);
+        if (released > 0)
+        {
+            // Those statements went straight to the database, so the released jobs this context tracks still
+            // read the status they had before. Only they are brought up to date: clearing the whole tracker
+            // would drop every other entity in this context, including unsaved changes a caller sharing it
+            // is holding.
+            foreach (var entry in held)
+            {
+                await RefreshTrackedAsync(entry, HoldReleaseStatementProperties, ct).ConfigureAwait(false);
+            }
+        }
+
+        return released;
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewSubmissionWindow> GetSubmissionWindowAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        DateTimeOffset since,
+        Guid excludeJobId,
+        CancellationToken ct = default)
+    {
+        // Count and oldest submission in one aggregate, so the hold the caller derives from them describes the
+        // same set of rows. The bound is on reviews an AI performed, so a job counts once a model call was
+        // made for it: while it is processing, and afterwards whatever status it reached, because its token
+        // aggregates then record the calls. A job still queued, a job refused, a job still held and a job that
+        // ended before its first model call cost nothing, so none of them takes a place in the hour.
+        var window = await dbContext.ReviewJobs
+            .AsNoTracking()
+            .Where(j => j.ClientId == clientId
+                        && j.OrganizationUrl == organizationUrl
+                        && j.ProjectId == projectId
+                        && j.RepositoryId == repositoryId
+                        && j.PullRequestId == pullRequestId
+                        && j.SubmittedAt >= since
+                        && j.Id != excludeJobId
+                        && (j.Status == JobStatus.Processing
+                            || j.TotalInputTokensAggregated > 0
+                            || j.TotalOutputTokensAggregated > 0))
+            .GroupBy(_ => 1)
+            .Select(grouped => new ReviewSubmissionWindow(grouped.Count(), grouped.Min(j => (DateTimeOffset?)j.SubmittedAt)))
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        return window ?? ReviewSubmissionWindow.Empty;
     }
 
     /// <inheritdoc />
@@ -1235,6 +1599,62 @@ public sealed partial class JobRepository(
             ReviewRevisionKeys.GetStoredKey(revision, latest.IterationId),
             revision,
             latest.IterationId);
+    }
+
+    /// <inheritdoc />
+    public async Task<RefusedReviewAdmission?> GetLatestRefusedAdmissionAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct = default)
+    {
+        // Only the revision columns and the recorded bounds are read, for the same reason the engaged-revision
+        // query reads only those: this runs on the crawl hot path, and materializing the entity would
+        // deserialize each past review's whole finding payload to compare two strings.
+        var latest = await dbContext.ReviewJobs
+            .AsNoTracking()
+            .Where(j => j.ClientId == clientId &&
+                        j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        j.RepositoryId == repositoryId &&
+                        j.PullRequestId == pullRequestId &&
+                        j.Status == JobStatus.AdmissionRefused)
+            .OrderByDescending(j => j.SubmittedAt)
+            .ThenByDescending(j => j.IterationId)
+            .Select(j => new
+            {
+                j.RevisionHeadSha,
+                j.RevisionBaseSha,
+                j.RevisionStartSha,
+                j.ProviderRevisionId,
+                j.ReviewPatchIdentity,
+                j.IterationId,
+                j.AdmissionPolicyFingerprint,
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (latest is null)
+        {
+            return null;
+        }
+
+        // Mirrors ReviewJob.ReviewRevisionReference: a revision without both shas was never recorded, and the
+        // iteration id carries the whole identity.
+        var revision = string.IsNullOrWhiteSpace(latest.RevisionHeadSha)
+                       || string.IsNullOrWhiteSpace(latest.RevisionBaseSha)
+            ? null
+            : new ReviewRevision(
+                latest.RevisionHeadSha,
+                latest.RevisionBaseSha,
+                latest.RevisionStartSha,
+                latest.ProviderRevisionId,
+                latest.ReviewPatchIdentity);
+
+        return new RefusedReviewAdmission(
+            ReviewRevisionKeys.GetStoredKey(revision, latest.IterationId),
+            latest.AdmissionPolicyFingerprint);
     }
 
     /// <inheritdoc />
@@ -1438,6 +1858,65 @@ public sealed partial class JobRepository(
     ///     loaded the job beforehand holds a snapshot in which they are still empty, and clearing them in
     ///     memory would look like no change at all.
     /// </summary>
+    // A conditional statement writes straight to the database, so a copy this context happens to be tracking
+    // still holds the status the row had before it ran, and callers hand exactly that instance on.
+    private async Task ReloadTrackedAsync(Guid id, IReadOnlyCollection<string> statementProperties, CancellationToken ct)
+    {
+        var tracked = dbContext.ChangeTracker.Entries<ReviewJob>()
+            .FirstOrDefault(entry => entry.Entity.Id == id);
+        if (tracked is not null)
+        {
+            await RefreshTrackedAsync(tracked, statementProperties, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Brings one tracked job up to date with the row a conditional statement has just changed.
+    /// </summary>
+    /// <remarks>
+    ///     A plain reload overwrites every property with the stored value, including edits a caller sharing
+    ///     this context has made and not saved yet, and those edits are then lost without an error. So an
+    ///     entry carrying edits keeps its own pending values, except for the columns the statement decided:
+    ///     those are taken from the row whatever the entry holds for them, because an edit left in place is
+    ///     written back by the next save and undoes the transition.
+    /// </remarks>
+    private static async Task RefreshTrackedAsync(
+        EntityEntry<ReviewJob> entry,
+        IReadOnlyCollection<string> statementProperties,
+        CancellationToken ct)
+    {
+        if (entry.State == EntityState.Unchanged)
+        {
+            await entry.ReloadAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (entry.State != EntityState.Modified)
+        {
+            // An added or deleted entry has no stored row this statement could have changed.
+            return;
+        }
+
+        var stored = await entry.GetDatabaseValuesAsync(ct).ConfigureAwait(false);
+        if (stored is null)
+        {
+            // The row is gone, so nothing this entry holds describes it any more.
+            entry.State = EntityState.Detached;
+            return;
+        }
+
+        var refreshed = entry.Properties
+            .Where(property => !property.Metadata.IsPrimaryKey()
+                               && (!property.IsModified || statementProperties.Contains(property.Metadata.Name)))
+            .ToList();
+        foreach (var property in refreshed)
+        {
+            property.CurrentValue = stored[property.Metadata];
+        }
+
+        entry.OriginalValues.SetValues(stored);
+    }
+
     private async Task ClearLeaseAsync(ReviewJob job, CancellationToken ct)
     {
         job.ClearLease();

@@ -64,6 +64,77 @@
                 <span v-if="saveError" class="error">{{ saveError }}</span>
             </div>
         </div>
+
+        <div class="section-card">
+            <div class="section-card-header">
+                <h3>Review limits</h3>
+            </div>
+            <div class="section-card-body section-card-body--compact">
+                <p class="muted budget-intro">
+                    Optional bounds on the size of a review. A pull request measured past one of the first three
+                    bounds is not reviewed: the job ends before any model call and ProPR posts the measured value,
+                    the bound and the way forward on the pull request. The reviews-per-hour bound holds a job
+                    instead, and it starts by itself once the hour has passed. Leave a field blank for no bound.
+                    Changed files are counted after exclusions and after files carried forward from an earlier
+                    review. These bounds protect the installation, so they need no licence.
+                </p>
+                <fieldset class="budget-grid">
+                    <legend class="budget-legend">Review admission limits</legend>
+                    <div class="form-field">
+                        <label for="admissionMaxChangedFiles">Changed files per review</label>
+                        <input id="admissionMaxChangedFiles" v-model="editedAdmissionMaxChangedFiles"
+                            aria-describedby="admissionPolicyError" data-testid="admission-max-changed-files"
+                            name="admissionMaxChangedFiles" type="number" min="1" max="2147483647" step="1"
+                            placeholder="No limit" />
+                    </div>
+                    <div class="form-field">
+                        <label for="admissionMaxChangedLines">Changed lines per review</label>
+                        <input id="admissionMaxChangedLines" v-model="editedAdmissionMaxChangedLines"
+                            aria-describedby="admissionPolicyError" data-testid="admission-max-changed-lines"
+                            name="admissionMaxChangedLines" type="number" min="1" max="2147483647" step="1"
+                            placeholder="No limit" />
+                    </div>
+                    <div class="form-field">
+                        <label for="admissionMaxDiffBytes">Diff size per review (bytes)</label>
+                        <input id="admissionMaxDiffBytes" v-model="editedAdmissionMaxDiffBytes"
+                            aria-describedby="admissionPolicyError" data-testid="admission-max-diff-bytes"
+                            name="admissionMaxDiffBytes" type="number" min="1" max="2147483647" step="1"
+                            placeholder="No limit" />
+                        <p class="muted budget-field-note">The size of the unified diff as ProPR obtains it, from the SCM host or from the mirror the review runs against. Each provider renders a diff in its own way, so the measurement is an approximation.</p>
+                    </div>
+                    <div class="form-field">
+                        <label for="admissionMaxReviewsPerPullRequestPerHour">Reviews per pull request per hour</label>
+                        <input id="admissionMaxReviewsPerPullRequestPerHour"
+                            v-model="editedAdmissionMaxReviewsPerPullRequestPerHour"
+                            aria-describedby="admissionPolicyError" data-testid="admission-max-reviews-per-hour"
+                            name="admissionMaxReviewsPerPullRequestPerHour" type="number" min="1" max="2147483647"
+                            step="1" placeholder="No limit" />
+                        <p class="muted budget-field-note">ProPR counts the reviews of the pull request it ran in the past hour: a review that is running, and a review that made at least one model call. A push burst past this bound waits for the hour to pass and then runs. No comment is posted for a wait.</p>
+                    </div>
+                    <div class="form-field">
+                        <label for="admissionMaxRepositoryMegabytes">Repository size (MB)</label>
+                        <input id="admissionMaxRepositoryMegabytes" v-model="editedAdmissionMaxRepositoryMegabytes"
+                            aria-describedby="admissionPolicyError" data-testid="admission-max-repository-megabytes"
+                            name="admissionMaxRepositoryMegabytes" type="number" min="1" max="2147483647" step="1"
+                            placeholder="No limit" />
+                        <p class="muted budget-field-note">Applied while the repository is fetched and checked out. ProPR stops the transfer once it passes this size and does not review the repository. No size is stored between reviews.</p>
+                    </div>
+                </fieldset>
+                <p v-if="admissionPolicyError" id="admissionPolicyError" class="error" role="alert"
+                    data-testid="admission-validation">{{ admissionPolicyError }}</p>
+                <div class="budget-actions">
+                    <button :disabled="!isAdmissionButtonEnabled()"
+                        class="btn-primary inline-save-btn budget-save-btn"
+                        data-testid="admission-save"
+                        @click="saveAdmissionPolicy">
+                        Save
+                    </button>
+                </div>
+                <!-- Only the admission save writes this error, so a message here came from the Save above it.
+                     A failed budget save is reported in the Budget card with its own fields. -->
+                <span v-if="admissionSaveError" class="error" role="alert" data-testid="admission-save-error">{{ admissionSaveError }}</span>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -75,14 +146,23 @@ const vm = inject(ClientDetailVmKey)!;
 const {
     client,
     saveError,
+    admissionSaveError,
     editedMonthlyBudgetSoftCapUsd,
     editedMonthlyBudgetHardCapUsd,
     editedPullRequestBudgetSoftCapUsd,
     editedPullRequestBudgetHardCapUsd,
     editedIncrementBudgetSoftCapUsd,
     editedIncrementBudgetHardCapUsd,
+    editedAdmissionMaxChangedFiles,
+    editedAdmissionMaxChangedLines,
+    editedAdmissionMaxDiffBytes,
+    editedAdmissionMaxReviewsPerPullRequestPerHour,
+    editedAdmissionMaxRepositoryMegabytes,
     saveBudgetConfig,
+    saveAdmissionPolicy,
     isBudgetButtonEnabled,
+    isAdmissionButtonEnabled,
+    admissionPolicyError,
     isBudgetingAvailable,
     budgetingUpgradeMessage,
 } = vm;
@@ -107,6 +187,12 @@ const {
 
 .budget-intro {
     padding: 0 0 0.85rem;
+}
+
+.budget-legend {
+    padding: 0 0 0.35rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
 }
 
 .budget-grid {

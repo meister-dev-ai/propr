@@ -4,4 +4,4 @@
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
 
 /// <summary>Query for retrieving the status of a submitted review job.</summary>
-public sealed record GetReviewJobStatusQuery(Guid JobId);
+public sealed record GetReviewJobStatusQuery(Guid JobId, Guid? ExpectedClientId = null);

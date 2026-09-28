@@ -29,6 +29,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 internal sealed partial class GitHubReviewThreadReplyPublisher(
     GitHubConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory,
+    IPostedCommentComposer composer,
     ILogger<GitHubReviewThreadReplyPublisher>? logger = null) : IReviewThreadReplyPublisher
 {
     private const string ReplyMutation =
@@ -84,7 +85,7 @@ internal sealed partial class GitHubReviewThreadReplyPublisher(
                     variables = new
                     {
                         threadId,
-                        body = FormatReplyText(replyText),
+                        body = FormatReplyText(replyText, composer),
                     },
                 }),
         };
@@ -98,9 +99,12 @@ internal sealed partial class GitHubReviewThreadReplyPublisher(
         return commentId;
     }
 
-    internal static string FormatReplyText(string replyText)
+    internal static string FormatReplyText(string replyText, IPostedCommentComposer composer)
     {
-        return HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText;
+        ArgumentNullException.ThrowIfNull(composer);
+
+        // The marker goes on after the rendering, so nothing in it is rewritten on its way to the provider.
+        return composer.Append(HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText);
     }
 
     /// <summary>
@@ -144,7 +148,7 @@ internal sealed partial class GitHubReviewThreadReplyPublisher(
         request.Content = JsonContent.Create(
             new
             {
-                body = FormatReplyText(ReviewCommentQuoting.BuildQuotedReply(quotedComment, replyText)),
+                body = FormatReplyText(ReviewCommentQuoting.BuildQuotedReply(quotedComment, replyText), composer),
             });
 
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);

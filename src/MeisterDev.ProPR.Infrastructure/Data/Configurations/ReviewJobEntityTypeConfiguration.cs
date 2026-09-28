@@ -254,6 +254,19 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasPrecision(18, 6)
             .IsRequired(false);
 
+        builder.Property(j => j.AdmissionRefusalReason)
+            .HasColumnName("admission_refusal_reason")
+            .IsRequired(false);
+
+        builder.Property(j => j.AdmissionPolicyFingerprint)
+            .HasColumnName("admission_policy_fingerprint")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
+        builder.Property(j => j.HeldUntil)
+            .HasColumnName("held_until")
+            .IsRequired(false);
+
         builder.Property(j => j.InScopeChangedFileCount)
             .HasColumnName("in_scope_changed_file_count")
             .IsRequired(false);
@@ -331,6 +344,8 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
 
         builder.HasIndex(j => j.Status).HasDatabaseName("ix_review_jobs_status");
         builder.HasIndex(j => j.ClientId).HasDatabaseName("ix_review_jobs_client_id");
+        builder.HasIndex(j => new { j.ClientId, j.Status, j.CompletedAt })
+            .HasDatabaseName("ix_review_jobs_client_status_completed_at");
         builder.HasIndex(j => new { j.OrganizationUrl, j.ProjectId, j.RepositoryId, j.PullRequestId, j.IterationId })
             .HasDatabaseName("ix_review_jobs_pr_identity");
         builder.HasIndex(j => new { j.ClientId, j.PullRequestId })

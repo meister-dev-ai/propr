@@ -8,6 +8,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -15,6 +16,7 @@ using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +40,25 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
         }
 
         return request;
+    }
+
+    [Fact]
+    public async Task History_ReturnsBoundedClientRowsAndRejectsInvalidQueries()
+    {
+        await factory.ClearJobsAsync();
+        await factory.InsertJobAsync(factory.ClientAId, 101);
+        await factory.InsertJobAsync(factory.ClientAId, 102);
+        await factory.InsertJobAsync(factory.ClientBId, 103);
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(factory.ClientAUserId));
+        var response = await client.GetAsync($"/clients/{factory.ClientAId}/reviewing/history?page=1&pageSize=1");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(2, body.RootElement.GetProperty("totalCount").GetInt64());
+        Assert.Single(body.RootElement.GetProperty("items").EnumerateArray());
+        foreach (var query in new[] { "page=0", "pageSize=101", "pageSize=0", "status=unknown", "status=999" })
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/clients/{factory.ClientAId}/reviewing/history?{query}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/clients/{factory.ClientBId}/reviewing/history")).StatusCode);
     }
 
     [Fact]
@@ -81,6 +102,44 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Dashboard_RequiresClientRoleAndReturnsOnlyProcessingReviews()
+    {
+        await factory.ClearJobsAsync();
+        var client = factory.CreateClient();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.ReviewJobs.AddRange(
+                new ReviewJob(Guid.NewGuid(), factory.ClientAId, "https://example.test", "project", "repo", 11, 1)
+                {
+                    Status = JobStatus.Processing,
+                },
+                new ReviewJob(Guid.NewGuid(), factory.ClientAId, "https://example.test", "project", "repo", 12, 1),
+                new ReviewJob(Guid.NewGuid(), factory.ClientBId, "https://example.test", "project", "repo", 13, 1)
+                {
+                    Status = JobStatus.Processing,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        using var own = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.ClientAId}/reviewing/dashboard");
+        own.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(factory.ClientAUserId));
+        var ownResponse = await client.SendAsync(own);
+        Assert.Equal(HttpStatusCode.OK, ownResponse.StatusCode);
+        using var body = JsonDocument.Parse(await ownResponse.Content.ReadAsStringAsync());
+        Assert.Equal(0, body.RootElement.GetProperty("recentFindingCount").GetInt64());
+        var review = Assert.Single(body.RootElement.GetProperty("runningReviews").EnumerateArray());
+        Assert.Equal(11, review.GetProperty("pullRequestNumber").GetInt32());
+
+        using var other = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.ClientBId}/reviewing/dashboard");
+        other.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(factory.ClientAUserId));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(other)).StatusCode);
+
+        using var anonymous = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.ClientAId}/reviewing/dashboard");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(anonymous)).StatusCode);
     }
 
     [Fact]
@@ -179,6 +238,8 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
                 services.AddDbContextFactory<MeisterProPRDbContext>(options =>
                     options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IJobRepository, JobRepository>();
+                services.AddScoped<ICustomerDashboardReader, EfCustomerDashboardReader>();
+                services.AddScoped<ICustomerReviewHistoryReader, TestHistoryReader>();
 
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
@@ -251,6 +312,20 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
             }
 
             services.AddSingleton(implementation);
+        }
+
+        private sealed class TestHistoryReader(MeisterProPRDbContext db) : ICustomerReviewHistoryReader
+        {
+            public async Task<CustomerReviewHistory> GetAsync(Guid clientId, int page, int pageSize, JobStatus? status, CancellationToken ct)
+            {
+                var rows = await db.ReviewJobs.Where(job => job.ClientId == clientId && (!status.HasValue || job.Status == status))
+                    .OrderByDescending(job => job.SubmittedAt).ThenByDescending(job => job.Id).ToListAsync(ct);
+                return new(
+                    rows.Count, page, pageSize, rows.Skip((page - 1) * pageSize).Take(pageSize)
+                        .Select(job => new CustomerReviewHistoryItem(
+                            job.Id, job.Status, job.Provider, job.RepositoryId,
+                            job.PullRequestId, job.SubmittedAt, job.CompletedAt, job.Result?.Comments.Count ?? 0)).ToArray());
+            }
         }
     }
 }

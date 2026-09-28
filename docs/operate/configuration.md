@@ -47,7 +47,7 @@ To use one that is not forwarded, add it to the `meisterpropr` service's `enviro
 
 ```yaml
     environment:
-      - AI_ALLOW_PRIVATE_EGRESS=${AI_ALLOW_PRIVATE_EGRESS:-}
+      - MEISTER_ALLOW_PRIVATE_EGRESS=${MEISTER_ALLOW_PRIVATE_EGRESS:-}
 ```
 
 ## Required values
@@ -92,14 +92,55 @@ See [deployment topology](deploy.md#deployment-topology) for why both matter beh
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
-| `MEISTER_DATA_PROTECTION_KEYS_PATH` | Directory holding the key ring that encrypts stored provider and AI credentials and the activated license | unset - keys live on the container's own filesystem and are lost when it is replaced | writable directory path, created if absent | pinned |
+| `MEISTER_DATA_PROTECTION_KEYS_PATH` | Directory holding the key ring that encrypts stored provider and AI credentials and the activated license | unset - keys live on the container's own filesystem and are lost when it is replaced | ProPR creates the writable directory if absent. Relative paths resolve against the process working directory, and whitespace is preserved. | pinned |
+| `MEISTER_DATA_PROTECTION_PROTECTOR` | Encrypts the key files themselves, so a copy of the key directory reads nothing on its own | `none` | `none`, `certificate`, or the name of a protector add-in | no |
+| `MEISTER_DATA_PROTECTION_ADD_IN_DIRECTORY` | Directory protector add-ins are read from | `data-protection-add-ins` beside the service's own files, which is where the images put the add-ins they ship | directory path | no |
 
-The example stack pins this to a fixed in-container path and mounts a named volume there, shared by both
-services. To put the key ring on durable storage of your own, edit that line and mount your volume in
+The example stack pins the key path to a fixed in-container path and mounts a named volume there, shared by
+both services. To put the key ring on durable storage of your own, edit that line and mount your volume in
 its place.
 
-Both services must be given the same path. What the key ring protects and what to back up with it:
+Both services must be given the same path and the same protector. Give them an absolute path, or the same
+relative path under working directories backed by the same volume. Relative paths resolve against each
+process's working directory. Different working directories can therefore select different key rings.
+
+What the key ring protects and what to back up with it:
 [the encryption key ring](../reference/security.md#the-encryption-key-ring).
+
+### The certificate protector
+
+`MEISTER_DATA_PROTECTION_PROTECTOR=certificate` encrypts the key files with a PKCS#12 certificate you hold.
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_DATA_PROTECTION_CERTIFICATE_PATH` | The certificate the key files are encrypted with | none | path to a `.pfx` file | no |
+| `MEISTER_DATA_PROTECTION_CERTIFICATE_PASSWORD` | The password of the certificate files | none | the password, or unset for a file without one | no |
+| `MEISTER_DATA_PROTECTION_PREVIOUS_CERTIFICATE_PATHS` | Certificates an earlier key was encrypted with, which stay readable during a rotation | none | paths separated by `;`, on every platform | no |
+
+One password applies to every file in the list, the current certificate and the previous ones alike. To
+rotate to a certificate carrying a password of its own, export the superseded certificate again under the new
+password, list that copy in `MEISTER_DATA_PROTECTION_PREVIOUS_CERTIFICATE_PATHS`, and set
+`MEISTER_DATA_PROTECTION_CERTIFICATE_PASSWORD` to the new password. Keep a superseded certificate listed
+until every key it encrypted has expired; a key removed from the list is a key nothing can read. The
+semicolon separates the entries, so a certificate whose path contains one cannot be listed: move or rename
+that file. A certificate the service cannot open, and a protector name nothing provides, both stop the
+service from starting, with the variable named.
+
+### The Azure Key Vault protector
+
+`MEISTER_DATA_PROTECTION_PROTECTOR=azure-key-vault` wraps the key ring with a Key Vault key. Both service
+images carry this protector, so selecting it needs no rebuild.
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_DATA_PROTECTION_AZURE_KEY_VAULT_KEY_ID` | The vault key the ring is wrapped with | none | a key identifier URL, `https://<vault>.vault.azure.net/keys/<key>/<version>` | no |
+| `MEISTER_DATA_PROTECTION_AZURE_BLOB_URI` | Stores the key ring in a blob instead of a directory | unset: the ring stays where `MEISTER_DATA_PROTECTION_KEYS_PATH` points | a blob URL | no |
+
+The service authenticates to Azure with the credential described under
+[a process-wide Azure credential](#a-process-wide-azure-credential). That identity needs wrap and unwrap on
+the key, and read and write on the blob where one is configured. Each URL you set must use `https` and name a
+host; the blob URI stays optional. A missing key identifier stops the service from starting, with the
+variable named. Give both services the same key, and the blob URI where you use one.
 
 ## Sessions and sign-in protection
 
@@ -317,10 +358,14 @@ pull requests takes.
 |---|---|---|---|---|
 | `REVIEW_WORKSPACE_ROOT_PATH` | Where repository mirrors and per-review workspaces are stored | a directory under the service account's local application data | writable directory path | no |
 | `REVIEW_WORKSPACE_MAX_CACHE_SIZE_MEGABYTES` | Size the mirror eviction sweep works towards. Mirrors held by a running review are skipped, so the total can exceed it while those reviews run; per-review checkouts are not counted against it | `4096` | 128–1048576 | no |
+| `REVIEW_WORKSPACE_MIRROR_RETENTION_DAYS` | How long a mirror is kept after the last fetch into it. The sweep removes a mirror older than this whatever the cache holds in total, and skips one a running review holds | `7` | 1–365 | no |
 | `REVIEW_WORKSPACE_RETENTION_MINUTES` | How long an unreferenced workspace directory waits before the sweep removes it. This covers what a failed preparation, an interrupted review, an interrupted release, a failed delete, or a restart leaves behind; a review that ends normally deletes its own checkout at once | `180` | 1–10080 | no |
 | `REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS` | How many workspaces may be prepared at once | `4` | 1–128 | no |
 | `REVIEW_WORKSPACE_FETCH_DEPTH_POLICY` | How much of a repository a mirror fetch brings down | `full` | `full`, `blobless`, `shallow` | no |
 | `REVIEW_WORKSPACE_FETCH_DEPTH` | Commits fetched under the `shallow` policy. Ignored by the others, which also do not check the range | `200` | 1–100000 | no |
+
+A repository nobody has reviewed for `REVIEW_WORKSPACE_MIRROR_RETENTION_DAYS` is cloned again on its next
+review.
 
 One preparation fetches into a mirror and writes a checkout of the repository, so
 `REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS` bounds how much of the workspace disk is written at any
@@ -435,6 +480,18 @@ page they move token spend the most - see [control cost](../guides/control-cost.
 | `AI_FILE_BATCH_LINES` | Lines returned per file-content read the reviewer makes | `100` | 10–1000 | no |
 | `AI_MAX_FILE_SIZE_BYTES` | Largest file the reviewer may read; above it the read returns an error instead of content | `1048576` | 1024 or more | no |
 
+A tenant administrator can set both `AI_MAX_FILE_SIZE_BYTES` and `AI_MAX_STRUCTURAL_PARSE_BYTES` for one
+tenant through the tenant patch endpoint. Setting them requires the budgeting capability, which a commercial
+license carries; a value already stored is applied in every edition - see
+[editions](../reference/editions.md). A tenant value applies to every review that tenant's clients run, here
+and on a runner. A tenant that sets neither reviews at the installation values above. The installation
+value of `AI_MAX_STRUCTURAL_PARSE_BYTES` is the ceiling: the structural analyzer is built with it, so a
+tenant value above it is clamped and a file over the installation value is still reported as too large to
+parse.
+
+The size of a whole review is bounded per client instead, on the client's Budget tab, and those bounds
+refuse a review before it starts - see [what you can tune](../concepts/reviews.md#what-you-can-tune).
+
 `AI_MAX_FILE_REVIEW_CONCURRENCY` needs a commercial license for parallel review execution to have any
 effect - see [editions](../reference/editions.md). Without it a review works on one file at a time, the
 same rule the worker applies to whole jobs. Sizing it alongside
@@ -461,6 +518,22 @@ Which files land in which complexity tier is decided per review - see
 A finding that clears these thresholds still goes through the publication gate - see
 [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted).
 
+## The marker on posted comments
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_AI_GENERATED_MARKER` | Sentence ProPR ends every comment it posts with, stating that the content was generated by AI | `Generated by ProPR, an AI code reviewer.` | up to 200 characters on one line, without `<`, `>`, `&`, `"`, `*`, `_`, `` ` ``, `[`, `]` or `\`, and not starting with `/` or `#` | yes |
+
+The marker is the last line of every summary, inline finding and reply ProPR posts, on all four hosts.
+The accepted characters are what a host is guaranteed to render as written. GitLab encodes the comment
+body, and a leading slash there starts a quick action. ProPR wraps the marker in Markdown emphasis, and
+each refused character is Markdown syntax a host can render as a link, a code span or a heading in some
+position, not one that always does: `[` needs a following `(url)` to form a link, and `#` starts a
+heading only at the beginning of a line. Validation runs once against the configured wording and cannot
+know where in the finished comment the marker will land, so it refuses the character regardless of
+position. A value outside the accepted set stops startup with an error naming the variable. The wording
+applies to the whole installation, not to one client.
+
 ## Thread memory
 
 | Variable | What it does | Default | Accepted | Example stack |
@@ -482,7 +555,7 @@ much work one lookup may do before it returns what it has, marked truncated.
 |---|---|---|---|---|
 | `AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION` | Use the structural analyzer to pick context boundaries instead of a line heuristic | `true` | `true`, `false` | no |
 | `AI_STRUCTURAL_PARSE_TIMEOUT_MS` | Per-file budget for that analysis before it falls back to the heuristic | `200` | 10–5000 | no |
-| `AI_MAX_STRUCTURAL_PARSE_BYTES` | Largest file it will parse | `524288` | 1024–5242880 | no |
+| `AI_MAX_STRUCTURAL_PARSE_BYTES` | Largest file it will parse | `1048576` | 1024–5242880 | no |
 | `AI_ENABLE_STRUCTURAL_REFERENCE_TOOLS` | Register the cross-file reference and definition lookups and the caller-evidence feed | `true` | `true`, `false` | no |
 | `AI_MAX_REFERENCE_CANDIDATE_FILES` | Files scanned per reference lookup | `200` | 1–2000 | no |
 | `AI_MAX_REFERENCE_RESULTS` | Confirmed sites returned per lookup | `50` | 1–1000 | no |
@@ -529,29 +602,43 @@ How to install a family and what the host does with one it cannot load:
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
-| `AI_ALLOW_PRIVATE_EGRESS` | Permit outbound AI calls to private, loopback and link-local addresses | `false` | `true`, `false` | no |
+| `MEISTER_ALLOW_PRIVATE_EGRESS` | Permit outbound calls to private, loopback and link-local addresses, for AI endpoints and source-control hosts alike | `false` | `true`, `false` | no |
 | `AI_CAPTURE_REASONING_IN_PROTOCOL` | Record the model's reasoning into the review protocol; it can contain verbatim source excerpts | `true` | `true`, `false` | no |
+
+`AI_ALLOW_PRIVATE_EGRESS` is the earlier name of the same setting and is still read, so an installation
+that carries it keeps working. Where both are set, `MEISTER_ALLOW_PRIVATE_EGRESS` decides.
 
 What private egress does and does not permit:
 [outbound request protection](../reference/security.md#outbound-request-protection). What the captured
 reasoning contains, and when to turn it off:
-[what ProPR stores](../reference/security.md#what-propr-stores).
+[what ProPR stores](../reference/security.md#what-propr-stores). A tenant can override
+`AI_CAPTURE_REASONING_IN_PROTOCOL` for its own reviews:
+[model reasoning in the job trace](../ai/compliance.md#model-reasoning-in-the-job-trace).
 
 ## A process-wide Azure credential
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
-| `AZURE_TENANT_ID` | Microsoft Entra tenant of the service principal | none | - | no |
-| `AZURE_CLIENT_ID` | Application ID of the service principal | none | - | no |
+| `AZURE_TENANT_ID` | Microsoft Entra tenant of the service principal, or of the federated workload identity | none | - | no |
+| `AZURE_CLIENT_ID` | Application ID of the service principal, or of the user-assigned managed identity | none | - | no |
 | `AZURE_CLIENT_SECRET` | Its client secret | none | - | no |
 
 All three together supply one Azure service principal to the backend process. That credential serves two
 unrelated purposes: Azure DevOps operations for a client that has no connection of its own - see
 [global Azure fallback](../platforms/azure-devops.md#global-azure-fallback) - and Azure-hosted AI
-endpoints configured with Azure Identity instead of a key.
+endpoints configured with Azure Identity instead of a key. The key ring is wrapped with it where the Azure
+Key Vault protector is configured - see
+[the Azure Key Vault protector](#the-azure-key-vault-protector).
 
-Set fewer than three and none of them are used. With all three absent, ProPR uses the ambient Azure
-credential: a managed identity, an Azure CLI login, or whatever else the host offers.
+Set `AZURE_CLIENT_SECRET` without both ids and the service does not start, naming the id that is missing. A
+secret is usable only as part of a service principal, and the ambient credential would otherwise authenticate
+as an identity you did not choose.
+
+Every other combination uses the ambient Azure credential: a managed identity, a federated workload identity,
+an Azure CLI login, or whatever else the host offers. The two ids keep the meanings Azure gives them there.
+`AZURE_CLIENT_ID` with no secret names the user-assigned managed identity to authenticate as.
+`AZURE_TENANT_ID` and `AZURE_CLIENT_ID` with no secret are the workload identity pair, which the ambient
+credential reads together with the federated token file its own variable points at.
 
 ## Observability
 
@@ -589,3 +676,9 @@ This evaluator judges which of a repository's instruction files apply to a diff.
 when the endpoint and the deployment are both set, and it calls Azure OpenAI directly. It does not go
 through the per-client AI connections, so a client's provider configuration does not control it. Leave
 all three unset unless you want it.
+
+`AI_EVALUATOR_ENDPOINT` follows the address rule every AI endpoint follows: `https`, and no private,
+loopback or link-local address without `MEISTER_ALLOW_PRIVATE_EGRESS` - see
+[outbound request protection](../reference/security.md#outbound-request-protection). An address this
+installation refuses stops the service from starting, with the variable named. `AI_API_KEY` travels in a
+request header, so a plain `http` endpoint would put it on the wire unencrypted.

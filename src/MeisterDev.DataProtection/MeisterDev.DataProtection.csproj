@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <!--
+        The data-protection surface comes from the shared framework, so this project carries the key-ring
+        contract without a package reference and without depending on any other project in the solution. A
+        protector add-in is compiled against this assembly alone.
+    -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="MeisterDev.DataProtection.Tests"/>
+        <InternalsVisibleTo Include="MeisterDev.DataProtection.AzureKeyVaultAddIn.Tests"/>
+    </ItemGroup>
+
+</Project>

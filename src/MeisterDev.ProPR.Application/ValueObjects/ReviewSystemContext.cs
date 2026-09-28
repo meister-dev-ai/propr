@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -195,6 +196,15 @@ public sealed class ReviewSystemContext
     public bool IncludeLinkedItemsInContext { get; set; } = true;
 
     /// <summary>
+    ///     Whether this job captures the model's reasoning into the protocol and asks the provider for a reasoning
+    ///     summary in the first place. <see langword="null" /> means nothing has stated a policy for this job and
+    ///     the installation switch decides; <see cref="CapturesReasoning" /> resolves the two. The orchestration
+    ///     service fills this in from the tenant that owns the job's client, because the installation options are a
+    ///     process singleton and cannot vary per job. Reasoning effort is a separate setting and is unaffected.
+    /// </summary>
+    public bool? CaptureReasoning { get; set; }
+
+    /// <summary>
     ///     Eval-harness-only override for the number of independent per-file passes to run when
     ///     <see cref="EnableMultiPassUnion" /> is enabled and the file's resolved tier is in scope. When set, the
     ///     resample passes are driven by <see cref="MultiPassDiversity" /> arms over the tier connection. Production
@@ -276,6 +286,30 @@ public sealed class ReviewSystemContext
     ///     See <see cref="MeisterDev.ProPR.Domain.ValueObjects.ReviewOutputLanguage" />.
     /// </summary>
     public string? OutputLanguage { get; set; }
+
+    /// <summary>
+    ///     The largest file this review's tenant lets the reviewer read, or null when the installation value
+    ///     stays in force. Resolved on the control plane so a review reads the same limit wherever it executes.
+    /// </summary>
+    public int? MaxFileSizeBytes { get; set; }
+
+    /// <summary>
+    ///     The largest source this review's tenant lets the structural analyzer accept, or null when the
+    ///     installation value stays in force.
+    /// </summary>
+    public int? MaxStructuralParseBytes { get; set; }
+
+    /// <summary>
+    ///     Resolves whether this job captures reasoning, falling back to the installation switch when nothing has
+    ///     stated a policy for the job.
+    /// </summary>
+    /// <param name="installationOptions">The installation-wide review options.</param>
+    public bool CapturesReasoning(AiReviewOptions installationOptions)
+    {
+        ArgumentNullException.ThrowIfNull(installationOptions);
+
+        return this.CaptureReasoning ?? installationOptions.CaptureReasoningInProtocol;
+    }
 
     /// <summary>
     ///     Returns a copy of this context for a pass that runs under its own protocol, carrying the review's

@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.Features.Admission;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using MeisterDev.ProPR.Api.Telemetry;
@@ -184,6 +186,10 @@ public sealed partial class ReviewJobWorker(
             }
         }
 
+        // A hold set by review admission resolves on its own: the jobs whose window has passed go back to the
+        // queue at the start of the tick, so they are candidates again without an operator restarting them.
+        await jobRepository.ReleaseDueAdmissionHoldsAsync(timeProvider.GetUtcNow(), stoppingToken);
+
         var budgetCapsProvider = tickScope.ServiceProvider.GetService<IBudgetCapsProvider>();
         var spendAccumulator = tickScope.ServiceProvider.GetService<IReviewSpendAccumulator>();
         var budgetEventPublisher = tickScope.ServiceProvider.GetService<IBudgetEventPublisher>();
@@ -241,6 +247,31 @@ public sealed partial class ReviewJobWorker(
                     // claim below is never reached with a cap the store refuses.
                     stopScanning = true;
                     break;
+                }
+
+                if (clientRegistry is not null)
+                {
+                    // The push-burst bound is the one admission dimension that needs no diff, so it is decided
+                    // here, beside the budget admission, before a workspace is prepared for the job.
+                    try
+                    {
+                        var burstHold = await EvaluateBurstHoldAsync(clientRegistry, jobRepository, job, timeProvider.GetUtcNow(), stoppingToken);
+                        if (burstHold is { } admissibleAt)
+                        {
+                            await jobRepository.SetAdmissionHeldAsync(job.Id, admissibleAt, stoppingToken);
+                            LogAdmissionHeld(logger, job.Id, job.PullRequestId, admissibleAt);
+                            continue;
+                        }
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // A registry or database outage while one candidate is being weighed, or while the
+                        // hold it decided on is written, leaves that job pending for a later tick. Letting the
+                        // failure out of this loop ends the background service, and every pending job then
+                        // waits for the host to restart it.
+                        LogAdmissionUndecided(logger, job.Id, job.PullRequestId, ex);
+                        continue;
+                    }
                 }
 
                 if (budgetCapsProvider is not null && spendAccumulator is not null)
@@ -369,6 +400,50 @@ public sealed partial class ReviewJobWorker(
     /// </summary>
     private const int MaxClaimWindowsPerCycle = 20;
 
+    /// <summary>
+    ///     When this job becomes admissible, or null when its pull request is under its hourly number of
+    ///     reviews. A pull request that has already started that many reviews within the hour waits for the
+    ///     window to pass instead of being refused, because the next push would otherwise be refused too.
+    /// </summary>
+    private static async Task<DateTimeOffset?> EvaluateBurstHoldAsync(
+        IClientRegistry clientRegistry,
+        IReviewJobExecutionStore jobRepository,
+        ReviewJob job,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        // A registry that answers nothing leaves the review unbounded, as an unconfigured client is.
+        var policy = await clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, ct) ?? ReviewAdmissionPolicy.None;
+        if (policy.MaxReviewsPerPullRequestPerHour is null)
+        {
+            return null;
+        }
+
+        // Counting the window and then admitting is not one atomic step, and it does not have to be: an
+        // installation runs one API instance, and this loop evaluates its candidates one after another, so no
+        // second evaluator of the same pull request can be inside the gap. The claim earlier in the tick is
+        // coordinated across hosts because runners claim jobs too, which says nothing about this decision:
+        // admission is evaluated here, on the single host that intakes reviews. Running several API instances
+        // is later work, and this count is one of the things it has to settle.
+        var window = await jobRepository.GetSubmissionWindowAsync(
+            job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            now - ReviewAdmissionEvaluator.BurstWindow,
+            job.Id,
+            ct);
+
+        var decision = ReviewAdmissionEvaluator.Evaluate(
+            policy,
+            new ReviewAdmissionMeasurement(
+                ReviewsStartedInWindow: window.Count,
+                OldestReviewSubmittedInWindow: window.OldestSubmittedAt),
+            now);
+        return decision.Outcome == ReviewAdmissionOutcome.Hold ? decision.AdmissibleAt : null;
+    }
+
     private static async Task<BudgetBreach?> EvaluateAdmissionBreachAsync(
         IBudgetCapsProvider budgetCapsProvider,
         IReviewSpendAccumulator spendAccumulator,
@@ -389,7 +464,8 @@ public sealed partial class ReviewJobWorker(
             caps,
             baseline.ClientMonthToDate.KnownUsd,
             baseline.PullRequest.KnownUsd,
-            baseline.Increment.KnownUsd);
+            baseline.Increment.KnownUsd,
+            baseline.TenantMonthToDate.KnownUsd);
     }
 
     /// <summary>Processes a single job safely, handling exceptions and cancellations.</summary>
@@ -495,6 +571,16 @@ public sealed partial class ReviewJobWorker(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "ReviewJobWorker started")]
     private static partial void LogWorkerStarted(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Review job {JobId} for pull request {PullRequestId} is held until {AdmissibleAt} because the pull request reached its hourly review limit")]
+    private static partial void LogAdmissionHeld(ILogger logger, Guid jobId, int pullRequestId, DateTimeOffset admissibleAt);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Review admission could not be evaluated for review job {JobId} on pull request {PullRequestId}; the job stays queued")]
+    private static partial void LogAdmissionUndecided(ILogger logger, Guid jobId, int pullRequestId, Exception ex);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

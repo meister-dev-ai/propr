@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
@@ -25,7 +26,13 @@ public sealed class CodeInsightBrowseReaderTests : IDisposable
     private static readonly Guid ClientB = Guid.Parse("66666666-6666-6666-6666-666666666666");
     private static readonly DateTimeOffset ReviewedAt = new(2026, 3, 11, 9, 0, 0, TimeSpan.Zero);
 
+    /// <summary>A stored discussion that is ProPR speaking: a summary ending in the AI-generated marker.</summary>
+    private static readonly string OwnMarkedComment =
+        "0caeb875-08d2-6d69: ## Meister Review Bot Review\nThis PR adds...\n"
+        + TestPostedCommentComposer.Default.Text;
+
     private readonly MeisterProPRDbContext _dbContext;
+    private readonly ISecretProtectionCodec _codec;
     private readonly CodeInsightFindingStore _store;
     private readonly CodeInsightBrowseReader _reader;
 
@@ -35,9 +42,9 @@ public sealed class CodeInsightBrowseReaderTests : IDisposable
             .UseInMemoryDatabase($"CodeInsightBrowseReaderTests-{Guid.NewGuid():N}")
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
-        var codec = CreateCodec();
-        this._store = new CodeInsightFindingStore(this._dbContext, codec);
-        this._reader = new CodeInsightBrowseReader(this._dbContext, codec);
+        this._codec = CreateCodec();
+        this._store = new CodeInsightFindingStore(this._dbContext, this._codec);
+        this._reader = new CodeInsightBrowseReader(this._dbContext, this._codec, TestPostedCommentComposer.Default);
     }
 
     public void Dispose()
@@ -208,11 +215,105 @@ public sealed class CodeInsightBrowseReaderTests : IDisposable
                 "thread-activity",
                 false,
                 "00000002-0000-8888-8000-000000000000: Andreas Rain added Meister ProPR as a reviewer"));
+        await this._store.RecordMissAsync(
+            key,
+            Miss(
+                "thread-marked-summary",
+                false,
+                "0caeb875-08d2-6d69: ## Meister Review Bot Review\nThis PR adds...\n"
+                + TestPostedCommentComposer.Default.Text));
 
         var rows = await this._reader.ListMissesAsync(this.Query(ClientA));
 
         var row = Assert.Single(rows);
         Assert.Equal("thread-human", row.ProviderThreadId);
+    }
+
+    [Fact]
+    public async Task TheRowLimitCountsHumanThreadsAndNotProPrsOwnComments()
+    {
+        // The newest stored rows are ProPR's own. A limit applied to the query and only then to eligibility
+        // would spend the caller's single row on one of them and answer with nothing.
+        var key = await this.SeedAsync(ClientA, "repo-1", 7, ["a.cs"]);
+        await this._store.RecordMissAsync(key, Miss("thread-human", true));
+        await this._store.RecordMissAsync(key, Miss("thread-own-older", true, OwnMarkedComment));
+        await this._store.RecordMissAsync(key, Miss("thread-own-newer", true, OwnMarkedComment));
+        await this.HarvestedAtAsync("thread-human", ReviewedAt);
+        await this.HarvestedAtAsync("thread-own-older", ReviewedAt.AddMinutes(1));
+        await this.HarvestedAtAsync("thread-own-newer", ReviewedAt.AddMinutes(2));
+
+        var rows = await this._reader.ListMissesAsync(this.Query(ClientA) with { Limit = 1 });
+
+        Assert.Equal("thread-human", Assert.Single(rows).ProviderThreadId);
+    }
+
+    [Fact]
+    public async Task TheRowLimitStillBoundsWhatComesBack()
+    {
+        var key = await this.SeedAsync(ClientA, "repo-1", 7, ["a.cs"]);
+        await this._store.RecordMissAsync(key, Miss("thread-older", true));
+        await this._store.RecordMissAsync(key, Miss("thread-newer", true));
+        await this.HarvestedAtAsync("thread-older", ReviewedAt);
+        await this.HarvestedAtAsync("thread-newer", ReviewedAt.AddMinutes(1));
+
+        var rows = await this._reader.ListMissesAsync(this.Query(ClientA) with { Limit = 1 });
+
+        Assert.Equal("thread-newer", Assert.Single(rows).ProviderThreadId);
+    }
+
+    [Fact]
+    public async Task TheScanCeilingStopsTheEligibilityScanBeforeAnEligibleThreadBehindEnoughIneligibleOnes()
+    {
+        // The ceiling is set below the number of ProPR's own rows sitting in front of the one human thread, so
+        // the scan gives up before reaching it. That thread does count toward recall on its own row, but the
+        // scan ceiling still stops the page short of it, and the page comes back empty.
+        const int ceiling = 3;
+        var reader = new CodeInsightBrowseReader(
+            this._dbContext,
+            this._codec,
+            TestPostedCommentComposer.Default,
+            maxScannedMisses: ceiling);
+
+        var key = await this.SeedAsync(ClientA, "repo-1", 7, ["a.cs"]);
+        await this._store.RecordMissAsync(key, Miss("thread-own-1", true, OwnMarkedComment));
+        await this._store.RecordMissAsync(key, Miss("thread-own-2", true, OwnMarkedComment));
+        await this._store.RecordMissAsync(key, Miss("thread-own-3", true, OwnMarkedComment));
+        await this._store.RecordMissAsync(key, Miss("thread-human", true));
+        await this.HarvestedAtAsync("thread-human", ReviewedAt);
+        await this.HarvestedAtAsync("thread-own-1", ReviewedAt.AddMinutes(1));
+        await this.HarvestedAtAsync("thread-own-2", ReviewedAt.AddMinutes(2));
+        await this.HarvestedAtAsync("thread-own-3", ReviewedAt.AddMinutes(3));
+
+        var rows = await reader.ListMissesAsync(this.Query(ClientA) with { Limit = 1 });
+
+        Assert.Empty(rows);
+    }
+
+    [Fact]
+    public async Task ARaisedCeilingReachesTheSameEligibleThreadTheDefaultCeilingWouldMiss()
+    {
+        // Same shape as the row above, but with room to scan past the ineligible rows: this is what confirms
+        // the previous test's empty result comes from the ceiling and not from some other reason the thread
+        // was excluded.
+        var reader = new CodeInsightBrowseReader(
+            this._dbContext,
+            this._codec,
+            TestPostedCommentComposer.Default,
+            maxScannedMisses: 10);
+
+        var key = await this.SeedAsync(ClientA, "repo-1", 7, ["a.cs"]);
+        await this._store.RecordMissAsync(key, Miss("thread-own-1", true, OwnMarkedComment));
+        await this._store.RecordMissAsync(key, Miss("thread-own-2", true, OwnMarkedComment));
+        await this._store.RecordMissAsync(key, Miss("thread-own-3", true, OwnMarkedComment));
+        await this._store.RecordMissAsync(key, Miss("thread-human", true));
+        await this.HarvestedAtAsync("thread-human", ReviewedAt);
+        await this.HarvestedAtAsync("thread-own-1", ReviewedAt.AddMinutes(1));
+        await this.HarvestedAtAsync("thread-own-2", ReviewedAt.AddMinutes(2));
+        await this.HarvestedAtAsync("thread-own-3", ReviewedAt.AddMinutes(3));
+
+        var rows = await reader.ListMissesAsync(this.Query(ClientA) with { Limit = 1 });
+
+        Assert.Equal("thread-human", Assert.Single(rows).ProviderThreadId);
     }
 
     [Fact]
@@ -233,6 +334,18 @@ public sealed class CodeInsightBrowseReaderTests : IDisposable
     {
         Assert.Empty(await this._reader.ListFindingsAsync(this.Query(ClientA)));
         Assert.Empty(await this._reader.ListMissesAsync(this.Query(ClientA)));
+    }
+
+    /// <summary>
+    ///     Moves a stored miss to <paramref name="harvestedAt" />, so a test can say which row is the newest one
+    ///     instead of depending on how close together two inserts landed.
+    /// </summary>
+    private async Task HarvestedAtAsync(string providerThreadId, DateTimeOffset harvestedAt)
+    {
+        var miss = await this._dbContext.CodeInsightMisses
+            .SingleAsync(candidate => candidate.ProviderThreadId == providerThreadId);
+        this._dbContext.Entry(miss).Property(nameof(CodeInsightMiss.HarvestedAt)).CurrentValue = harvestedAt;
+        await this._dbContext.SaveChangesAsync();
     }
 
     private CodeInsightBrowseQuery Query(params Guid[] clientIds)

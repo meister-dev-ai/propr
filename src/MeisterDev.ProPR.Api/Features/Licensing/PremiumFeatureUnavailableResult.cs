@@ -11,14 +11,22 @@ namespace MeisterDev.ProPR.Api.Features.Licensing;
 public sealed class PremiumFeatureUnavailableResult : ObjectResult
 {
     /// <summary>Initializes a premium-unavailable result for the supplied capability snapshot.</summary>
+    /// <param name="capability">The capability that is not available.</param>
+    /// <param name="message">
+    ///     What to report instead of the capability's own message. An endpoint that guards several settings
+    ///     behind one capability passes a message naming the settings this request was refused, because the
+    ///     capability's own message describes the capability and not the request.
+    /// </param>
+    /// <param name="statusCode">The status code to answer with.</param>
     public PremiumFeatureUnavailableResult(
         CapabilitySnapshot capability,
+        string? message = null,
         int statusCode = StatusCodes.Status409Conflict)
         : base(
             new PremiumFeatureUnavailablePayload(
                 "premium_feature_unavailable",
                 capability.Key,
-                capability.Message ?? $"Capability '{capability.Key}' is unavailable.",
+                message ?? capability.Message ?? $"Capability '{capability.Key}' is unavailable.",
                 capability.Reason))
     {
         this.StatusCode = statusCode;

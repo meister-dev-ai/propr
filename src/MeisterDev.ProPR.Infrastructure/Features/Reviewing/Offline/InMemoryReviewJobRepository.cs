@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
@@ -20,18 +21,39 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     private readonly ConcurrentDictionary<Guid, ReviewJob> _jobs = new();
 
     /// <summary>
-    ///     Serialises the writes that decide a job's end state. The dictionary is concurrent, the entities in
-    ///     it are not, and completion and failure are decided by different threads against the same fields.
+    ///     Serialises every read and write that decides a job's status. The dictionary is concurrent, the
+    ///     entities in it are not, and a claim, a completion, a failure, an admission decision and a supersede
+    ///     are taken by different threads against the same fields. A check followed by an unguarded assignment
+    ///     lets the later write win whichever order the two arrived in, so the check and the assignment are
+    ///     taken together here.
     /// </summary>
-    private readonly object _endStateLock = new();
+    private readonly object _statusLock = new();
 
     public Task AddAsync(ReviewJob job, CancellationToken ct = default)
     {
-        this._jobs[job.Id] = job;
+        // Under the same lock as the atomic add: an insert made beside it can land between that operation's
+        // duplicate scan and its own insert, which is how a second active job for one pull request appears.
+        lock (this._statusLock)
+        {
+            this._jobs[job.Id] = job;
+        }
+
         return Task.CompletedTask;
     }
 
     public Task<TryAddReviewJobResult> TryAddIfNoActiveDuplicateAsync(ReviewJob job, CancellationToken ct = default)
+    {
+        // The contract calls this operation atomic, so the read, the duplicate check, the supersede of older
+        // revisions and the insert are one step. Two submissions for the same pull request would otherwise
+        // both see no active job and both insert, and a refusal decided between the read and the supersede
+        // would be overwritten.
+        lock (this._statusLock)
+        {
+            return this.TryAddIfNoActiveDuplicate(job);
+        }
+    }
+
+    private Task<TryAddReviewJobResult> TryAddIfNoActiveDuplicate(ReviewJob job)
     {
         var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
         var activeJobs = this._jobs.Values
@@ -39,7 +61,8 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                                 && string.Equals(candidate.ProjectId, job.ProjectId, StringComparison.Ordinal)
                                 && RepositoryMatches(candidate, job.RepositoryId, job.ProjectId)
                                 && candidate.PullRequestId == job.PullRequestId
-                                && candidate.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded)
+                                && candidate.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded
+                                    or JobStatus.AdmissionHeld)
             .ToList();
 
         if (!string.IsNullOrWhiteSpace(currentRevisionKey))
@@ -96,7 +119,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             && RepositoryMatches(job, repositoryId, projectId)
             && job.PullRequestId == pullRequestId
             && job.IterationId == iterationId
-            && job.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded);
+            && job.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded or JobStatus.AdmissionHeld);
     }
 
     public ReviewJob? FindCompletedJob(
@@ -361,18 +384,21 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
     {
-        if (!this._jobs.TryGetValue(id, out var job) || job.Status != from)
+        lock (this._statusLock)
         {
-            return Task.FromResult(false);
-        }
+            if (!this._jobs.TryGetValue(id, out var job) || job.Status != from)
+            {
+                return Task.FromResult(false);
+            }
 
-        job.Status = to;
-        if (to == JobStatus.Processing)
-        {
-            job.ProcessingStartedAt = DateTimeOffset.UtcNow;
-        }
+            job.Status = to;
+            if (to == JobStatus.Processing)
+            {
+                job.ProcessingStartedAt = DateTimeOffset.UtcNow;
+            }
 
-        return Task.FromResult(true);
+            return Task.FromResult(true);
+        }
     }
 
     public Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default)
@@ -405,10 +431,10 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
     {
-        lock (this._endStateLock)
+        lock (this._statusLock)
         {
             if (this._jobs.TryGetValue(id, out var job) &&
-                job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+                job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.AdmissionRefused))
             {
                 job.ErrorMessage = errorMessage;
                 job.Status = JobStatus.Failed;
@@ -430,7 +456,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     /// </remarks>
     public bool TryFailWhileProcessing(Guid id, string errorMessage, ReviewJobFailureReason reason)
     {
-        lock (this._endStateLock)
+        lock (this._statusLock)
         {
             if (!this._jobs.TryGetValue(id, out var job) || job.Status != JobStatus.Processing)
             {
@@ -455,10 +481,10 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     {
         // Under the same lock as the failing transitions: a review completes on its own thread while the
         // heartbeat may be failing the job on another, and the two decide the same fields.
-        lock (this._endStateLock)
+        lock (this._statusLock)
         {
             if (this._jobs.TryGetValue(id, out var job) &&
-                job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+                job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.AdmissionRefused))
             {
                 job.ApplyResult(result);
                 job.Status = JobStatus.Completed;
@@ -518,11 +544,15 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job) &&
-            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+        lock (this._statusLock)
         {
-            job.Status = JobStatus.Cancelled;
-            job.CompletedAt = DateTimeOffset.UtcNow;
+            if (this._jobs.TryGetValue(id, out var job) &&
+                job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped
+                    or JobStatus.AdmissionRefused))
+            {
+                job.Status = JobStatus.Cancelled;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+            }
         }
 
         return Task.CompletedTask;
@@ -530,23 +560,88 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetSupersededAsync(Guid id, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job) &&
-            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+        lock (this._statusLock)
         {
-            job.Status = JobStatus.Superseded;
-            job.CompletedAt = DateTimeOffset.UtcNow;
+            if (this._jobs.TryGetValue(id, out var job) &&
+                job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped
+                    or JobStatus.AdmissionRefused))
+            {
+                job.Status = JobStatus.Superseded;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+            }
         }
 
         return Task.CompletedTask;
     }
 
+    public Task<SupersededReviewJobState?> TrySupersedeAsync(
+        Guid id,
+        JobStatus expectedStatus,
+        CancellationToken ct = default)
+    {
+        lock (this._statusLock)
+        {
+            if (!this._jobs.TryGetValue(id, out var job) || job.Status != expectedStatus)
+            {
+                return Task.FromResult<SupersededReviewJobState?>(null);
+            }
+
+            var previous = new SupersededReviewJobState(
+                job.Status,
+                job.CompletedAt,
+                job.LeaseOwner,
+                job.LeaseExpiresAt,
+                job.LastHeartbeatAt);
+
+            job.Status = JobStatus.Superseded;
+            job.CompletedAt = DateTimeOffset.UtcNow;
+            job.ClearLease();
+            return Task.FromResult<SupersededReviewJobState?>(previous);
+        }
+    }
+
+    public Task<bool> TryRestoreSupersededAsync(
+        Guid id,
+        SupersededReviewJobState state,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        lock (this._statusLock)
+        {
+            if (!this._jobs.TryGetValue(id, out var job) || job.Status != JobStatus.Superseded)
+            {
+                return Task.FromResult(false);
+            }
+
+            job.Status = state.Status;
+            job.CompletedAt = state.CompletedAt;
+            if (state.LeaseOwner is { } owner
+                && state.LeaseExpiresAt is { } expiresAt
+                && state.LastHeartbeatAt is { } lastHeartbeatAt)
+            {
+                job.ApplyLease(owner, Math.Max(job.LeaseGeneration, 1), expiresAt, lastHeartbeatAt);
+            }
+            else
+            {
+                job.ClearLease();
+            }
+
+            return Task.FromResult(true);
+        }
+    }
+
     public Task SetStoppedAsync(Guid id, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job) &&
-            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+        lock (this._statusLock)
         {
-            job.Status = JobStatus.Stopped;
-            job.CompletedAt = DateTimeOffset.UtcNow;
+            if (this._jobs.TryGetValue(id, out var job) &&
+                job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped
+                    or JobStatus.AdmissionRefused))
+            {
+                job.Status = JobStatus.Stopped;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+            }
         }
 
         return Task.CompletedTask;
@@ -554,18 +649,22 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetBudgetExceededAsync(
         Guid id,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job) &&
-            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+        lock (this._statusLock)
         {
-            job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
-            job.Status = JobStatus.BudgetExceeded;
-            job.CompletedAt = DateTimeOffset.UtcNow;
+            if (this._jobs.TryGetValue(id, out var job) &&
+                job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped
+                    or JobStatus.AdmissionRefused))
+            {
+                job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
+                job.Status = JobStatus.BudgetExceeded;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+            }
         }
 
         return Task.CompletedTask;
@@ -579,13 +678,111 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         decimal spentUsd,
         CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job) && job.Status == JobStatus.Pending)
+        lock (this._statusLock)
         {
-            job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
-            job.Status = JobStatus.BudgetHeld;
+            if (this._jobs.TryGetValue(id, out var job) && job.Status == JobStatus.Pending)
+            {
+                job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
+                job.Status = JobStatus.BudgetHeld;
+            }
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task SetAdmissionHeldAsync(Guid id, DateTimeOffset heldUntil, CancellationToken ct = default)
+    {
+        lock (this._statusLock)
+        {
+            if (this._jobs.TryGetValue(id, out var job) && job.Status == JobStatus.Pending)
+            {
+                job.SetAdmissionHold(heldUntil);
+                job.Status = JobStatus.AdmissionHeld;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> SetAdmissionRefusedAsync(Guid id, string reason, string? policyFingerprint, CancellationToken ct = default)
+    {
+        lock (this._statusLock)
+        {
+            if (!this._jobs.TryGetValue(id, out var job)
+                || job.Status is not (JobStatus.Pending or JobStatus.Processing or JobStatus.AdmissionHeld))
+            {
+                return Task.FromResult(false);
+            }
+
+            job.SetAdmissionRefusal(reason, policyFingerprint);
+            job.Status = JobStatus.AdmissionRefused;
+            job.CompletedAt = DateTimeOffset.UtcNow;
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<int> ReleaseDueAdmissionHoldsAsync(DateTimeOffset now, CancellationToken ct = default)
+    {
+        var released = 0;
+        lock (this._statusLock)
+        {
+            foreach (var job in this._jobs.Values)
+            {
+                if (job.Status == JobStatus.AdmissionHeld && job.HeldUntil is { } heldUntil && heldUntil <= now)
+                {
+                    job.ClearAdmissionHold();
+                    job.Status = JobStatus.Pending;
+                    released++;
+                }
+            }
+        }
+
+        return Task.FromResult(released);
+    }
+
+    public Task<ReviewSubmissionWindow> GetSubmissionWindowAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        DateTimeOffset since,
+        Guid excludeJobId,
+        CancellationToken ct = default)
+    {
+        // Under the lock the status writers take, so the window is counted against a set of jobs no
+        // transition is halfway through. The admission decision the caller makes from it is a second step:
+        // one host evaluates its candidates one after another, so no other evaluator of the same pull
+        // request is inside that gap.
+        //
+        // The bound is on reviews an AI performed, so a job counts once a model call was made for it: while it
+        // is processing, and afterwards whatever status it reached, because its token aggregates then record
+        // the calls. A job still queued, a job refused, a job still held and a job that ended before its first
+        // model call cost nothing, so none of them takes a place in the hour. The relational store counts the
+        // same jobs.
+        List<DateTimeOffset> inWindow;
+        lock (this._statusLock)
+        {
+            inWindow = this._jobs.Values
+                .Where(job =>
+                    job.ClientId == clientId
+                    && string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                    && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                    && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+                    && job.PullRequestId == pullRequestId
+                    && job.SubmittedAt >= since
+                    && job.Id != excludeJobId
+                    && (job.Status == JobStatus.Processing
+                        || job.TotalInputTokensAggregated > 0
+                        || job.TotalOutputTokensAggregated > 0))
+                .Select(job => job.SubmittedAt)
+                .ToList();
+        }
+
+        return Task.FromResult(
+            inWindow.Count == 0
+                ? ReviewSubmissionWindow.Empty
+                : new ReviewSubmissionWindow(inWindow.Count, inWindow.Min()));
     }
 
     public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
@@ -598,7 +795,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                 .Where(job =>
                     string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                     && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
-                    && job.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded)
+                    && job.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded or JobStatus.AdmissionHeld)
                 .ToList()
                 .AsReadOnly());
     }
@@ -688,6 +885,34 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                     ReviewRevisionKeys.GetStoredKey(latest.ReviewRevisionReference, latest.IterationId),
                     latest.ReviewRevisionReference,
                     latest.IterationId));
+    }
+
+    public Task<RefusedReviewAdmission?> GetLatestRefusedAdmissionAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct = default)
+    {
+        var latest = this._jobs.Values
+            .Where(job =>
+                job.ClientId == clientId
+                && string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+                && job.PullRequestId == pullRequestId
+                && job.Status == JobStatus.AdmissionRefused)
+            .OrderByDescending(job => job.SubmittedAt)
+            .ThenByDescending(job => job.IterationId)
+            .FirstOrDefault();
+
+        return Task.FromResult(
+            latest is null
+                ? null
+                : new RefusedReviewAdmission(
+                    ReviewRevisionKeys.GetStoredKey(latest.ReviewRevisionReference, latest.IterationId),
+                    latest.AdmissionPolicyFingerprint));
     }
 
     public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(

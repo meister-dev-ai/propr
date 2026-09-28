@@ -75,6 +75,44 @@ public sealed class CrawlConfigurationRepository(
     }
 
     /// <inheritdoc />
+    public async Task<CrawlConfigurationDto> AddReviewTargetAsync(
+        Guid clientId,
+        ScmProvider provider,
+        string providerScopePath,
+        string providerProjectKey,
+        string repositoryId,
+        string repositoryName,
+        CancellationToken ct = default)
+    {
+        var record = new CrawlConfigurationRecord
+        {
+            Id = Guid.NewGuid(),
+            ClientId = clientId,
+            Provider = provider,
+            OrganizationUrl = providerScopePath,
+            ProjectId = providerProjectKey,
+            CrawlIntervalSeconds = 60,
+            IsActive = false,
+            CreatedAt = DateTimeOffset.UtcNow,
+            RepoFilters =
+            [
+                new CrawlRepoFilterRecord
+                {
+                    Id = Guid.NewGuid(),
+                    RepositoryName = repositoryName,
+                    DisplayName = repositoryName,
+                    SourceProvider = provider.ToString(),
+                    CanonicalSourceRef = repositoryId,
+                    TargetBranchPatterns = [],
+                },
+            ],
+        };
+        dbContext.CrawlConfigurations.Add(record);
+        await dbContext.SaveChangesAsync(ct);
+        return ToDto(record);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<CrawlConfigurationDto>> GetAllActiveAsync(CancellationToken ct = default)
     {
         var records = await this.BaseQuery()

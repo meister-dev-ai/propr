@@ -1,9 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Net;
-using System.Net.Sockets;
 using FluentValidation;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Domain.Enums;
 
@@ -14,8 +13,11 @@ public sealed class
     CreateClientProviderConnectionRequestValidator : AbstractValidator<CreateClientProviderConnectionRequest>
 {
     /// <summary>Initializes a new instance of <see cref="CreateClientProviderConnectionRequestValidator" />.</summary>
-    public CreateClientProviderConnectionRequestValidator()
+    /// <param name="egressUrlPolicy">What this installation permits an operator-entered address to reach.</param>
+    public CreateClientProviderConnectionRequestValidator(EgressUrlPolicy egressUrlPolicy)
     {
+        ArgumentNullException.ThrowIfNull(egressUrlPolicy);
+
         this.RuleFor(request => request.AuthenticationKind)
             .Must((request, authenticationKind) =>
                 IsSupportedAuthenticationKind(request.ProviderFamily, request.HostBaseUrl, authenticationKind))
@@ -46,8 +48,8 @@ public sealed class
         this.RuleFor(request => request.HostBaseUrl)
             .NotEmpty()
             .WithMessage("HostBaseUrl is required.")
-            .Must(BeValidProviderHostBaseUrl)
-            .WithMessage("HostBaseUrl must be a valid HTTPS provider host URL.");
+            .Must(hostBaseUrl => GetHostBaseUrlRefusal(egressUrlPolicy, hostBaseUrl) is null)
+            .WithMessage(request => GetHostBaseUrlRefusal(egressUrlPolicy, request.HostBaseUrl));
 
         this.RuleFor(request => request.DisplayName)
             .NotEmpty()
@@ -160,54 +162,20 @@ public sealed class
         };
     }
 
-    internal static bool BeValidProviderHostBaseUrl(string? hostBaseUrl)
+    /// <summary>
+    ///     Why this installation refuses <paramref name="hostBaseUrl" />, or <see langword="null" /> when it
+    ///     permits it. The address classification is the one the outbound guard applies, so an address refused
+    ///     when a connection is saved is the same set of addresses refused at connect time.
+    /// </summary>
+    /// <param name="egressUrlPolicy">What this installation permits an operator-entered address to reach.</param>
+    /// <param name="hostBaseUrl">The host base URL as the operator entered it.</param>
+    internal static string? GetHostBaseUrlRefusal(EgressUrlPolicy egressUrlPolicy, string? hostBaseUrl)
     {
-        if (string.IsNullOrWhiteSpace(hostBaseUrl) || !Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
+        ArgumentNullException.ThrowIfNull(egressUrlPolicy);
 
-        if (string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-               && (uri.IsLoopback
-                   || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
-                   || IsPrivateNetworkHost(uri.Host));
-    }
-
-    private static bool IsPrivateNetworkHost(string host)
-    {
-        if (!IPAddress.TryParse(host, out var ipAddress))
-        {
-            return false;
-        }
-
-        if (IPAddress.IsLoopback(ipAddress))
-        {
-            return true;
-        }
-
-        var bytes = ipAddress.GetAddressBytes();
-        return ipAddress.AddressFamily switch
-        {
-            AddressFamily.InterNetwork => bytes[0] switch
-            {
-                10 => true,
-                172 when bytes[1] is >= 16 and <= 31 => true,
-                192 when bytes[1] == 168 => true,
-                _ => false,
-            },
-            AddressFamily.InterNetworkV6 => ipAddress.IsIPv6LinkLocal || ipAddress.IsIPv6SiteLocal || IsUniqueLocalIpv6(bytes),
-            _ => false,
-        };
-    }
-
-    private static bool IsUniqueLocalIpv6(byte[] bytes)
-    {
-        return bytes.Length > 0 && (bytes[0] & 0xFE) == 0xFC;
+        return egressUrlPolicy.GetRepositoryHostRefusalReason(
+            hostBaseUrl,
+            nameof(CreateClientProviderConnectionRequest.HostBaseUrl));
     }
 
     internal static bool IsHostedAzureDevOps(string? hostBaseUrl)

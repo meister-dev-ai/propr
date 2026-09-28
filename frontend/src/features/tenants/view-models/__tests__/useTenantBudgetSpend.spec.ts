@@ -119,4 +119,129 @@ describe('useTenantBudgetSpend', () => {
     expect(vm.spend.value).toBeNull()
     expect(vm.error.value).not.toBe('')
   })
+
+  it('measures the meter against the tenant cap when the tenant has one', async () => {
+    const vm = useTenantBudgetSpend('t1', {
+      loader: async () => ({
+        data: spend({
+          spentToDateUsd: 4500,
+          monthlySoftCapUsd: 120,
+          monthlyHardCapUsd: 150,
+          tenantMonthlySoftCapUsd: 4000,
+          tenantMonthlyHardCapUsd: 5000,
+        }),
+      }),
+    })
+
+    await vm.loadSpend()
+
+    expect(vm.hasTenantCap.value).toBe(true)
+    expect(vm.meterCapUsd.value).toBe(5000)
+    expect(vm.meterPercent.value).toBe(90)
+    // Past the tenant soft cap but under the tenant hard cap.
+    expect(vm.status.value).toBe('warning')
+    // The summed client total is still reported beside it.
+    expect(vm.softCapUsd.value).toBe(120)
+    expect(vm.hardCapUsd.value).toBe(150)
+    // The projection (180) is measured against the tenant caps, not the summed client caps it also exceeds.
+    expect(vm.projectedToExceedSoftCap.value).toBe(false)
+    expect(vm.projectedToExceedHardCap.value).toBe(false)
+  })
+
+  it('fills the meter toward the tenant soft cap when it is the only tenant cap', async () => {
+    const vm = useTenantBudgetSpend('t1', {
+      loader: async () => ({
+        data: spend({ spentToDateUsd: 2000, tenantMonthlySoftCapUsd: 4000 }),
+      }),
+    })
+
+    await vm.loadSpend()
+
+    // The summed client hard cap (150) would misreport a tenant spending toward its own $4,000 ceiling.
+    expect(vm.meterCapUsd.value).toBe(4000)
+    expect(vm.meterPercent.value).toBe(50)
+  })
+
+  it('draws the tenant cap on the current month only', async () => {
+    const vm = useTenantBudgetSpend('t1', {
+      loader: async () => ({
+        data: spend({
+          tenantMonthlySoftCapUsd: 4000,
+          tenantMonthlyHardCapUsd: 5000,
+          months: [
+            {
+              year: 2026,
+              month: 6,
+              periodStart: '2026-06-01',
+              spentUsd: 100,
+              effectiveSoftCapUsd: 120,
+              effectiveHardCapUsd: 150,
+            },
+            {
+              year: 2026,
+              month: 7,
+              periodStart: '2026-07-01',
+              spentUsd: 90,
+              effectiveSoftCapUsd: 120,
+              effectiveHardCapUsd: 150,
+            },
+          ],
+        }),
+      }),
+    })
+
+    await vm.loadSpend()
+
+    const chart = vm.trendChartData.value
+    // June keeps the client cap history the API supplied; July carries the tenant cap in force today.
+    expect(chart.datasets.find((set) => set.label === 'Soft cap')?.data).toEqual([120, 4000])
+    expect(chart.datasets.find((set) => set.label === 'Hard cap')?.data).toEqual([150, 5000])
+  })
+
+  // The summed client caps bind a single client each, so a tenant that states one kind of cap is measured
+  // against that kind alone. Mixing the two sources warned a tenant well inside its own $4,000 ceiling that it
+  // had passed a summed client hard cap of $150.
+  it('leaves the kind the tenant did not state without a ceiling when it stated the other', async () => {
+    const vm = useTenantBudgetSpend('t1', {
+      loader: async () => ({
+        data: spend({ spentToDateUsd: 2000, projectedPeriodSpendUsd: 3000, tenantMonthlySoftCapUsd: 4000 }),
+      }),
+    })
+
+    await vm.loadSpend()
+
+    expect(vm.effectiveSoftCapUsd.value).toBe(4000)
+    expect(vm.effectiveHardCapUsd.value).toBeNull()
+    expect(vm.isOverHardCap.value).toBe(false)
+    expect(vm.projectedToExceedHardCap.value).toBe(false)
+    expect(vm.status.value).toBe('ok')
+  })
+
+  it('measures a tenant that stated only a hard cap against that cap alone', async () => {
+    const vm = useTenantBudgetSpend('t1', {
+      loader: async () => ({
+        data: spend({ spentToDateUsd: 2000, projectedPeriodSpendUsd: 3000, tenantMonthlyHardCapUsd: 5000 }),
+      }),
+    })
+
+    await vm.loadSpend()
+
+    expect(vm.effectiveSoftCapUsd.value).toBeNull()
+    expect(vm.effectiveHardCapUsd.value).toBe(5000)
+    expect(vm.meterCapUsd.value).toBe(5000)
+    expect(vm.isOverSoftCap.value).toBe(false)
+    expect(vm.projectedToExceedSoftCap.value).toBe(false)
+    expect(vm.status.value).toBe('ok')
+  })
+
+  it('falls back to the summed client caps when the tenant has none', async () => {
+    const vm = useTenantBudgetSpend('t1', { loader: async () => ({ data: spend({ spentToDateUsd: 90 }) }) })
+
+    await vm.loadSpend()
+
+    expect(vm.hasTenantCap.value).toBe(false)
+    expect(vm.effectiveSoftCapUsd.value).toBe(120)
+    expect(vm.effectiveHardCapUsd.value).toBe(150)
+    expect(vm.meterCapUsd.value).toBe(150)
+  })
 })

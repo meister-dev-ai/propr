@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.IdentityAndAccess.Authentication.Models;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Api.Controllers;
@@ -24,6 +25,26 @@ public sealed class SecretLogRedactionTests
     private const string CompatibleApiKey = "meisterdev/openAiCompatible:ApiKey";
 
     private const string Secret = "sk-must-never-be-logged";
+
+    [Fact]
+    public void MachineCredentialRenderingWithholdsIssuedTokenAndStoredVerifiers()
+    {
+        var sink = new CapturingSink();
+        using var logger = SecretLogRedaction.Apply(new LoggerConfiguration().MinimumLevel.Verbose())
+            .WriteTo.Sink(sink).CreateLogger();
+        var issued = new IssuedTenantMachineCredential(Guid.NewGuid(), Guid.NewGuid(), "automation", Secret, DateTimeOffset.UtcNow, null);
+        var stored = new TenantMachineCredential(
+            issued.Id, issued.TenantId, issued.Label,
+            "bcrypt-secret-verifier", "sha-secret-lookup", issued.CreatedAt, null, Guid.NewGuid());
+        logger.Information(
+            "issued {@Issued} stored {@Stored} issuedText {IssuedText} storedText {StoredText}",
+            issued, stored, issued, stored);
+        var rendered = sink.Rendered();
+        Assert.DoesNotContain(Secret, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("bcrypt-secret-verifier", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("sha-secret-lookup", rendered, StringComparison.Ordinal);
+        Assert.Contains("[REDACTED]", rendered, StringComparison.Ordinal);
+    }
 
     // A family's secret-marked declared value. It goes into the same protected envelope as the credential and is
     // withheld from the caller on the same terms.

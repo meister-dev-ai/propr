@@ -106,6 +106,43 @@ public sealed class AgentAiCommentResolutionCoreTests
         return new PrCommentThread("1", "/src/Target.cs", 5, comments);
     }
 
+    // A thread pass never asks the model for its reasoning and never records model output that could carry
+    // it: the request carries no provider reasoning options, and what the pass takes from the completion is
+    // the parsed verdict and its reply text, which exclude reasoning parts. There is therefore no tenant
+    // capture decision to apply to a thread pass.
+    [Fact]
+    public async Task EvaluateCodeChangeAsync_AsksForNoReasoningAndKeepsNoneTheProviderReturns()
+    {
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [
+                            new TextReasoningContent("the model weighing the thread privately"),
+                            new TextContent("""{"resolved": true, "replyText": "The values are validated now."}"""),
+                        ])));
+        var sut = new AgentAiCommentResolutionCore();
+
+        var result = await sut.EvaluateCodeChangeAsync(
+            BuildAnchoredThread(),
+            BuildPr(),
+            chatClient,
+            ModelId,
+            CancellationToken.None);
+
+        Assert.True(result.IsResolved);
+        Assert.Equal("The values are validated now.", result.ReplyText);
+        await chatClient.Received(1).GetResponseAsync(
+            Arg.Any<IList<ChatMessage>>(),
+            Arg.Is<ChatOptions?>(options => options != null && options.RawRepresentationFactory == null),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task EvaluateCodeChangeAsync_WhenTheFixLandedInAnotherFile_AsksForThatFileAndResolves()
     {

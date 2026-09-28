@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
@@ -21,6 +22,13 @@ public class AdoCommentPosterTests
     private const string Host = "https://dev.azure.com/org";
 
     private const string Project = "project";
+
+    /// <summary>The marker every summary the poster writes starts with.</summary>
+    private const string SummaryPrefix = "**AI Review Summary**";
+
+    private const string Refusal = "Review not started: 312 changed files exceed the limit of 150.";
+
+    private const string OversizedRepository = "Review not started: the repository is 4,096 MB.";
 
     [Theory]
     [InlineData(CommentSeverity.Error)]
@@ -366,7 +374,7 @@ public class AdoCommentPosterTests
     public void TruncateIfNeeded_ShortMessage_ReturnsUnchanged()
     {
         var message = "Short message.";
-        var result = AdoCommentPoster.TruncateIfNeeded(message);
+        var result = AdoCommentPoster.TruncateIfNeeded(message, TestPostedCommentComposer.Default);
         Assert.Equal(message, result);
     }
 
@@ -374,7 +382,7 @@ public class AdoCommentPosterTests
     public void TruncateIfNeeded_ExactlyAtLimit_ReturnsUnchanged()
     {
         var message = new string('x', AdoCommentPoster.MaxCommentLength);
-        var result = AdoCommentPoster.TruncateIfNeeded(message);
+        var result = AdoCommentPoster.TruncateIfNeeded(message, TestPostedCommentComposer.Default);
         Assert.Equal(message, result);
     }
 
@@ -382,7 +390,7 @@ public class AdoCommentPosterTests
     public void TruncateIfNeeded_OverLimit_TruncatesAndAppendsNotice()
     {
         var message = new string('a', AdoCommentPoster.MaxCommentLength + 5_000);
-        var result = AdoCommentPoster.TruncateIfNeeded(message);
+        var result = AdoCommentPoster.TruncateIfNeeded(message, TestPostedCommentComposer.Default);
         Assert.True(result.Length <= AdoCommentPoster.MaxCommentLength);
         Assert.Contains("truncated", result);
         Assert.Contains("admin UI", result);
@@ -393,7 +401,7 @@ public class AdoCommentPosterTests
     {
         // Build a message where the cutoff lands in the middle of "boundary"
         var prefix = new string('x', AdoCommentPoster.MaxCommentLength - 10) + " boundary extra";
-        var result = AdoCommentPoster.TruncateIfNeeded(prefix);
+        var result = AdoCommentPoster.TruncateIfNeeded(prefix, TestPostedCommentComposer.Default);
         Assert.True(result.Length <= AdoCommentPoster.MaxCommentLength);
         // Result should not start mid-word from the overflow
         Assert.DoesNotContain("boundary", result.Split('\n')[0]);
@@ -406,7 +414,7 @@ public class AdoCommentPosterTests
             "Run dotnet \"$ProCursorDll\" --output \"$ApiDll\" to validate the fix.",
             []);
 
-        var summary = AdoCommentPoster.BuildSummaryText(result);
+        var summary = AdoCommentPoster.BuildSummaryText(result, TestPostedCommentComposer.Default);
 
         Assert.Contains("dotnet \"$ProCursorDll\" --output \"$ApiDll\"", summary);
         Assert.DoesNotContain("&quot;", summary);
@@ -421,7 +429,7 @@ public class AdoCommentPosterTests
             ContextSkippedFilePaths = ["src/Generated/Huge.g.cs"],
         };
 
-        var summary = AdoCommentPoster.BuildSummaryText(result);
+        var summary = AdoCommentPoster.BuildSummaryText(result, TestPostedCommentComposer.Default);
 
         Assert.Contains("Reviewed diff-only", summary);
         Assert.Contains("src/BigService.cs", summary);
@@ -434,7 +442,7 @@ public class AdoCommentPosterTests
     {
         var result = new ReviewResult("Overall summary.", []);
 
-        var summary = AdoCommentPoster.BuildSummaryText(result);
+        var summary = AdoCommentPoster.BuildSummaryText(result, TestPostedCommentComposer.Default);
 
         Assert.DoesNotContain("Reviewed diff-only", summary);
         Assert.DoesNotContain("Skipped — exceeds model context window", summary);
@@ -453,13 +461,91 @@ public class AdoCommentPosterTests
             severity,
             "Use \"$ApiDll\" after removing <script>alert('xss')</script>.");
 
-        var body = AdoCommentPoster.FormatInlineCommentBody(comment);
+        var body = AdoCommentPoster.FormatInlineCommentBody(comment, TestPostedCommentComposer.Default);
 
         Assert.StartsWith($"{expectedPrefix}: ", body, StringComparison.Ordinal);
         Assert.Contains("\"$ApiDll\"", body);
         Assert.DoesNotContain("&quot;", body);
         Assert.Equal(-1, body.IndexOf("<script>", StringComparison.Ordinal));
         Assert.Contains("<\u200Bscript>", body);
+    }
+
+    [Fact]
+    public void BuildSummaryText_KeepsTheSummaryPrefixFirstAndTheMarkerLast()
+    {
+        var result = new ReviewResult("Overall summary.", []);
+
+        var summary = AdoCommentPoster.BuildSummaryText(result, TestPostedCommentComposer.Default);
+
+        Assert.StartsWith(HarvestedThreadEligibility.SummaryPrefix, summary, StringComparison.Ordinal);
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildSummaryText_PutsTheMarkerAfterTheContextBudgetSections()
+    {
+        var result = new ReviewResult("Overall summary.", [])
+        {
+            ContextSkippedFilePaths = ["src/Generated/Huge.g.cs"],
+        };
+
+        var summary = AdoCommentPoster.BuildSummaryText(result, TestPostedCommentComposer.Default);
+
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, summary, StringComparison.Ordinal);
+        Assert.True(
+            summary.IndexOf("src/Generated/Huge.g.cs", StringComparison.Ordinal)
+            < summary.IndexOf(TestPostedCommentComposer.Default.Text, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BuildSummaryText_WithConfiguredWording_UsesThatWording()
+    {
+        var composer = TestPostedCommentComposer.With("Erzeugt von ProPR.");
+        var result = new ReviewResult("Overall summary.", []);
+
+        var summary = AdoCommentPoster.BuildSummaryText(result, composer);
+
+        Assert.EndsWith(composer.Text, summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatInlineCommentBody_KeepsTheSeverityPrefixFirstAndTheMarkerLast()
+    {
+        var comment = new ReviewComment("/src/Foo.cs", 7, CommentSeverity.Error, "Add a null check.");
+
+        var body = AdoCommentPoster.FormatInlineCommentBody(comment, TestPostedCommentComposer.Default);
+
+        Assert.StartsWith("ERROR: ", body, StringComparison.Ordinal);
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TruncateIfNeeded_OverLimit_KeepsTheNoticeAndTheMarkerInsideTheCap()
+    {
+        var marked = AdoCommentPoster.FormatInlineCommentBody(
+            new ReviewComment("/src/Foo.cs", 7, CommentSeverity.Error, new string('a', AdoCommentPoster.MaxCommentLength)),
+            TestPostedCommentComposer.Default);
+
+        var result = AdoCommentPoster.TruncateIfNeeded(marked, TestPostedCommentComposer.Default);
+
+        Assert.True(result.Length <= AdoCommentPoster.MaxCommentLength);
+        Assert.Contains("truncated", result, StringComparison.Ordinal);
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TruncateIfNeeded_OverLimit_CarriesTheMarkerOnlyOnce()
+    {
+        // The body goes in already marked, so a truncation that appends without taking the marker off first
+        // leaves two of them. Comparing the first and last occurrence alone would also hold for a body that
+        // lost the marker entirely, which is why the marker has to be found on the last line as well.
+        var marked = AdoCommentPoster.FormatInlineCommentBody(
+            new ReviewComment("/src/Foo.cs", 7, CommentSeverity.Error, new string('a', AdoCommentPoster.MaxCommentLength)),
+            TestPostedCommentComposer.Distinctive);
+
+        var result = AdoCommentPoster.TruncateIfNeeded(marked, TestPostedCommentComposer.Distinctive);
+
+        TestPostedCommentComposer.AssertMarkedOnce(result, TestPostedCommentComposer.DistinctiveMarker);
     }
 
     [Fact]
@@ -582,6 +668,127 @@ public class AdoCommentPosterTests
         var failure = Assert.Single(diagnostics.PostingFailures);
         Assert.Equal("summary", failure.ThreadKind);
         Assert.Null(failure.FilePath);
+    }
+
+    // An admission refusal carries its whole message in the summary. Where a bot summary thread already sits on
+    // the pull request, skipping the summary would leave the author with nothing saying why nothing ran, so the
+    // refusal joins that thread as a reply.
+    [Fact]
+    public async Task PostResolvedThreadsAsync_WithAReplyFactoryAndABotSummary_RepliesInThatThread()
+    {
+        var newThreads = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            newThreads.Add(message);
+            return Task.FromResult(CreatedThread(newThreads.Count, message));
+        };
+
+        var replies = new List<(int ThreadId, string Message)>();
+        AdoCommentPoster.AdoReplyFactory replyFactory = (threadId, message, _) =>
+        {
+            replies.Add((threadId, message));
+            return Task.FromResult(new Comment { Id = 77, Content = message });
+        };
+
+        var diagnostics = await PostAsync(new ReviewResult(Refusal, []), factory, BotSummaryThread(), replyFactory);
+
+        Assert.Empty(newThreads);
+        var reply = Assert.Single(replies);
+        Assert.Equal(4242, reply.ThreadId);
+        Assert.Equal(TestPostedCommentComposer.Default.Append(SummaryPrefix + "\n\n" + Refusal), reply.Message);
+        // The reply is recorded against the thread it joined, so the provenance row points at that thread.
+        var posted = Assert.Single(diagnostics.PostedComments);
+        Assert.Equal("4242", posted.ProviderThreadId);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_ReplyRejected_RecordsTheFailureAndStillPostsTheInlineThreads()
+    {
+        // A rejected reply is caught where the summary is posted, separately from a rejected thread creation,
+        // so the rest of the pass has to survive it the same way.
+        var newThreads = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            newThreads.Add(message);
+            return Task.FromResult(CreatedThread(newThreads.Count, message));
+        };
+
+        AdoCommentPoster.AdoReplyFactory replyFactory = (_, _, _) =>
+            throw new InvalidOperationException("TF401028: the reply was rejected by the provider.");
+
+        var result = new ReviewResult(
+            Refusal,
+            new List<ReviewComment>
+            {
+                new("/src/A.cs", 1, CommentSeverity.Error, "inline still posts"),
+            }.AsReadOnly());
+
+        var diagnostics = await PostAsync(result, factory, BotSummaryThread(), replyFactory);
+
+        var posted = Assert.Single(newThreads);
+        Assert.Contains("inline still posts", posted, StringComparison.Ordinal);
+        Assert.Equal(1, diagnostics.PostedCount);
+        var failure = Assert.Single(diagnostics.PostingFailures);
+        Assert.Equal("summary", failure.ThreadKind);
+        Assert.Null(failure.FilePath);
+        Assert.Contains("TF401028", failure.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_ReplyRejectedAndNothingElseToPost_ThrowsPublicationFailure()
+    {
+        // An admission refusal carries no inline comments, so a rejected reply leaves the pass with nothing
+        // posted and it must not be reported as a success.
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) => Task.FromResult(CreatedThread(1, message));
+        AdoCommentPoster.AdoReplyFactory replyFactory = (_, _, _) =>
+            throw new InvalidOperationException("TF401028: the reply was rejected by the provider.");
+
+        var exception = await Assert.ThrowsAsync<ReviewCommentPublicationFailedException>(() => PostAsync(
+            new ReviewResult(Refusal, []), factory, BotSummaryThread(), replyFactory));
+
+        Assert.Equal(0, exception.Diagnostics.PostedCount);
+        Assert.Equal(1, exception.Diagnostics.FailedCount);
+        Assert.Equal("summary", Assert.Single(exception.Diagnostics.PostingFailures).ThreadKind);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_WithAReplyFactoryAndNoBotSummary_PostsTheSummaryThread()
+    {
+        var newThreads = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            newThreads.Add(message);
+            return Task.FromResult(CreatedThread(newThreads.Count, message));
+        };
+
+        var replied = false;
+        AdoCommentPoster.AdoReplyFactory replyFactory = (_, _, _) =>
+        {
+            replied = true;
+            return Task.FromResult(new Comment { Id = 1, Content = string.Empty });
+        };
+
+        await PostAsync(new ReviewResult(OversizedRepository, []), factory, existingThreads: [], replyFactory);
+
+        Assert.False(replied);
+        Assert.Equal(
+            TestPostedCommentComposer.Default.Append(SummaryPrefix + "\n\n" + OversizedRepository),
+            Assert.Single(newThreads));
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_WithoutAReplyFactory_LeavesAnExistingBotSummaryAlone()
+    {
+        var newThreads = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            newThreads.Add(message);
+            return Task.FromResult(CreatedThread(newThreads.Count, message));
+        };
+
+        await PostAsync(new ReviewResult("Summary body.", []), factory, BotSummaryThread());
+
+        Assert.Empty(newThreads);
     }
 
     [Fact]
@@ -764,9 +971,10 @@ public class AdoCommentPosterTests
         ReviewResult result,
         AdoCommentPoster.AdoThreadFactory factory,
         IReadOnlyList<PrCommentThread>? existingThreads = null,
+        AdoCommentPoster.AdoReplyFactory? replyFactory = null,
         CancellationToken cancellationToken = default)
     {
-        var poster = new AdoCommentPoster(null!, null!);
+        var poster = new AdoCommentPoster(null!, null!, TestPostedCommentComposer.Default);
         return poster.PostResolvedThreadsAsync(
             result,
             factory,
@@ -781,7 +989,20 @@ public class AdoCommentPosterTests
             changeTrackingIds: new Dictionary<string, int>(),
             existingThreads: existingThreads,
             publicationIdentity: null,
+            replyFactory: replyFactory,
             cancellationToken);
+    }
+
+    private static IReadOnlyList<PrCommentThread> BotSummaryThread(string threadId = "4242")
+    {
+        return
+        [
+            new PrCommentThread(
+                threadId,
+                null,
+                null,
+                [new PrThreadComment("Meister Bot", "**AI Review Summary**\n\nAll clear.", PosterBotId)]),
+        ];
     }
 
     private static GitPullRequestCommentThread CreatedThread(int id, string message)

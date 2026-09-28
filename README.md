@@ -55,6 +55,11 @@ provider and AI model, and getting a first review posted. The [deployment guide]
 covers what to change once you keep the installation. The compose stack is for evaluation;
 `example/azure/.azure/` deploys the same stack to Azure Container Apps.
 
+Automation callers can use tenant machine credentials for permitted client configuration and review
+operations. ProPR checks current tenant ownership of clients and review jobs. See
+[automation credentials](docs/reference/security.md#automation-credentials) and the
+[API reference](docs/reference/api.md#tenant-machine-credentials).
+
 ## Documentation
 
 All documentation is under [docs/](docs/index.md), which maps every page and gives a reading order.

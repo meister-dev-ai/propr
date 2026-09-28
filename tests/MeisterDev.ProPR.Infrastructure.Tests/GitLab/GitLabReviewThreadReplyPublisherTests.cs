@@ -65,14 +65,22 @@ public sealed class GitLabReviewThreadReplyPublisherTests
 
         var sut = new GitLabReviewThreadReplyPublisher(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var noteId = await sut.ReplyAsync(clientId, thread, "Fixed in the latest push.");
 
         Assert.Equal(HttpMethod.Post, replyMethod);
         Assert.Equal(NotesUri, replyUri);
         Assert.NotNull(replyBody);
-        Assert.Contains("Fixed in the latest push.", Uri.UnescapeDataString(replyBody.Replace('+', ' ')), StringComparison.Ordinal);
+
+        // The form field as it left the process, not what the formatter would have produced on its own: a
+        // publisher that stopped passing the body through the composer posts an unmarked reply.
+        var posted = Uri.UnescapeDataString(replyBody.Replace('+', ' '));
+        Assert.StartsWith("body=", posted, StringComparison.Ordinal);
+        Assert.Equal(
+            "Fixed in the latest push.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            posted["body=".Length..]);
         Assert.Equal("1126", noteId);
     }
 
@@ -94,7 +102,8 @@ public sealed class GitLabReviewThreadReplyPublisherTests
 
         var sut = new GitLabReviewThreadReplyPublisher(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ReplyAsync(clientId, thread, "Fixed in the latest push."));
 
@@ -123,7 +132,8 @@ public sealed class GitLabReviewThreadReplyPublisherTests
 
         var sut = new GitLabReviewThreadReplyPublisher(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ReplyAsync(clientId, thread, "Fixed in the latest push."));
 
@@ -149,7 +159,8 @@ public sealed class GitLabReviewThreadReplyPublisherTests
 
         var sut = new GitLabReviewThreadReplyPublisher(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ReplyAsync(clientId, thread, "Fixed in the latest push."));
 
@@ -160,13 +171,15 @@ public sealed class GitLabReviewThreadReplyPublisherTests
     [Fact]
     public void FormatReplyText_NeutralizesMarkupWithoutManglingQuotedCode()
     {
-        const string input = "Use \"--no-verify\" only after removing <script>alert('xss')</script>.";
+        const string input =
+            "Use \"--no-verify\" only after removing <script>alert('xss')</script> and <img src=x onerror=alert(1)>.";
 
-        var reply = GitLabReviewThreadReplyPublisher.FormatReplyText(input);
+        var reply = GitLabReviewThreadReplyPublisher.FormatReplyText(input, TestPostedCommentComposer.Distinctive);
 
-        Assert.Contains("\"--no-verify\"", reply, StringComparison.Ordinal);
-        Assert.DoesNotContain("&quot;", reply, StringComparison.Ordinal);
-        Assert.Equal(-1, reply.IndexOf("<script>", StringComparison.Ordinal));
+        Assert.Equal(
+            "Use \"--no-verify\" only after removing <\u200Bscript>alert('xss')<\u200B/script> and "
+            + "<\u200Bimg src=x onerror=alert(1)>.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            reply);
     }
 
     private static ReviewThreadRef CreateThread(ProviderHostRef host)
@@ -174,5 +187,15 @@ public sealed class GitLabReviewThreadReplyPublisherTests
         var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
         var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
         return new ReviewThreadRef(review, DiscussionId, "src/file.ts", 18, isReviewerOwned: true);
+    }
+
+    [Fact]
+    public void FormatReplyText_EndsWithTheMarker()
+    {
+        var reply = GitLabReviewThreadReplyPublisher.FormatReplyText(
+            "Fixed in the latest push.",
+            TestPostedCommentComposer.Distinctive);
+
+        Assert.Equal("Fixed in the latest push.\n\n" + TestPostedCommentComposer.DistinctiveMarker, reply);
     }
 }

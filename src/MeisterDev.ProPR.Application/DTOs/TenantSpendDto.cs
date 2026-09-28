@@ -45,6 +45,11 @@ public sealed record TenantSpendMonthDto(
 /// <param name="Months">Per-month aggregate spend over the trailing window, oldest first.</param>
 /// <param name="ResetCount">How many manual spend resets the tenant's clients received this period, in total.</param>
 /// <param name="LastResetAt">When the most recent manual spend reset in this period was performed (UTC), or null when none.</param>
+/// <param name="TenantMonthlySoftCapUsd">
+///     The tenant's own monthly soft cap, or null when the tenant has no soft cap. Unlike
+///     <paramref name="MonthlySoftCapUsd" /> this is a ceiling enforcement applies to the tenant's aggregate spend.
+/// </param>
+/// <param name="TenantMonthlyHardCapUsd">The tenant's own monthly hard cap, or null when the tenant has no hard cap.</param>
 public sealed record TenantSpendDto(
     Guid TenantId,
     DateOnly PeriodStart,
@@ -56,4 +61,6 @@ public sealed record TenantSpendDto(
     decimal? ProjectedPeriodSpendUsd,
     IReadOnlyList<TenantSpendMonthDto> Months,
     int ResetCount = 0,
-    DateTime? LastResetAt = null);
+    DateTime? LastResetAt = null,
+    decimal? TenantMonthlySoftCapUsd = null,
+    decimal? TenantMonthlyHardCapUsd = null);

@@ -12,7 +12,7 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
     : IClassFixture<TenantAdministrationApiFactory>
 {
     [Fact]
-    public async Task PostMembership_TenantAdministratorForOwnTenant_Returns405()
+    public async Task PostMembership_TenantAdministratorForOwnTenant_Returns403()
     {
         var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
         var tenantAdminId = await factory.SeedUserAsync($"tenant.admin.{Guid.NewGuid():N}", $"tenant.admin.{Guid.NewGuid():N}@acme.test");
@@ -28,11 +28,11 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
 
         var response = await httpClient.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
-    public async Task PostMembership_TenantAdministratorForOtherTenant_Returns405()
+    public async Task PostMembership_TenantAdministratorForOtherTenant_Returns403()
     {
         var ownTenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
         var otherTenantId = await factory.SeedTenantAsync($"globex-{Guid.NewGuid():N}", "Globex Corp");
@@ -49,7 +49,7 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
 
         var response = await httpClient.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

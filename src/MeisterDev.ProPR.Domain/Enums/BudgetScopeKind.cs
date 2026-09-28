@@ -14,4 +14,7 @@ public enum BudgetScopeKind
 
     /// <summary>The spend across the review jobs of a single pull-request increment.</summary>
     Increment = 2,
+
+    /// <summary>The spend of every client in the tenant across the current monthly period.</summary>
+    TenantMonthly = 3,
 }

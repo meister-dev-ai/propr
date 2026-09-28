@@ -10,9 +10,15 @@ COPY src/ src/
 COPY tests/ tests/
 
 RUN dotnet restore src/MeisterDev.ProPR.ProCursor.Service/MeisterDev.ProPR.ProCursor.Service.csproj
+RUN dotnet restore src/MeisterDev.DataProtection.AzureKeyVaultAddIn/MeisterDev.DataProtection.AzureKeyVaultAddIn.csproj
 
 RUN dotnet publish src/MeisterDev.ProPR.ProCursor.Service/MeisterDev.ProPR.ProCursor.Service.csproj \
     -c Release -o /app --no-restore
+
+# The key-ring protector add-in directory, at the same path the API image uses. Both services read the same
+# key ring, so both need the protector that opens it.
+RUN dotnet publish src/MeisterDev.DataProtection.AzureKeyVaultAddIn/MeisterDev.DataProtection.AzureKeyVaultAddIn.csproj \
+    -c Release -o /app/data-protection-add-ins/MeisterDev.DataProtection.AzureKeyVaultAddIn --no-restore
 
 RUN mkdir -p /app/.data-protection-keys
 

@@ -327,6 +327,66 @@ public sealed class FileByFileContextPrefetchStageTests
         Assert.Equal(FallbackReason.FileTooLarge, result.FallbackReason);
     }
 
+    // The structural analyzers are built with the installation value and hold their own guard to it, so a
+    // tenant limit above it is clamped here. Without the clamp the file passes this check, reaches an analyzer
+    // that refuses it, and comes back with no definitions and no reason.
+    [Fact]
+    public async Task BuildSurroundingContextAsync_ATenantLimitAboveTheInstallationValue_IsClampedToIt()
+    {
+        var opts = new AiReviewOptions
+        {
+            MaxPrefetchRegionChars = 4000,
+            PrefetchWindowLinesBefore = 40,
+            PrefetchWindowLinesAfter = 15,
+            MaxPrefetchCallerSites = 0,
+            MaxStructuralParseBytes = 1024,
+        };
+
+        var big = new string('x', 5000) + "\n";
+        var diff = BuildDiffWithHunkAt(1, 1);
+
+        var result = await FileByFileContextPrefetchStage.BuildSurroundingContextAsync(
+            "big.cs",
+            big,
+            diff,
+            opts,
+            CreateRoslynAnalyzer(),
+            CancellationToken.None,
+            maxStructuralParseBytesOverride: 5_242_880);
+
+        Assert.False(result.BoundaryResolved);
+        Assert.Equal(FallbackReason.FileTooLarge, result.FallbackReason);
+    }
+
+    // A tenant limit under the installation value is the case the override exists for, and it still binds.
+    [Fact]
+    public async Task BuildSurroundingContextAsync_ATenantLimitUnderTheInstallationValue_Binds()
+    {
+        var opts = new AiReviewOptions
+        {
+            MaxPrefetchRegionChars = 4000,
+            PrefetchWindowLinesBefore = 40,
+            PrefetchWindowLinesAfter = 15,
+            MaxPrefetchCallerSites = 0,
+            MaxStructuralParseBytes = 1_048_576,
+        };
+
+        var big = new string('x', 5000) + "\n";
+        var diff = BuildDiffWithHunkAt(1, 1);
+
+        var result = await FileByFileContextPrefetchStage.BuildSurroundingContextAsync(
+            "big.cs",
+            big,
+            diff,
+            opts,
+            CreateRoslynAnalyzer(),
+            CancellationToken.None,
+            maxStructuralParseBytesOverride: 1024);
+
+        Assert.False(result.BoundaryResolved);
+        Assert.Equal(FallbackReason.FileTooLarge, result.FallbackReason);
+    }
+
     // T020d — kill-switch off: heuristic everywhere, AnalyzerDisabled reason.
     [Fact]
     public async Task BuildSurroundingContextAsync_KillSwitchOff_UsesHeuristicWithAnalyzerDisabled()

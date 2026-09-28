@@ -530,6 +530,7 @@ public sealed class CodeInsightMissHarvesterTests
                 this.Misses,
                 this.Classifier,
                 this.Gate,
+                TestPostedCommentComposer.Default,
                 NullLogger<CodeInsightMissHarvester>.Instance);
         }
 

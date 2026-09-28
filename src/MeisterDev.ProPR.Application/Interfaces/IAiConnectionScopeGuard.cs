@@ -14,6 +14,9 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 /// </summary>
 public interface IAiConnectionScopeGuard
 {
+    /// <summary>Validates a reference batch with shared ownership and provider-policy reads.</summary>
+    Task<IReadOnlySet<Guid>> ValidateManyAsync(IReadOnlyList<AiConnectionDto> connections, Guid referencingTenantId, CancellationToken ct = default);
+
     /// <summary>
     ///     Returns <see langword="null" /> when <paramref name="connection" /> may be referenced from
     ///     <paramref name="referencingTenantId" />, or a user-facing reason when the reference must be refused.

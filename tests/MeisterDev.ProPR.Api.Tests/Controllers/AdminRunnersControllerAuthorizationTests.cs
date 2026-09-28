@@ -471,7 +471,8 @@ public sealed class AdminRunnersControllerAuthorizationTests
             true,
             true,
             DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            InstallationDefaultCapturesReasoning: true);
     }
 
     private static RunnerFleetStatus StalledStatus()

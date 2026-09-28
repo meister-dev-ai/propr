@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { describe, expect, it } from 'vitest'
-import { capFromInput, capToInput } from '../useClientDetailViewModel'
+import { MAX_ADMISSION_BOUND, admissionBoundsError, capFromInput, capToInput } from '../useClientDetailViewModel'
 
 // A blank budget field means "no limit" (null), never a $0 cap. These conversions guard that
 // invariant in both directions so an unset cap round-trips as unset instead of silently becoming 0.
@@ -38,5 +38,60 @@ describe('budget cap input conversion', () => {
     expect(capFromInput(capToInput(80))).toBe(80)
     expect(capFromInput(capToInput(0))).toBe(0)
     expect(capFromInput(capToInput(null))).toBeNull()
+  })
+})
+
+// The number inputs carry min and step, which the browser applies to a submitted form. This editor saves
+// through a button, so a decimal, a zero or a negative value typed by hand would otherwise travel to the
+// backend and come back as a 400 with no field named.
+describe('review admission bound validation', () => {
+  it('accepts a whole number of at least 1 and a blank field', () => {
+    expect(admissionBoundsError([['Changed files per review', '150']])).toBe('')
+    expect(admissionBoundsError([['Changed files per review', '']])).toBe('')
+    expect(admissionBoundsError([['Changed files per review', '1']])).toBe('')
+  })
+
+  it('names the field for a zero, a negative value and a decimal', () => {
+    expect(admissionBoundsError([['Changed files per review', '0']])).toContain('Changed files per review')
+    expect(admissionBoundsError([['Changed lines per review', '-1']])).toContain('Changed lines per review')
+    expect(admissionBoundsError([['Repository size', '2.5']])).toContain('Repository size')
+  })
+
+  // The fields are bound with v-model on <input type="number">, so an edited bound reaches the check as a
+  // number and not as the string it was loaded as.
+  it('applies the same rule to a bound that arrives as a number', () => {
+    expect(admissionBoundsError([['Changed files per review', 150 as unknown as string]])).toBe('')
+    expect(admissionBoundsError([['Changed files per review', 0 as unknown as string]]))
+      .toContain('Changed files per review')
+    expect(admissionBoundsError([['Changed lines per review', -1 as unknown as string]]))
+      .toContain('Changed lines per review')
+    expect(admissionBoundsError([['Repository size', 2.5 as unknown as string]])).toContain('Repository size')
+  })
+
+  // The bounds are nullable 32-bit integers in the database. A larger value comes back as a 400 with no field
+  // named, and one past JavaScript's safe-integer range is rounded before it is sent at all.
+  it('refuses a bound above the 32-bit range and names the range it accepts', () => {
+    expect(admissionBoundsError([['Diff size per review', String(MAX_ADMISSION_BOUND)]])).toBe('')
+
+    const message = admissionBoundsError([['Diff size per review', String(MAX_ADMISSION_BOUND + 1)]])
+
+    expect(message).toContain('Diff size per review')
+    expect(message).toContain('1')
+    expect(message).toContain(String(MAX_ADMISSION_BOUND))
+  })
+
+  it('refuses a bound beyond the safe-integer range, which would be rounded before it is sent', () => {
+    expect(admissionBoundsError([['Diff size per review', '9007199254740993']])).toContain('Diff size per review')
+  })
+
+  it('reports the first bound that is wrong, leaving the ones that are fine out of the message', () => {
+    const message = admissionBoundsError([
+      ['Changed files per review', '150'],
+      ['Diff size per review', '-4'],
+      ['Repository size', '0'],
+    ])
+
+    expect(message).toContain('Diff size per review')
+    expect(message).not.toContain('Repository size')
   })
 })

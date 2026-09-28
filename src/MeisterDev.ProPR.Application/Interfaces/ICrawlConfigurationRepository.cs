@@ -21,6 +21,16 @@ public interface ICrawlConfigurationRepository
         CancellationToken ct = default,
         float? reviewTemperature = null);
 
+    /// <summary>Creates an inactive repository-scoped configuration and its canonical filter in one save.</summary>
+    Task<CrawlConfigurationDto> AddReviewTargetAsync(
+        Guid clientId,
+        ScmProvider provider,
+        string providerScopePath,
+        string providerProjectKey,
+        string repositoryId,
+        string repositoryName,
+        CancellationToken ct = default);
+
     /// <summary>Deletes a crawl configuration. Returns false if not found or not owned by clientId.</summary>
     Task<bool> DeleteAsync(Guid configId, Guid clientId, CancellationToken ct = default);
 

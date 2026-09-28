@@ -24,6 +24,9 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Budgeting;
 public sealed class ReviewSpendAccumulatorTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private Guid _clientId;
+    private Guid _siblingClientId;
+    private Guid _otherTenantId;
+    private Guid _otherTenantClientId;
     private MeisterProPRDbContext _dbContext = null!;
     private ReviewSpendAccumulator _accumulator = null!;
     private ClientTokenUsageRepository _usageRepo = null!;
@@ -66,11 +69,13 @@ public sealed class ReviewSpendAccumulatorTests(PostgresContainerFixture fixture
             return;
         }
 
-        await this._dbContext.ClientTokenUsageSamples.Where(s => s.ClientId == this._clientId).ExecuteDeleteAsync();
+        var seededClients = new[] { this._clientId, this._siblingClientId, this._otherTenantClientId };
+        await this._dbContext.ClientTokenUsageSamples.Where(s => seededClients.Contains(s.ClientId)).ExecuteDeleteAsync();
 
         // A mention answer holds its client down with a restricting foreign key, so the rows go before it does.
-        await this._dbContext.MentionReplyJobs.Where(m => m.ClientId == this._clientId).ExecuteDeleteAsync();
-        await this._dbContext.Clients.Where(c => c.Id == this._clientId).ExecuteDeleteAsync();
+        await this._dbContext.MentionReplyJobs.Where(m => seededClients.Contains(m.ClientId)).ExecuteDeleteAsync();
+        await this._dbContext.Clients.Where(c => seededClients.Contains(c.Id)).ExecuteDeleteAsync();
+        await this._dbContext.Tenants.Where(t => t.Id == this._otherTenantId).ExecuteDeleteAsync();
         await this._dbContext.DisposeAsync();
     }
 
@@ -105,6 +110,89 @@ public sealed class ReviewSpendAccumulatorTests(PostgresContainerFixture fixture
         Assert.False(baseline.PullRequest.IsApproximate);
         Assert.Equal(5.00m, baseline.Increment.KnownUsd); // 3 + 2 (iteration 5 only)
         Assert.False(baseline.Increment.IsApproximate);
+    }
+
+    [Fact]
+    public async Task GetBaselineAsync_TotalsEveryClientOfTheTenantForTheTenantScope()
+    {
+        var asOf = new DateOnly(2026, 7, 19);
+
+        this._siblingClientId = Guid.NewGuid();
+        this._otherTenantId = Guid.NewGuid();
+        this._otherTenantClientId = Guid.NewGuid();
+        this._dbContext.Clients.Add(
+            new ClientRecord
+            {
+                Id = this._siblingClientId,
+                TenantId = TenantCatalog.SystemTenantId,
+                DisplayName = "Sibling Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        this._dbContext.Tenants.Add(
+            new TenantRecord
+            {
+                Id = this._otherTenantId,
+                Slug = $"other-{this._otherTenantId:N}",
+                DisplayName = "Other Tenant",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        this._dbContext.Clients.Add(
+            new ClientRecord
+            {
+                Id = this._otherTenantClientId,
+                TenantId = this._otherTenantId,
+                DisplayName = "Other Tenant Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await this._dbContext.SaveChangesAsync();
+
+        var current = MakeJob(this._clientId, prId: 1, iterationId: 1);
+        await this.AddJobWithCostAsync(current, costUsd: null);
+
+        await this._usageRepo.UpsertAsync(this._clientId, "gpt-4o", new DateOnly(2026, 7, 2), 100, 50, default, estimatedCostUsd: 10.00m);
+        await this._usageRepo.UpsertAsync(this._siblingClientId, "gpt-4o", new DateOnly(2026, 7, 3), 100, 50, default, estimatedCostUsd: 20.00m);
+        // A prior period and a client of another tenant are both outside the scope.
+        await this._usageRepo.UpsertAsync(this._siblingClientId, "gpt-4o", new DateOnly(2026, 6, 30), 100, 50, default, estimatedCostUsd: 99.00m);
+        await this._usageRepo.UpsertAsync(this._otherTenantClientId, "gpt-4o", new DateOnly(2026, 7, 4), 100, 50, default, estimatedCostUsd: 500.00m);
+
+        var baseline = await this._accumulator.GetBaselineAsync(ReviewSpendSubject.For(current), asOf);
+
+        Assert.Equal(10.00m, baseline.ClientMonthToDate.KnownUsd);
+        Assert.Equal(30.00m, baseline.TenantMonthToDate.KnownUsd);
+        Assert.False(baseline.TenantMonthToDate.IsApproximate);
+    }
+
+    [Fact]
+    public async Task GetBaselineAsync_FlagsTheTenantScopeApproximate_WhenAClientOfTheTenantHasAnUnpricedSample()
+    {
+        var asOf = new DateOnly(2026, 7, 19);
+
+        this._siblingClientId = Guid.NewGuid();
+        this._dbContext.Clients.Add(
+            new ClientRecord
+            {
+                Id = this._siblingClientId,
+                TenantId = TenantCatalog.SystemTenantId,
+                DisplayName = "Sibling Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await this._dbContext.SaveChangesAsync();
+
+        var current = MakeJob(this._clientId, prId: 1, iterationId: 1);
+        await this.AddJobWithCostAsync(current, costUsd: null);
+
+        await this._usageRepo.UpsertAsync(this._clientId, "gpt-4o", new DateOnly(2026, 7, 2), 100, 50, default, estimatedCostUsd: 10.00m);
+        await this._usageRepo.UpsertAsync(this._siblingClientId, "unpriced-model", new DateOnly(2026, 7, 3), 100, 50, default, estimatedCostUsd: null);
+
+        var baseline = await this._accumulator.GetBaselineAsync(ReviewSpendSubject.For(current), asOf);
+
+        Assert.Equal(10.00m, baseline.TenantMonthToDate.KnownUsd);
+        Assert.True(baseline.TenantMonthToDate.IsApproximate);
     }
 
     [Fact]

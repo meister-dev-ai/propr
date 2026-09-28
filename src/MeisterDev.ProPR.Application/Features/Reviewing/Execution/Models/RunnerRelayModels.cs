@@ -16,9 +16,15 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 ///     connection is what keeps the provider key on the control plane.
 /// </param>
 /// <param name="Messages">The conversation to complete.</param>
-/// <param name="Options">
-///     Chat options, including any tools the pass offers. Tool calling is not optional here: review passes
-///     use it, and a relay that dropped it would turn a tool-using review into a different review.
+/// <param name="OptionsFor">
+///     Builds the chat options for this completion once the job's reasoning-capture decision is known,
+///     including any tools the pass offers. Tool calling is not optional here: review passes use it, and a
+///     relay that dropped it would turn a tool-using review into a different review.
+///     <para>
+///         A function and not a finished value, because the reasoning-capture decision belongs to the tenant
+///         that owns the job. The relay reads it only after it has validated the lease, so a caller naming a
+///         job it does not hold causes no tenant lookup.
+///     </para>
 /// </param>
 /// <param name="IdempotencyKey">
 ///     Identifies this completion attempt. A retry carrying the same key is answered from what the first
@@ -27,7 +33,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 public sealed record RunnerRelayRequest(
     string LogicalModelName,
     IReadOnlyList<ChatMessage> Messages,
-    ChatOptions? Options,
+    Func<bool, ChatOptions?> OptionsFor,
     string IdempotencyKey);
 
 /// <summary>Why a relayed completion was not performed.</summary>
@@ -100,7 +106,7 @@ public sealed record RunnerRelayResult(
     }
 
     /// <summary>A completion refused because a hard cap is reached.</summary>
-    public static RunnerRelayResult BudgetExceeded(BudgetBreach breach)
+    public static RunnerRelayResult BudgetExceeded(BudgetBreach? breach)
     {
         return new RunnerRelayResult(null, RunnerRelayRefusal.BudgetHardCapReached, RunnerCallRefusal.None, breach, false, false);
     }

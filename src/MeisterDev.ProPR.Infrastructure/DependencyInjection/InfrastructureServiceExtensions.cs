@@ -11,6 +11,7 @@ using OpenAI;
 using MeisterDev.Ai.Providers.AddIns;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Egress;
+using MeisterDev.ProPR.Infrastructure.Egress;
 using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.ProPR.Application.AI;
@@ -19,6 +20,7 @@ using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.Ai.Providers.Transport;
 using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Options;
@@ -122,6 +124,12 @@ public static class InfrastructureServiceExtensions
 
         services.AddSingleton<ISecretProtectionCodec, SecretProtectionCodec>();
 
+        // The AI-generated marker every publication and reply adapter ends its body with. Each provider module
+        // registers it as well; it is repeated here so a composition that holds no provider adapters still
+        // resolves it. The wording is read from the environment by the API host, because comments are posted
+        // from there and runners never post.
+        services.AddPostedCommentComposer();
+
         // One meter for the process, so the instruments are not recreated per resolved runtime. Its name matches
         // the meter the host already exports, so no telemetry configuration has to learn about it.
         services.AddSingleton<AiProviderMetrics>();
@@ -143,7 +151,7 @@ public static class InfrastructureServiceExtensions
         if (includeProviderOperationalServices)
         {
             var adoOperationalCredential =
-                configuration.GetValue<bool>("ADO_STUB_PR") ? null : ResolveCredential(configuration);
+                configuration.GetValue<bool>("ADO_STUB_PR") ? null : ResolveAzureDevOpsCredential(configuration);
             services.AddAzureDevOpsInfrastructureServices(configuration, adoOperationalCredential);
         }
 
@@ -307,15 +315,35 @@ public static class InfrastructureServiceExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        // AiEvaluatorOptions — bound from individual env vars; only validated and registered when both are provided.
-        // Resolved before the evaluator client is built, because that client takes the same guarded transport.
+        // Guard these outbound clients against SSRF: an admin-supplied AI baseUrl must not reach
+        // private/loopback/link-local (incl. cloud-metadata) addresses, and redirects are never followed.
+        // Private egress is permitted in Development so a local provider (e.g. LiteLLM) stays reachable, or when
+        // an operator explicitly opts in via MEISTER_ALLOW_PRIVATE_EGRESS to reach a self-hosted / on-prem
+        // endpoint. Both are off by default, so production egress stays locked unless enabled.
+
+        // Resolved once and registered, so every place that checks an operator-entered address against this
+        // installation's rules — the probe target a provider family is handed, the connection write paths, the
+        // declared-field floor — asks the same question of the same answer instead of reading the environment
+        // again. Built before the evaluator block below, which holds its endpoint to the same rules.
         var isDevelopment = environment?.IsDevelopment() ?? false;
         var allowPrivateEgress = AllowPrivateEgress(isDevelopment, configuration);
+        var egressUrlPolicy = new EgressUrlPolicy(allowPrivateEgress, AllowInsecureScheme: isDevelopment);
+        services.AddSingleton(egressUrlPolicy);
 
+        // AiEvaluatorOptions — bound from individual env vars; only validated and registered when both are provided.
         var evaluatorEndpoint = configuration["AI_EVALUATOR_ENDPOINT"];
         var evaluatorDeployment = configuration["AI_EVALUATOR_DEPLOYMENT"];
         if (!string.IsNullOrWhiteSpace(evaluatorEndpoint) && !string.IsNullOrWhiteSpace(evaluatorDeployment))
         {
+            // The evaluator client keeps the scheme the endpoint names and sends AI_API_KEY in a header, so a
+            // plain http endpoint would put that key on the wire in the clear. The address is held to the same
+            // rules as any other endpoint an operator enters, before the client is registered; Development
+            // keeps http through the policy's insecure-scheme relaxation.
+            if (egressUrlPolicy.GetRefusalReason(evaluatorEndpoint, "AI_EVALUATOR_ENDPOINT") is { } evaluatorRefusal)
+            {
+                throw new InvalidOperationException(evaluatorRefusal);
+            }
+
             services.AddOptions<AiEvaluatorOptions>()
                 .Configure(opts =>
                 {
@@ -332,17 +360,10 @@ public static class InfrastructureServiceExtensions
                     CreateChatClient(evaluatorEndpoint, configuration["AI_API_KEY"], allowPrivateEgress));
         }
 
-        // Guard these outbound clients against SSRF: an admin-supplied AI baseUrl must not reach
-        // private/loopback/link-local (incl. cloud-metadata) addresses, and redirects are never followed.
-        // Private egress is permitted in Development so a local provider (e.g. LiteLLM) stays reachable, or when
-        // an operator explicitly opts in via AI_ALLOW_PRIVATE_EGRESS to reach a self-hosted / on-prem endpoint.
-        // Both are off by default, so production egress stays locked unless deliberately enabled.
-
-        // Resolved once and registered, so every place that checks an operator-entered address against this
-        // installation's rules — the probe target a provider family is handed, the connection write paths, the
-        // declared-field floor — asks the same question of the same answer instead of reading the environment
-        // again.
-        services.AddSingleton(new EgressUrlPolicy(allowPrivateEgress, AllowInsecureScheme: isDevelopment));
+        // The same posture, for an address this host hands to something that opens its own sockets: the git
+        // binary fetching a repository mirror cannot be reached by a message handler.
+        services.TryAddSingleton<IOutboundHostResolver, DnsOutboundHostResolver>();
+        services.TryAddSingleton<OutboundHostGuard>();
         services.AddHttpClient(ProviderHttpPipelines.Probe)
             .ConfigurePrimaryHttpMessageHandler(() => GuardedEgressHttpHandler.Create(allowPrivateEgress));
         services.AddHttpClient(ProviderHttpPipelines.Admin)
@@ -434,14 +455,30 @@ public static class InfrastructureServiceExtensions
     }
 
     /// <summary>
-    ///     Resolves whether outbound AI egress may reach private/loopback/link-local addresses. Off by default so
-    ///     production stays locked against SSRF: it is permitted in Development (so a local provider stays
-    ///     reachable) or when an operator explicitly opts in via <c>AI_ALLOW_PRIVATE_EGRESS</c> to reach a
-    ///     self-hosted / on-prem endpoint. A missing or non-boolean value falls through to the safe default.
+    ///     Resolves whether outbound egress may reach private/loopback/link-local addresses. It covers AI
+    ///     endpoints and source-control hosts alike, so an installation states one posture instead of two. Off by
+    ///     default so production stays locked against SSRF: it is permitted in Development (so a local provider
+    ///     stays reachable) or when an operator explicitly opts in via
+    ///     <see cref="EgressUrlPolicy.PrivateEgressOptIn" /> to reach a self-hosted / on-prem endpoint. The older
+    ///     <c>AI_ALLOW_PRIVATE_EGRESS</c> name stays accepted, so an installation already carrying it keeps
+    ///     working; the current name wins where both are set. A value under the current name that is not a
+    ///     boolean counts as the safe default, and only an absent one is answered by the older name: a typo in
+    ///     the setting an operator meant to control this with must not be decided by a setting they did not
+    ///     touch. An empty or whitespace value is such a typo and not an absent setting, so it counts as the
+    ///     safe default too.
     /// </summary>
     internal static bool AllowPrivateEgress(bool isDevelopment, IConfiguration configuration)
     {
-        return isDevelopment || (TryGetBool(configuration, "AI_ALLOW_PRIVATE_EGRESS") ?? false);
+        if (isDevelopment)
+        {
+            return true;
+        }
+
+        var current = configuration[EgressUrlPolicy.PrivateEgressOptIn];
+
+        return current is null
+            ? TryGetBool(configuration, "AI_ALLOW_PRIVATE_EGRESS") ?? false
+            : bool.TryParse(current, out var value) && value;
     }
 
     /// <summary>
@@ -482,24 +519,69 @@ public static class InfrastructureServiceExtensions
 
 
     /// <summary>
-    ///     Resolves an Azure credential from configuration. Uses <see cref="ClientSecretCredential" />
-    ///     when AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_CLIENT_SECRET are present in configuration
-    ///     (e.g. user secrets), otherwise falls back to <see cref="DefaultAzureCredential" /> which
-    ///     picks up Azure CLI login, managed identity, etc.
+    ///     Resolves the credential used by Azure DevOps infrastructure from configuration. AZURE_CLIENT_ID, AZURE_TENANT_ID and
+    ///     AZURE_CLIENT_SECRET together select a <see cref="ClientSecretCredential" />. Other valid configurations
+    ///     select <see cref="DefaultAzureCredential" />, which supports managed identity, a
+    ///     federated workload identity or an Azure CLI login.
     /// </summary>
-    private static TokenCredential ResolveCredential(IConfiguration configuration)
+    /// <param name="configuration">The configuration the host was started with.</param>
+    /// <remarks>
+    ///     Azure DevOps infrastructure uses this credential. The Azure Key Vault add-in has a separate resolver
+    ///     that follows the same AZURE_* configuration conventions.
+    ///     <para>
+    ///         The variables carry the meanings the Azure SDK gives them, so a deployment that sets them the way
+    ///         Azure documents keeps working. AZURE_CLIENT_ID on its own names a user-assigned managed identity,
+    ///         which the default chain is given through <see cref="DefaultAzureCredentialOptions.ManagedIdentityClientId" />;
+    ///         a tenant id and a client id together with a federated token file are the workload-identity shape,
+    ///         which the default chain reads itself.
+    ///     </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    ///     AZURE_CLIENT_SECRET is set without both AZURE_CLIENT_ID and AZURE_TENANT_ID. Startup fails
+    ///     because client-secret authentication requires both identifiers.
+    /// </exception>
+    internal static TokenCredential ResolveAzureDevOpsCredential(IConfiguration configuration)
     {
-        var clientId = configuration["AZURE_CLIENT_ID"];
-        var tenantId = configuration["AZURE_TENANT_ID"];
-        var clientSecret = configuration["AZURE_CLIENT_SECRET"];
+        var clientId = Stated(configuration["AZURE_CLIENT_ID"]);
+        var tenantId = Stated(configuration["AZURE_TENANT_ID"]);
+        var clientSecret = Stated(configuration["AZURE_CLIENT_SECRET"]);
 
-        if (!string.IsNullOrWhiteSpace(clientId) &&
-            !string.IsNullOrWhiteSpace(tenantId) &&
-            !string.IsNullOrWhiteSpace(clientSecret))
+        if (clientSecret is not null)
         {
+            var missing = new[]
+                {
+                    (Key: "AZURE_CLIENT_ID", Value: clientId),
+                    (Key: "AZURE_TENANT_ID", Value: tenantId),
+                }
+                .Where(variable => variable.Value is null)
+                .Select(variable => variable.Key)
+                .ToArray();
+
+            if (missing.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    "AZURE_CLIENT_SECRET is set, which names a service principal, and "
+                    + $"{string.Join(" and ", missing)} {(missing.Length == 1 ? "is" : "are")} not set. Set "
+                    + "AZURE_CLIENT_ID and AZURE_TENANT_ID as well, or clear the secret to authenticate with "
+                    + "the default Azure credential chain.");
+            }
+
             return new ClientSecretCredential(tenantId, clientId, clientSecret);
         }
 
-        return new DefaultAzureCredential();
+        return clientId is null
+            ? new DefaultAzureCredential()
+            : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = clientId });
+    }
+
+    /// <summary>The value of a variable, or <see langword="null" /> where it holds nothing usable.</summary>
+    /// <param name="value">What configuration answered with.</param>
+    /// <remarks>
+    ///     Whitespace is not a value: a variable an environment file left blank would otherwise name a service
+    ///     principal with an empty secret.
+    /// </remarks>
+    private static string? Stated(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 }

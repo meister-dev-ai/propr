@@ -61,7 +61,9 @@ internal sealed class AdoRepositoryDiscoveryProvider(
                     host,
                     source.CanonicalSourceRef.Value,
                     project.ProjectId,
-                    project.ProjectId)));
+                    project.ProjectId,
+                    source.DisplayName,
+                    project.ProjectName)));
         }
 
         return repositories;

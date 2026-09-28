@@ -111,8 +111,7 @@ public sealed partial class WorkspaceFetcher(
     }
 
     /// <summary>
-    ///     Removes everything this job wrote. Called when the job ends however it ended, and at startup for
-    ///     anything a previous life left behind.
+    ///     Removes job workspaces after each job and at process startup.
     /// </summary>
     /// <param name="jobId">The job whose directory to remove, or null for every job directory.</param>
     public void Purge(Guid? jobId = null)
@@ -123,9 +122,19 @@ public sealed partial class WorkspaceFetcher(
             return;
         }
 
-        var targets = jobId is null
-            ? Directory.GetDirectories(root)
-            : [Path.Combine(root, jobId.Value.ToString("D"))];
+        string[] targets;
+        try
+        {
+            targets = jobId is null
+                ? Directory.GetDirectories(root)
+                : [Path.Combine(root, jobId.Value.ToString("D"))];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // Report inaccessible work roots and let the runner continue to enrollment.
+            LogPurgeFailed(logger, root, ex);
+            return;
+        }
 
         foreach (var target in targets.Where(Directory.Exists))
         {
@@ -133,9 +142,7 @@ public sealed partial class WorkspaceFetcher(
             {
                 Directory.Delete(target, recursive: true);
             }
-#pragma warning disable CA1031 // A directory that will not delete must not keep the runner from continuing.
-            catch (Exception ex)
-#pragma warning restore CA1031
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
                 LogPurgeFailed(logger, target, ex);
             }

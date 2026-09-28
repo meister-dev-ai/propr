@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using FluentValidation;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Domain.Enums;
 
@@ -12,8 +13,11 @@ public sealed class
     PatchClientProviderConnectionRequestValidator : AbstractValidator<PatchClientProviderConnectionRequest>
 {
     /// <summary>Initializes a new instance of <see cref="PatchClientProviderConnectionRequestValidator" />.</summary>
-    public PatchClientProviderConnectionRequestValidator()
+    /// <param name="egressUrlPolicy">What this installation permits an operator-entered address to reach.</param>
+    public PatchClientProviderConnectionRequestValidator(EgressUrlPolicy egressUrlPolicy)
     {
+        ArgumentNullException.ThrowIfNull(egressUrlPolicy);
+
         this.RuleFor(request => request)
             .Must(request =>
                 request.HostBaseUrl is not null
@@ -32,8 +36,10 @@ public sealed class
             .WithMessage("At least one field must be provided.");
 
         this.RuleFor(request => request.HostBaseUrl)
-            .Must(CreateClientProviderConnectionRequestValidator.BeValidProviderHostBaseUrl)
-            .WithMessage("HostBaseUrl must be a valid HTTPS provider host URL.")
+            .Must(hostBaseUrl =>
+                CreateClientProviderConnectionRequestValidator.GetHostBaseUrlRefusal(egressUrlPolicy, hostBaseUrl) is null)
+            .WithMessage(request =>
+                CreateClientProviderConnectionRequestValidator.GetHostBaseUrlRefusal(egressUrlPolicy, request.HostBaseUrl))
             .When(request => request.HostBaseUrl is not null);
 
         this.RuleFor(request => request.DisplayName)

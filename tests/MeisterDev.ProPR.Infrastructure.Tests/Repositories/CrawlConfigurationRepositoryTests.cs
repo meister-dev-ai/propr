@@ -138,6 +138,23 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
         return record;
     }
 
+    [Fact]
+    public async Task AddReviewTargetAsync_PersistsInactiveConfigurationAndCanonicalRepositoryFilter()
+    {
+        var created = await this._repo.AddReviewTargetAsync(this._clientId, ScmProvider.GitHub, "https://github.example.test", "owner", "12345", "repo");
+
+        Assert.False(created.IsActive);
+        var stored = await this._dbContext.CrawlConfigurations.AsNoTracking()
+            .Include(config => config.RepoFilters)
+            .SingleAsync(config => config.Id == created.Id);
+        Assert.False(stored.IsActive);
+        Assert.Null(stored.RepositoryId);
+        var filter = Assert.Single(stored.RepoFilters);
+        Assert.Equal("12345", filter.CanonicalSourceRef);
+        Assert.Equal("GitHub", filter.SourceProvider);
+        Assert.Equal("repo", filter.RepositoryName);
+    }
+
     private async Task<Guid> SeedAzureConnectionAsync()
     {
         var connectionId = Guid.NewGuid();

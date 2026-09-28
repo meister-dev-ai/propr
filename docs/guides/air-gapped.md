@@ -21,6 +21,7 @@ license identifier, which identifies the licensee, and keeps sending while the l
 | PostgreSQL with the `vector` extension | See [what you need](../quickstart.md#what-you-need) |
 | A writable review workspace volume | See [review workspace](../operate/deploy.md#review-workspace) |
 | A durable, backed-up key ring volume | See [what to back up](../operate/upgrades-and-backups.md#what-to-back-up) |
+| The certificate protecting the key ring, where one is configured | A key service reached over the network is not available offline; the certificate protector needs a file. See [the certificate protector](../operate/configuration.md#the-certificate-protector) |
 
 ## What needs no network at all
 

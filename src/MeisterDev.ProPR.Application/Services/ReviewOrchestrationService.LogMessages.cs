@@ -19,7 +19,7 @@ public sealed partial class ReviewOrchestrationService
         Level = LogLevel.Warning,
         Message =
             "Review job {JobId} reached the {Scope} hard budget cap of {ThresholdUsd} USD (spent {SpentUsd} USD) — stopping and marking budget-exceeded")]
-    private static partial void LogBudgetHardCapReached(ILogger logger, Guid jobId, BudgetScopeKind scope, decimal thresholdUsd, decimal spentUsd);
+    private static partial void LogBudgetHardCapReached(ILogger logger, Guid jobId, BudgetScopeKind? scope, decimal? thresholdUsd, decimal? spentUsd);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

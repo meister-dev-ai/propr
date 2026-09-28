@@ -24,6 +24,32 @@ public sealed class AiConnectionScopeGuard(
     ITenantProviderPolicyProvider providerPolicies,
     IAiProviderDriverRegistry providerDrivers) : IAiConnectionScopeGuard
 {
+    public async Task<IReadOnlySet<Guid>> ValidateManyAsync(
+        IReadOnlyList<AiConnectionDto> connections, Guid referencingTenantId,
+        CancellationToken ct = default)
+    {
+        var policy = await providerPolicies.GetForTenantAsync(referencingTenantId, ct).ConfigureAwait(false);
+        var owners = new Dictionary<Guid, Guid?>();
+        var allowed = new HashSet<Guid>();
+        foreach (var connection in connections)
+        {
+            var owner = connection.TenantId;
+            if ((owner is null || owner == Guid.Empty) && connection.ClientId is { } clientId && clientId != Guid.Empty)
+            {
+                if (!owners.TryGetValue(clientId, out owner))
+                    owners[clientId] = owner = await clients.GetTenantIdAsync(clientId, ct).ConfigureAwait(false);
+            }
+
+            if (owner != referencingTenantId || owner == Guid.Empty ||
+                !policy.IsAllowed(connection.ProviderKind) ||
+                policy.DescribeReachRefusal(connection.BaseUrl, providerDrivers.ReachedHostPatterns(connection.ProviderKind)) is not null)
+                continue;
+            allowed.Add(connection.Id);
+        }
+
+        return allowed;
+    }
+
     public async Task<string?> ValidateAsync(
         AiConnectionDto connection,
         Guid referencingTenantId,

@@ -69,10 +69,10 @@ public sealed class NoOpThreadPassJobRepository : IThreadPassJobRepository
     /// <inheritdoc />
     public Task SetBudgetExceededAsync(
         Guid jobId,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default)
     {
         return Task.CompletedTask;

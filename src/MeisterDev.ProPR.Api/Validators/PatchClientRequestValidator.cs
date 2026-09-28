@@ -85,13 +85,39 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         this.RuleFor(r => r.BudgetConfig)
             .Must(BeAValidBudgetConfig)
             .WithMessage(
-                "Budget caps must be non-negative, and a soft cap must not exceed its hard cap (for the monthly, "
-                + "per-PR, and per-increment scopes).")
+                "Budget caps must be non-negative, at most 999999999999.999999 with at most six fractional digits, "
+                + "and a soft cap must not exceed its hard cap (for the monthly, per-PR, and per-increment scopes).")
             .When(r => r.BudgetConfig is not null);
+
+        this.RuleFor(r => r.AdmissionPolicy)
+            .Must(BeAValidAdmissionPolicy)
+            .WithMessage("Every review admission bound must be greater than zero; leave one out for no bound.")
+            .When(r => r.AdmissionPolicy is not null);
     }
 
-    // Each cap must be non-negative (null means "no limit"), and where both a soft and a hard cap are set for the
-    // same scope the soft cap must not exceed the hard one.
+    // Each bound must be positive (null means "no bound"). Zero would refuse every review, which clearing the
+    // bound already expresses more directly.
+    private static bool BeAValidAdmissionPolicy(ReviewAdmissionPolicyDto? policy)
+    {
+        if (policy is null)
+        {
+            return true;
+        }
+
+        int?[] bounds =
+        [
+            policy.MaxChangedFiles,
+            policy.MaxChangedLines,
+            policy.MaxDiffBytes,
+            policy.MaxReviewsPerPullRequestPerHour,
+            policy.MaxRepositoryMegabytes,
+        ];
+
+        return bounds.All(bound => bound is null or > 0);
+    }
+
+    // Each cap must be non-negative (null means "no limit") and must fit the persisted numeric(18,6) columns, and
+    // where both a soft and a hard cap are set for the same scope the soft cap must not exceed the hard one.
     private static bool BeAValidBudgetConfig(BudgetConfigDto? config)
     {
         if (config is null)
@@ -110,6 +136,11 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         ];
 
         if (caps.Any(cap => cap is < 0m))
+        {
+            return false;
+        }
+
+        if (!caps.All(MonetaryCapRange.IsStorable))
         {
             return false;
         }

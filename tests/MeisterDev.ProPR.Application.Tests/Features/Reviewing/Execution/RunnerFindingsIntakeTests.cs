@@ -81,7 +81,7 @@ public sealed class RunnerFindingsIntakeTests
     {
         var scope = new BudgetScope(
             new BudgetCaps(null, null, null, null, 1m, null),
-            new ReviewSpendBaseline(ReviewScopeSpend.None, ReviewScopeSpend.None, new ReviewScopeSpend(5m, false)));
+            new ReviewSpendBaseline(ReviewScopeSpend.None, ReviewScopeSpend.None, new ReviewScopeSpend(5m, false), ReviewScopeSpend.None));
         Assert.True(scope.IsIncrementSoftCapReached());
         this._budgets.Register(JobId, scope);
         ReviewResult? published = null;
@@ -110,7 +110,7 @@ public sealed class RunnerFindingsIntakeTests
     {
         var scope = new BudgetScope(
             new BudgetCaps(null, null, null, null, 1m, null),
-            new ReviewSpendBaseline(ReviewScopeSpend.None, ReviewScopeSpend.None, new ReviewScopeSpend(5m, false)));
+            new ReviewSpendBaseline(ReviewScopeSpend.None, ReviewScopeSpend.None, new ReviewScopeSpend(5m, false), ReviewScopeSpend.None));
         Assert.True(scope.IsIncrementSoftCapReached());
         this._budgets.Register(JobId, scope);
         ReviewResult? published = null;
@@ -166,7 +166,7 @@ public sealed class RunnerFindingsIntakeTests
     }
 
     private static ReviewSpendBaseline EmptyBaseline { get; } =
-        new(ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None);
+        new(ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None);
 
     private readonly RunnerJobBudgetRegistry _budgets = new();
     private readonly RunnerSubmissionLedger _ledger = new();

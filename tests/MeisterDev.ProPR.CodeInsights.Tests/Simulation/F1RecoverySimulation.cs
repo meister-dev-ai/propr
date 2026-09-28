@@ -616,6 +616,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
             this._store,
             this._classifier,
             gate,
+            TestPostedCommentComposer.Default,
             NullLogger<CodeInsightMissHarvester>.Instance);
 
         this._sealer = new CodeInsightMetricSealer(

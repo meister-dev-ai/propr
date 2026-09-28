@@ -8,6 +8,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
@@ -707,6 +708,200 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
     }
 
     [Fact]
+    public async Task CreateProviderConnection_PrivateHostWithoutTheOptIn_Returns400()
+    {
+        await factory.ResetProviderStateAsync();
+
+        using var strict = factory.WithWebHostBuilder(builder => builder.UseSetting(EgressUrlPolicy.PrivateEgressOptIn, "false"));
+        var httpClient = strict.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/clients/{factory.ClientId}/provider-connections");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                providerFamily = "forgejo",
+                hostBaseUrl = "https://10.0.0.5",
+                authenticationKind = "personalAccessToken",
+                displayName = "Forgejo",
+                secret = "forgejo-token-value",
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var messages = body.GetProperty("errors")
+            .GetProperty(nameof(CreateClientProviderConnectionRequest.HostBaseUrl))
+            .EnumerateArray()
+            .Select(message => message.GetString());
+        Assert.Contains(
+            messages,
+            message => message is not null
+                       && message.Contains(EgressUrlPolicy.PrivateEgressOptIn, StringComparison.Ordinal));
+    }
+
+    // The strict answer is what an installation that never set the variable gets, and not only one that set
+    // it to false.
+    [Fact]
+    public async Task CreateProviderConnection_PrivateHostWithNoOptInConfigured_Returns400()
+    {
+        await factory.ResetProviderStateAsync();
+
+        using var unset = factory.WithWebHostBuilder(builder => builder.UseSetting(EgressUrlPolicy.PrivateEgressOptIn, null));
+        var httpClient = unset.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/clients/{factory.ClientId}/provider-connections");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                providerFamily = "forgejo",
+                hostBaseUrl = "https://10.0.0.5",
+                authenticationKind = "personalAccessToken",
+                displayName = "Forgejo",
+                secret = "forgejo-token-value",
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var messages = body.GetProperty("errors")
+            .GetProperty(nameof(CreateClientProviderConnectionRequest.HostBaseUrl))
+            .EnumerateArray()
+            .Select(message => message.GetString());
+        Assert.Contains(
+            messages,
+            message => message is not null
+                       && message.Contains(EgressUrlPolicy.PrivateEgressOptIn, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PatchProviderConnection_DeactivatesConnectionOnStoredPrivateHostWithoutTheOptIn_Returns200()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(
+            ScmProvider.Forgejo,
+            "http://127.0.0.1",
+            displayName: "Forgejo",
+            secret: "forgejo-token-value");
+
+        using var strict = factory.WithWebHostBuilder(builder => builder.UseSetting(EgressUrlPolicy.PrivateEgressOptIn, "false"));
+        var httpClient = strict.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/clients/{factory.ClientId}/provider-connections/{created.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                isActive = false,
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.False(body.GetProperty("isActive").GetBoolean());
+    }
+
+    [Fact]
+    public async Task PatchProviderConnection_MovesConnectionToPrivateHostWithoutTheOptIn_Returns400()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(
+            ScmProvider.Forgejo,
+            "https://forgejo.example.com",
+            displayName: "Forgejo",
+            secret: "forgejo-token-value");
+
+        using var strict = factory.WithWebHostBuilder(builder => builder.UseSetting(EgressUrlPolicy.PrivateEgressOptIn, "false"));
+        var httpClient = strict.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/clients/{factory.ClientId}/provider-connections/{created.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                hostBaseUrl = "https://10.0.0.5",
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var messages = body.GetProperty("errors")
+            .GetProperty(nameof(CreateClientProviderConnectionRequest.HostBaseUrl))
+            .EnumerateArray()
+            .Select(message => message.GetString());
+        Assert.Contains(
+            messages,
+            message => message is not null
+                       && message.Contains(EgressUrlPolicy.PrivateEgressOptIn, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task VerifyProviderConnection_StoredPrivateHostWithoutTheOptIn_ReportsTheRefusal()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(hostBaseUrl: "http://127.0.0.1");
+        factory.SetDiscoveryScopes("acme/platform");
+
+        using var strict = factory.WithWebHostBuilder(builder => builder.UseSetting(EgressUrlPolicy.PrivateEgressOptIn, "false"));
+        var httpClient = strict.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/clients/{factory.ClientId}/provider-connections/{created.Id}/verify");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("failed", body.GetProperty("verificationStatus").GetString());
+        Assert.Contains(
+            EgressUrlPolicy.PrivateEgressOptIn,
+            body.GetProperty("lastVerificationError").GetString()!,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VerifyProviderConnection_StoredPrivateHostWithTheOptIn_Verifies()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(hostBaseUrl: "http://127.0.0.1");
+        factory.SetDiscoveryScopes("acme/platform");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/clients/{factory.ClientId}/provider-connections/{created.Id}/verify");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("verified", body.GetProperty("verificationStatus").GetString());
+    }
+
+    [Fact]
     public async Task PatchProviderConnection_AzureDevOpsServerPatToWindowsWithoutSecret_Returns400()
     {
         await factory.ResetProviderStateAsync();
@@ -1259,6 +1454,11 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
 
         public Guid ClientId { get; } = Guid.NewGuid();
         public Guid OtherClientId { get; } = Guid.NewGuid();
+        public Guid MachineTenantId { get; } = Guid.NewGuid();
+        public Guid OtherMachineTenantId { get; } = Guid.NewGuid();
+        private bool _machineTenantTest;
+
+        public void EnableMachineTenantTest() => this._machineTenantTest = true;
         public Guid ClientAdministratorUserId { get; } = Guid.NewGuid();
         public Guid ClientUserId { get; } = Guid.NewGuid();
         public Guid ConnectionId { get; private set; }
@@ -1412,6 +1612,11 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
         {
             builder.UseEnvironment("Testing");
             builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+
+            // The connections these tests work with sit on loopback and private addresses, which an installation
+            // reaches only with the opt-in set. The strict default is covered by the cases that start a host
+            // without it.
+            builder.UseSetting(EgressUrlPolicy.PrivateEgressOptIn, "true");
             builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
 
             var dbName = this._dbName;
@@ -1428,6 +1633,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
                     options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddDbContextFactory<MeisterProPRDbContext>(options =>
                     options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddScoped<MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication.TenantMachineCredentialService>();
 
                 services.AddScoped<IClientAdminService, ClientAdminService>();
                 // The licensing module is not composed here, so client creation admits through a gate with no ceiling.
@@ -1488,21 +1694,42 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
 
             using var scope = host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            db.Clients.AddRange(
-                new ClientRecord
+
+            if (this._machineTenantTest)
+            {
+                db.Tenants.AddRange(
+                    new TenantRecord { Id = this.MachineTenantId, Slug = "machine", DisplayName = "Machine" },
+                    new TenantRecord { Id = this.OtherMachineTenantId, Slug = "other-machine", DisplayName = "Other" });
+            }
+
+            // Seeded only where the row is absent. A second host started over the same database, configured
+            // with a different installation posture, then reaches the same clients instead of failing on a
+            // duplicate key.
+            ClientRecord[] seeds =
+            [
+                new()
                 {
                     Id = this.ClientId,
+                    TenantId = this._machineTenantTest ? this.MachineTenantId : Guid.Empty,
                     DisplayName = "Provider Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
                 },
-                new ClientRecord
+                new()
                 {
                     Id = this.OtherClientId,
+                    TenantId = this._machineTenantTest ? this.OtherMachineTenantId : Guid.Empty,
                     DisplayName = "Other Provider Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
-                });
+                },
+            ];
+
+            foreach (var seed in seeds.Where(seed => db.Clients.All(existing => existing.Id != seed.Id)))
+            {
+                db.Clients.Add(seed);
+            }
+
             db.SaveChanges();
 
             return host;

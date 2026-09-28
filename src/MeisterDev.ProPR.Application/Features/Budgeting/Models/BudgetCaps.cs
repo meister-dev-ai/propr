@@ -4,10 +4,11 @@
 namespace MeisterDev.ProPR.Application.Features.Budgeting.Models;
 
 /// <summary>
-///     The USD budget caps resolved for a review job's client. Every cap is optional; a null cap means no limit
-///     for that scope and threshold. Soft and hard caps are independent dollar values (e.g. $80 soft / $100 hard).
-///     The monthly and per-PR soft caps hold new jobs at admission; the increment soft cap instead stops a running
-///     job from scanning further files and concludes it with a synthesis. Hard caps cut further model calls.
+///     The USD budget caps resolved for a review job's client and the tenant that client belongs to. Every cap is
+///     optional; a null cap means no limit for that scope and threshold. Soft and hard caps are independent dollar
+///     values (e.g. $80 soft / $100 hard). The monthly, per-PR and tenant soft caps hold new jobs at admission; the
+///     increment soft cap instead stops a running job from scanning further files and concludes it with a
+///     synthesis. Hard caps cut further model calls.
 /// </summary>
 public sealed record BudgetCaps(
     decimal? MonthlySoftCapUsd,
@@ -15,7 +16,9 @@ public sealed record BudgetCaps(
     decimal? PullRequestSoftCapUsd,
     decimal? PullRequestHardCapUsd,
     decimal? IncrementSoftCapUsd,
-    decimal? IncrementHardCapUsd)
+    decimal? IncrementHardCapUsd,
+    decimal? TenantMonthlySoftCapUsd = null,
+    decimal? TenantMonthlyHardCapUsd = null)
 {
     /// <summary>Caps with no configured limits (the opt-in default: nothing is enforced).</summary>
     public static BudgetCaps None { get; } = new(null, null, null, null, null, null);
@@ -27,7 +30,9 @@ public sealed record BudgetCaps(
         this.PullRequestSoftCapUsd is not null ||
         this.PullRequestHardCapUsd is not null ||
         this.IncrementSoftCapUsd is not null ||
-        this.IncrementHardCapUsd is not null;
+        this.IncrementHardCapUsd is not null ||
+        this.TenantMonthlySoftCapUsd is not null ||
+        this.TenantMonthlyHardCapUsd is not null;
 
     /// <summary>True when the per-increment soft cap is configured (the in-run graceful-stop threshold).</summary>
     public bool IncrementSoftCapConfigured => this.IncrementSoftCapUsd is not null;
@@ -36,5 +41,6 @@ public sealed record BudgetCaps(
     public bool AnyHardCapConfigured =>
         this.MonthlyHardCapUsd is not null ||
         this.PullRequestHardCapUsd is not null ||
-        this.IncrementHardCapUsd is not null;
+        this.IncrementHardCapUsd is not null ||
+        this.TenantMonthlyHardCapUsd is not null;
 }

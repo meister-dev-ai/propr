@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.Features.Admission;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
@@ -31,6 +32,8 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.Fi
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.DependencyInjection;
+using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.PostedFindings;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory.DependencyInjection;
@@ -102,6 +105,8 @@ public static class ReviewingModuleServiceCollectionExtensions
         if (hasDatabase)
         {
             services.AddScoped<IJobRepository, JobRepository>();
+            services.AddScoped<ICustomerDashboardReader, EfCustomerDashboardReader>();
+            services.AddScoped<ICustomerReviewHistoryReader, EfCustomerReviewHistoryReader>();
             services.AddScoped<IThreadPassJobRepository, EfThreadPassJobRepository>();
             services.AddScoped<IReviewSpendAccumulator, ReviewSpendAccumulator>();
 
@@ -231,6 +236,10 @@ public static class ReviewingModuleServiceCollectionExtensions
         }
 
         services.TryAddScoped<IReviewerThreadStatusFetcher, ProviderReviewerThreadStatusFetcher>();
+
+        // Scoped, so the two execution paths share one notice within a scope and each gets its own across
+        // scopes. Nothing is carried between calls, so that is all the notice needs.
+        services.AddScoped<IReviewAdmissionNotice, ReviewAdmissionNotice>();
         services.AddTransient<ReviewOrchestrationService>();
 
         services.AddAzureDevOpsReviewingServices(configuration);

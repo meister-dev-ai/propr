@@ -24,6 +24,7 @@ namespace MeisterDev.Ai.Providers.Tests.AddIns;
 ///     between an assembly and a file that looks like one. A stand-in driver would pass every check the loader
 ///     makes without any of them having been exercised.
 /// </remarks>
+[Collection(nameof(ProviderAddInMarkerCollection))]
 public sealed class ProviderAddInLoaderTests
 {
     /// <summary>The identity the example add-in declares, which a driver built into the host also claims.</summary>

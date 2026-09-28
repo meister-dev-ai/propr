@@ -52,6 +52,10 @@ public sealed record AiConnectionDto(
     [property: JsonIgnore] string? Secret = null,
     Guid? TenantId = null)
 {
+    /// <summary>Internal snapshot digest used to reject promotion after a concurrent configuration mutation.</summary>
+    [JsonIgnore]
+    public string? ConfigurationStamp { get; init; }
+
     /// <summary>
     ///     Whether this profile can be used as it is stored, and what stands in the way when it cannot.
     /// </summary>

@@ -16,44 +16,95 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 /// <summary>
 ///     Covers the runtime side of the private-egress opt-in: how the "allow private egress" flag is derived
-///     from the environment and the <c>AI_ALLOW_PRIVATE_EGRESS</c> knob, how the connect-time SSRF guard is
+///     from the environment and the <c>MEISTER_ALLOW_PRIVATE_EGRESS</c> knob, how the connect-time SSRF guard is
 ///     wired from that flag, and what posture the composed infrastructure states for a provider family to
 ///     apply. What a family does with that posture is covered in the family's own test project, and what an
 ///     operator meets when saving a connection against a private address is covered over the composed host.
 /// </summary>
 public sealed class PrivateEgressOptInTests
 {
+    /// <summary>The name the opt-in was first shipped under, still accepted so an existing installation keeps working.</summary>
+    private const string LegacyOptIn = "AI_ALLOW_PRIVATE_EGRESS";
+
     [Fact]
     public void AllowPrivateEgress_DefaultsToBlocked_OutsideDevelopmentWithNoKnob()
     {
         Assert.False(InfrastructureServiceExtensions.AllowPrivateEgress(isDevelopment: false, BuildConfiguration()));
     }
 
-    [Fact]
-    public void AllowPrivateEgress_PermittedWhenOperatorOptsIn()
+    [Theory]
+    [InlineData(EgressUrlPolicy.PrivateEgressOptIn)]
+    [InlineData(LegacyOptIn)]
+    public void AllowPrivateEgress_PermittedWhenOperatorOptsIn(string knob)
     {
-        var configuration = BuildConfiguration(("AI_ALLOW_PRIVATE_EGRESS", "true"));
+        var configuration = BuildConfiguration((knob, "true"));
 
         Assert.True(InfrastructureServiceExtensions.AllowPrivateEgress(isDevelopment: false, configuration));
     }
 
-    [Fact]
-    public void AllowPrivateEgress_ExplicitFalseStaysBlocked()
+    [Theory]
+    [InlineData(EgressUrlPolicy.PrivateEgressOptIn)]
+    [InlineData(LegacyOptIn)]
+    public void AllowPrivateEgress_ExplicitFalseStaysBlocked(string knob)
     {
-        var configuration = BuildConfiguration(("AI_ALLOW_PRIVATE_EGRESS", "false"));
+        var configuration = BuildConfiguration((knob, "false"));
 
         Assert.False(InfrastructureServiceExtensions.AllowPrivateEgress(isDevelopment: false, configuration));
+    }
+
+    [Fact]
+    public void AllowPrivateEgress_CurrentNameWinsOverTheLegacyOne()
+    {
+        Assert.False(
+            InfrastructureServiceExtensions.AllowPrivateEgress(
+                isDevelopment: false,
+                BuildConfiguration((EgressUrlPolicy.PrivateEgressOptIn, "false"), (LegacyOptIn, "true"))));
+        Assert.True(
+            InfrastructureServiceExtensions.AllowPrivateEgress(
+                isDevelopment: false,
+                BuildConfiguration((EgressUrlPolicy.PrivateEgressOptIn, "true"), (LegacyOptIn, "false"))));
     }
 
     [Theory]
     [InlineData("maybe")]
     [InlineData("1")]
     [InlineData("")]
+    [InlineData(" ")]
     public void AllowPrivateEgress_NonBooleanKnobFallsBackToBlocked(string knobValue)
     {
-        var configuration = BuildConfiguration(("AI_ALLOW_PRIVATE_EGRESS", knobValue));
+        var configuration = BuildConfiguration((EgressUrlPolicy.PrivateEgressOptIn, knobValue));
 
         Assert.False(InfrastructureServiceExtensions.AllowPrivateEgress(isDevelopment: false, configuration));
+    }
+
+    // A typo in the setting the operator meant to control this with is answered by the safe default, not by a
+    // setting they did not touch.
+    [Fact]
+    public void AllowPrivateEgress_NonBooleanCurrentKnobIsNotAnsweredByTheLegacyOne()
+    {
+        var configuration = BuildConfiguration((EgressUrlPolicy.PrivateEgressOptIn, "maybe"), (LegacyOptIn, "true"));
+
+        Assert.False(InfrastructureServiceExtensions.AllowPrivateEgress(isDevelopment: false, configuration));
+    }
+
+    // An operator who set the current name meant to control this with it, so a value that says nothing is
+    // answered by the safe default and not by a setting they did not touch.
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void AllowPrivateEgress_AnEmptyCurrentKnobIsNotAnsweredByTheLegacyOne(string knobValue)
+    {
+        var configuration = BuildConfiguration((EgressUrlPolicy.PrivateEgressOptIn, knobValue), (LegacyOptIn, "true"));
+
+        Assert.False(InfrastructureServiceExtensions.AllowPrivateEgress(isDevelopment: false, configuration));
+    }
+
+    [Fact]
+    public void AllowPrivateEgress_AbsentCurrentKnobIsAnsweredByTheLegacyOne()
+    {
+        var configuration = BuildConfiguration((LegacyOptIn, "true"));
+
+        Assert.True(InfrastructureServiceExtensions.AllowPrivateEgress(isDevelopment: false, configuration));
     }
 
     [Fact]
@@ -63,7 +114,7 @@ public sealed class PrivateEgressOptInTests
         Assert.True(
             InfrastructureServiceExtensions.AllowPrivateEgress(
                 isDevelopment: true,
-                BuildConfiguration(("AI_ALLOW_PRIVATE_EGRESS", "false"))));
+                BuildConfiguration((EgressUrlPolicy.PrivateEgressOptIn, "false"))));
     }
 
     [Fact]
@@ -93,7 +144,7 @@ public sealed class PrivateEgressOptInTests
         // requires https (proving the knob is NOT wired into the scheme relaxation). This pins the single wiring
         // decision — private egress uses the opt-in, but http stays Development-only.
         var policy = ResolveEgressPolicy(
-            BuildConfiguration(("AI_ALLOW_PRIVATE_EGRESS", "true")),
+            BuildConfiguration((EgressUrlPolicy.PrivateEgressOptIn, "true")),
             environmentName: "Production");
 
         Assert.True(policy.AllowPrivateEgress);

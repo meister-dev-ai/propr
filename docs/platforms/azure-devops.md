@@ -29,8 +29,10 @@ principal object ID. The service principal must be usable against the target org
 
 ## Azure DevOps Server
 
-Do not use `https://dev.azure.com` for a self-hosted server; that host is only for Azure DevOps
-Services. Both self-hosted modes require an HTTPS `hostBaseUrl` - HTTP is rejected when you save.
+Do not use `https://dev.azure.com` for a self-hosted server; that host serves Azure DevOps Services. Both
+self-hosted modes require an HTTPS `hostBaseUrl`. HTTP is rejected when you save. A server on a private
+address also needs `MEISTER_ALLOW_PRIVATE_EGRESS` set on the installation. See
+[outbound request protection](../reference/security.md#outbound-request-protection).
 
 Prepare the endpoint before creating the connection:
 

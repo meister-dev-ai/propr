@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
@@ -388,8 +389,15 @@ public sealed class TenantPersistenceServiceTests
 
     private static MeisterProPRDbContext CreateContext()
     {
+        return CreateContext($"TenantPersistenceServiceTests_{Guid.NewGuid()}");
+    }
+
+    // A second context over the same store. A persistence assertion made through the context the service wrote
+    // with can be answered from the change tracker, so it passes whether or not anything was saved.
+    private static MeisterProPRDbContext CreateContext(string databaseName)
+    {
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseInMemoryDatabase($"TenantPersistenceServiceTests_{Guid.NewGuid()}")
+            .UseInMemoryDatabase(databaseName)
             .Options;
 
         return new MeisterProPRDbContext(options);
@@ -511,5 +519,85 @@ public sealed class TenantPersistenceServiceTests
         driver.CredentialFields.Returns(declaration.CredentialFields);
 
         return new AiProviderRegistry([driver]);
+    }
+
+    // The policy has three values and the middle one is the CLR default, so a patch that carries only it has to
+    // still be written and audited: it is how a tenant hands the decision back to the installation switch.
+    [Theory]
+    [InlineData(ReasoningCapturePolicy.Enabled)]
+    [InlineData(ReasoningCapturePolicy.Disabled)]
+    [InlineData(ReasoningCapturePolicy.InstallationDefault)]
+    public async Task TenantAdminService_PatchAsync_StoresTheReasoningCapturePolicyAndAuditsIt(ReasoningCapturePolicy requested)
+    {
+        var databaseName = $"TenantPersistenceServiceTests_{Guid.NewGuid()}";
+        Guid tenantId;
+        await using (var db = CreateContext(databaseName))
+        {
+            var sut = new TenantAdminService(db);
+            var created = await sut.CreateAsync("acme", "Acme Corp");
+            tenantId = created.Id;
+
+            var patched = await sut.PatchAsync(created.Id, reasoningCapturePolicy: requested);
+
+            Assert.NotNull(patched);
+            Assert.Equal(requested, patched!.ReasoningCapturePolicy);
+        }
+
+        await using var reader = CreateContext(databaseName);
+        Assert.Equal(requested, (await reader.Tenants.FindAsync(tenantId))!.ReasoningCapturePolicy);
+
+        // The tenant the entry belongs to is part of the claim: an audit row written for another tenant would
+        // otherwise satisfy it.
+        Assert.Contains(
+            reader.TenantAuditEntries,
+            entry => entry.TenantId == tenantId
+                     && entry.EventType == "tenant.policy.updated"
+                     && entry.Detail!.Contains(requested.ToString(), StringComparison.Ordinal));
+    }
+
+    // A tenant that has never stated a policy leaves the decision to the installation switch, and a patch that
+    // does not mention the policy must not change it.
+    [Fact]
+    public async Task TenantAdminService_PatchAsync_WithoutTheReasoningPolicy_LeavesItUnchanged()
+    {
+        var databaseName = $"TenantPersistenceServiceTests_{Guid.NewGuid()}";
+        Guid tenantId;
+        await using (var db = CreateContext(databaseName))
+        {
+            var sut = new TenantAdminService(db);
+            var created = await sut.CreateAsync("acme", "Acme Corp");
+            tenantId = created.Id;
+            Assert.Equal(ReasoningCapturePolicy.InstallationDefault, created.ReasoningCapturePolicy);
+
+            await sut.PatchAsync(created.Id, reasoningCapturePolicy: ReasoningCapturePolicy.Disabled);
+            var patched = await sut.PatchAsync(created.Id, "Acme Updated");
+
+            Assert.NotNull(patched);
+            Assert.Equal(ReasoningCapturePolicy.Disabled, patched!.ReasoningCapturePolicy);
+        }
+
+        await using var reader = CreateContext(databaseName);
+        Assert.Equal(
+            ReasoningCapturePolicy.Disabled,
+            (await reader.Tenants.FindAsync(tenantId))!.ReasoningCapturePolicy);
+    }
+
+    // The reported installation switch is the one the host is actually running with. A DTO that defaulted it
+    // would tell an operator the installation captures reasoning when the switch says it does not.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TenantAdminService_GetByIdAsync_ReportsTheInstallationSwitchAsConfigured(bool installationSwitch)
+    {
+        await using var db = CreateContext();
+        var sut = new TenantAdminService(
+            db,
+            aiReviewOptions: Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { CaptureReasoningInProtocol = installationSwitch }));
+        var created = await sut.CreateAsync("acme", "Acme Corp");
+
+        var read = await sut.GetByIdAsync(created.Id);
+
+        Assert.NotNull(read);
+        Assert.Equal(installationSwitch, read!.InstallationDefaultCapturesReasoning);
     }
 }

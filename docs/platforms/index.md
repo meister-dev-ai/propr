@@ -105,8 +105,10 @@ kind.
 | `storeDiffs` | Archive the per-file diffs of each reviewed increment | Opt-in; see data retention below |
 | `retentionDays` | How long archived data is kept, `1`–`3650` | See data retention below |
 
-`hostBaseUrl` must be an HTTPS URL. Plain HTTP is accepted only for loopback, `localhost`, or
-private-network addresses, and never for Azure DevOps Server.
+`hostBaseUrl` must be an HTTPS URL on a public host. A private, loopback or link-local address needs
+`MEISTER_ALLOW_PRIVATE_EGRESS` set on the installation, and with it set those addresses also accept plain
+HTTP. Azure DevOps Server requires HTTPS in every case. See
+[outbound request protection](../reference/security.md#outbound-request-protection).
 
 The three retention fields appear on the connection form as **Data retention**. Their defaults, what
 each one archives, and what the purge sweep does and does not delete are in

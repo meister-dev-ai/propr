@@ -50,6 +50,14 @@
                             <span class="spend-label">Spent to date</span>
                             <span class="spend-value">{{ formatUsd(vm.spentToDateUsd.value) }}</span>
                         </div>
+                        <div class="spend-card" data-testid="tenant-soft-cap-card">
+                            <span class="spend-label">Tenant soft cap</span>
+                            <span class="spend-value">{{ capLabel(vm.tenantSoftCapUsd.value) }}</span>
+                        </div>
+                        <div class="spend-card" data-testid="tenant-hard-cap-card">
+                            <span class="spend-label">Tenant hard cap</span>
+                            <span class="spend-value">{{ capLabel(vm.tenantHardCapUsd.value) }}</span>
+                        </div>
                         <div class="spend-card">
                             <span class="spend-label">Summed soft cap</span>
                             <span class="spend-value">{{ capLabel(vm.softCapUsd.value) }}</span>
@@ -74,15 +82,18 @@
                                 <span :class="{ 'over-budget': vm.remainingUsd.value < 0 }">{{ remainingLabel }}</span>
                             </template>
                         </p>
-                        <p v-if="vm.projectedToExceedHardCap.value" class="warn danger">
-                            Projected to exceed the summed hard cap this period.
+                        <p v-if="vm.projectedToExceedHardCap.value" class="warn danger"
+                            data-testid="hard-cap-projection-warning">
+                            Projected to exceed the {{ capSourceLabel }} hard cap this period.
                         </p>
-                        <p v-else-if="vm.projectedToExceedSoftCap.value" class="warn">
-                            Projected to exceed the summed soft cap this period.
+                        <p v-else-if="vm.projectedToExceedSoftCap.value" class="warn"
+                            data-testid="soft-cap-projection-warning">
+                            Projected to exceed the {{ capSourceLabel }} soft cap this period.
                         </p>
                     </div>
                     <p v-else class="muted-hint no-budget">
-                        No client in this tenant has a monthly budget configured. Caps are summed across clients once set.
+                        This tenant has no monthly cap and no client in it has one. Set a tenant cap on the Budget
+                        section, or a client cap on the client's Budget tab.
                     </p>
 
                     <div class="chart-wrap">
@@ -133,6 +144,11 @@ const remainingLabel = computed(() => {
     }
     return remaining < 0 ? `${formatUsd(Math.abs(remaining))} over` : `${formatUsd(remaining)} remaining`
 })
+
+// Each forecast warning names the ceiling it was measured against. Both warnings read the same source as the
+// caps they measure against: the tenant's own caps when it states either kind, the summed client caps when it
+// states neither.
+const capSourceLabel = computed(() => (vm.hasTenantCap.value ? 'tenant' : 'summed'))
 
 function capLabel(value: number | null | undefined): string {
     return value == null ? 'No limit' : formatUsd(value)

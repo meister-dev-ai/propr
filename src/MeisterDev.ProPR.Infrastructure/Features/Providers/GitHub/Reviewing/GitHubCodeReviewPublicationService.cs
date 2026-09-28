@@ -16,8 +16,9 @@ internal sealed class GitHubCodeReviewPublicationService : ICodeReviewPublicatio
 
     public GitHubCodeReviewPublicationService(
         GitHubConnectionVerifier connectionVerifier,
-        IHttpClientFactory httpClientFactory)
-        : this(new GitHubLifecyclePublicationService(connectionVerifier, httpClientFactory))
+        IHttpClientFactory httpClientFactory,
+        IPostedCommentComposer composer)
+        : this(new GitHubLifecyclePublicationService(connectionVerifier, httpClientFactory, composer))
     {
     }
 

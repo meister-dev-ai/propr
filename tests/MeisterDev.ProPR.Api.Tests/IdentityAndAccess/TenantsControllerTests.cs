@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
@@ -14,6 +15,7 @@ using MeisterDev.ProPR.Application.Features.Licensing.Dtos;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Auth;
@@ -32,6 +34,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -196,6 +199,268 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
     }
 
     [Fact]
+    public async Task PatchTenant_TenantAdministrator_SetsChangesAndClearsTheMonthlyCaps()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"caps-{Guid.NewGuid():N}", "Caps Corp");
+        var userId = await factory.SeedUserAsync($"caps.admin-{Guid.NewGuid():N}", "caps.admin@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+        var httpClient = factory.CreateClient();
+
+        var afterSet = await this.PatchBudgetAsync(httpClient, tenantId, userId, new { monthlySoftCapUsd = 800m, monthlyHardCapUsd = 1000m });
+        Assert.Equal(HttpStatusCode.OK, afterSet.StatusCode);
+        var setBody = JsonDocument.Parse(await afterSet.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(800m, setBody.GetProperty("budget").GetProperty("monthlySoftCapUsd").GetDecimal());
+        Assert.Equal(1000m, setBody.GetProperty("budget").GetProperty("monthlyHardCapUsd").GetDecimal());
+
+        var afterChange = await this.PatchBudgetAsync(httpClient, tenantId, userId, new { monthlySoftCapUsd = 400m, monthlyHardCapUsd = 500m });
+        Assert.Equal(HttpStatusCode.OK, afterChange.StatusCode);
+        var changeBody = JsonDocument.Parse(await afterChange.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(400m, changeBody.GetProperty("budget").GetProperty("monthlySoftCapUsd").GetDecimal());
+        Assert.Equal(500m, changeBody.GetProperty("budget").GetProperty("monthlyHardCapUsd").GetDecimal());
+
+        var afterClear = await this.PatchBudgetAsync(
+            httpClient, tenantId, userId, new { monthlySoftCapUsd = (decimal?)null, monthlyHardCapUsd = (decimal?)null });
+        Assert.Equal(HttpStatusCode.OK, afterClear.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var stored = await dbContext.Tenants.AsNoTracking().SingleAsync(tenant => tenant.Id == tenantId);
+        Assert.Null(stored.MonthlyBudgetSoftCapUsd);
+        Assert.Null(stored.MonthlyBudgetHardCapUsd);
+    }
+
+    [Fact]
+    public async Task PatchTenant_TenantUserSettingTheMonthlyCaps_Returns403()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"caps-{Guid.NewGuid():N}", "Caps Corp");
+        var userId = await factory.SeedUserAsync($"caps.user-{Guid.NewGuid():N}", "caps.user@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantUser);
+
+        var response = await this.PatchBudgetAsync(factory.CreateClient(), tenantId, userId, new { monthlyHardCapUsd = 100m });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchTenant_MonthlyCapsWithoutTheBudgetingCapability_ReportsThePremiumRefusal()
+    {
+        factory.ResetLicensing();
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.Budgeting, isAvailable: false, "Budgeting requires a commercial license.");
+
+        try
+        {
+            var tenantId = await factory.SeedTenantAsync($"caps-{Guid.NewGuid():N}", "Caps Corp");
+            var userId = await factory.SeedUserAsync($"caps.admin-{Guid.NewGuid():N}", "caps.admin@acme.test");
+            await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+            var response = await this.PatchBudgetAsync(factory.CreateClient(), tenantId, userId, new { monthlyHardCapUsd = 100m });
+
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
+            Assert.Equal(PremiumCapabilityKey.Budgeting, body.GetProperty("feature").GetString());
+        }
+        finally
+        {
+            // The licensing service lives on the shared fixture, so an assertion that fails here would leave
+            // Budgeting unavailable for every test that runs after this one.
+            factory.ResetLicensing();
+        }
+    }
+
+    [Fact]
+    public async Task PatchTenant_SoftCapAboveTheHardCap_Returns400()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"caps-{Guid.NewGuid():N}", "Caps Corp");
+        var userId = await factory.SeedUserAsync($"caps.admin-{Guid.NewGuid():N}", "caps.admin@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+        var response = await this.PatchBudgetAsync(factory.CreateClient(), tenantId, userId, new { monthlySoftCapUsd = 200m, monthlyHardCapUsd = 100m });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    // Beyond the magnitude the numeric(18,6) cap column holds, and finer than the scale it keeps.
+    [InlineData("1000000000000")]
+    [InlineData("0.0000001")]
+    public async Task PatchTenant_CapOutsideTheStorableRange_Returns400(string hardCapUsd)
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"caps-{Guid.NewGuid():N}", "Caps Corp");
+        var userId = await factory.SeedUserAsync($"caps.admin-{Guid.NewGuid():N}", "caps.admin@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+        var response = await this.PatchBudgetAsync(
+            factory.CreateClient(),
+            tenantId,
+            userId,
+            new { monthlyHardCapUsd = decimal.Parse(hardCapUsd, CultureInfo.InvariantCulture) });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var stored = await dbContext.Tenants.AsNoTracking().SingleAsync(tenant => tenant.Id == tenantId);
+        Assert.Null(stored.MonthlyBudgetHardCapUsd);
+    }
+
+    [Fact]
+    public async Task PatchTenant_TenantAdministrator_SetsAndClearsThePerFileLimits()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"limits-{Guid.NewGuid():N}", "Limits Corp");
+        var userId = await factory.SeedUserAsync($"limits.admin-{Guid.NewGuid():N}", "limits.admin@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+        var httpClient = factory.CreateClient();
+
+        var afterSet = await this.PatchTenantAsync(
+            httpClient, tenantId, userId, new { reviewLimits = new { maxFileSizeBytes = 262_144, maxStructuralParseBytes = 131_072 } });
+        Assert.Equal(HttpStatusCode.OK, afterSet.StatusCode);
+        var body = JsonDocument.Parse(await afterSet.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(262_144, body.GetProperty("reviewLimits").GetProperty("maxFileSizeBytes").GetInt32());
+        Assert.Equal(131_072, body.GetProperty("reviewLimits").GetProperty("maxStructuralParseBytes").GetInt32());
+
+        var afterClear = await this.PatchTenantAsync(
+            httpClient, tenantId, userId, new { reviewLimits = new { maxFileSizeBytes = (int?)null, maxStructuralParseBytes = (int?)null } });
+        Assert.Equal(HttpStatusCode.OK, afterClear.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var stored = await dbContext.Tenants.AsNoTracking().SingleAsync(tenant => tenant.Id == tenantId);
+        Assert.Null(stored.AiMaxFileSizeBytes);
+        Assert.Null(stored.AiMaxStructuralParseBytes);
+    }
+
+    // The per-file limits bound what a tenant's reviews may spend, so they sit behind the same licensed
+    // capability as the tenant's budget caps.
+    [Fact]
+    public async Task PatchTenant_PerFileLimitsWithoutTheBudgetingCapability_ReportsThePremiumRefusal()
+    {
+        factory.ResetLicensing();
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.Budgeting, isAvailable: false, "Budgeting requires a commercial license.");
+
+        try
+        {
+            var tenantId = await factory.SeedTenantAsync($"limits-{Guid.NewGuid():N}", "Limits Corp");
+            var userId = await factory.SeedUserAsync($"limits.admin-{Guid.NewGuid():N}", "limits.admin@acme.test");
+            await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+            var refused = await this.PatchTenantAsync(factory.CreateClient(), tenantId, userId, new { reviewLimits = new { maxFileSizeBytes = 262_144 } });
+
+            Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+            var body = JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
+            Assert.Equal(PremiumCapabilityKey.Budgeting, body.GetProperty("feature").GetString());
+
+            // The message names what this request asked to set. A request that carried no spend cap must not
+            // be refused with a message about spend caps.
+            var message = body.GetProperty("message").GetString();
+            Assert.Contains("per-file review limits", message, StringComparison.Ordinal);
+            Assert.DoesNotContain("spend caps", message, StringComparison.Ordinal);
+
+            // The same patch with the capability in force, so the refusal is the licence and nothing else
+            // about the request.
+            factory.ResetLicensing();
+            var accepted = await this.PatchTenantAsync(factory.CreateClient(), tenantId, userId, new { reviewLimits = new { maxFileSizeBytes = 262_144 } });
+
+            Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+            var acceptedBody = JsonDocument.Parse(await accepted.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal(262_144, acceptedBody.GetProperty("reviewLimits").GetProperty("maxFileSizeBytes").GetInt32());
+        }
+        finally
+        {
+            // The licensing service lives on the shared fixture, so an assertion that fails here would leave
+            // Budgeting unavailable for every test that runs after this one.
+            factory.ResetLicensing();
+        }
+    }
+
+    [Fact]
+    public async Task PatchTenant_CapsAndLimitsWithoutTheBudgetingCapability_NamesBothInTheRefusal()
+    {
+        factory.ResetLicensing();
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.Budgeting, isAvailable: false, "Budgeting requires a commercial license.");
+
+        try
+        {
+            var tenantId = await factory.SeedTenantAsync($"both-{Guid.NewGuid():N}", "Both Corp");
+            var userId = await factory.SeedUserAsync($"both.admin-{Guid.NewGuid():N}", "both.admin@acme.test");
+            await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+            var refused = await this.PatchTenantAsync(
+                factory.CreateClient(),
+                tenantId,
+                userId,
+                new { budget = new { monthlyHardCapUsd = 100m }, reviewLimits = new { maxFileSizeBytes = 262_144 } });
+
+            Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+            var body = JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement;
+            var message = body.GetProperty("message").GetString();
+            Assert.Contains("spend caps", message, StringComparison.Ordinal);
+            Assert.Contains("per-file review limits", message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            // The licensing service lives on the shared fixture, so an assertion that fails here would leave
+            // Budgeting unavailable for every test that runs after this one.
+            factory.ResetLicensing();
+        }
+    }
+
+    [Fact]
+    public async Task PatchTenant_PerFileLimitBelowTheAcceptedRange_Returns400()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"limits-{Guid.NewGuid():N}", "Limits Corp");
+        var userId = await factory.SeedUserAsync($"limits.admin-{Guid.NewGuid():N}", "limits.admin@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+        var response = await this.PatchTenantAsync(factory.CreateClient(), tenantId, userId, new { reviewLimits = new { maxFileSizeBytes = 512 } });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchTenant_TenantUserSettingThePerFileLimits_Returns403()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"limits-{Guid.NewGuid():N}", "Limits Corp");
+        var userId = await factory.SeedUserAsync($"limits.user-{Guid.NewGuid():N}", "limits.user@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantUser);
+
+        var response = await this.PatchTenantAsync(factory.CreateClient(), tenantId, userId, new { reviewLimits = new { maxFileSizeBytes = 262_144 } });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    private async Task<HttpResponseMessage> PatchTenantAsync(HttpClient httpClient, Guid tenantId, Guid userId, object payload)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{tenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateToken(userId, AppUserRole.User));
+        request.Content = JsonContent.Create(payload);
+        return await httpClient.SendAsync(request);
+    }
+
+    private async Task<HttpResponseMessage> PatchBudgetAsync(HttpClient httpClient, Guid tenantId, Guid userId, object budget)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{tenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateToken(userId, AppUserRole.User));
+        request.Content = JsonContent.Create(new { budget });
+        return await httpClient.SendAsync(request);
+    }
+
+    [Fact]
     public async Task PatchTenant_SystemTenant_Returns409Conflict()
     {
         factory.ResetLicensing();
@@ -259,6 +524,138 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
             "A commercial license is required to use more than the built-in System tenant, including in self-hosted deployments.",
             body.GetProperty("error").GetString());
     }
+
+    // A tenant nobody has touched leaves reasoning capture to the installation switch, and the switch's current
+    // value is reported alongside so a console can name what that default does here. Both switch values are
+    // exercised: a response that always reported the shipped default would satisfy only one of them.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetTenant_NeverStatedReasoningPolicy_ReadsInstallationDefaultAndReportsTheSwitch(bool installationSwitch)
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
+
+        using var configured = factory.WithWebHostBuilder(builder => builder.UseSetting(
+            "AI_CAPTURE_REASONING_IN_PROTOCOL",
+            installationSwitch ? "true" : "false"));
+
+        var httpClient = configured.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/tenants/{tenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("installationDefault", body.GetProperty("reasoningCapturePolicy").GetString());
+        Assert.Equal(installationSwitch, body.GetProperty("installationDefaultCapturesReasoning").GetBoolean());
+
+        using var scope = configured.Services.CreateScope();
+        Assert.Equal(
+            installationSwitch,
+            scope.ServiceProvider.GetRequiredService<IOptions<AiReviewOptions>>().Value.CaptureReasoningInProtocol);
+    }
+
+    [Theory]
+    [InlineData("enabled")]
+    [InlineData("disabled")]
+    [InlineData("installationDefault")]
+    public async Task PatchTenant_ReasoningPolicyAlone_IsAcceptedAndStored(string requestedPolicy)
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
+        var userId = await factory.SeedUserAsync(
+            $"tenant.admin.{Guid.NewGuid():N}",
+            $"tenant.admin.{Guid.NewGuid():N}@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{tenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(userId, AppUserRole.User));
+        request.Content = JsonContent.Create(new { reasoningCapturePolicy = requestedPolicy });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(requestedPolicy, body.GetProperty("reasoningCapturePolicy").GetString());
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var stored = await dbContext.Tenants.AsNoTracking().SingleAsync(tenant => tenant.Id == tenantId);
+        Assert.Equal(requestedPolicy, JsonNamingPolicy.CamelCase.ConvertName(stored.ReasoningCapturePolicy.ToString()));
+    }
+
+    [Fact]
+    public async Task PatchTenant_ReasoningPolicy_TenantUserOfTheSameTenant_Returns403()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
+        var userId = await factory.SeedUserAsync(
+            $"tenant.user.{Guid.NewGuid():N}",
+            $"tenant.user.{Guid.NewGuid():N}@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantUser);
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{tenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(userId, AppUserRole.User));
+        request.Content = JsonContent.Create(new { reasoningCapturePolicy = "disabled" });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchTenant_ReasoningPolicy_AdministratorOfAnotherTenant_Returns403()
+    {
+        factory.ResetLicensing();
+
+        var ownTenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
+        var otherTenantId = await factory.SeedTenantAsync($"globex-{Guid.NewGuid():N}", "Globex Corp");
+        var userId = await factory.SeedUserAsync(
+            $"tenant.admin.{Guid.NewGuid():N}",
+            $"tenant.admin.{Guid.NewGuid():N}@acme.test");
+        await factory.SeedTenantMembershipAsync(ownTenantId, userId, TenantRole.TenantAdministrator);
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{otherTenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(userId, AppUserRole.User));
+        request.Content = JsonContent.Create(new { reasoningCapturePolicy = "disabled" });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchTenant_ReasoningPolicyOnTheSystemTenant_Returns409Conflict()
+    {
+        factory.ResetLicensing();
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{TenantCatalog.SystemTenantId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));
+        request.Content = JsonContent.Create(new { reasoningCapturePolicy = "disabled" });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
 }
 
 public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Program>
@@ -273,6 +670,13 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
     private readonly Lock _externalAuthResponsesLock = new();
     private readonly TestLicensingCapabilityService _licensingCapabilityService = new();
     private string? _publicBaseUrl;
+    private MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication.TenantMachineAuthenticationThrottle? _machineThrottle;
+
+    public void SetMachineThrottle(int globalPermits, int perCredentialPermits, TimeSpan window)
+    {
+        this._machineThrottle =
+            new MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication.TenantMachineAuthenticationThrottle(globalPermits, perCredentialPermits, window);
+    }
 
     /// <summary>
     ///     Credentials the test id_token factory signs with; the SSO validator is wired to trust the matching public key.
@@ -290,6 +694,11 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             PremiumCapabilityKey.SsoAuthentication,
             isAvailable,
             message);
+    }
+
+    public void SetCapabilityAvailability(string capabilityKey, bool isAvailable, string? message = null)
+    {
+        this._licensingCapabilityService.SetCapabilityAvailability(capabilityKey, isAvailable, message);
     }
 
     public void ResetLicensing()
@@ -322,13 +731,18 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
 
     public string GenerateToken(Guid userId, AppUserRole globalRole)
     {
+        return this.GenerateToken(userId.ToString(), globalRole);
+    }
+
+    public string GenerateToken(string subject, AppUserRole globalRole)
+    {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
         var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
         var descriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(
             [
-                new Claim("sub", userId.ToString()),
+                new Claim("sub", subject),
                 new Claim("global_role", globalRole.ToString()),
                 new Claim(JwtRegisteredClaimNames.UniqueName, "tenant-admin"),
             ]),
@@ -525,6 +939,12 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             services.AddSingleton<IPasswordHashService, PasswordHashService>();
             services.AddSingleton(secretProtectionCodec);
             services.AddDbContext<MeisterProPRDbContext>(options => options.UseInMemoryDatabase(dbName, dbRoot));
+            services.AddScoped<MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication.TenantMachineCredentialService>();
+            if (this._machineThrottle is not null)
+            {
+                services.RemoveAll<MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication.TenantMachineAuthenticationThrottle>();
+                services.AddSingleton(this._machineThrottle);
+            }
 
             services.RemoveAll<ILicensingCapabilityService>();
             services.AddSingleton<ILicensingCapabilityService>(this._licensingCapabilityService);
@@ -556,8 +976,17 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
             services.AddSingleton(crawlRepo);
+            services.AddSingleton(Substitute.For<IWebhookConfigurationRepository>());
+            services.AddSingleton(Substitute.For<IScmProviderRegistry>());
+            services.AddSingleton(Substitute.For<MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports.IPullRequestSynchronizationService>());
 
             services.AddSingleton(Substitute.For<IJobRepository>());
+            services.AddScoped<MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports.ICustomerDashboardReader,
+                MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.Persistence.EfCustomerDashboardReader>();
+            var history = Substitute.For<MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports.ICustomerReviewHistoryReader>();
+            history.GetAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<MeisterDev.ProPR.Domain.Enums.JobStatus?>(), Arg.Any<CancellationToken>())
+                .Returns(new MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports.CustomerReviewHistory(0, 1, 25, []));
+            services.AddSingleton(history);
             services.AddScoped<IAccountLockoutService, AccountLockoutService>();
 
             // Validate id_tokens against a static, in-memory OIDC configuration keyed off the derived

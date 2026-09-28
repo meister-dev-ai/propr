@@ -2100,6 +2100,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AdmissionPolicyFingerprint")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("admission_policy_fingerprint");
+
+                    b.Property<string>("AdmissionRefusalReason")
+                        .HasColumnType("text")
+                        .HasColumnName("admission_refusal_reason");
+
                     b.Property<Guid?>("AiConnectionId")
                         .HasColumnType("uuid")
                         .HasColumnName("ai_connection_id");
@@ -2173,6 +2182,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("failure_reason");
+
+                    b.Property<DateTimeOffset?>("HeldUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("held_until");
 
                     b.Property<string>("HostBaseUrl")
                         .HasMaxLength(512)
@@ -2421,6 +2434,9 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.HasIndex("Status", "SubmittedAt")
                         .HasDatabaseName("ix_review_jobs_claim_candidates");
+
+                    b.HasIndex("ClientId", "Status", "CompletedAt")
+                        .HasDatabaseName("ix_review_jobs_client_status_completed_at");
 
                     b.HasIndex("ClientId", "Provider", "RepositoryId", "ExternalCodeReviewId")
                         .HasDatabaseName("ix_review_jobs_client_provider_review");
@@ -3462,6 +3478,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnName("tenant_id");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
@@ -3875,6 +3892,26 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<int?>("AdmissionMaxChangedFiles")
+                        .HasColumnType("integer")
+                        .HasColumnName("admission_max_changed_files");
+
+                    b.Property<int?>("AdmissionMaxChangedLines")
+                        .HasColumnType("integer")
+                        .HasColumnName("admission_max_changed_lines");
+
+                    b.Property<int?>("AdmissionMaxDiffBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("admission_max_diff_bytes");
+
+                    b.Property<int?>("AdmissionMaxRepositoryMegabytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("admission_max_repository_megabytes");
+
+                    b.Property<int?>("AdmissionMaxReviewsPerPullRequestPerHour")
+                        .HasColumnType("integer")
+                        .HasColumnName("admission_max_reviews_per_pull_request_per_hour");
 
                     b.Property<string>("AutoResolveSeverities")
                         .IsRequired()
@@ -5586,6 +5623,62 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("tenant_audit_entries", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.TenantMachineCredentialRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("IssuedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("issued_by_user_id");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("label");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid?>("RevokedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revoked_by_user_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("token_hash");
+
+                    b.Property<string>("TokenLookupHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("token_lookup_hash");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TokenLookupHash")
+                        .IsUnique();
+
+                    b.ToTable("tenant_machine_credentials", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.TenantMembershipRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5630,6 +5723,14 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int?>("AiMaxFileSizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("ai_max_file_size_bytes");
+
+                    b.Property<int?>("AiMaxStructuralParseBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("ai_max_structural_parse_bytes");
+
                     b.Property<string>("AllowedAiEndpointHosts")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -5664,6 +5765,23 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("local_login_enabled");
+
+                    b.Property<decimal?>("MonthlyBudgetHardCapUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("monthly_budget_hard_cap_usd");
+
+                    b.Property<decimal?>("MonthlyBudgetSoftCapUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("monthly_budget_soft_cap_usd");
+
+                    b.Property<string>("ReasoningCapturePolicy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("installation_default")
+                        .HasColumnName("reasoning_capture_policy");
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -6868,6 +6986,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Navigation("ActorUser");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.TenantMachineCredentialRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.TenantRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.TenantMembershipRecord", b =>

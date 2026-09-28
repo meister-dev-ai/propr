@@ -122,6 +122,7 @@ public sealed class ClientAdminService(
         string? outputLanguage = null,
         bool? reviewEveryIncrementEnabled = null,
         bool? withholdOutOfScopeFindings = null,
+        ReviewAdmissionPolicyDto? admissionPolicy = null,
         CancellationToken ct = default)
     {
         var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
@@ -159,6 +160,7 @@ public sealed class ClientAdminService(
         ReplaceReviewPassesIfProvided(client, reviewPasses);
         ReplaceBudgetCapsIfProvided(client, budgetConfig);
         ReplaceAutoResolveSeveritiesIfProvided(client, autoResolveSeverities);
+        ReplaceAdmissionPolicyIfProvided(client, admissionPolicy);
 
         await dbContext.SaveChangesAsync(ct);
         return await this.GetByIdAsync(clientId, ct);
@@ -264,6 +266,22 @@ public sealed class ClientAdminService(
         client.PullRequestBudgetHardCapUsd = budgetConfig.PullRequestHardCapUsd;
         client.IncrementBudgetSoftCapUsd = budgetConfig.IncrementSoftCapUsd;
         client.IncrementBudgetHardCapUsd = budgetConfig.IncrementHardCapUsd;
+    }
+
+    private static void ReplaceAdmissionPolicyIfProvided(ClientRecord client, ReviewAdmissionPolicyDto? admissionPolicy)
+    {
+        if (admissionPolicy is null)
+        {
+            return;
+        }
+
+        // Replaced as a group for the same reason the budget caps are: an explicit null clears one bound, which
+        // the per-field "omit means unchanged" convention cannot express.
+        client.AdmissionMaxChangedFiles = admissionPolicy.MaxChangedFiles;
+        client.AdmissionMaxChangedLines = admissionPolicy.MaxChangedLines;
+        client.AdmissionMaxDiffBytes = admissionPolicy.MaxDiffBytes;
+        client.AdmissionMaxReviewsPerPullRequestPerHour = admissionPolicy.MaxReviewsPerPullRequestPerHour;
+        client.AdmissionMaxRepositoryMegabytes = admissionPolicy.MaxRepositoryMegabytes;
     }
 
     private static void ReplaceAutoResolveSeveritiesIfProvided(
@@ -503,7 +521,13 @@ public sealed class ClientAdminService(
             client.CodeInsightsCollectionEnabled,
             ReviewOutputLanguage.Normalize(client.OutputLanguage),
             client.ReviewEveryIncrementEnabled,
-            client.WithholdOutOfScopeFindings);
+            client.WithholdOutOfScopeFindings,
+            new ReviewAdmissionPolicyDto(
+                client.AdmissionMaxChangedFiles,
+                client.AdmissionMaxChangedLines,
+                client.AdmissionMaxDiffBytes,
+                client.AdmissionMaxReviewsPerPullRequestPerHour,
+                client.AdmissionMaxRepositoryMegabytes));
     }
 
     // Without the licensing module there is no installation state to read, which a deployment with no

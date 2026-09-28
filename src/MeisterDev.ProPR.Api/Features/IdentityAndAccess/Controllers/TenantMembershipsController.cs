@@ -20,6 +20,50 @@ public sealed class TenantMembershipsController(
     ITenantAdminService tenantAdminService,
     ITenantMembershipService tenantMembershipService) : ControllerBase
 {
+    /// <summary>Creates a tenant membership for an existing user. Only platform administrators may call this endpoint.</summary>
+    [HttpPost]
+    [ProducesResponseType(typeof(TenantMembershipDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateMembership(
+        Guid tenantId,
+        [FromBody] CreateTenantMembershipRequest request,
+        [FromServices] IValidator<CreateTenantMembershipRequest> validator,
+        CancellationToken ct)
+    {
+        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        if (!await tenantAdminService.ExistsAsync(tenantId, ct))
+        {
+            return this.NotFound();
+        }
+
+        try
+        {
+            var membership = await tenantMembershipService.CreateAsync(tenantId, request.UserId, ParseRole(request.Role), ct);
+            return membership is null
+                ? this.NotFound()
+                : this.CreatedAtAction(nameof(this.GetMembership), new { tenantId, membershipId = membership.Id }, membership);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return this.Conflict(new { error = ex.Message });
+        }
+    }
+
     /// <summary>Lists tenant memberships for one tenant administrator scope.</summary>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<TenantMembershipDto>), StatusCodes.Status200OK)]
@@ -148,3 +192,6 @@ public sealed class TenantMembershipsController(
 
 /// <summary>Tenant membership role update payload.</summary>
 public sealed record UpdateTenantMembershipRequest(string Role);
+
+/// <summary>Creates a membership for an existing user.</summary>
+public sealed record CreateTenantMembershipRequest(Guid UserId, string Role);

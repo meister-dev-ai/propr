@@ -99,6 +99,7 @@ public interface IClientAdminService
         string? outputLanguage = null,
         bool? reviewEveryIncrementEnabled = null,
         bool? withholdOutOfScopeFindings = null,
+        ReviewAdmissionPolicyDto? admissionPolicy = null,
         CancellationToken ct = default);
 
     /// <summary>

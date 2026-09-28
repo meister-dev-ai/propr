@@ -49,6 +49,61 @@ public sealed class TenantMembershipService(
         return membership is null ? null : ToDto(membership);
     }
 
+    public async Task<TenantMembershipDto?> CreateAsync(
+        Guid tenantId,
+        Guid userId,
+        TenantRole role,
+        CancellationToken ct = default)
+    {
+        EnsureTenantIsEditable(tenantId);
+
+        if (await dbContext.TenantMemberships.AnyAsync(record => record.TenantId == tenantId && record.UserId == userId, ct))
+        {
+            throw new InvalidOperationException("User already belongs to this tenant.");
+        }
+
+        if (!await dbContext.AppUsers.AnyAsync(record => record.Id == userId, ct))
+        {
+            return null;
+        }
+
+        var membership = new TenantMembershipRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            UserId = userId,
+            Role = role,
+            AssignedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        dbContext.TenantMemberships.Add(membership);
+        try
+        {
+            await dbContext.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            if (await dbContext.TenantMemberships.AsNoTracking()
+                    .AnyAsync(record => record.TenantId == tenantId && record.UserId == userId, ct))
+            {
+                throw new InvalidOperationException("User already belongs to this tenant.");
+            }
+
+            throw;
+        }
+
+        membership = await dbContext.TenantMemberships
+            .Include(record => record.User)
+            .SingleAsync(record => record.Id == membership.Id, ct);
+        await this.AddAuditEntryAsync(
+            tenantId,
+            "tenant.membership.assigned",
+            $"Assigned tenant role {membership.Role} to {membership.User?.Username ?? membership.UserId.ToString()}.",
+            $"membershipId={membership.Id}; userId={membership.UserId}; role={membership.Role}",
+            ct);
+        return ToDto(membership);
+    }
+
     public async Task<TenantMembershipDto> UpsertAsync(
         Guid tenantId,
         Guid userId,

@@ -8,6 +8,8 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.Extensions.AI;
+using NSubstitute;
+using OpenAI.Responses;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
@@ -134,5 +136,92 @@ public sealed class RunnerRelayedChatOptionsTests
         var options = RunnerRelayedChatOptions.ToChatOptions(new RunnerChatOptions(MaxOutputTokens: 8192));
 
         Assert.Equal(8192, options!.MaxOutputTokens);
+    }
+
+    // A runner states its own reasoning-summary opt-in, so an outdated or hostile one can ask for reasoning a
+    // tenant has forbidden. The control plane resolves the job's policy and that is what reaches the provider.
+    [Fact]
+    public void AJobThatWithholdsReasoning_GetsNoSummaryEvenWhenTheRunnerAsksForOne()
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(
+            new RunnerChatOptions(ReasoningEffort: "high", CaptureReasoning: true),
+            captureReasoning: false);
+
+        var raw = options!.RawRepresentationFactory!(new FakeNativeClient());
+        var request = Assert.IsType<ProviderReasoningRequest>(raw);
+        Assert.False(request.CaptureReasoning);
+
+        // The effort level is a separate setting and reaches the provider as the runner sent it.
+        Assert.Equal(ProviderReasoningEffort.High, request.Effort);
+    }
+
+    [Fact]
+    public void AJobThatCapturesReasoning_GetsASummaryEvenWhenTheRunnerDidNotAskForOne()
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(
+            new RunnerChatOptions(CaptureReasoning: false),
+            captureReasoning: true);
+
+        Assert.True(
+            Assert.IsType<ProviderReasoningRequest>(options!.RawRepresentationFactory!(new FakeNativeClient()))
+                .CaptureReasoning);
+
+        // The same request in the form the OpenAI adapter reads. The capture flag alone would hold even if
+        // the summary the provider is asked for went missing, and the summary is what returns the text.
+        AssertRequestsAReasoningSummary(options);
+    }
+
+    // Without an effort level the shaping has nothing of its own to ask for, so the resolved refusal is what
+    // the request has to state. An absent request would leave the runner's own opt-in standing, which is the
+    // branch that opt-in would slip through.
+    [Fact]
+    public void AJobThatWithholdsReasoning_StatesTheRefusalWhenNoEffortIsSet()
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(
+            new RunnerChatOptions(CaptureReasoning: true),
+            captureReasoning: false);
+
+        Assert.NotNull(options!.RawRepresentationFactory);
+
+        var request = Assert.IsType<ProviderReasoningRequest>(options.RawRepresentationFactory!(new FakeNativeClient()));
+        Assert.False(request.CaptureReasoning);
+        Assert.Equal(ProviderReasoningEffort.None, request.Effort);
+    }
+
+    // A wire that named no reasoning at all is not a refusal either. The resolved answer decides, so a tenant
+    // that captures gets the summary asked for on a call the runner sent nothing about.
+    [Fact]
+    public void AJobThatCapturesReasoning_GetsASummaryWhenTheWireNamedNoReasoning()
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(
+            new RunnerChatOptions(MaxOutputTokens: 8192),
+            captureReasoning: true);
+
+        Assert.True(
+            Assert.IsType<ProviderReasoningRequest>(options!.RawRepresentationFactory!(new FakeNativeClient()))
+                .CaptureReasoning);
+        AssertRequestsAReasoningSummary(options);
+    }
+
+    // A caller that has not resolved the job's policy must not change what the runner asked for.
+    [Fact]
+    public void WithoutAResolvedPolicy_TheRunnersOwnOptInStands()
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(new RunnerChatOptions(CaptureReasoning: true));
+
+        var raw = options!.RawRepresentationFactory!(new FakeNativeClient());
+        Assert.True(Assert.IsType<ProviderReasoningRequest>(raw).CaptureReasoning);
+    }
+
+    // The OpenAI adapter reads the OpenAI library's own options object, and the summary verbosity is the
+    // field on it that asks the provider to return the reasoning text.
+    private static void AssertRequestsAReasoningSummary(ChatOptions options)
+    {
+        var raw = options.RawRepresentationFactory!(Substitute.For<IChatClient>());
+#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
+        var createOptions = Assert.IsType<CreateResponseOptions>(raw);
+        Assert.NotNull(createOptions.ReasoningOptions);
+        Assert.Equal(ResponseReasoningSummaryVerbosity.Auto, createOptions.ReasoningOptions!.ReasoningSummaryVerbosity);
+#pragma warning restore OPENAI001
     }
 }

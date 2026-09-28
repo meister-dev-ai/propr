@@ -14,6 +14,7 @@ namespace MeisterDev.Ai.Providers.Tests.AddIns;
 ///     not a static constructor, not a driver. An administrator decides on what the file states about itself,
 ///     which is read out of the assembly's metadata, and the decision is bound to the bytes.
 /// </remarks>
+[Collection(nameof(ProviderAddInMarkerCollection))]
 public sealed class ProviderAddInActivationTests
 {
     [Fact]

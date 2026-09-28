@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -25,9 +26,25 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persisten
 public sealed partial class RunnerIngestWriter(
     IJobRepository jobs,
     IProtocolRecorder protocolRecorder,
+    IRunnerJobReasoningCapturePolicy reasoningCapture,
     ILogicalModelResolver? logicalModels = null,
     ILogger<RunnerIngestWriter>? logger = null) : IRunnerIngestWriter
 {
+    /// <summary>The spooled event whose payload can carry the model's reasoning.</summary>
+    private const string AiCallEventName = "protocol.ai_call";
+
+    /// <summary>The property of a spooled AI call that carries the recorded assistant turn.</summary>
+    private const string OutputSampleProperty = "outputTextSample";
+
+    /// <summary>The property of a recorded assistant turn that carries the model's reasoning.</summary>
+    private const string ReasoningProperty = "reasoning";
+
+    /// <summary>
+    ///     What replaces a sample this side cannot read into its parts. The whole sample goes, because a
+    ///     payload that cannot be inspected cannot be shown to hold no reasoning.
+    /// </summary>
+    private const string WithheldSample = "[withheld: this tenant does not capture model reasoning]";
+
     /// <inheritdoc />
     public async Task WriteEventsAsync(
         Guid jobId,
@@ -40,6 +57,10 @@ public sealed partial class RunnerIngestWriter(
             return;
         }
 
+        // The runner decided for itself what to spool, so the decision is applied again here, where the text
+        // is about to be stored. Read once for the batch: every event in it belongs to the same job.
+        var capturesReasoning = await reasoningCapture.CapturesReasoningAsync(jobId, ct);
+
         // One protocol per batch, so a remote review's trace reads as a sequence of passes the viewer
         // already knows how to render rather than as a new kind of record.
         var protocolId = await protocolRecorder.BeginAsync(jobId, 1, "runner-trace", ct: ct);
@@ -47,16 +68,84 @@ public sealed partial class RunnerIngestWriter(
         foreach (var traceEvent in events)
         {
             ct.ThrowIfCancellationRequested();
+            var details = capturesReasoning || traceEvent.Name != AiCallEventName
+                ? traceEvent.Details
+                : WithoutReasoning(traceEvent.Details);
             await protocolRecorder.RecordReviewStrategyEventAsync(
                 protocolId,
                 traceEvent.Name,
-                traceEvent.Details,
-                traceEvent.Details,
+                details,
+                details,
                 null,
                 ct);
         }
 
         await protocolRecorder.SetCompletedAsync(protocolId, "Completed", 0, 0, 0, 0, null, ct);
+    }
+
+    /// <summary>
+    ///     The spooled AI call without the model's reasoning. The token counts sit beside the sample and are
+    ///     left alone, because budgets are computed from them.
+    /// </summary>
+    private static string? WithoutReasoning(string? details)
+    {
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return details;
+        }
+
+        var root = TryParseObject(details);
+        if (root is null)
+        {
+            // Nothing in it can be read, so nothing in it can be stored.
+            return WithheldSample;
+        }
+
+        if (!root.TryGetPropertyValue(OutputSampleProperty, out var sampleNode) || sampleNode is null)
+        {
+            // The event carries no recorded turn, so there is nothing that could hold reasoning.
+            return details;
+        }
+
+        if (sampleNode is not JsonValue sampleValue || !sampleValue.TryGetValue<string>(out var sample))
+        {
+            // A runner that spooled the turn as an object or any other shape this side does not read: the
+            // sample cannot be shown to hold no reasoning, so the whole sample goes.
+            root[OutputSampleProperty] = WithheldSample;
+            return root.ToJsonString();
+        }
+
+        if (string.IsNullOrEmpty(sample))
+        {
+            return details;
+        }
+
+        var turn = TryParseObject(sample);
+        if (turn is null)
+        {
+            root[OutputSampleProperty] = WithheldSample;
+            return root.ToJsonString();
+        }
+
+        if (!turn.Remove(ReasoningProperty))
+        {
+            return details;
+        }
+
+        root[OutputSampleProperty] = turn.ToJsonString();
+        return root.ToJsonString();
+    }
+
+    private static JsonObject? TryParseObject(string candidate)
+    {
+        try
+        {
+            return JsonNode.Parse(candidate) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <inheritdoc />

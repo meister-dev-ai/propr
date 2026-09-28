@@ -21,5 +21,6 @@ public interface IAdoCommentPoster
         IReadOnlyList<PrCommentThread>? existingThreads = null,
         AzureDevOpsPublicationContext? publicationContext = null,
         ReviewerIdentity? publicationIdentity = null,
+        bool replyInExistingSummaryThread = false,
         CancellationToken cancellationToken = default);
 }

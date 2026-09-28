@@ -37,6 +37,14 @@
         <Using Include="Xunit"/>
     </ItemGroup>
 
+    <!--
+        One set of cases for a contract two assemblies implement. The file's own remarks say why the two
+        resolvers cannot be compiled into one test project.
+    -->
+    <ItemGroup>
+        <Compile Include="..\Shared\AzureCredentialResolutionContract.cs" Link="AzureCredentialResolutionContract.cs"/>
+    </ItemGroup>
+
     <ItemGroup>
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.Infrastructure\MeisterDev.ProPR.Infrastructure.csproj"/>
         <ProjectReference Include="..\..\src\MeisterDev.ProPR.ProRV\MeisterDev.ProPR.ProRV.csproj"/>

@@ -65,7 +65,7 @@ public sealed class BudgetEnforcingChatClientTests
         var baseline = new ReviewSpendBaseline(
             ReviewScopeSpend.None,
             ReviewScopeSpend.None,
-            new ReviewScopeSpend(baselineUsd, false));
+            new ReviewScopeSpend(baselineUsd, false), ReviewScopeSpend.None);
         return new BudgetScope(caps, baseline);
     }
 

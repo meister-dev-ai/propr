@@ -34,7 +34,9 @@ public static class StartupMaintenanceExtensions
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
 
         // Apply any pending migrations automatically on startup.
-        await db.Database.MigrateAsync();
+        await StartupDatabaseMigrations.ApplyAsync(
+            db,
+            app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(StartupDatabaseMigrations)));
 
         var systemTenantBootstrapService = scope.ServiceProvider.GetService<SystemTenantBootstrapService>();
         if (systemTenantBootstrapService is not null)

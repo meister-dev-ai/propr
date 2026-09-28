@@ -61,7 +61,8 @@ public sealed class ClientsController(
             client.CodeInsightsCollectionEnabled,
             client.OutputLanguage,
             client.ReviewEveryIncrementEnabled,
-            client.WithholdOutOfScopeFindings);
+            client.WithholdOutOfScopeFindings,
+            client.AdmissionPolicyOrEmpty);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -409,6 +410,7 @@ public sealed class ClientsController(
             request.OutputLanguage,
             request.ReviewEveryIncrementEnabled,
             request.WithholdOutOfScopeFindings,
+            request.AdmissionPolicy,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -441,7 +443,8 @@ public sealed record ClientResponse(
     bool CodeInsightsCollectionEnabled = false,
     string OutputLanguage = ReviewOutputLanguage.Default,
     bool ReviewEveryIncrementEnabled = false,
-    bool WithholdOutOfScopeFindings = false);
+    bool WithholdOutOfScopeFindings = false,
+    ReviewAdmissionPolicyDto? AdmissionPolicy = null);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
@@ -526,4 +529,5 @@ public sealed record PatchClientRequest(
     bool? CodeInsightsCollectionEnabled = null,
     string? OutputLanguage = null,
     bool? ReviewEveryIncrementEnabled = null,
-    bool? WithholdOutOfScopeFindings = null);
+    bool? WithholdOutOfScopeFindings = null,
+    ReviewAdmissionPolicyDto? AdmissionPolicy = null);

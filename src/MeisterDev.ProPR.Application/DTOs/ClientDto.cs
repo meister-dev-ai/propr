@@ -35,7 +35,8 @@ public sealed record ClientDto(
     bool CodeInsightsCollectionEnabled = false,
     string OutputLanguage = ReviewOutputLanguage.Default,
     bool ReviewEveryIncrementEnabled = false,
-    bool WithholdOutOfScopeFindings = false)
+    bool WithholdOutOfScopeFindings = false,
+    ReviewAdmissionPolicyDto? AdmissionPolicy = null)
 {
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];
@@ -43,9 +44,25 @@ public sealed record ClientDto(
     /// <summary>The client's budget caps, or an all-null (uncapped) config when none are stored.</summary>
     public BudgetConfigDto BudgetConfigOrEmpty => this.BudgetConfig ?? new BudgetConfigDto();
 
+    /// <summary>The client's admission bounds, or an all-null (unbounded) policy when none are stored.</summary>
+    public ReviewAdmissionPolicyDto AdmissionPolicyOrEmpty => this.AdmissionPolicy ?? new ReviewAdmissionPolicyDto();
+
     /// <summary>The severities posted already resolved, or an empty list when none are configured.</summary>
     public IReadOnlyList<CommentSeverity> AutoResolveSeveritiesOrEmpty => this.AutoResolveSeverities ?? [];
 }
+
+/// <summary>
+///     A client's review admission bounds. Every bound is optional; a null bound means that dimension is
+///     unbounded. A review measured past a bound is refused before any model call, with the measured value and
+///     the bound named in the notice posted on the pull request. The reviews-per-hour bound holds a job instead
+///     of refusing it, and releases it once the window has passed.
+/// </summary>
+public sealed record ReviewAdmissionPolicyDto(
+    int? MaxChangedFiles = null,
+    int? MaxChangedLines = null,
+    int? MaxDiffBytes = null,
+    int? MaxReviewsPerPullRequestPerHour = null,
+    int? MaxRepositoryMegabytes = null);
 
 /// <summary>
 ///     A client's USD budget caps. Every value is optional; a null cap means no limit. Monthly-client and per-PR

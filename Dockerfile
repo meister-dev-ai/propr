@@ -80,6 +80,12 @@ RUN dotnet publish src/MeisterDev.Ai.Providers.OpenAiAddIn/MeisterDev.Ai.Provide
 RUN dotnet publish src/MeisterDev.Ai.Providers.AnthropicAddIn/MeisterDev.Ai.Providers.AnthropicAddIn.csproj \
     -c Release -o /app/provider-add-ins/MeisterDev.Ai.Providers.AnthropicAddIn --no-restore
 
+# The shared data-protection assembly includes the certificate protector without an add-in.
+# The Azure Key Vault protector is published separately to keep Azure dependencies in its add-in folder.
+# MEISTER_DATA_PROTECTION_PROTECTOR selects none, certificate, or an external protector by name.
+RUN dotnet publish src/MeisterDev.DataProtection.AzureKeyVaultAddIn/MeisterDev.DataProtection.AzureKeyVaultAddIn.csproj \
+    -c Release -o /app/data-protection-add-ins/MeisterDev.DataProtection.AzureKeyVaultAddIn --no-restore
+
 # Minimal Kerberos runtime slice for Azure DevOps client auth support.
 # ubuntu:24.04
 FROM ubuntu@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254 AS kerberos

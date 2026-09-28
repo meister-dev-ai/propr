@@ -21,6 +21,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewi
 public sealed class AdoCommentPoster(
     VssConnectionFactory connectionFactory,
     IClientScmConnectionRepository connectionRepository,
+    IPostedCommentComposer composer,
     IThreadMemoryService? threadMemoryService = null,
     IPostedFindingIndex? postedFindingIndex = null) : IAdoCommentPoster
 {
@@ -48,6 +49,12 @@ public sealed class AdoCommentPoster(
         GitPullRequestCommentThreadContext? prThreadContext,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     Adds one comment to a thread that already exists, returning the created comment. The seam that lets
+    ///     the reply path be exercised without a live Azure DevOps connection.
+    /// </summary>
+    internal delegate Task<Comment> AdoReplyFactory(int threadId, string message, CancellationToken cancellationToken);
+
     public async Task<ReviewCommentPostingDiagnosticsDto> PostAsync(
         string organizationUrl,
         string projectId,
@@ -59,6 +66,7 @@ public sealed class AdoCommentPoster(
         IReadOnlyList<PrCommentThread>? existingThreads = null,
         AzureDevOpsPublicationContext? publicationContext = null,
         ReviewerIdentity? publicationIdentity = null,
+        bool replyInExistingSummaryThread = false,
         CancellationToken cancellationToken = default)
     {
         using var activity = ActivitySource.StartActivity("AdoCommentPoster.Post");
@@ -108,6 +116,7 @@ public sealed class AdoCommentPoster(
                 message,
                 threadContext,
                 prThreadContext,
+                composer,
                 token),
             botId,
             clientId,
@@ -120,6 +129,17 @@ public sealed class AdoCommentPoster(
             changeTrackingIds,
             existingThreads,
             publicationIdentity,
+            replyInExistingSummaryThread
+                ? (threadId, message, token) => ReplyToThreadAsync(
+                    gitClient,
+                    projectId,
+                    repositoryId,
+                    pullRequestId,
+                    threadId,
+                    message,
+                    composer,
+                    token)
+                : null,
             cancellationToken);
     }
 
@@ -144,6 +164,7 @@ public sealed class AdoCommentPoster(
         IReadOnlyDictionary<string, int> changeTrackingIds,
         IReadOnlyList<PrCommentThread>? existingThreads,
         ReviewerIdentity? publicationIdentity,
+        AdoReplyFactory? replyFactory,
         CancellationToken cancellationToken)
     {
         var diagnostics = new PostingDiagnosticsBuilder(
@@ -160,6 +181,7 @@ public sealed class AdoCommentPoster(
             botId,
             publicationIdentity,
             threadFactory,
+            replyFactory,
             diagnostics,
             state,
             cancellationToken);
@@ -202,19 +224,35 @@ public sealed class AdoCommentPoster(
         Guid? botId,
         ReviewerIdentity? publicationIdentity,
         AdoThreadFactory threadFactory,
+        AdoReplyFactory? replyFactory,
         PostingDiagnosticsBuilder diagnostics,
         PostingState state,
         CancellationToken cancellationToken)
     {
-        // Post summary as PR-level thread, skipping if a bot summary already exists.
+        // Post summary as PR-level thread. A bot summary thread already on the pull request carries the review
+        // summary, so a second one is not written. A caller that supplied a reply factory brought a message of
+        // its own, so that message joins the existing thread as a reply.
+        int? replyTarget = null;
         if (HasBotSummary(existingThreads, botId, publicationIdentity))
         {
-            return;
+            replyTarget = replyFactory is null ? null : FindBotSummaryThreadId(existingThreads, botId, publicationIdentity);
+            if (replyTarget is null)
+            {
+                return;
+            }
         }
 
         try
         {
-            var createdSummary = await threadFactory(BuildSummaryText(result), null, null, cancellationToken);
+            if (replyTarget is { } threadId && replyFactory is not null)
+            {
+                var reply = await replyFactory(threadId, BuildSummaryText(result, composer), cancellationToken);
+                diagnostics.RecordPostedComments(CaptureRepliedComment(reply, threadId));
+                state.PostedThreadCount++;
+                return;
+            }
+
+            var createdSummary = await threadFactory(BuildSummaryText(result, composer), null, null, cancellationToken);
             diagnostics.RecordPostedComments(CaptureCreatedComments(createdSummary, null, null, PostedReviewCommentKind.Summary));
             state.PostedThreadCount++;
         }
@@ -306,7 +344,8 @@ public sealed class AdoCommentPoster(
             normalizedFilePath,
             comment.LineNumber,
             comment.Message,
-            botId);
+            botId,
+            composer);
         if (duplicateMatch is not null)
         {
             RecordSuppressed(diagnostics, comment, ordinal, duplicateMatch.ReasonCode, duplicateMatch.ThreadId);
@@ -372,7 +411,8 @@ public sealed class AdoCommentPoster(
             normalizedFilePath,
             comment.LineNumber,
             comment.Message,
-            botId);
+            botId,
+            composer);
         if (fallbackMatch is not null)
         {
             RecordSuppressed(diagnostics, comment, ordinal, fallbackMatch.ReasonCode, fallbackMatch.ThreadId);
@@ -526,7 +566,7 @@ public sealed class AdoCommentPoster(
         try
         {
             var createdThread = await threadFactory(
-                FormatInlineCommentBody(comment),
+                FormatInlineCommentBody(comment, composer),
                 threadContext,
                 prThreadContext,
                 cancellationToken);
@@ -554,8 +594,10 @@ public sealed class AdoCommentPoster(
     ///     When the result includes carried-forward file paths, a section listing those files
     ///     is appended to the summary. All content is HTML-sanitized to prevent injection.
     /// </summary>
-    internal static string BuildSummaryText(ReviewResult result)
+    internal static string BuildSummaryText(ReviewResult result, IPostedCommentComposer composer)
     {
+        ArgumentNullException.ThrowIfNull(composer);
+
         var sb = new StringBuilder(HarvestedThreadEligibility.SummaryPrefix + "\n\n");
         sb.Append(HtmlSanitizer.RenderForDisplay(result.Summary, ReviewBodyRenderingMode.Summary).RenderedText);
 
@@ -600,12 +642,13 @@ public sealed class AdoCommentPoster(
             }
         }
 
-        return sb.ToString();
+        return composer.Append(sb.ToString());
     }
 
-    internal static string FormatInlineCommentBody(ReviewComment comment)
+    internal static string FormatInlineCommentBody(ReviewComment comment, IPostedCommentComposer composer)
     {
         ArgumentNullException.ThrowIfNull(comment);
+        ArgumentNullException.ThrowIfNull(composer);
 
         var severityPrefix = comment.Severity switch
         {
@@ -615,7 +658,7 @@ public sealed class AdoCommentPoster(
             _ => "INFO",
         };
         var renderedMessage = HtmlSanitizer.RenderForDisplay(comment.Message, ReviewBodyRenderingMode.InlineComment);
-        return $"{severityPrefix}: {renderedMessage.RenderedText}";
+        return composer.Append($"{severityPrefix}: {renderedMessage.RenderedText}");
     }
 
     /// <summary>
@@ -632,6 +675,44 @@ public sealed class AdoCommentPoster(
             t.FilePath is null &&
             t.Comments.Any(c => IsBotAuthor(c.AuthorId, botId, c.AuthorName, publicationIdentity)
                                 && c.Content.StartsWith(HarvestedThreadEligibility.SummaryPrefix, StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    ///     The id of the bot-authored pull-request-level summary thread, or <see langword="null" /> when there
+    ///     is none whose id reads as a number.
+    /// </summary>
+    /// <remarks>
+    ///     The first such thread with a usable id is taken. Stopping at the first match and giving up on an id
+    ///     that does not parse would skip a later thread that is a perfectly good reply target.
+    ///     <para>
+    ///         A thread counts as the bot's by the same recognition rule the summary deduplication uses, which
+    ///         falls back to the author's display name when the connection has no identity to compare. A reply
+    ///         therefore goes to the thread a second summary would have been suppressed by, and the two
+    ///         decisions cannot disagree about which thread is ProPR's.
+    ///     </para>
+    /// </remarks>
+    internal static int? FindBotSummaryThreadId(
+        IReadOnlyList<PrCommentThread>? threads,
+        Guid? botId,
+        ReviewerIdentity? publicationIdentity = null)
+    {
+        foreach (var thread in threads ?? [])
+        {
+            if (thread.FilePath is not null
+                || !thread.Comments.Any(c => IsBotAuthor(c.AuthorId, botId, c.AuthorName, publicationIdentity)
+                                             && c.Content.StartsWith(HarvestedThreadEligibility.SummaryPrefix, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            if (thread.ThreadId is { } threadId
+                && int.TryParse(threadId, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -682,7 +763,8 @@ public sealed class AdoCommentPoster(
         string? filePath,
         int? lineNumber,
         string message,
-        Guid? botId)
+        Guid? botId,
+        IPostedCommentComposer composer)
     {
         var locationMatch = FindLocationDuplicateMatch(threads, filePath, lineNumber, botId);
         if (locationMatch is not null)
@@ -690,7 +772,7 @@ public sealed class AdoCommentPoster(
             return locationMatch;
         }
 
-        var normalizedMessage = NormalizeCommentMessage(message);
+        var normalizedMessage = NormalizeCommentMessage(message, composer);
         if (normalizedMessage.Length == 0)
         {
             return null;
@@ -700,7 +782,7 @@ public sealed class AdoCommentPoster(
         {
             if (thread.Comments.Any(comment =>
                     IsBotAuthor(comment.AuthorId, botId) &&
-                    NormalizeCommentMessage(comment.Content) == normalizedMessage))
+                    NormalizeCommentMessage(comment.Content, composer) == normalizedMessage))
             {
                 return new DuplicateSuppressionMatch("normalized_text_match", thread.ThreadId);
             }
@@ -714,9 +796,10 @@ public sealed class AdoCommentPoster(
         string? filePath,
         int? lineNumber,
         string message,
-        Guid? botId)
+        Guid? botId,
+        IPostedCommentComposer composer)
     {
-        var normalizedMessage = NormalizeCommentMessage(message);
+        var normalizedMessage = NormalizeCommentMessage(message, composer);
         if (normalizedMessage.Length == 0)
         {
             return null;
@@ -730,7 +813,7 @@ public sealed class AdoCommentPoster(
                     .Where(comment => IsBotAuthor(comment.AuthorId, botId))
                     .Select(comment => CalculateTextSimilarity(
                         normalizedMessage,
-                        NormalizeCommentMessage(comment.Content)))
+                        NormalizeCommentMessage(comment.Content, composer)))
                     .DefaultIfEmpty(0d)
                     .Max(),
             })
@@ -801,6 +884,43 @@ public sealed class AdoCommentPoster(
         };
     }
 
+    private static async Task<Comment> ReplyToThreadAsync(
+        GitHttpClient gitClient,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int threadId,
+        string message,
+        IPostedCommentComposer composer,
+        CancellationToken ct)
+    {
+        var comment = new Comment { Content = TruncateIfNeeded(message, composer), CommentType = CommentType.Text };
+        return await gitClient.CreateCommentAsync(
+            comment,
+            repositoryId,
+            pullRequestId,
+            threadId,
+            projectId,
+            ct);
+    }
+
+    // The provenance row for a reply: the comment carries its own id, and the thread it joined is the one the
+    // caller replied into, so neither has to be read back out of a created-thread response.
+    private static IReadOnlyList<PostedReviewCommentRef> CaptureRepliedComment(Comment? reply, int threadId)
+    {
+        return reply is { Id: > 0 }
+            ?
+            [
+                new PostedReviewCommentRef(
+                    reply.Id.ToString(CultureInfo.InvariantCulture),
+                    threadId.ToString(CultureInfo.InvariantCulture),
+                    null,
+                    null,
+                    PostedReviewCommentKind.Summary),
+            ]
+            : [];
+    }
+
     private static async Task<GitPullRequestCommentThread> CreateThreadAsync(
         GitHttpClient gitClient,
         string projectId,
@@ -809,9 +929,10 @@ public sealed class AdoCommentPoster(
         string message,
         CommentThreadContext? threadContext,
         GitPullRequestCommentThreadContext? prThreadContext,
+        IPostedCommentComposer composer,
         CancellationToken ct)
     {
-        var content = TruncateIfNeeded(message);
+        var content = TruncateIfNeeded(message, composer);
         var thread = new GitPullRequestCommentThread
         {
             Comments = [new Comment { Content = content, CommentType = CommentType.Text }],
@@ -853,24 +974,31 @@ public sealed class AdoCommentPoster(
             .ToList();
     }
 
-    internal static string TruncateIfNeeded(string message)
+    internal static string TruncateIfNeeded(string message, IPostedCommentComposer composer)
     {
+        ArgumentNullException.ThrowIfNull(composer);
+
         if (message.Length <= MaxCommentLength)
         {
             return message;
         }
 
         const string notice = "\n\n> *(Review comment truncated — view the full review in the MeisterProPR admin UI)*";
-        var cutoff = MaxCommentLength - notice.Length;
+
+        // The marker comes off before the cut and goes back on after it, so the cut cannot land inside it and
+        // the body that survives leaves room for both the notice and the marker.
+        var body = composer.Strip(message);
+        var markerCost = composer.Append(body).Length - body.Length;
+        var cutoff = MaxCommentLength - notice.Length - markerCost;
 
         // Trim to last whitespace boundary so we don't cut mid-word.
-        var boundary = message.LastIndexOf(' ', cutoff);
+        var boundary = body.LastIndexOf(' ', cutoff);
         if (boundary < 1)
         {
             boundary = cutoff;
         }
 
-        return message[..boundary] + notice;
+        return composer.Append(body[..boundary] + notice);
     }
 
     private static string NormalizePath(string path)
@@ -1174,9 +1302,11 @@ public sealed class AdoCommentPoster(
         };
     }
 
-    private static string NormalizeCommentMessage(string message)
+    private static string NormalizeCommentMessage(string message, IPostedCommentComposer composer)
     {
-        var sanitized = HtmlSanitizer.Sanitize(message).Trim();
+        // The marker comes off first. Comments posted before the marker existed carry none, and a re-review has
+        // to recognize its own earlier finding in them.
+        var sanitized = HtmlSanitizer.Sanitize(composer.Strip(message)).Trim();
 
         // These four prefixes stay English whatever output language the client configured. They are the severity
         // labels this poster itself prepends, and stripping them is how a re-review recognizes a comment it already

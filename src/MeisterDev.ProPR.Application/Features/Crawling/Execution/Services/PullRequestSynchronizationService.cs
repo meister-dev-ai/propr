@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
@@ -669,6 +670,12 @@ public sealed class PullRequestSynchronizationService(
                 request.PullRequestId,
                 iterationId);
             return CreateFailedAwaitingRestartOutcome(request, iterationId);
+        }
+
+        if (!completedSameIterationAlreadyReviewed
+            && await this.WasAdmissionRefusedAtThisRevisionAsync(request, iterationId, ct))
+        {
+            return CreateAdmissionRefusedOutcome(request, iterationId);
         }
 
         if (prScanRepository is null || threadStatusFetcher is null)
@@ -1382,6 +1389,65 @@ public sealed class PullRequestSynchronizationService(
             PullRequestSynchronizationLifecycleDecision.None,
             [
                 $"Skipped automatic re-review for PR #{request.PullRequestId} at iteration {iterationId} because a prior review failed at this revision and the pull request has not been updated; a manual restart is required (via {request.SummaryLabel}).",
+            ]);
+    }
+
+    /// <summary>
+    ///     Reports whether review admission already refused this pull request head under the bounds the client
+    ///     has now.
+    /// </summary>
+    /// <remarks>
+    ///     A refused review is the review of its head. The head measures the same on every attempt, so a
+    ///     second job would be refused again after transferring the repository and would post a second notice.
+    ///     An administrator who raises a bound changes the bounds recorded on the refusal, and the head is then
+    ///     reviewed again without waiting for a new commit. A refusal recorded before the bounds were stored
+    ///     carries none, and the head stays refused until it changes or an operator restarts the job.
+    /// </remarks>
+    /// <param name="request">The synchronization request.</param>
+    /// <param name="iterationId">The iteration the request resolved.</param>
+    /// <param name="ct">The cancellation token.</param>
+    private async Task<bool> WasAdmissionRefusedAtThisRevisionAsync(
+        PullRequestSynchronizationRequest request,
+        int iterationId,
+        CancellationToken ct)
+    {
+        var refused = await jobs.GetLatestRefusedAdmissionAsync(
+            request.ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            ct);
+        if (refused is null)
+        {
+            return false;
+        }
+
+        var revisionKey = ReviewRevisionKeys.GetStoredKey(request.ReviewRevision, iterationId);
+        if (!string.Equals(refused.StoredRevisionKey, revisionKey, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (refused.PolicyFingerprint is null || clientRegistry is null)
+        {
+            return true;
+        }
+
+        var policy = await clientRegistry.GetReviewAdmissionPolicyAsync(request.ClientId, ct)
+                     ?? ReviewAdmissionPolicy.None;
+        return string.Equals(refused.PolicyFingerprint, policy.Fingerprint, StringComparison.Ordinal);
+    }
+
+    private static PullRequestSynchronizationOutcome CreateAdmissionRefusedOutcome(
+        PullRequestSynchronizationRequest request,
+        int iterationId)
+    {
+        return new PullRequestSynchronizationOutcome(
+            PullRequestSynchronizationReviewDecision.AdmissionRefusedAtThisRevision,
+            PullRequestSynchronizationLifecycleDecision.None,
+            [
+                $"Skipped automatic re-review for PR #{request.PullRequestId} at iteration {iterationId} because review admission refused this revision under the limits the client has now (via {request.SummaryLabel}).",
             ]);
     }
 

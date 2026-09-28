@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -68,7 +69,8 @@ public sealed class ForgejoPublicationContextContractTests
 
         var sut = new ForgejoCodeReviewPublicationService(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer, publicationContext: publicationContext);
 
@@ -115,7 +117,8 @@ public sealed class ForgejoPublicationContextContractTests
 
         var sut = new ForgejoCodeReviewPublicationService(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -161,11 +164,74 @@ public sealed class ForgejoPublicationContextContractTests
 
         var sut = new ForgejoCodeReviewPublicationService(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
         Assert.Empty(diagnostics.PostedComments);
         Assert.Equal(1, diagnostics.PostedCount);
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_EndsTheReviewBodyAndEveryInlineCommentWithTheMarker()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision(
+            "aabbccddeeff00112233445566778899aabbccdd",
+            "00112233445566778899aabbccddeeff00112233",
+            "00112233445566778899aabbccddeeff00112233",
+            "aabbccddeeff00112233445566778899aabbccdd",
+            "00112233445566778899aabbccddeeff00112233...aabbccddeeff00112233445566778899aabbccdd");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [
+                new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case."),
+                new ReviewComment(null, null, CommentSeverity.Info, "No blocking issues found."),
+            ]);
+
+        string? postedReview = null;
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(async request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            if (uri == "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews"
+                && request.Method == HttpMethod.Post)
+            {
+                postedReview = await request.Content!.ReadAsStringAsync();
+                return ForgejoTestHelpers.CreateJsonResponse(new { id = 9001L });
+            }
+
+            return uri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews?limit=100" =>
+                    ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+
+        var sut = new ForgejoCodeReviewPublicationService(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        Assert.NotNull(postedReview);
+        const string marker = TestPostedCommentComposer.DistinctiveMarker;
+        using var payload = JsonDocument.Parse(postedReview);
+        TestPostedCommentComposer.AssertMarkedOnce(payload.RootElement.GetProperty("body").GetString(), marker);
+
+        // One inline comment for the one comment anchored to a file; the comment without a file belongs in the
+        // review body. A count assertion is what keeps a dropped inline comment from reading as success.
+        var comments = payload.RootElement.GetProperty("comments").EnumerateArray().ToList();
+        var comment = Assert.Single(comments);
+        Assert.Equal("src/file.ts", comment.GetProperty("path").GetString());
+        Assert.Equal("Warning: Guard this null case.\n\n" + marker, comment.GetProperty("body").GetString());
     }
 }

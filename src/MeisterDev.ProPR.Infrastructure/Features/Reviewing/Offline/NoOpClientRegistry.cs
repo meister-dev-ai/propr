@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Enums;
@@ -112,5 +113,15 @@ public sealed class NoOpClientRegistry : IClientRegistry
     public Task<Guid?> GetTenantIdAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<Guid?>(null);
+    }
+
+    public Task<ReviewAdmissionPolicy> GetReviewAdmissionPolicyAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(ReviewAdmissionPolicy.None);
+    }
+
+    public Task<TenantReviewLimits> GetTenantReviewLimitsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(TenantReviewLimits.None);
     }
 }

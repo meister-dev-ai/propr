@@ -33,6 +33,20 @@ public sealed partial class RunnerWorkLoop(
     TimeProvider timeProvider,
     ILogger<RunnerWorkLoop> logger) : BackgroundService
 {
+    /// <summary>
+    ///     The delay before the first enrollment retry.
+    /// </summary>
+    /// <remarks>
+    ///     Enrollment refusals can require operator action, such as license activation or replacement of
+    ///     a revoked or exhausted registration token. Retries begin after ten seconds and double up to
+    ///     five minutes to limit repeated requests while the refusal persists. The runner continues retrying
+    ///     until enrollment succeeds or shutdown is requested.
+    /// </remarks>
+    private static readonly TimeSpan FirstEnrollmentRetryDelay = TimeSpan.FromSeconds(10);
+
+    /// <summary>The maximum delay between enrollment retries.</summary>
+    private static readonly TimeSpan MaxEnrollmentRetryDelay = TimeSpan.FromMinutes(5);
+
     private readonly ConcurrentDictionary<Guid, LeasedJob> _inFlight = new();
 
     /// <summary>How many jobs this runner is working on right now.</summary>
@@ -43,11 +57,22 @@ public sealed partial class RunnerWorkLoop(
     {
         LogRunnerStarted(logger, options.Value.DisplayName, options.Value.Capacity);
 
-        // Before asking for anything. A runner that died mid-job left a working copy of a customer's source
-        // on disk, and the first thing a restarted host should do is get rid of it rather than add to it.
-        workspaces.Purge();
+        // Remove working copies left by a previous process before requesting new work.
+        // This startup supervisor logs unexpected cleanup failures and continues to enrollment
+        // because a cleanup exception must not prevent the host from reporting its operating status.
+        try
+        {
+            workspaces.Purge();
+        }
+#pragma warning disable CA1031 // Contain unexpected startup cleanup failures so enrollment and health reporting can proceed.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            LogStartupPurgeFailed(logger, ex);
+        }
 
         var consecutiveFailures = 0;
+        var enrollmentFailures = 0;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -55,15 +80,11 @@ public sealed partial class RunnerWorkLoop(
 
             try
             {
-                // Enrollment before anything else, because every other call presents the credential it
-                // produces. A host that cannot enrol keeps trying rather than exiting: an operator has to
-                // see why, and a restart loop hides it.
-                //
-                // Deliberately not an early `continue`. The wait at the end of this loop is the only thing
-                // pacing it, and skipping it turned a host that could not enrol into roughly nine hundred
-                // requests a second against the endpoint that had just rate-limited it.
-                if (await this.EnsureCredentialAsync(stoppingToken))
+                // Every control-plane call requires the enrollment credential.
+                // Refusals use the delay at the end of the loop to prevent rapid repeated requests.
+                if (await this.EnsureCredentialAsync(enrollmentFailures, stoppingToken))
                 {
+                    enrollmentFailures = 0;
                     var freeSlots = options.Value.Capacity - this._inFlight.Count;
 
                     // A full runner does not ask. Asking anyway would make the control plane's answer depend
@@ -76,8 +97,8 @@ public sealed partial class RunnerWorkLoop(
                 }
                 else
                 {
-                    consecutiveFailures++;
-                    delay = this.Backoff(consecutiveFailures);
+                    enrollmentFailures++;
+                    delay = EnrollmentBackoff(enrollmentFailures);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -186,18 +207,24 @@ public sealed partial class RunnerWorkLoop(
     ///         alive.
     ///     </para>
     /// </summary>
+    /// <param name="enrollmentFailures">
+    ///     How many enrollment attempts in a row this host has been refused, which decides how long it waits
+    ///     before the next one. Reported with the refusal so an operator reads the cadence off one line.
+    /// </param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>Whether the host may go on to ask for work.</returns>
-    private async Task<bool> EnsureCredentialAsync(CancellationToken ct)
+    private async Task<bool> EnsureCredentialAsync(int enrollmentFailures, CancellationToken ct)
     {
         if (!credentials.IsEnrolled)
         {
+            var nextRetryInSeconds = (int)EnrollmentBackoff(enrollmentFailures + 1).TotalSeconds;
             var token = options.Value.RegistrationToken;
             if (string.IsNullOrWhiteSpace(token))
             {
                 // Neither a credential nor a way to get one. Said once per cycle rather than at startup
                 // only, because an operator who fixes the configuration restarts the container anyway and
                 // an operator who has not yet should keep seeing it.
-                LogNotEnrollable(logger);
+                LogNotEnrollable(logger, nextRetryInSeconds);
                 health.Report(RunnerHealthState.Status.Refused, "This host has neither a credential nor a registration token.");
                 return false;
             }
@@ -205,7 +232,10 @@ public sealed partial class RunnerWorkLoop(
             var enrolled = await controlPlane.EnrollAsync(token, options.Value.DisplayName, options.Value.Tags, ct);
             if (!enrolled.Succeeded)
             {
-                LogEnrollmentRefused(logger, enrolled.Refusal ?? "no detail");
+                // Every refusal is retried, including one naming a licence this installation does not hold:
+                // an operator activates a licence while the host is running, and a host that gave up would
+                // have to be restarted to notice.
+                LogEnrollmentRefused(logger, enrolled.Refusal ?? "no detail", nextRetryInSeconds);
                 health.Report(RunnerHealthState.Status.Refused, enrolled.Refusal);
                 return false;
             }
@@ -349,9 +379,19 @@ public sealed partial class RunnerWorkLoop(
     }
 
     /// <summary>
-    ///     Exponential backoff, capped. Capped rather than unbounded so a control plane that comes back
-    ///     after an hour is noticed in the next minute rather than the next hour.
+    ///     Returns the delay before the next enrollment attempt, doubling from
+    ///     <see cref="FirstEnrollmentRetryDelay" /> up to <see cref="MaxEnrollmentRetryDelay" />.
     /// </summary>
+    /// <param name="enrollmentFailures">How many attempts in a row were refused, counting from one.</param>
+    private static TimeSpan EnrollmentBackoff(int enrollmentFailures)
+    {
+        var steps = Math.Min(Math.Max(enrollmentFailures, 1) - 1, 10);
+        var seconds = FirstEnrollmentRetryDelay.TotalSeconds * Math.Pow(2, steps);
+        return seconds >= MaxEnrollmentRetryDelay.TotalSeconds
+            ? MaxEnrollmentRetryDelay
+            : TimeSpan.FromSeconds(seconds);
+    }
+
     private TimeSpan Backoff(int consecutiveFailures)
     {
         var seconds = Math.Min(
@@ -422,14 +462,24 @@ public sealed partial class RunnerWorkLoop(
     }
 
     [LoggerMessage(
+        EventId = 6017,
+        Level = LogLevel.Error,
+        Message =
+            "Removing what a previous life of this runner left under the work root failed. The host carries on and asks for work; a job it leases will fail to prepare its workspace while the work root stays unusable.")]
+    private static partial void LogStartupPurgeFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(
         EventId = 6012,
         Level = LogLevel.Error,
         Message =
-            "This host has neither a runner credential nor a registration token, so it cannot enrol. Set RUNNER_REGISTRATION_TOKEN to a token issued in the admin UI.")]
-    private static partial void LogNotEnrollable(ILogger logger);
+            "This host has neither a runner credential nor a registration token, so it cannot enroll. Set RUNNER_REGISTRATION_TOKEN to a token issued in the admin UI. The next attempt follows in {NextRetryInSeconds} seconds.")]
+    private static partial void LogNotEnrollable(ILogger logger, int nextRetryInSeconds);
 
-    [LoggerMessage(EventId = 6013, Level = LogLevel.Error, Message = "Enrollment was refused: {Reason}")]
-    private static partial void LogEnrollmentRefused(ILogger logger, string reason);
+    [LoggerMessage(
+        EventId = 6013,
+        Level = LogLevel.Error,
+        Message = "Enrollment was refused: {Reason} The next attempt follows in {NextRetryInSeconds} seconds.")]
+    private static partial void LogEnrollmentRefused(ILogger logger, string reason, int nextRetryInSeconds);
 
     [LoggerMessage(EventId = 6014, Level = LogLevel.Information, Message = "Enrolled as {DisplayName}; the credential expires {ExpiresAt}")]
     private static partial void LogEnrolled(ILogger logger, string displayName, DateTimeOffset? expiresAt);

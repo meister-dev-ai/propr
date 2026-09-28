@@ -3,6 +3,8 @@
 
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.ProPR.Application.Features.Clients.Contracts;
 using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.Interfaces;
@@ -10,6 +12,16 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 /// <summary>Repository for per-client AI connection configurations.</summary>
 public interface IAiConnectionRepository
 {
+    /// <summary>Verifies an unsaved candidate and atomically promotes it if the original profile remains current.</summary>
+    Task<AiVerifiedUpdateResult> VerifyUpdateAsync(
+        Guid clientId, AiConnectionDto original,
+        AiConnectionWriteRequestDto request, Func<AiConnectionDto, CancellationToken, Task<AiVerificationResultDto>> verify,
+        CancellationToken ct = default, Guid? authorizedTenantId = null);
+
+    /// <summary>Applies all workspace purpose selections together after validating ownership and effective routing.</summary>
+    Task<AiConfigurationResult> SelectPurposesAsync(
+        Guid clientId, AiWorkspacePurposeSelection selection, CancellationToken ct = default, Guid? authorizedTenantId = null);
+
     /// <summary>Returns all AI connection profiles for the given client.</summary>
     Task<IReadOnlyList<AiConnectionDto>> GetByClientAsync(Guid clientId, CancellationToken ct = default);
 
@@ -21,6 +33,9 @@ public interface IAiConnectionRepository
 
     /// <summary>Returns the AI connection profile by ID, or null if not found.</summary>
     Task<AiConnectionDto?> GetByIdAsync(Guid connectionId, CancellationToken ct = default);
+
+    /// <summary>Loads distinct referenced connections in one database read; callers enforce the reference scope.</summary>
+    Task<IReadOnlyList<AiConnectionDto>> GetByIdsAsync(IReadOnlyCollection<Guid> connectionIds, CancellationToken ct = default);
 
     /// <summary>Adds a new AI connection profile. Returns the created DTO.</summary>
     Task<AiConnectionDto> AddAsync(Guid clientId, AiConnectionWriteRequestDto request, CancellationToken ct = default);

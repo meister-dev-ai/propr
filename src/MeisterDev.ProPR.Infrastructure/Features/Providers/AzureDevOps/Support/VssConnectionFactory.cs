@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Azure.Core;
 using Azure.Identity;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.VisualStudio.Services.Common;
@@ -19,7 +20,12 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Support
 ///     Creates and caches <see cref="VssConnection" /> instances keyed by organisation URL and optional
 ///     per-client Azure DevOps connection credentials. OAuth connections are refreshed before the access token expires.
 /// </summary>
-public sealed class VssConnectionFactory(TokenCredential credential)
+/// <param name="credential">The installation credential used where a connection carries none of its own.</param>
+/// <param name="egressUrlPolicy">
+///     What this installation permits an operator-entered address to reach. Left out, the strictest posture
+///     applies, so a caller that composes the factory itself cannot end up with a weaker one than the host has.
+/// </param>
+public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPolicy? egressUrlPolicy = null)
 {
     private const string AdoResourceScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
     private static readonly TimeSpan ExpiryBuffer = TimeSpan.FromMinutes(5);
@@ -27,6 +33,8 @@ public sealed class VssConnectionFactory(TokenCredential credential)
 
     private readonly ConcurrentDictionary<string, (VssConnection Connection, DateTimeOffset ExpiresOn)> _cache
         = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly EgressUrlPolicy _egressUrlPolicy = egressUrlPolicy ?? EgressUrlPolicy.Locked;
 
     /// <summary>
     ///     Returns a live <see cref="VssConnection" /> for the given organisation URL, acquiring or refreshing the token
@@ -41,6 +49,7 @@ public sealed class VssConnectionFactory(TokenCredential credential)
         CancellationToken ct = default)
     {
         var normalizedUrl = organizationUrl.TrimEnd('/');
+        this.RefuseUnlessPermitted(normalizedUrl);
         var cacheKey = BuildCacheKey(normalizedUrl, credentials);
 
         if (this._cache.TryGetValue(cacheKey, out var cached) &&
@@ -59,11 +68,24 @@ public sealed class VssConnectionFactory(TokenCredential credential)
     ///     Returns the HTTP <c>Authorization</c> header value suitable for git HTTPS operations, or <c>null</c>
     ///     when the authentication kind cannot be represented as an HTTP header (e.g. Windows/NTLM).
     /// </summary>
+    /// <param name="organizationUrl">The Azure DevOps organisation URL the header is issued for.</param>
+    /// <param name="credentials">Optional per-client Azure DevOps credentials; falls back to the global credential when <c>null</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <remarks>
+    ///     The header carries the credential git sends with every request to that organisation, so the address
+    ///     is held to the installation's rule before one is read or minted: a URL this installation refuses
+    ///     never produces a credential to send anywhere.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    ///     The installation refuses the organisation URL, which is a stored value an operator has to correct.
+    /// </exception>
     public async Task<string?> GetHttpAuthorizationHeaderAsync(
         string organizationUrl,
         AdoConnectionCredentials? credentials,
         CancellationToken ct)
     {
+        this.RefuseUnlessPermitted(organizationUrl.TrimEnd('/'));
+
         if (credentials?.AuthenticationKind == ScmAuthenticationKind.PersonalAccessToken)
         {
             var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes($":{credentials.Secret}"));
@@ -117,9 +139,7 @@ public sealed class VssConnectionFactory(TokenCredential credential)
         {
             var token = await credential.GetTokenAsync(new TokenRequestContext([AdoResourceScope]), ct);
             return (
-                new VssConnection(
-                    new Uri(normalizedUrl),
-                    new VssOAuthAccessTokenCredential(token.Token)),
+                this.CreateGuardedConnection(normalizedUrl, new VssOAuthAccessTokenCredential(token.Token)),
                 token.ExpiresOn);
         }
 
@@ -127,13 +147,9 @@ public sealed class VssConnectionFactory(TokenCredential credential)
         {
             ScmAuthenticationKind.OAuthClientCredentials => await this.CreateOAuthConnectionAsync(normalizedUrl, credentials, ct),
             ScmAuthenticationKind.PersonalAccessToken => (
-                new VssConnection(new Uri(normalizedUrl), new VssBasicCredential(string.Empty, credentials.Secret)),
+                this.CreateGuardedConnection(normalizedUrl, new VssBasicCredential(string.Empty, credentials.Secret)),
                 NonExpiringCredentials),
-            ScmAuthenticationKind.WindowsUserAccount => (
-                new VssConnection(
-                    new Uri(normalizedUrl),
-                    new VssCredentials(new WindowsCredential(CreateWindowsNetworkCredential(credentials.UserName, credentials.Secret)))),
-                NonExpiringCredentials),
+            ScmAuthenticationKind.WindowsUserAccount => this.CreateWindowsConnection(normalizedUrl, credentials),
             _ => throw new InvalidOperationException(
                 $"Azure DevOps authentication kind '{credentials.AuthenticationKind}' is not supported by the runtime connection factory."),
         };
@@ -155,10 +171,107 @@ public sealed class VssConnectionFactory(TokenCredential credential)
             credentials.Secret);
         var token = await effectiveCredential.GetTokenAsync(new TokenRequestContext([AdoResourceScope]), ct);
         return (
-            new VssConnection(
-                new Uri(normalizedUrl),
-                new VssOAuthAccessTokenCredential(token.Token)),
+            this.CreateGuardedConnection(normalizedUrl, new VssOAuthAccessTokenCredential(token.Token)),
             token.ExpiresOn);
+    }
+
+    /// <summary>
+    ///     Builds a connection whose transport refuses a blocked egress address, so Azure DevOps traffic follows
+    ///     the rule every other outbound call of this host follows.
+    /// </summary>
+    /// <param name="normalizedUrl">The organisation or collection URL, without a trailing slash.</param>
+    /// <param name="credentials">What the connection authenticates with.</param>
+    /// <param name="transportCredentials">
+    ///     The account a Windows-authenticated connection answers a challenge with, or <see langword="null" />
+    ///     where the credential rides on the request instead.
+    /// </param>
+    /// <remarks>
+    ///     The SDK builds its own transport and applies its request settings to it, and it recognises only the
+    ///     handler type it builds. A transport supplied from here therefore carries those settings itself: no
+    ///     cookies, gzip where the settings enable compression, no automatic redirects, and the network
+    ///     credential a Windows-authenticated connection needs the transport to answer a challenge with.
+    /// </remarks>
+    private VssConnection CreateGuardedConnection(
+        string normalizedUrl,
+        VssCredentials credentials,
+        NetworkCredential? transportCredentials = null)
+    {
+        var settings = VssClientHttpRequestSettings.Default.Clone();
+        var transport = CreateGuardedTransport(
+            this._egressUrlPolicy.AllowPrivateEgress,
+            settings.CompressionEnabled,
+            transportCredentials);
+
+        return new VssConnection(
+            new Uri(normalizedUrl),
+            new VssHttpMessageHandler(credentials, settings, transport),
+            []);
+    }
+
+    /// <summary>The transport every connection this factory hands out sends its requests through.</summary>
+    /// <param name="allowPrivateEgress">Whether this installation permits a private, loopback or link-local address.</param>
+    /// <param name="compressionEnabled">Whether the SDK's request settings ask for a compressed response.</param>
+    /// <param name="transportCredentials">
+    ///     The account a Windows-authenticated connection answers a challenge with, or <see langword="null" />
+    ///     where the credential rides on the request instead.
+    /// </param>
+    /// <remarks>
+    ///     A 3xx response is not followed. The rule is stated here and not read off the SDK's request settings,
+    ///     so an SDK release that changes its own default leaves Azure DevOps traffic where every other
+    ///     outbound call of this host is: a redirect reaches the caller as the response it is.
+    /// </remarks>
+    internal static SocketsHttpHandler CreateGuardedTransport(
+        bool allowPrivateEgress,
+        bool compressionEnabled,
+        NetworkCredential? transportCredentials)
+    {
+        var transport = GuardedEgressHttpHandler.Create(allowPrivateEgress);
+        transport.UseCookies = false;
+        transport.AllowAutoRedirect = false;
+        transport.AutomaticDecompression = compressionEnabled ? DecompressionMethods.GZip : DecompressionMethods.None;
+        transport.Credentials = transportCredentials;
+
+        return transport;
+    }
+
+    /// <summary>
+    ///     Stops where this installation refuses <paramref name="normalizedUrl" /> as the address of a
+    ///     source-control host.
+    /// </summary>
+    /// <param name="normalizedUrl">The organisation or collection URL, without a trailing slash.</param>
+    /// <remarks>
+    ///     Applied at the start of each entry point, before a credential is read, minted or asked of Azure AD.
+    ///     A refused URL then costs no token and cannot surface as an authentication failure standing in for
+    ///     the refusal. The scheme is decided here and not by the transport, which sees an address and never a
+    ///     scheme: without this check a URL naming plain http would put the credential of every request on the
+    ///     wire unencrypted.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    ///     The installation refuses the organisation URL, which is a stored value an operator has to correct.
+    /// </exception>
+    private void RefuseUnlessPermitted(string normalizedUrl)
+    {
+        var refusal = this._egressUrlPolicy.GetRepositoryHostRefusalReason(
+            normalizedUrl,
+            "The Azure DevOps organisation URL");
+        if (refusal is not null)
+        {
+            throw new InvalidOperationException(refusal);
+        }
+    }
+
+    private (VssConnection Connection, DateTimeOffset ExpiresOn) CreateWindowsConnection(
+        string normalizedUrl,
+        AdoConnectionCredentials credentials)
+    {
+        var networkCredential = CreateWindowsNetworkCredential(credentials.UserName, credentials.Secret);
+
+        return (
+            this.CreateGuardedConnection(
+                normalizedUrl,
+                new VssCredentials(new WindowsCredential(networkCredential)),
+                networkCredential),
+            NonExpiringCredentials);
     }
 
     internal static string BuildCacheKey(string normalizedUrl, AdoConnectionCredentials? credentials)

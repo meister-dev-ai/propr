@@ -23,7 +23,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
 
 internal sealed class GitLabCodeReviewPublicationService(
     GitLabConnectionVerifier connectionVerifier,
-    IHttpClientFactory httpClientFactory) : ICodeReviewPublicationService
+    IHttpClientFactory httpClientFactory,
+    IPostedCommentComposer composer) : ICodeReviewPublicationService
 {
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
 
@@ -52,7 +53,7 @@ internal sealed class GitLabCodeReviewPublicationService(
             $"/projects/{Uri.EscapeDataString(review.Repository.ExternalRepositoryId)}/merge_requests/{review.Number}/discussions");
         var client = httpClientFactory.CreateClient("GitLabProvider");
 
-        var summaryBody = BuildSummaryBody(result, reviewer);
+        var summaryBody = BuildSummaryBody(result, reviewer, composer);
         var inlineComments = result.Comments.Where(IsInlineComment).ToList();
         var nonInlineCommentCount = result.Comments.Count - inlineComments.Count;
         var totalDiscussions = inlineComments.Count + (string.IsNullOrWhiteSpace(summaryBody) ? 0 : 1);
@@ -175,7 +176,7 @@ internal sealed class GitLabCodeReviewPublicationService(
                         token,
                         discussionUri,
                         new GitLabDiscussionRequest(
-                            $"{FormatSeverity(comment.Severity)}: {comment.Message}",
+                            composer.Append($"{FormatSeverity(comment.Severity)}: {comment.Message}"),
                             new GitLabDiscussionPosition(
                                 "text",
                                 inlineRevision.BaseSha,
@@ -307,7 +308,7 @@ internal sealed class GitLabCodeReviewPublicationService(
         }
     }
 
-    private static string BuildSummaryBody(ReviewResult result, ReviewerIdentity author)
+    private static string BuildSummaryBody(ReviewResult result, ReviewerIdentity author, IPostedCommentComposer composer)
     {
         var summaryBuilder = new StringBuilder();
         summaryBuilder.AppendLine($"## {author.DisplayName} Review");
@@ -322,7 +323,7 @@ internal sealed class GitLabCodeReviewPublicationService(
 
         ContextBudgetSummarySections.Append(summaryBuilder, result);
 
-        return summaryBuilder.ToString().Trim();
+        return composer.Append(summaryBuilder.ToString().Trim());
     }
 
     private static bool IsInlineComment(ReviewComment comment)

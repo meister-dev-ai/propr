@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.Ai.Providers.Transport;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
@@ -86,7 +87,7 @@ public sealed class ProviderEgressCompositionTests
                 .AddInMemoryCollection(
                     new Dictionary<string, string?>
                     {
-                        ["AI_ALLOW_PRIVATE_EGRESS"] = allowPrivateEgress ? "true" : "false",
+                        [EgressUrlPolicy.PrivateEgressOptIn] = allowPrivateEgress ? "true" : "false",
                     })
                 .Build(),
             environment: null,

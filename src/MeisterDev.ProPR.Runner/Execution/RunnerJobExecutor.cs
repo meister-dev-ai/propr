@@ -225,19 +225,26 @@ public sealed partial class RunnerJobExecutor(
     }
 
     /// <summary>
-    ///     The review context, built from the manifest the way the control plane builds it from the
-    ///     database. Each value here has a counterpart there, and the manifest exists so the two agree.
+    ///     What the tools that read the working copy are given. Every per-client value they honour travels on
+    ///     the manifest, because a runner has no client record of its own to read it from.
     /// </summary>
-    private ReviewSystemContext BuildContext(
+    /// <remarks>
+    ///     The per-file byte limit travels here because the tools read it from this request. The structural
+    ///     parse limit reaches the prefetch stage that enforces it on the review context built below, so a
+    ///     remote review already applies the tenant's value and this request does not carry it.
+    /// </remarks>
+    internal static ReviewContextToolsRequest BuildToolsRequest(
         RunnerJobManifest manifest,
         ReviewJob job,
         PullRequest pullRequest,
-        IReviewRepositoryWorkspace workspace,
-        HttpClient http,
-        IProtocolRecorder recorder,
-        RelayChatClient defaultClient)
+        IReviewRepositoryWorkspace workspace)
     {
-        var toolsRequest = new ReviewContextToolsRequest(
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(pullRequest);
+        ArgumentNullException.ThrowIfNull(workspace);
+
+        return new ReviewContextToolsRequest(
             job.CodeReviewReference,
             pullRequest.SourceBranch,
             job.IterationId,
@@ -247,7 +254,26 @@ public sealed partial class RunnerJobExecutor(
             pullRequest.TargetBranch,
             [.. pullRequest.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile)],
             Workspace: workspace,
-            WorkspaceLease: workspace.Lease);
+            WorkspaceLease: workspace.Lease,
+            // The tenant's per-file limit, carried on the manifest. Left unset the local tools fall back to the
+            // installation limit, and a remote review then reads files a tenant with a tighter limit excluded.
+            MaxFileSizeBytes: manifest.Behaviour?.MaxFileSizeBytes);
+    }
+
+    /// <summary>
+    ///     The review context, built from the manifest the way the control plane builds it from the
+    ///     database. Each value here has a counterpart there, and the manifest exists so the two agree.
+    /// </summary>
+    internal ReviewSystemContext BuildContext(
+        RunnerJobManifest manifest,
+        ReviewJob job,
+        PullRequest pullRequest,
+        IReviewRepositoryWorkspace workspace,
+        HttpClient http,
+        IProtocolRecorder recorder,
+        RelayChatClient defaultClient)
+    {
+        var toolsRequest = BuildToolsRequest(manifest, job, pullRequest, workspace);
 
         // The credentialed tools go over the proxy; the twelve that read the working copy stay local, which
         // is what keeps a review from becoming network traffic. The local set is handed a disabled
@@ -320,6 +346,14 @@ public sealed partial class RunnerJobExecutor(
             // review behaving exactly as it did before the section existed. Linked items default on.
             IncludeLinkedItemsInContext = manifest.Behaviour?.IncludeLinkedItemsInContext ?? true,
             Temperature = manifest.Behaviour?.Temperature,
+            // Whether the model's reasoning may be recorded is the control plane's decision, because it is
+            // the tenant's. A manifest from an older control plane states nothing and this host's own switch
+            // decides, which is how the review behaved before the field existed.
+            CaptureReasoning = manifest.Behaviour?.CaptureReasoning,
+            // Null leaves this runner's own configured limits in force, the case an older control plane that
+            // does not send them presents.
+            MaxFileSizeBytes = manifest.Behaviour?.MaxFileSizeBytes,
+            MaxStructuralParseBytes = manifest.Behaviour?.MaxStructuralParseBytes,
         };
     }
 

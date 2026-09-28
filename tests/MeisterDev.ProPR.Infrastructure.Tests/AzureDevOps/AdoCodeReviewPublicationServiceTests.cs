@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using Azure.Core;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -26,6 +27,9 @@ public sealed class AdoCodeReviewPublicationServiceTests
         services.AddSingleton(Substitute.For<IClientScmConnectionRepository>());
         services.AddSingleton(Substitute.For<IClientScmScopeRepository>());
         services.AddSingleton(Substitute.For<IAdoCommentPoster>());
+
+        // The posture the composed host registers, which the Azure DevOps connection takes its transport from.
+        services.AddSingleton(EgressUrlPolicy.Locked);
 
         services.AddAzureDevOpsProviderAdapters();
         services.AddAzureDevOpsInfrastructureServices(configuration, Substitute.For<TokenCredential>());
@@ -117,6 +121,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
                 Arg.Is<AzureDevOpsPublicationContext?>(ctx => ctx!.CompareToIterationId == 3),
                 Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
 
@@ -140,6 +145,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
                 Arg.Is<AzureDevOpsPublicationContext?>(ctx => ctx!.CompareToIterationId == 3),
                 Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
+                false,
                 Arg.Any<CancellationToken>());
     }
 
@@ -221,6 +227,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
                 Arg.Is<AzureDevOpsPublicationContext?>(ctx => ctx!.CompareToIterationId == 3),
                 Arg.Is<ReviewerIdentity?>(identity => identity != null && identity.DisplayName == "Meister Bot"),
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
 
@@ -244,6 +251,117 @@ public sealed class AdoCodeReviewPublicationServiceTests
                 Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
                 Arg.Is<AzureDevOpsPublicationContext?>(ctx => ctx!.CompareToIterationId == 3),
                 Arg.Is<ReviewerIdentity?>(identity => identity != null && identity.DisplayName == "Meister Bot"),
+                false,
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_AsksThePosterToReplyInTheSummaryThread_ForAnAdmissionRefusal()
+    {
+        var clientId = Guid.NewGuid();
+        var repositoryId = Guid.NewGuid().ToString("D");
+        var connectionId = Guid.NewGuid();
+        var scopeId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org-one");
+        var repository = new RepositoryRef(host, repositoryId, "project-1", "project-1");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "base-sha", "7", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "meister-bot", "meister-bot", "Meister Bot", true);
+        var result = new ReviewResult("Review not started: 312 changed files exceed the limit of 150.", []);
+        IReadOnlyList<PrCommentThread> existingThreads =
+        [
+            new("12", null, null, [new PrThreadComment("Meister Bot", "**AI Review Summary**")]),
+        ];
+
+        // The refusal's whole message is the summary. Without the reply request the poster would leave the
+        // existing bot summary thread alone and the author would see no notice at all.
+        var publicationContext = new ReviewPublicationContext(
+            review,
+            revision,
+            reviewer,
+            existingThreads,
+            new AzureDevOpsPublicationContext(CompareToIterationId: 3),
+            ReplyInExistingSummaryThread: true);
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetByClientIdAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ClientScmConnectionDto(
+                    connectionId,
+                    clientId,
+                    ScmProvider.AzureDevOps,
+                    host.HostBaseUrl,
+                    ScmAuthenticationKind.OAuthClientCredentials,
+                    "Azure DevOps",
+                    true,
+                    "verified",
+                    null,
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow),
+            ]);
+
+        var scopeRepository = Substitute.For<IClientScmScopeRepository>();
+        scopeRepository.GetByConnectionIdAsync(clientId, connectionId, Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ClientScmScopeDto(
+                    scopeId,
+                    clientId,
+                    connectionId,
+                    "organization",
+                    "org-one",
+                    host.HostBaseUrl,
+                    "Org One",
+                    "verified",
+                    true,
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow),
+            ]);
+
+        var commentPoster = Substitute.For<IAdoCommentPoster>();
+        commentPoster.PostAsync(
+                host.HostBaseUrl,
+                "project-1",
+                repositoryId,
+                review.Number,
+                7,
+                result,
+                clientId,
+                Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
+                Arg.Is<AzureDevOpsPublicationContext?>(context => context != null && context.CompareToIterationId == 3),
+                Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
+                true,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
+
+        var sut = new AdoCodeReviewPublicationService(
+            connectionRepository,
+            scopeRepository,
+            new VssConnectionFactory(Substitute.For<TokenCredential>()),
+            commentPoster);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer, CancellationToken.None, publicationContext);
+
+        await commentPoster.Received(1)
+            .PostAsync(
+                host.HostBaseUrl,
+                "project-1",
+                repositoryId,
+                review.Number,
+                7,
+                result,
+                clientId,
+                Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == existingThreads),
+                // The context this review carries reaches the poster, so the notice is posted against the
+                // iteration the refusal was measured on.
+                Arg.Is<AzureDevOpsPublicationContext?>(context => context != null && context.CompareToIterationId == 3),
+                Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
+                true,
                 Arg.Any<CancellationToken>());
     }
 

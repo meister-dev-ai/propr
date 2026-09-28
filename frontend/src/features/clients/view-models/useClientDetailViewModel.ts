@@ -34,6 +34,7 @@ export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 export type ReviewReasoningEffort = components['schemas']['ReviewReasoningEffort']
 export type CommentResolutionBehavior = components['schemas']['CommentResolutionBehavior']
 export type BudgetConfig = components['schemas']['BudgetConfigDto']
+export type ReviewAdmissionPolicy = components['schemas']['ReviewAdmissionPolicyDto']
 export type CommentSeverity = components['schemas']['CommentSeverity']
 
 export interface ClientDetailDto {
@@ -54,6 +55,7 @@ export interface ClientDetailDto {
   reviewPasses?: ReviewPassEntry[] | null
   baselineReasoningEffort?: ReviewReasoningEffort | null
   budgetConfig?: BudgetConfig | null
+  admissionPolicy?: ReviewAdmissionPolicy | null
   minimumSeverityToPost?: CommentSeverity | null
   autoResolveSeverities?: CommentSeverity[] | null
   withholdOutOfScopeFindings?: boolean | null
@@ -82,6 +84,7 @@ export interface ClientDetailViewModel {
   loadError: Ref<boolean>
   saving: Ref<boolean>
   saveError: Ref<string>
+  admissionSaveError: Ref<string>
   showDeleteDialog: Ref<boolean>
   editedDisplayName: Ref<string>
   editedDefaultReviewPipelineProfileId: Ref<string>
@@ -105,6 +108,11 @@ export interface ClientDetailViewModel {
   editedPullRequestBudgetHardCapUsd: Ref<string>
   editedIncrementBudgetSoftCapUsd: Ref<string>
   editedIncrementBudgetHardCapUsd: Ref<string>
+  editedAdmissionMaxChangedFiles: Ref<string>
+  editedAdmissionMaxChangedLines: Ref<string>
+  editedAdmissionMaxDiffBytes: Ref<string>
+  editedAdmissionMaxReviewsPerPullRequestPerHour: Ref<string>
+  editedAdmissionMaxRepositoryMegabytes: Ref<string>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
@@ -127,10 +135,13 @@ export interface ClientDetailViewModel {
   saveAdvancedSettings: () => Promise<void>
   saveReviewProfile: () => Promise<void>
   saveBudgetConfig: () => Promise<void>
+  saveAdmissionPolicy: () => Promise<void>
   savePostConfiguration: () => Promise<void>
   saveCodeInsightsCollection: () => Promise<void>
   isAdvancedSettingsButtonEnabled: () => boolean
   isBudgetButtonEnabled: () => boolean
+  isAdmissionButtonEnabled: () => boolean
+  admissionPolicyError: ComputedRef<string>
   isReviewProfileButtonEnabled: () => boolean
   isPostConfigButtonEnabled: () => boolean
   handleDelete: () => Promise<void>
@@ -287,6 +298,27 @@ export function capFromInput(value: string | number | null | undefined): number 
   return trimmed === '' ? null : Number(trimmed)
 }
 
+/** The largest review-admission bound the backend can store: the columns are nullable 32-bit integers. */
+export const MAX_ADMISSION_BOUND = 2_147_483_647
+
+/**
+ * The message for the first review-admission bound the backend would refuse, or an empty string when every
+ * bound is fine. A bound is a whole number between 1 and the largest 32-bit integer, and a blank field means no
+ * bound. The number input's min and step attributes are hints the browser applies to a submitted form, and this
+ * editor saves through a button, so a decimal or a negative value typed by hand reaches here. A value above the
+ * 32-bit range is refused too: the backend rejects it, and one beyond JavaScript's safe-integer range would be
+ * rounded before it is even sent.
+ */
+export function admissionBoundsError(bounds: readonly (readonly [string, string])[]): string {
+  const invalid = bounds.find(([, value]) => {
+    const bound = capFromInput(value)
+    return bound !== null && (!Number.isSafeInteger(bound) || bound < 1 || bound > MAX_ADMISSION_BOUND)
+  })
+  return invalid === undefined
+    ? ''
+    : `${invalid[0]} must be a whole number between 1 and ${MAX_ADMISSION_BOUND}, or blank for no bound.`
+}
+
 export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
   if (left.length !== right.length) {
     return false
@@ -342,6 +374,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const loadError = ref(false)
   const saving = ref(false)
   const saveError = ref('')
+  // The admission save has its own error because saveError is written by every other save on this page, and
+  // reporting that shared value beside the admission fields attributes those failures to the review limits.
+  const admissionSaveError = ref('')
   const showDeleteDialog = ref(false)
   const editedDisplayName = ref('')
   const editedDefaultReviewPipelineProfileId = ref('file-by-file-balanced')
@@ -365,6 +400,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedPullRequestBudgetHardCapUsd = ref('')
   const editedIncrementBudgetSoftCapUsd = ref('')
   const editedIncrementBudgetHardCapUsd = ref('')
+  const editedAdmissionMaxChangedFiles = ref('')
+  const editedAdmissionMaxChangedLines = ref('')
+  const editedAdmissionMaxDiffBytes = ref('')
+  const editedAdmissionMaxReviewsPerPullRequestPerHour = ref('')
+  const editedAdmissionMaxRepositoryMegabytes = ref('')
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
@@ -437,6 +477,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedPullRequestBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.pullRequestHardCapUsd)
     editedIncrementBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.incrementSoftCapUsd)
     editedIncrementBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.incrementHardCapUsd)
+    editedAdmissionMaxChangedFiles.value = capToInput(nextClient.admissionPolicy?.maxChangedFiles)
+    editedAdmissionMaxChangedLines.value = capToInput(nextClient.admissionPolicy?.maxChangedLines)
+    editedAdmissionMaxDiffBytes.value = capToInput(nextClient.admissionPolicy?.maxDiffBytes)
+    editedAdmissionMaxReviewsPerPullRequestPerHour.value = capToInput(nextClient.admissionPolicy?.maxReviewsPerPullRequestPerHour)
+    editedAdmissionMaxRepositoryMegabytes.value = capToInput(nextClient.admissionPolicy?.maxRepositoryMegabytes)
   }
 
   function applyClientReviewProfile(nextProfile: ClientReviewProfileDto): void {
@@ -653,6 +698,60 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     }
   }
 
+  function currentEditedAdmissionPolicy(): ReviewAdmissionPolicy {
+    return {
+      maxChangedFiles: capFromInput(editedAdmissionMaxChangedFiles.value),
+      maxChangedLines: capFromInput(editedAdmissionMaxChangedLines.value),
+      maxDiffBytes: capFromInput(editedAdmissionMaxDiffBytes.value),
+      maxReviewsPerPullRequestPerHour: capFromInput(editedAdmissionMaxReviewsPerPullRequestPerHour.value),
+      maxRepositoryMegabytes: capFromInput(editedAdmissionMaxRepositoryMegabytes.value),
+    }
+  }
+
+  async function saveAdmissionPolicy() {
+    if (!canManageClient.value || !client.value) return
+    saving.value = true
+    admissionSaveError.value = ''
+    try {
+      // Patched as a whole, so a blank field clears that bound.
+      const result = await patchClientFn(clientId, { admissionPolicy: currentEditedAdmissionPolicy() })
+      if (isFailedPatch(result)) {
+        admissionSaveError.value = extractValidationMessage(result.error, 'Failed to save the review limits.')
+        return
+      }
+      applyClient(result.data as ClientDetailDto | null | undefined)
+    } catch {
+      admissionSaveError.value = 'Failed to save the review limits.'
+    } finally {
+      saving.value = false
+    }
+  }
+
+  const admissionPolicyError = computed(() =>
+    admissionBoundsError([
+      ['Changed files per review', editedAdmissionMaxChangedFiles.value],
+      ['Changed lines per review', editedAdmissionMaxChangedLines.value],
+      ['Diff size per review', editedAdmissionMaxDiffBytes.value],
+      ['Reviews per pull request per hour', editedAdmissionMaxReviewsPerPullRequestPerHour.value],
+      ['Repository size', editedAdmissionMaxRepositoryMegabytes.value],
+    ]),
+  )
+
+  function isAdmissionButtonEnabled(): boolean {
+    if (saving.value || client.value === null || !canManageClient.value || admissionPolicyError.value !== '') {
+      return false
+    }
+    const stored = client.value.admissionPolicy ?? {}
+    const edited = currentEditedAdmissionPolicy()
+    return (
+      edited.maxChangedFiles !== (stored.maxChangedFiles ?? null) ||
+      edited.maxChangedLines !== (stored.maxChangedLines ?? null) ||
+      edited.maxDiffBytes !== (stored.maxDiffBytes ?? null) ||
+      edited.maxReviewsPerPullRequestPerHour !== (stored.maxReviewsPerPullRequestPerHour ?? null) ||
+      edited.maxRepositoryMegabytes !== (stored.maxRepositoryMegabytes ?? null)
+    )
+  }
+
   async function saveBudgetConfig() {
     if (!canManageClient.value || !client.value) return
     saving.value = true
@@ -817,6 +916,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     loadError,
     saving,
     saveError,
+    admissionSaveError,
     showDeleteDialog,
     editedDisplayName,
     editedDefaultReviewPipelineProfileId,
@@ -840,6 +940,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedPullRequestBudgetHardCapUsd,
     editedIncrementBudgetSoftCapUsd,
     editedIncrementBudgetHardCapUsd,
+    editedAdmissionMaxChangedFiles,
+    editedAdmissionMaxChangedLines,
+    editedAdmissionMaxDiffBytes,
+    editedAdmissionMaxReviewsPerPullRequestPerHour,
+    editedAdmissionMaxRepositoryMegabytes,
     reviewProfiles,
     clientReviewProfile,
     isProviderDetailOpen,
@@ -862,10 +967,13 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saveAdvancedSettings,
     saveReviewProfile,
     saveBudgetConfig,
+    saveAdmissionPolicy,
     savePostConfiguration,
     saveCodeInsightsCollection,
     isAdvancedSettingsButtonEnabled,
     isBudgetButtonEnabled,
+    isAdmissionButtonEnabled,
+    admissionPolicyError,
     isReviewProfileButtonEnabled,
     isPostConfigButtonEnabled,
     handleDelete,

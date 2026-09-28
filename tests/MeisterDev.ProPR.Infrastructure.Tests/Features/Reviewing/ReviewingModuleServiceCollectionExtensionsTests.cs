@@ -63,6 +63,7 @@ public sealed class ReviewingModuleServiceCollectionExtensionsTests
                     ["REVIEW_WORKSPACE_ROOT_PATH"] = "/tmp/review-workspaces",
                     ["REVIEW_WORKSPACE_RETENTION_MINUTES"] = "240",
                     ["REVIEW_WORKSPACE_MAX_CACHE_SIZE_MEGABYTES"] = "2048",
+                    ["REVIEW_WORKSPACE_MIRROR_RETENTION_DAYS"] = "30",
                     ["REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS"] = "8",
                     ["REVIEW_WORKSPACE_FETCH_DEPTH_POLICY"] = "full",
                 })
@@ -82,6 +83,7 @@ public sealed class ReviewingModuleServiceCollectionExtensionsTests
         Assert.Equal("/tmp/review-workspaces", options.RootPath);
         Assert.Equal(240, options.RetentionMinutes);
         Assert.Equal(2048, options.MaxCacheSizeMegabytes);
+        Assert.Equal(30, options.MirrorRetentionDays);
         Assert.Equal(8, options.MaxConcurrentPreparations);
         Assert.Equal("full", options.FetchDepthPolicy);
         Assert.NotNull(provider.GetRequiredService<ReviewWorkspacePreparationThrottle>());

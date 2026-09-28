@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -223,6 +224,27 @@ public interface IJobRepository : IReviewFileResultStore
     Task SetSupersededAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
+    ///     Marks the job as superseded on the condition that it still holds <paramref name="expectedStatus" />,
+    ///     and returns the state it held before, or <see langword="null" /> when it held another status and this
+    ///     call changed nothing. Two callers retiring the same job therefore get one answer each about which of
+    ///     them retired it, and only that one may put it back.
+    /// </summary>
+    Task<SupersededReviewJobState?> TrySupersedeAsync(
+        Guid id,
+        JobStatus expectedStatus,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Puts a job that is still superseded back into the state <see cref="TrySupersedeAsync" /> reported,
+    ///     status and lifecycle fields together, and returns whether it was restored. A job another writer has
+    ///     moved on since keeps the status that writer decided.
+    /// </summary>
+    Task<bool> TryRestoreSupersededAsync(
+        Guid id,
+        SupersededReviewJobState state,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Marks the job as stopped because a client administrator halted it manually through the control
     ///     panel. No-op if the job does not exist or is already in a terminal state.
     /// </summary>
@@ -232,13 +254,16 @@ public interface IJobRepository : IReviewFileResultStore
     ///     Marks the job budget-exceeded because a hard cap was reached mid-review, recording the binding scope,
     ///     cap kind, threshold, and spend as the reason. No-op if the job does not exist or is already in a
     ///     deliberate terminal state (completed, failed, cancelled, superseded, or stopped).
+    ///     The scope, threshold and spend are null where the refusal that stopped the review named no cap, and
+    ///     the job then records that a budget stopped it without detailing which one. The cap kind carries no
+    ///     such null: a refusal naming no cap is recorded as the hard cap.
     /// </summary>
     Task SetBudgetExceededAsync(
         Guid id,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default);
 
     /// <summary>
@@ -251,6 +276,91 @@ public interface IJobRepository : IReviewFileResultStore
         BudgetCapKind capKind,
         decimal thresholdUsd,
         decimal spentUsd,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Holds a queued review job until <paramref name="heldUntil" />, because its pull request has already
+    ///     started the number of reviews its client allows within the hour. No-op unless the job is pending.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="heldUntil">When the job becomes admissible again.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task SetAdmissionHeldAsync(Guid id, DateTimeOffset heldUntil, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Ends a review job without a model call, because the pull request exceeded a size bound its client
+    ///     set. The reason is stored on the job in the words posted on the pull request. No-op once the job has
+    ///     reached a terminal status.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="reason">Why the review was refused, and what the author can do about it.</param>
+    /// <param name="policyFingerprint">
+    ///     The client's admission bounds as they stood at the refusal. An automatic trigger compares it with
+    ///     the client's current bounds to decide whether to review the same pull request head again.
+    /// </param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Whether this call was the one that refused the job.</returns>
+    Task<bool> SetAdmissionRefusedAsync(Guid id, string reason, string? policyFingerprint, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the pull request head that review admission last refused for this client, together with the
+    ///     bounds it was refused under, or null where admission refused no review of this pull request.
+    /// </summary>
+    /// <remarks>
+    ///     A refused review counts as the review of its head. An automatic trigger reads this so it creates no
+    ///     second job for a head that measures the same and would be refused again, and each attempt transfers
+    ///     the repository again before it is.
+    /// </remarks>
+    /// <param name="clientId">The client identifier.</param>
+    /// <param name="organizationUrl">The provider scope path of the pull request.</param>
+    /// <param name="projectId">The provider project key of the pull request.</param>
+    /// <param name="repositoryId">The repository identifier.</param>
+    /// <param name="pullRequestId">The pull request number.</param>
+    /// <param name="ct">The cancellation token.</param>
+    Task<RefusedReviewAdmission?> GetLatestRefusedAdmissionAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns every job held by review admission whose wait has passed to the queue, and answers how many
+    ///     were returned.
+    /// </summary>
+    /// <param name="now">The current UTC time.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>How many held jobs were returned to the queue.</returns>
+    Task<int> ReleaseDueAdmissionHoldsAsync(DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Reports the review jobs submitted for one pull request since <paramref name="since" /> for which a
+    ///     model call was made, leaving out the job that is asking. The count feeds a bound on the reviews an
+    ///     AI performed for that pull request, so a job counts while it is processing, and afterwards in
+    ///     whatever status it reached once its token aggregates record a call; a superseded job that spent
+    ///     tokens counts too. A job still queued, a job admission refused, a job still held and a job that
+    ///     ended before its first model call are left out. The oldest submission time says when the window
+    ///     frees up again.
+    /// </summary>
+    /// <param name="clientId">The client that pays for the reviews.</param>
+    /// <param name="organizationUrl">Provider scope path the pull request lives under.</param>
+    /// <param name="projectId">Provider project, workspace, or namespace key.</param>
+    /// <param name="repositoryId">Provider-native repository identifier.</param>
+    /// <param name="pullRequestId">Provider pull request number.</param>
+    /// <param name="since">The inclusive start of the window.</param>
+    /// <param name="excludeJobId">The asking job, left out of the count.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The submissions for that pull request in the window.</returns>
+    Task<ReviewSubmissionWindow> GetSubmissionWindowAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        DateTimeOffset since,
+        Guid excludeJobId,
         CancellationToken ct = default);
 
     /// <summary>Returns all Pending or Processing jobs for the given ADO organisation/project combination.</summary>

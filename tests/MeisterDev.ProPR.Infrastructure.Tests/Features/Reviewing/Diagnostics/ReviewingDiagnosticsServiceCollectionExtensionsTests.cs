@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -49,6 +50,28 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         var diagnosticsReader = scope.ServiceProvider.GetRequiredService<IReviewDiagnosticsReader>();
 
         Assert.IsType<EfReviewDiagnosticsReader>(diagnosticsReader);
+    }
+
+    [Fact]
+    public async Task AddReviewingDiagnostics_ReadsAProtocolThroughTheJobRepositoryTheHostRegistered()
+    {
+        // The diagnostics reader is exercised, not the repository underneath it: resolving that repository
+        // here and calling it would pass whatever the registration hands the reader.
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 42, 1);
+        var repository = new FakeJobRepository { Job = job };
+        var services = new ServiceCollection();
+        services.AddScoped<IJobRepository>(_ => repository);
+        services.AddReviewingDiagnostics();
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var protocol = await scope.ServiceProvider.GetRequiredService<IReviewDiagnosticsReader>()
+            .GetJobProtocolAsync(job.Id);
+
+        Assert.NotNull(protocol);
+        Assert.Equal(job.ClientId, protocol.ClientId);
+        Assert.Equal(job.Id, repository.RequestedJobId);
     }
 
     private static IConfiguration CreateConfiguration(bool withDatabaseConnectionString)
@@ -243,9 +266,16 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.CompletedTask;
         }
 
+        /// <summary>The job this double answers protocol reads with.</summary>
+        public ReviewJob? Job { get; set; }
+
+        /// <summary>The job id the last protocol read asked for.</summary>
+        public Guid? RequestedJobId { get; private set; }
+
         public Task<ReviewJob?> GetByIdWithProtocolsAsync(Guid id, CancellationToken ct = default)
         {
-            return Task.FromResult<ReviewJob?>(null);
+            this.RequestedJobId = id;
+            return Task.FromResult(this.Job is { } job && job.Id == id ? job : null);
         }
 
         public Task<ReviewJob?> GetByIdWithProtocolsForOverviewAsync(Guid id, CancellationToken ct = default)
@@ -268,6 +298,22 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.CompletedTask;
         }
 
+        public Task<SupersededReviewJobState?> TrySupersedeAsync(
+            Guid id,
+            JobStatus expectedStatus,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<SupersededReviewJobState?>(null);
+        }
+
+        public Task<bool> TryRestoreSupersededAsync(
+            Guid id,
+            SupersededReviewJobState state,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult(false);
+        }
+
         public Task SetStoppedAsync(Guid id, CancellationToken ct = default)
         {
             return Task.CompletedTask;
@@ -275,10 +321,10 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
 
         public Task SetBudgetExceededAsync(
             Guid id,
-            MeisterDev.ProPR.Domain.Enums.BudgetScopeKind scope,
+            MeisterDev.ProPR.Domain.Enums.BudgetScopeKind? scope,
             MeisterDev.ProPR.Domain.Enums.BudgetCapKind capKind,
-            decimal thresholdUsd,
-            decimal spentUsd,
+            decimal? thresholdUsd,
+            decimal? spentUsd,
             CancellationToken ct = default)
         {
             return Task.CompletedTask;
@@ -293,6 +339,48 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             CancellationToken ct = default)
         {
             return Task.CompletedTask;
+        }
+
+        public Task SetAdmissionHeldAsync(Guid id, DateTimeOffset heldUntil, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> SetAdmissionRefusedAsync(Guid id, string reason, string? policyFingerprint, CancellationToken ct = default)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task<RefusedReviewAdmission?> GetLatestRefusedAdmissionAsync(
+            Guid clientId,
+            string organizationUrl,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<RefusedReviewAdmission?>(null);
+        }
+
+        public Task<int> ReleaseDueAdmissionHoldsAsync(DateTimeOffset now, CancellationToken ct = default)
+        {
+            return Task.FromResult(0);
+        }
+
+        /// <summary>What this repository reports for the rolling admission window. Empty until a test sets it.</summary>
+        public ReviewSubmissionWindow SubmissionWindow { get; set; } = ReviewSubmissionWindow.Empty;
+
+        public Task<ReviewSubmissionWindow> GetSubmissionWindowAsync(
+            Guid clientId,
+            string organizationUrl,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            DateTimeOffset since,
+            Guid excludeJobId,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult(this.SubmissionWindow);
         }
 
         public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(

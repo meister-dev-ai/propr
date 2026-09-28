@@ -15,6 +15,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenAI.Responses;
 using NSubstitute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
@@ -1349,11 +1350,19 @@ public class ToolAwareAiReviewCoreTests
 
         await sut.ReviewAsync(CreatePullRequest(), context);
 
-        var turn = capturedOutputs.FirstOrDefault(o => o is not null && o.Contains("\"assistantText\"", StringComparison.Ordinal));
-        Assert.NotNull(turn);
-        using var doc = JsonDocument.Parse(turn!);
-        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
-        Assert.DoesNotContain("private chain of thought", turn!, StringComparison.Ordinal);
+        var turns = capturedOutputs
+            .Where(o => o is not null && o.Contains("\"assistantText\"", StringComparison.Ordinal))
+            .ToList();
+        Assert.NotEmpty(turns);
+        foreach (var turn in turns)
+        {
+            using var doc = JsonDocument.Parse(turn!);
+            Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
+        }
+
+        Assert.DoesNotContain(
+            capturedOutputs,
+            o => o is not null && o.Contains("private chain of thought", StringComparison.Ordinal));
     }
 
     // With reasoning capture enabled, reasoning content is recorded and bounded to the configured cap.
@@ -1399,6 +1408,218 @@ public class ToolAwareAiReviewCoreTests
         // Bounded well below the raw 5000 chars, with a truncation marker.
         Assert.True(reasoning!.Length < 700, $"reasoning length was {reasoning.Length}");
         Assert.Contains("reasoning truncated", reasoning, StringComparison.Ordinal);
+    }
+
+    // The tenant that owns the job decides, and its decision overrides an installation switch that is on. The
+    // provider is then not asked for a reasoning summary either, so less text crosses the wire; the effort level
+    // is a separate setting and still reaches the request.
+    [Fact]
+    public async Task ReviewAsync_TheJobWithholdsReasoningWhileTheInstallationSwitchIsOn_OmitsItAndAsksForNoSummary()
+    {
+        var capturedOutputs = new List<string?>();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder
+            .WhenForAnyArgs(r => r.RecordAiCallAsync(Guid.Empty, 0, null, null, null, null, null))
+            .Do(call => capturedOutputs.Add(call.ArgAt<string?>(6)));
+
+        var reasoningMessage = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextReasoningContent("private chain of thought"), new TextContent(CreateFinalReviewJson("Done."))]);
+
+        ChatOptions? sentOptions = null;
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Do<ChatOptions?>(options => sentOptions = options),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(reasoningMessage));
+
+        var context = CreateContext();
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = recorder;
+        context.CaptureReasoning = false;
+        context.ActiveReasoningEffort = ReviewReasoningEffort.High;
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { CaptureReasoningInProtocol = true }),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        var turn = capturedOutputs.FirstOrDefault(o => o is not null && o.Contains("\"assistantText\"", StringComparison.Ordinal));
+        Assert.NotNull(turn);
+        using var doc = JsonDocument.Parse(turn!);
+        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
+        Assert.DoesNotContain("private chain of thought", turn!, StringComparison.Ordinal);
+
+        Assert.NotNull(sentOptions?.RawRepresentationFactory);
+        var raw = sentOptions!.RawRepresentationFactory!(null!);
+#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
+        var createOptions = Assert.IsType<CreateResponseOptions>(raw);
+        Assert.Null(createOptions.ReasoningOptions!.ReasoningSummaryVerbosity);
+        Assert.Equal(ResponseReasoningEffortLevel.High, createOptions.ReasoningOptions.ReasoningEffortLevel);
+#pragma warning restore OPENAI001
+    }
+
+    [Fact]
+    public async Task ReviewAsync_TheJobCapturesReasoningWhileTheInstallationSwitchIsOff_RecordsIt()
+    {
+        var capturedOutputs = new List<string?>();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder
+            .WhenForAnyArgs(r => r.RecordAiCallAsync(Guid.Empty, 0, null, null, null, null, null))
+            .Do(call => capturedOutputs.Add(call.ArgAt<string?>(6)));
+
+        var reasoningMessage = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextReasoningContent("weighing the tradeoffs"), new TextContent(CreateFinalReviewJson("Done."))]);
+
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(reasoningMessage));
+
+        var context = CreateContext();
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = recorder;
+        context.CaptureReasoning = true;
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { CaptureReasoningInProtocol = false }),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        var turn = capturedOutputs.FirstOrDefault(o => o is not null && o.Contains("\"reasoning\"", StringComparison.Ordinal));
+        Assert.NotNull(turn);
+        using var doc = JsonDocument.Parse(turn!);
+        Assert.Equal("weighing the tradeoffs", doc.RootElement.GetProperty("reasoning").GetString());
+    }
+
+    // Two tenants' jobs run through the same process against the same installation options, so the decision
+    // cannot be read off those options at the moment the turn is recorded.
+    [Fact]
+    public async Task ReviewAsync_TwoJobsWithOpposingPolicies_ProduceIndependentTraces()
+    {
+        var reasoningMessage = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextReasoningContent("shared chain of thought"), new TextContent(CreateFinalReviewJson("Done."))]);
+
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(reasoningMessage));
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { CaptureReasoningInProtocol = true }),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var capturingTurns = await RunAndCollectTurnsAsync(sut, captureReasoning: true);
+        var withholdingTurns = await RunAndCollectTurnsAsync(sut, captureReasoning: false);
+
+        Assert.Contains(capturingTurns, turn => turn is not null && turn.Contains("shared chain of thought", StringComparison.Ordinal));
+
+        // An empty list would satisfy the absence on its own, so the withholding job has to be shown to have
+        // recorded its response first.
+        var withheld = withholdingTurns
+            .Where(turn => turn is not null && turn.Contains("\"assistantText\"", StringComparison.Ordinal))
+            .ToList();
+        Assert.NotEmpty(withheld);
+        foreach (var turn in withheld)
+        {
+            using var doc = JsonDocument.Parse(turn!);
+            Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
+        }
+
+        Assert.DoesNotContain(withholdingTurns, turn => turn is not null && turn.Contains("shared chain of thought", StringComparison.Ordinal));
+    }
+
+    // Budgets are computed from reasoning token counts, so withholding the reasoning text must not withhold the
+    // count.
+    [Fact]
+    public async Task ReviewAsync_TheJobWithholdsReasoning_StillRecordsTheReasoningTokenCount()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [
+                            new TextReasoningContent("private chain of thought"),
+                            new TextContent(CreateFinalReviewJson("Done.")),
+                        ]))
+                {
+                    Usage = new UsageDetails { InputTokenCount = 2048, OutputTokenCount = 50, ReasoningTokenCount = 128 },
+                });
+
+        var capturedOutputs = new List<string?>();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder
+            .WhenForAnyArgs(r => r.RecordAiCallAsync(Guid.Empty, 0, null, null, null, null, null))
+            .Do(call => capturedOutputs.Add(call.ArgAt<string?>(6)));
+
+        var context = CreateContext();
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = recorder;
+        context.CaptureReasoning = false;
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { CaptureReasoningInProtocol = true }),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        // The count without the recorded turn would pass with the policy ignored, so both are asserted.
+        var turns = capturedOutputs
+            .Where(o => o is not null && o.Contains("\"assistantText\"", StringComparison.Ordinal))
+            .ToList();
+        Assert.NotEmpty(turns);
+        foreach (var turn in turns)
+        {
+            using var doc = JsonDocument.Parse(turn!);
+            Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
+        }
+
+        Assert.DoesNotContain(
+            capturedOutputs,
+            o => o is not null && o.Contains("private chain of thought", StringComparison.Ordinal));
+
+        Assert.NotNull(context.LoopMetrics);
+        Assert.Equal(128L, context.LoopMetrics!.TotalReasoningTokens);
+    }
+
+    private static async Task<List<string?>> RunAndCollectTurnsAsync(ToolAwareAiReviewCore sut, bool captureReasoning)
+    {
+        var turns = new List<string?>();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder
+            .WhenForAnyArgs(r => r.RecordAiCallAsync(Guid.Empty, 0, null, null, null, null, null))
+            .Do(call => turns.Add(call.ArgAt<string?>(6)));
+
+        var context = CreateContext();
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = recorder;
+        context.CaptureReasoning = captureReasoning;
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        return turns;
     }
 
     // A zero (or negative) reasoning cap must yield no reasoning field rather than indexing past the start of the

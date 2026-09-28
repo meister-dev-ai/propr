@@ -2,11 +2,14 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Options;
+using MeisterDev.ProPR.Infrastructure.Egress;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -18,6 +21,7 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
     GitCommandRunner gitCommandRunner,
     ReviewWorkspaceCleanupService cleanupService,
     ReviewWorkspacePreparationThrottle preparationThrottle,
+    OutboundHostGuard outboundHostGuard,
     ILogger<GitReviewRepositoryWorkspaceManager> logger) : IReviewRepositoryWorkspaceManager
 {
     /// <summary>
@@ -26,7 +30,24 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
     /// </summary>
     private const int MaxPackFilesBeforeRepack = 50;
 
+    /// <summary>The preparation step that transfers the repository into the mirror.</summary>
+    private const string FetchStage = "fetch";
+
+    /// <summary>The preparation step that writes the reviewed revision into this job's own checkout.</summary>
+    private const string CheckoutStage = "checkout";
+
+    /// <summary>The failure code a caller turns into the client's repository-size admission refusal.</summary>
+    private const string RepositoryOverSizeLimitCode = "repository_over_size_limit";
+
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> MirrorLocks = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     How long the repository-size watch waits between two measurements of the directory git is writing
+    ///     into. One second in the composition: it bounds how far past the bound a transfer can get without
+    ///     measuring a large directory often enough to compete with git for the disk. A test shortens it so
+    ///     several samples fall inside a command that runs for a fraction of a second.
+    /// </summary>
+    internal TimeSpan SizeSamplingInterval { get; init; } = TimeSpan.FromSeconds(1);
 
     public async Task<ReviewRepositoryWorkspacePreparationResult> PrepareAsync(
         ReviewRepositoryWorkspaceRequest request,
@@ -45,6 +66,17 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
                 return Fail("remote_resolution", "unsupported_auth_mode", "The configured SCM authentication mode does not support local git fetch.", false);
             }
 
+            // git opens its own sockets, so the address behind the remote is classified here before it starts.
+            // Reported as a failure on the job, because an operator has to change the connection or the
+            // installation setting for the job to run at all, and a retry changes neither.
+            var egress = await outboundHostGuard.CheckAsync(remote.RemoteUrl, ct);
+            if (egress.RefusalReason is not null)
+            {
+                return Fail("remote_resolution", "blocked_egress_address", egress.RefusalReason, false);
+            }
+
+            var transportArguments = BuildTransportArguments(remote.RemoteUrl, egress.ApprovedAddresses);
+
             // The throttle bounds simultaneous checkouts across all repositories; the mirror lock keeps two
             // preparations out of one mirror. Always in this order, so the per-repository lock is never held
             // while waiting for a slot.
@@ -53,7 +85,7 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
             await mirrorLock.WaitAsync(ct);
             try
             {
-                var lease = await this.PrepareWorkspaceAsync(request, remote, ct);
+                var lease = await this.PrepareWorkspaceAsync(request, remote, transportArguments, ct);
                 cleanupService.RegisterLease(lease);
                 var workspace = new GitReviewRepositoryWorkspace(
                     lease,
@@ -68,6 +100,27 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
                 mirrorLock.Release();
             }
         }
+        catch (ReviewRepositorySizeExceededException ex)
+        {
+            // Not retryable: the repository is that large, and another attempt transfers the same bytes to the
+            // same bound. The caller refuses the review and names both numbers on the pull request.
+            logger.LogInformation(
+                "Stopped preparing the local review workspace for job {JobId}: the repository reached {MeasuredMegabytes} MB during {Stage} and the client's limit is {LimitMegabytes} MB.",
+                request.JobId,
+                ex.MeasuredMegabytes,
+                ex.Stage,
+                ex.LimitMegabytes);
+
+            return new ReviewRepositoryWorkspacePreparationResult(
+                null,
+                new ReviewWorkspaceFailure(
+                    ex.Stage,
+                    RepositoryOverSizeLimitCode,
+                    ex.Message,
+                    Retryable: false,
+                    FallbackApplied: false,
+                    new ReviewRepositorySizeBreach(ex.MeasuredMegabytes, ex.LimitMegabytes)));
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to prepare local review workspace for job {JobId}.", request.JobId);
@@ -75,9 +128,18 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
         }
     }
 
+    /// <param name="request">The review the workspace is prepared for.</param>
+    /// <param name="remote">The resolved remote of the repository under review.</param>
+    /// <param name="transportArguments">
+    ///     The git configuration refusing a redirect and, where the egress check approved addresses, holding
+    ///     the command to them. Prepended to every command that can reach the remote, and empty where the
+    ///     remote is neither an http nor an https address.
+    /// </param>
+    /// <param name="ct">The cancellation token.</param>
     private async Task<ReviewRepositoryWorkspaceLease> PrepareWorkspaceAsync(
         ReviewRepositoryWorkspaceRequest request,
         ReviewWorkspaceRemoteRef remote,
+        IReadOnlyList<string> transportArguments,
         CancellationToken ct)
     {
         var mirrorsRoot = Path.Combine(options.Value.RootPath, "mirrors");
@@ -123,16 +185,13 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
             addRemoteResult.EnsureSuccess("add remote", "git remote add origin <remote>");
         }
 
-        var leftPartialClone = await this.AlignMirrorWithPolicyAsync(mirrorPath, remote, authEnvironment, ct);
-        var fetchArguments = this.BuildFetchArguments(remote, leftPartialClone);
-        var fetchResult = await gitCommandRunner.RunAsync(mirrorPath, fetchArguments, authEnvironment, ct);
-
-        // The policy is named in the failure because it decides what the fetch asked the server for, and a
-        // server that will not serve a filtered fetch fails here. Its value is one of a fixed set, unlike the
-        // refspecs, which come from the provider and are left out of the message for that reason.
-        fetchResult.EnsureSuccess(
-            "fetch mirror",
-            $"git fetch --prune [{options.Value.FetchDepthPolicy}] origin <refspecs>");
+        var leftPartialClone = await this.FetchMirrorAsync(
+            mirrorPath,
+            remote,
+            authEnvironment,
+            transportArguments,
+            request.MaxRepositoryMegabytes,
+            ct);
 
         if (leftPartialClone)
         {
@@ -193,7 +252,27 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
         // Only the head revision is checked out. The target side of the review is read from the object store
         // at the base commit, so a second checkout would write a second full copy of the repository to the
         // workspace disk for reads that never used it.
-        await this.CreateWorktreeAsync(mirrorPath, headWorkspacePath, request.ReviewRevision.HeadSha, authEnvironment, ct);
+        try
+        {
+            await this.CreateWorktreeAsync(
+                mirrorPath,
+                headWorkspacePath,
+                request.ReviewRevision.HeadSha,
+                authEnvironment,
+                transportArguments,
+                request.MaxRepositoryMegabytes,
+                ct);
+        }
+        catch (ReviewRepositorySizeExceededException)
+        {
+            // The checkout belongs to this job alone, so removing it takes nothing from another review. Git
+            // has it registered on the mirror, and the registration is dropped with it, so the next
+            // preparation of this job is not refused the path by a registration pointing at a directory that
+            // is gone.
+            DeleteDirectory(workspaceRoot, logger);
+            await this.PruneWorktreesAsync(mirrorPath, ct);
+            throw;
+        }
 
         var preparedAt = DateTimeOffset.UtcNow;
         return new ReviewRepositoryWorkspaceLease(
@@ -209,6 +288,144 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
             "Active");
     }
 
+    /// <summary>
+    ///     Brings the mirror up to date with the remote, under the client's repository-size bound. Returns
+    ///     whether the mirror has just stopped being a partial clone.
+    /// </summary>
+    /// <param name="mirrorPath">The mirror the repository is fetched into.</param>
+    /// <param name="remote">The resolved remote of the repository under review.</param>
+    /// <param name="authEnvironment">Credentials for the mirror's remote.</param>
+    /// <param name="transportArguments">
+    ///     The git configuration refusing a redirect and, where the egress check approved addresses, holding
+    ///     the command to them.
+    /// </param>
+    /// <param name="maxMegabytes">The client's repository-size bound, or null where the client set none.</param>
+    /// <param name="ct">The cancellation token.</param>
+    private async Task<bool> FetchMirrorAsync(
+        string mirrorPath,
+        ReviewWorkspaceRemoteRef remote,
+        IReadOnlyDictionary<string, string?>? authEnvironment,
+        IReadOnlyList<string> transportArguments,
+        int? maxMegabytes,
+        CancellationToken ct)
+    {
+        // A mirror can already hold more than this client's bound although no transfer of this client's was
+        // ever stopped: an administrator can have lowered the bound since the mirror was fetched, the
+        // repository can have grown while a client with a higher bound fetched into the same mirror, or a
+        // transfer can have finished between two samples of an earlier watch. Measuring the mirror here
+        // refuses the review before this preparation transfers anything. The mirror is left where it is: it
+        // is the cache every client of this repository shares, a client with a higher bound still reviews
+        // from it, and the eviction sweep removes it once nobody does.
+        if (maxMegabytes is { } mirrorLimit)
+        {
+            ReviewRepositorySizeWatchdog.ThrowIfDirectoryPassesBound(mirrorPath, mirrorLimit, FetchStage);
+        }
+
+        try
+        {
+            var leftPartialClone = await this.AlignMirrorWithPolicyAsync(
+                mirrorPath,
+                remote,
+                authEnvironment,
+                transportArguments,
+                maxMegabytes,
+                ct);
+            var fetchArguments = this.BuildFetchArguments(remote, leftPartialClone, transportArguments);
+            var fetchResult = await this.RunTransferAsync(
+                mirrorPath,
+                fetchArguments,
+                authEnvironment,
+                mirrorPath,
+                FetchStage,
+                maxMegabytes,
+                ct);
+
+            // The policy is named in the failure because it decides what the fetch asked the server for, and a
+            // server that will not serve a filtered fetch fails here. Its value is one of a fixed set, unlike the
+            // refspecs, which come from the provider and are left out of the message for that reason.
+            fetchResult.EnsureSuccess(
+                "fetch mirror",
+                $"git fetch --prune [{options.Value.FetchDepthPolicy}] origin <refspecs>");
+
+            return leftPartialClone;
+        }
+        catch (ReviewRepositorySizeExceededException)
+        {
+            // A fetch that was stopped partway leaves a mirror holding part of a repository no review of this
+            // client may use. The eviction sweep works towards a total size and keeps the most recently used
+            // mirrors, so it would hold this one until the cache filled up. The caller holds this
+            // repository's mirror lock, so no other preparation is fetching into it. A review that is still
+            // reading it keeps it: that review fetched under a bound it passed, and deleting the directory
+            // under it would fail it with a git error naming a missing repository.
+            if (cleanupService.IsMirrorReferenced(mirrorPath))
+            {
+                logger.LogInformation(
+                    "Mirror {MirrorPath} passed the repository-size limit but is in use by a running review, so it was left to the eviction sweep.",
+                    mirrorPath);
+            }
+            else
+            {
+                DeleteDirectory(mirrorPath, logger);
+            }
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     Runs a git command that transfers repository data, stopping it once
+    ///     <paramref name="watchedDirectory" /> passes the client's repository-size bound.
+    /// </summary>
+    /// <param name="workingDirectory">Directory the command runs in.</param>
+    /// <param name="arguments">Arguments passed to git, one per element.</param>
+    /// <param name="environment">Credentials for the mirror's remote.</param>
+    /// <param name="watchedDirectory">The directory the command writes the transferred data into.</param>
+    /// <param name="stage">The preparation step the command belongs to.</param>
+    /// <param name="maxMegabytes">The client's repository-size bound, or null where the client set none.</param>
+    /// <param name="ct">The cancellation token.</param>
+    private Task<GitCommandResult> RunTransferAsync(
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string?>? environment,
+        string watchedDirectory,
+        string stage,
+        int? maxMegabytes,
+        CancellationToken ct)
+    {
+        if (maxMegabytes is not { } limit)
+        {
+            return gitCommandRunner.RunAsync(workingDirectory, arguments, environment, ct);
+        }
+
+        var watchdog = new ReviewRepositorySizeWatchdog(watchedDirectory, limit, this.SizeSamplingInterval, stage);
+        return watchdog.RunAsync(
+            token => gitCommandRunner.RunAsync(workingDirectory, arguments, environment, token),
+            ct);
+    }
+
+    /// <summary>Removes a directory a stopped transfer left behind.</summary>
+    /// <param name="path">The directory to remove.</param>
+    /// <param name="logger">Where a directory that could not be removed is reported.</param>
+    /// <remarks>
+    ///     A failed removal is logged and the caller carries on. The transfer was stopped for a reason the
+    ///     caller already reports, and throwing here would replace that reason with a delete failure and hide
+    ///     why the review was refused. The eviction sweep can still remove what was left behind.
+    /// </remarks>
+    private static void DeleteDirectory(string path, ILogger logger)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Failed to remove {Path} after the repository passed the size limit.", path);
+        }
+    }
+
     /// <param name="mirrorPath">The mirror the worktree is added to.</param>
     /// <param name="worktreePath">Where the checkout is written.</param>
     /// <param name="commitSha">The commit to check out.</param>
@@ -216,18 +433,33 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
     ///     Credentials for the mirror's remote. A checkout from a partial clone downloads the file contents it
     ///     needs as it writes them, and that download is authenticated like any other fetch.
     /// </param>
+    /// <param name="transportArguments">
+    ///     The git configuration refusing a redirect and, where the egress check approved addresses, holding
+    ///     the command to them.
+    /// </param>
+    /// <param name="maxMegabytes">
+    ///     The client's repository-size bound, or null where the client set none. The checkout is watched
+    ///     like the fetch, because it is the second point at which a repository's size reaches this host: it
+    ///     writes the working-tree copy of the reviewed revision, and from a partial clone it downloads the
+    ///     file contents it writes.
+    /// </param>
     /// <param name="ct">The cancellation token.</param>
     private async Task CreateWorktreeAsync(
         string mirrorPath,
         string worktreePath,
         string commitSha,
         IReadOnlyDictionary<string, string?>? authEnvironment,
+        IReadOnlyList<string> transportArguments,
+        int? maxMegabytes,
         CancellationToken ct)
     {
-        var result = await gitCommandRunner.RunAsync(
+        var result = await this.RunTransferAsync(
             mirrorPath,
-            ["worktree", "add", "--detach", "--force", worktreePath, commitSha],
+            [.. transportArguments, "worktree", "add", "--detach", "--force", worktreePath, commitSha],
             authEnvironment,
+            worktreePath,
+            CheckoutStage,
+            maxMegabytes,
             ct);
         result.EnsureSuccess("create worktree", "git worktree add --detach --force <path> <sha>");
     }
@@ -247,10 +479,21 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
     ///         that reports the right history and is still missing every blob.
     ///     </para>
     /// </remarks>
+    /// <param name="mirrorPath">The mirror the policy is applied to.</param>
+    /// <param name="remote">The resolved remote, for its refspecs.</param>
+    /// <param name="authEnvironment">Credentials for the mirror's remote.</param>
+    /// <param name="transportArguments">
+    ///     The git configuration refusing a redirect and, where the egress check approved addresses, holding
+    ///     the command to them.
+    /// </param>
+    /// <param name="maxMegabytes">The client's repository-size bound, or null where the client set none.</param>
+    /// <param name="ct">The cancellation token.</param>
     private async Task<bool> AlignMirrorWithPolicyAsync(
         string mirrorPath,
         ReviewWorkspaceRemoteRef remote,
         IReadOnlyDictionary<string, string?>? authEnvironment,
+        IReadOnlyList<string> transportArguments,
+        int? maxMegabytes,
         CancellationToken ct)
     {
         var policy = options.Value.FetchDepthPolicy;
@@ -259,7 +502,7 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
 
         if (!isShallowPolicy && File.Exists(Path.Combine(mirrorPath, "shallow")))
         {
-            var unshallowArguments = new List<string> { "fetch", "--prune", "--unshallow" };
+            var unshallowArguments = new List<string>(transportArguments) { "fetch", "--prune", "--unshallow" };
 
             // Under the blobless policy this fetch carries the filter as well. Without it the deepening
             // transfers the file contents of the whole history, and the filter on the fetch that follows
@@ -271,7 +514,17 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
 
             unshallowArguments.Add("origin");
             unshallowArguments.AddRange(remote.FetchRefSpecs);
-            var unshallowResult = await gitCommandRunner.RunAsync(mirrorPath, unshallowArguments, authEnvironment, ct);
+
+            // Deepening transfers the history the boundary was keeping out, so it is bounded like the fetch
+            // that follows it.
+            var unshallowResult = await this.RunTransferAsync(
+                mirrorPath,
+                unshallowArguments,
+                authEnvironment,
+                mirrorPath,
+                FetchStage,
+                maxMegabytes,
+                ct);
             unshallowResult.EnsureSuccess("remove the mirror's shallow boundary", "git fetch --prune --unshallow origin <refspecs>");
         }
 
@@ -312,9 +565,13 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
     ///     Whether to ask for the objects an earlier filtered fetch omitted. Set when the mirror has just
     ///     stopped being a partial clone, where an ordinary fetch would transfer nothing.
     /// </param>
-    private List<string> BuildFetchArguments(ReviewWorkspaceRemoteRef remote, bool refetch)
+    /// <param name="transportArguments">
+    ///     The git configuration refusing a redirect and, where the egress check approved addresses, holding
+    ///     the command to them.
+    /// </param>
+    private List<string> BuildFetchArguments(ReviewWorkspaceRemoteRef remote, bool refetch, IReadOnlyList<string> transportArguments)
     {
-        var arguments = new List<string> { "fetch", "--prune" };
+        var arguments = new List<string>(transportArguments) { "fetch", "--prune" };
         var policy = options.Value.FetchDepthPolicy;
 
         if (refetch)
@@ -451,6 +708,67 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
             ct);
         result.EnsureSuccess("resolve merge-base", "git merge-base <base> <head>");
         return result.StandardOutput.Trim();
+    }
+
+    /// <summary>
+    ///     The git configuration every command that can reach the remote runs with: a refusal to follow a
+    ///     redirect, and the addresses the egress check approved where there are any to pin.
+    /// </summary>
+    /// <param name="remoteUrl">The remote the command reaches.</param>
+    /// <param name="approvedAddresses">The addresses the egress check resolved the remote's host to.</param>
+    /// <remarks>
+    ///     A server answering a fetch with a 3xx to another host sends git to a destination the egress check
+    ///     never classified. <c>http.followRedirects=false</c> makes git fail the command with its own error
+    ///     instead, which the caller records as the failure of that command. It is set whether or not an
+    ///     address is pinned: a remote on a literal address and an installation that permits private egress
+    ///     both leave nothing to pin, and the redirect off them still reaches a host nothing here saw.
+    ///     <para>
+    ///         Git resolves the host itself when it connects, and a name server can answer differently the
+    ///         second time. <c>http.curloptResolve</c> puts the approved addresses in front of that
+    ///         resolution for one host and port, so the connection reaches an address this host classified.
+    ///         Several addresses belong in one entry: <c>git help config</c> documents the value as
+    ///         <c>HOST:PORT:ADDRESS[,ADDRESS]</c>, which is one mapping for one host and port carrying every
+    ///         address it may be reached at.
+    ///     </para>
+    ///     <para>
+    ///         Both settings are http and https settings. A remote that is neither, such as a local path,
+    ///         leaves the command line unchanged.
+    ///     </para>
+    /// </remarks>
+    private static IReadOnlyList<string> BuildTransportArguments(string remoteUrl, IReadOnlyList<IPAddress> approvedAddresses)
+    {
+        if (!Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri))
+        {
+            return [];
+        }
+
+        var isHttp = string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+        if (!isHttp)
+        {
+            return [];
+        }
+
+        string[] refuseRedirects = ["-c", "http.followRedirects=false"];
+        if (approvedAddresses.Count == 0)
+        {
+            return refuseRedirects;
+        }
+
+        // Uri.Port carries the scheme's default where the URL names none, which is the port curl matches the
+        // entry against: 443 for https, 80 for http.
+        var addresses = string.Join(',', approvedAddresses.Select(FormatPinnedAddress));
+
+        return [.. refuseRedirects, "-c", $"http.curloptResolve={uri.Host}:{uri.Port}:{addresses}"];
+    }
+
+    /// <summary>The address as a curl resolver entry lists it, where an IPv6 address is bracketed.</summary>
+    /// <param name="address">One approved address.</param>
+    private static string FormatPinnedAddress(IPAddress address)
+    {
+        return address.AddressFamily == AddressFamily.InterNetworkV6
+            ? $"[{address}]"
+            : address.ToString();
     }
 
     private static ReviewRepositoryWorkspacePreparationResult Fail(string stage, string code, string message, bool retryable)

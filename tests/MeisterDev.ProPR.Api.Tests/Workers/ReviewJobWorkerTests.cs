@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Resilience;
@@ -220,7 +222,7 @@ public class ReviewJobWorkerTests
                 Arg.Is<ReviewSpendSubject>(subject => subject.UnitOfWorkId == job.Id),
                 Arg.Any<DateOnly>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new ReviewSpendBaseline(new ReviewScopeSpend(80m, false), ReviewScopeSpend.None, ReviewScopeSpend.None));
+            .Returns(new ReviewSpendBaseline(new ReviewScopeSpend(80m, false), ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None));
 
         // The held transition also emits a budget event for a downstream alerting capability.
         var published = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -274,6 +276,314 @@ public class ReviewJobWorkerTests
                 n.ClientId == job.ClientId &&
                 n.JobId == job.Id),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_HoldsPendingJob_WithTheTenantScope_WhenOnlyTheTenantCapIsReached()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(203);
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var leaseStore = CreateLeaseStore(job);
+        repo.SetBudgetHeldAsync(
+                job.Id, Arg.Any<BudgetScopeKind>(), Arg.Any<BudgetCapKind>(), Arg.Any<decimal>(), Arg.Any<decimal>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                held.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        // The client is well under its own caps; the tenant's aggregate spend has reached the tenant hard cap.
+        var capsProvider = Substitute.For<IBudgetCapsProvider>();
+        capsProvider.GetCapsAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new BudgetCaps(80m, 100m, null, null, null, null, 4_000m, 5_000m));
+        var accumulator = Substitute.For<IReviewSpendAccumulator>();
+        accumulator.GetBaselineAsync(
+                Arg.Is<ReviewSpendSubject>(subject => subject.UnitOfWorkId == job.Id),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewSpendBaseline(new ReviewScopeSpend(10m, false), ReviewScopeSpend.None, ReviewScopeSpend.None, new ReviewScopeSpend(5_000m, false)));
+
+        var published = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var eventPublisher = Substitute.For<IBudgetEventPublisher>();
+        eventPublisher.PublishAsync(Arg.Any<BudgetEventNotification>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                published.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        // Enforcement does not depend on the capability: only setting a cap does.
+        var licensing = Substitute.For<ILicensingCapabilityService>();
+        licensing.IsEnabledAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<bool>(false));
+
+        var logger = Substitute.For<ILogger<ReviewJobWorker>>();
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobLeaseStore)).Returns(leaseStore);
+        sp.GetService(typeof(ILicensingCapabilityService)).Returns(licensing);
+        sp.GetService(typeof(IBudgetCapsProvider)).Returns(capsProvider);
+        sp.GetService(typeof(IReviewSpendAccumulator)).Returns(accumulator);
+        sp.GetService(typeof(IBudgetEventPublisher)).Returns(eventPublisher);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(Substitute.For<IReviewJobProcessor>());
+
+        var worker = new ReviewJobWorker(
+            scopeFactory, CreateWorkerOptions(), CreateLeaseOptions(),
+            CreateMetrics(), CreateCancellationRegistry(),
+            TimeProvider.System, logger);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        _ = worker.StartAsync(cts.Token);
+        await Task.WhenAll(held.Task, published.Task).WaitAsync(TimeSpan.FromSeconds(2));
+
+        await cts.CancelAsync();
+        await worker.StopAsync(CancellationToken.None);
+
+        await repo.Received().SetBudgetHeldAsync(job.Id, BudgetScopeKind.TenantMonthly, BudgetCapKind.Hard, 5_000m, 5_000m, Arg.Any<CancellationToken>());
+        await leaseStore.DidNotReceive()
+            .TryClaimAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await eventPublisher.Received().PublishAsync(
+            Arg.Is<BudgetEventNotification>(n =>
+                n.EventType == BudgetEventType.HardCapReached &&
+                n.Scope == BudgetScopeKind.TenantMonthly &&
+                n.ClientId == job.ClientId &&
+                n.JobId == job.Id),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_HoldsPendingJob_WhenThePullRequestReachedItsHourlyReviewLimit()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(204);
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var leaseStore = CreateLeaseStore(job);
+        repo.SetAdmissionHeldAsync(job.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                held.TrySetResult();
+                return Task.CompletedTask;
+            });
+        // Four reviews in the window, the oldest of them 59 minutes ago, so the hold lasts the minute left of
+        // that review's hour.
+        var oldestSubmittedAt = DateTimeOffset.UtcNow.AddMinutes(-59);
+        repo.GetSubmissionWindowAsync(
+                job.ClientId,
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                Arg.Any<DateTimeOffset>(),
+                job.Id,
+                Arg.Any<CancellationToken>())
+            .Returns(new ReviewSubmissionWindow(4, oldestSubmittedAt));
+
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxReviewsPerPullRequestPerHour: 4));
+
+        var logger = Substitute.For<ILogger<ReviewJobWorker>>();
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobLeaseStore)).Returns(leaseStore);
+        sp.GetService(typeof(IClientRegistry)).Returns(clientRegistry);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(Substitute.For<IReviewJobProcessor>());
+
+        var worker = new ReviewJobWorker(
+            scopeFactory, CreateWorkerOptions(), CreateLeaseOptions(),
+            CreateMetrics(), CreateCancellationRegistry(),
+            TimeProvider.System, logger);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        _ = worker.StartAsync(cts.Token);
+        await held.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await cts.CancelAsync();
+        await worker.StopAsync(CancellationToken.None);
+
+        // The hold lasts until the oldest review in the window leaves it, so a hold computed from any other
+        // instant releases the job too early or keeps it waiting past the limit it was measured against.
+        var expectedHeldUntil = oldestSubmittedAt.AddHours(1);
+        await repo.Received().SetAdmissionHeldAsync(
+            job.Id,
+            Arg.Is<DateTimeOffset>(heldUntil => (heldUntil - expectedHeldUntil).Duration() < TimeSpan.FromSeconds(1)),
+            Arg.Any<CancellationToken>());
+        await leaseStore.DidNotReceive()
+            .TryClaimAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+    }
+
+    // A database outage while the hold is written must not end the background service: the job stays pending
+    // and is weighed again on the next tick, and every other pending job goes on being processed.
+    [Fact]
+    public async Task Worker_KeepsRunning_WhenWritingTheAdmissionHoldFails()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(206);
+        var attemptedTwice = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+        var leaseStore = CreateLeaseStore(job);
+        repo.SetAdmissionHeldAsync(job.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref attempts) >= 2)
+                {
+                    attemptedTwice.TrySetResult();
+                }
+
+                return Task.FromException(new InvalidOperationException("the job table is unreachable"));
+            });
+        repo.GetSubmissionWindowAsync(
+                job.ClientId,
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                Arg.Any<DateTimeOffset>(),
+                job.Id,
+                Arg.Any<CancellationToken>())
+            .Returns(new ReviewSubmissionWindow(4, DateTimeOffset.UtcNow.AddMinutes(-59)));
+
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxReviewsPerPullRequestPerHour: 4));
+
+        var logger = Substitute.For<ILogger<ReviewJobWorker>>();
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobLeaseStore)).Returns(leaseStore);
+        sp.GetService(typeof(IClientRegistry)).Returns(clientRegistry);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(Substitute.For<IReviewJobProcessor>());
+
+        var worker = new ReviewJobWorker(
+            scopeFactory, CreateWorkerOptions(), CreateLeaseOptions(),
+            CreateMetrics(), CreateCancellationRegistry(),
+            TimeProvider.System, logger);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        _ = worker.StartAsync(cts.Token);
+
+        // A second attempt is a second tick, so the loop the first failure ran inside is still going.
+        await attemptedTwice.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(worker.IsRunning);
+
+        await cts.CancelAsync();
+        await worker.StopAsync(CancellationToken.None);
+
+        // The job was neither held nor started, so it is still pending for a later tick.
+        await leaseStore.DidNotReceive()
+            .TryClaimAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_ReturnsJobsWhoseHoldHasPassed_ToTheQueueAtTheStartOfEachTick()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(205);
+        var releasedTwice = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // The order the calls arrive in. A release that ran after the candidates were claimed would leave a job
+        // whose window had passed sitting behind the very tick that was meant to pick it up.
+        var calls = new List<string>();
+        var releases = 0;
+        var holdReleased = false;
+        var leaseStore = CreateLeaseStore(job);
+        leaseStore.GetClaimCandidatesAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                bool queued;
+                lock (calls)
+                {
+                    calls.Add("claim-candidates");
+                    queued = holdReleased;
+                }
+
+                // The held job is not a candidate until the release put it back on the queue, as the database
+                // has it: the candidate query reads pending rows, and a hold is not one.
+                return Task.FromResult<IReadOnlyList<ReviewJob>>(queued && call.ArgAt<DateTimeOffset?>(1) is null ? [job] : []);
+            });
+        repo.ReleaseDueAdmissionHoldsAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                lock (calls)
+                {
+                    calls.Add("release-holds");
+                    holdReleased = true;
+                    releases++;
+                    if (releases >= 2)
+                    {
+                        releasedTwice.TrySetResult();
+                    }
+                }
+
+                return Task.FromResult(1);
+            });
+
+        var logger = Substitute.For<ILogger<ReviewJobWorker>>();
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobLeaseStore)).Returns(leaseStore);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(Substitute.For<IReviewJobProcessor>());
+
+        var worker = new ReviewJobWorker(
+            scopeFactory, CreateWorkerOptions(), CreateLeaseOptions(),
+            CreateMetrics(), CreateCancellationRegistry(),
+            TimeProvider.System, logger);
+        // Two ticks on a loaded machine take longer than the single tick the other tests here wait for.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        _ = worker.StartAsync(cts.Token);
+        await releasedTwice.Task.WaitAsync(TimeSpan.FromSeconds(20));
+
+        await cts.CancelAsync();
+        await worker.StopAsync(CancellationToken.None);
+
+        // The released job reached the queue, so the claim that followed the release took it.
+        await leaseStore.Received().TryClaimAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+
+        List<string> observed;
+        lock (calls)
+        {
+            observed = [.. calls];
+        }
+
+        // A tick that had already begun when the cancellation arrived releases once more, so the count is a
+        // floor and not an exact number.
+        var observedReleases = observed.Count(call => call == "release-holds");
+        Assert.True(observedReleases >= 2, "The worker released due holds fewer than twice.");
+
+        // Each tick releases once and then claims, so two releases in a row is a loop releasing without doing
+        // the work each release is for. Counting releases against claims would fail a healthy loop instead,
+        // because one tick claims several windows.
+        Assert.DoesNotContain(
+            observed.Zip(observed.Skip(1)),
+            pair => pair.First == "release-holds" && pair.Second == "release-holds");
+
+        // Every tick opens with the release, so a job whose window passed is a candidate on that same tick.
+        var firstRelease = observed.IndexOf("release-holds");
+        var firstClaim = observed.IndexOf("claim-candidates");
+        var secondRelease = observed.IndexOf("release-holds", firstRelease + 1);
+
+        Assert.Equal(0, firstRelease);
+        Assert.True(firstClaim > firstRelease, "The first tick claimed candidates before releasing due holds.");
+        Assert.True(secondRelease > firstClaim, "The second tick did not release due holds again.");
     }
 
     // A window the fleet skip emptied completely used to end the cycle, so a tenant with no runner whose job

@@ -73,7 +73,8 @@ public sealed class GitHubReviewThreadReplyPublisherTests
 
         var sut = new GitHubReviewThreadReplyPublisher(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var commentId = await sut.ReplyAsync(clientId, thread, "Fixed in the latest push.");
 
@@ -82,7 +83,13 @@ public sealed class GitHubReviewThreadReplyPublisherTests
         Assert.Contains("addPullRequestReviewThreadReply", mutationBody, StringComparison.Ordinal);
         Assert.Contains("pullRequestReviewThreadId", mutationBody, StringComparison.Ordinal);
         Assert.Contains(ThreadNodeId, mutationBody, StringComparison.Ordinal);
-        Assert.Contains("Fixed in the latest push.", mutationBody, StringComparison.Ordinal);
+
+        // The body the mutation carries, not the body the formatter would have produced: a publisher that
+        // ignores the injected composer sends the reply without the marker and still passes a formatter test.
+        using var mutation = JsonDocument.Parse(mutationBody);
+        Assert.Equal(
+            "Fixed in the latest push.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            mutation.RootElement.GetProperty("variables").GetProperty("body").GetString());
 
         // The REST numeric id, not the node id: everything else that identifies a GitHub comment, including
         // thread ownership, keys on that encoding.
@@ -113,7 +120,8 @@ public sealed class GitHubReviewThreadReplyPublisherTests
 
         var sut = new GitHubReviewThreadReplyPublisher(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ReplyAsync(clientId, thread, "Fixed in the latest push."));
 
@@ -139,7 +147,8 @@ public sealed class GitHubReviewThreadReplyPublisherTests
 
         var sut = new GitHubReviewThreadReplyPublisher(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ReplyAsync(clientId, thread, "Fixed in the latest push."));
 
@@ -164,7 +173,8 @@ public sealed class GitHubReviewThreadReplyPublisherTests
 
         var sut = new GitHubReviewThreadReplyPublisher(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ReplyAsync(clientId, thread, "Fixed in the latest push."));
 
@@ -190,7 +200,8 @@ public sealed class GitHubReviewThreadReplyPublisherTests
 
         var sut = new GitHubReviewThreadReplyPublisher(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ReplyAsync(clientId, thread, "Fixed in the latest push."));
 
@@ -202,13 +213,15 @@ public sealed class GitHubReviewThreadReplyPublisherTests
     [Fact]
     public void FormatReplyText_NeutralizesMarkupWithoutManglingQuotedCode()
     {
-        const string input = "Use \"--no-verify\" only after removing <script>alert('xss')</script>.";
+        const string input =
+            "Use \"--no-verify\" only after removing <script>alert('xss')</script> and <img src=x onerror=alert(1)>.";
 
-        var reply = GitHubReviewThreadReplyPublisher.FormatReplyText(input);
+        var reply = GitHubReviewThreadReplyPublisher.FormatReplyText(input, TestPostedCommentComposer.Distinctive);
 
-        Assert.Contains("\"--no-verify\"", reply, StringComparison.Ordinal);
-        Assert.DoesNotContain("&quot;", reply, StringComparison.Ordinal);
-        Assert.Equal(-1, reply.IndexOf("<script>", StringComparison.Ordinal));
+        Assert.Equal(
+            "Use \"--no-verify\" only after removing <\u200Bscript>alert('xss')<\u200B/script> and "
+            + "<\u200Bimg src=x onerror=alert(1)>.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            reply);
     }
 
     private static ReviewThreadRef CreateThread(ProviderHostRef host)
@@ -259,5 +272,15 @@ public sealed class GitHubReviewThreadReplyPublisherTests
         {
             return responder(request);
         }
+    }
+
+    [Fact]
+    public void FormatReplyText_EndsWithTheMarker()
+    {
+        var reply = GitHubReviewThreadReplyPublisher.FormatReplyText(
+            "Fixed in the latest push.",
+            TestPostedCommentComposer.Distinctive);
+
+        Assert.Equal("Fixed in the latest push.\n\n" + TestPostedCommentComposer.DistinctiveMarker, reply);
     }
 }

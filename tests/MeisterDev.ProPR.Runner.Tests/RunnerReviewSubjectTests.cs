@@ -251,6 +251,39 @@ public sealed class RunnerReviewSubjectTests
         return new ReviewComment("src/a.cs", 1, CommentSeverity.Warning, "Bounded?");
     }
 
+    // The tenant's per-file limit lives on the manifest because a runner has no client record to read it
+    // from. Dropped here, the tools fall back to the installation limit and a remote review reads files a
+    // tenant with a tighter limit meant to keep out.
+    [Fact]
+    public async Task TheToolsRequest_CarriesTheTenantFileSizeLimitFromTheManifest()
+    {
+        var sample = RunnerManifests.Sample(["src/a.cs"]);
+        var manifest = sample with
+        {
+            Behaviour = new RunnerReviewBehaviour(false, false, false, true, null, null, MaxFileSizeBytes: 262_144),
+        };
+        var workspace = new FakeWorkspace { Changed = [new ChangedFileSummary("src/a.cs", ChangeType.Edit)] };
+        var job = RunnerReviewSubject.BuildJob(manifest);
+        var pr = await RunnerReviewSubject.BuildPullRequestAsync(manifest, workspace, CancellationToken.None);
+
+        var request = RunnerJobExecutor.BuildToolsRequest(manifest, job, pr, workspace);
+
+        Assert.Equal(262_144, request.MaxFileSizeBytes);
+    }
+
+    [Fact]
+    public async Task TheToolsRequest_LeavesTheFileSizeLimitUnset_WhenTheManifestStatesNone()
+    {
+        var manifest = RunnerManifests.Sample(["src/a.cs"]);
+        var workspace = new FakeWorkspace { Changed = [new ChangedFileSummary("src/a.cs", ChangeType.Edit)] };
+        var job = RunnerReviewSubject.BuildJob(manifest);
+        var pr = await RunnerReviewSubject.BuildPullRequestAsync(manifest, workspace, CancellationToken.None);
+
+        var request = RunnerJobExecutor.BuildToolsRequest(manifest, job, pr, workspace);
+
+        Assert.Null(request.MaxFileSizeBytes);
+    }
+
     private sealed class FakeWorkspace : IReviewRepositoryWorkspace
     {
         public IReadOnlyList<ChangedFileSummary> Changed { get; set; } = [];
@@ -276,6 +309,18 @@ public sealed class RunnerReviewSubjectTests
             this.Reads.Add(path);
             return Task.FromResult(this.Contents.GetValueOrDefault(path));
         }
+
+        /// <summary>What a measurement of this workspace answers, so a test can put it either side of a bound.</summary>
+        public int ChangedLines { get; set; }
+
+        public long DiffBytes { get; set; }
+
+        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
+            Task.FromResult(this.ChangedLines);
+
+        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
+            Task.FromResult(this.DiffBytes);
+
 
         public Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct) =>
             Task.FromResult(this.Diffs.GetValueOrDefault(path));

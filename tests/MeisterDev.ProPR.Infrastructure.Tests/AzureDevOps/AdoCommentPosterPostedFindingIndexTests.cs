@@ -478,7 +478,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 });
         };
 
-        var poster = new AdoCommentPoster(null!, null!, postedFindingIndex: index);
+        var poster = new AdoCommentPoster(null!, null!, TestPostedCommentComposer.Default, postedFindingIndex: index);
         return poster.PostResolvedThreadsAsync(
             result,
             factory,
@@ -493,6 +493,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
             changeTrackingIds: new Dictionary<string, int>(),
             existingThreads: existingThreads,
             publicationIdentity: null,
+            replyFactory: null,
             CancellationToken.None);
     }
 }

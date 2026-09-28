@@ -60,6 +60,34 @@ public sealed class WorkspacePurgeTests : IDisposable
         this.CreateFetcher().Purge(Guid.NewGuid());
     }
 
+    /// <summary>
+    ///     The startup sweep runs before the host enrols. A work root it cannot read used to end the process
+    ///     there, and an orchestrator restarted the container into the same failure without an operator ever
+    ///     seeing the reason.
+    /// </summary>
+    [Fact]
+    public void APurgeOnAWorkRootThisHostCannotRead_IsReportedAndNotThrown()
+    {
+        // A file mode decides who may list a directory on Linux, and a privileged process may list one
+        // whatever its mode says. Elsewhere this case cannot be arranged, and the test asserts nothing.
+        if (!OperatingSystem.IsLinux() || Environment.IsPrivilegedProcess)
+        {
+            return;
+        }
+
+        this.GiveJobAWorkingCopy(Guid.NewGuid());
+        File.SetUnixFileMode(this._root, UnixFileMode.None);
+
+        try
+        {
+            this.CreateFetcher().Purge();
+        }
+        finally
+        {
+            File.SetUnixFileMode(this._root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(this._root))

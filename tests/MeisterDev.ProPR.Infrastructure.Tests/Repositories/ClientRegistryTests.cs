@@ -688,6 +688,103 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.Equal(ReviewOutputLanguage.Default, language);
     }
 
+    [Fact]
+    public async Task GetReviewAdmissionPolicyAsync_ReturnsTheStoredBoundsAndLeavesAnUnsetOneNull()
+    {
+        var client = await this.SeedClientAsync();
+        client.AdmissionMaxChangedFiles = 150;
+        client.AdmissionMaxChangedLines = 20_000;
+        client.AdmissionMaxReviewsPerPullRequestPerHour = 4;
+        await this._dbContext.SaveChangesAsync();
+
+        var policy = await this._registry.GetReviewAdmissionPolicyAsync(client.Id);
+
+        Assert.Equal(150, policy.MaxChangedFiles);
+        Assert.Equal(20_000, policy.MaxChangedLines);
+        Assert.Equal(4, policy.MaxReviewsPerPullRequestPerHour);
+        Assert.Null(policy.MaxDiffBytes);
+        Assert.Null(policy.MaxRepositoryMegabytes);
+        Assert.True(policy.AnyConfigured);
+    }
+
+    [Fact]
+    public async Task GetReviewAdmissionPolicyAsync_ReturnsAnUnboundedPolicyForAnUnknownClient()
+    {
+        var policy = await this._registry.GetReviewAdmissionPolicyAsync(Guid.NewGuid());
+
+        Assert.False(policy.AnyConfigured);
+        Assert.Null(policy.MaxChangedFiles);
+    }
+
+    [Fact]
+    public async Task GetTenantReviewLimitsAsync_ReturnsNothingForATenantThatStatesNoLimits()
+    {
+        var client = await this.SeedClientAsync();
+
+        var limits = await this._registry.GetTenantReviewLimitsAsync(client.Id);
+
+        Assert.False(limits.AnyStated);
+        Assert.Null(limits.MaxFileSizeBytes);
+        Assert.Null(limits.MaxStructuralParseBytes);
+    }
+
+    [Fact]
+    public async Task GetTenantReviewLimitsAsync_ReturnsNothingForAnUnknownClient()
+    {
+        var limits = await this._registry.GetTenantReviewLimitsAsync(Guid.NewGuid());
+
+        Assert.False(limits.AnyStated);
+        Assert.Null(limits.MaxFileSizeBytes);
+        Assert.Null(limits.MaxStructuralParseBytes);
+    }
+
+    [Fact]
+    public async Task GetTenantReviewLimitsAsync_ReturnsTheLimitsOfTheTenantTheClientBelongsTo()
+    {
+        var tenantId = Guid.NewGuid();
+        this._dbContext.Tenants.Add(
+            new TenantRecord
+            {
+                Id = tenantId,
+                Slug = $"limits-{tenantId:N}",
+                DisplayName = "Limits Tenant",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                AiMaxFileSizeBytes = 262_144,
+                AiMaxStructuralParseBytes = 131_072,
+            });
+        var client = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Limits Client",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        this._dbContext.Clients.Add(client);
+        await this._dbContext.SaveChangesAsync();
+        this._seededClientIds.Add(client.Id);
+
+        try
+        {
+            var limits = await this._registry.GetTenantReviewLimitsAsync(client.Id);
+
+            Assert.Equal(262_144, limits.MaxFileSizeBytes);
+            Assert.Equal(131_072, limits.MaxStructuralParseBytes);
+        }
+        finally
+        {
+            await this._dbContext.Clients.Where(row => row.Id == client.Id).ExecuteDeleteAsync();
+            await this._dbContext.Tenants.Where(row => row.Id == tenantId).ExecuteDeleteAsync();
+            this._seededClientIds.Remove(client.Id);
+
+            // The bulk delete went straight to the database, so the context still tracks a row that is gone.
+            // Left tracked, the next save through this context works on a stale entity.
+            this._dbContext.Entry(client).State = EntityState.Detached;
+        }
+    }
+
     private async Task<ClientRecord> SeedClientAsync()
     {
         var record = new ClientRecord

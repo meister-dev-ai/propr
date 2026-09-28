@@ -53,7 +53,7 @@ fi
 # ── 2. Backend: build and test ───────────────────────────────────────────────
 if [ -n "$STAGED_BACKEND_FILES" ]; then
     echo "pre-commit: running dotnet build..."
-    if ! dotnet build ./MeisterDev.ProPR.slnx --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
+    if ! dotnet build ./MeisterDev.ProPR.slnx --no-restore --configuration Release --nologo -m:1 -p:UseSharedCompilation=false -consoleLoggerParameters:NoSummary 2>&1; then
         echo ""
         echo "pre-commit: FAILED -- build errors detected."
         echo "Fix the compilation errors and commit again."
@@ -63,7 +63,7 @@ if [ -n "$STAGED_BACKEND_FILES" ]; then
     echo "pre-commit: build passed."
 
     echo "pre-commit: running dotnet test..."
-    if ! dotnet test ./MeisterDev.ProPR.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet 2>&1; then
+    if ! dotnet test ./MeisterDev.ProPR.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet -m:1 -p:UseSharedCompilation=false 2>&1; then
         echo ""
         echo "pre-commit: FAILED -- one or more backend tests failed."
         echo "Fix the failing tests and commit again."

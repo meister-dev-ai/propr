@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.Features.Admission;
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -38,7 +40,9 @@ public sealed partial class RunnerJobDispatchPreparer(
     ReviewJobReuse? reuse = null,
     IRepositoryExclusionFetcher? exclusionFetcher = null,
     IReviewFileResultStore? priorRows = null,
-    ILogger<RunnerJobDispatchPreparer>? logger = null) : IRunnerJobDispatchPreparer
+    ILogger<RunnerJobDispatchPreparer>? logger = null,
+    IClientRegistry? clientRegistry = null,
+    IReviewAdmissionNotice? admissionNotice = null) : IRunnerJobDispatchPreparer
 {
     /// <inheritdoc />
     public async Task<RunnerJobDispatchPreparation> PrepareAsync(
@@ -64,6 +68,12 @@ public sealed partial class RunnerJobDispatchPreparer(
             return RunnerJobDispatchPreparation.Failed("The job has no resolved review revision, so no workspace can be prepared for it.");
         }
 
+        var admissionPolicy = clientRegistry is null
+            ? ReviewAdmissionPolicy.None
+            : await clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, ct) ?? ReviewAdmissionPolicy.None;
+
+        // Preparation carries the client's repository-size bound and stops the transfer that passes it, so a
+        // repository over the bound occupies neither this replica's disk nor the runner's.
         var preparation = await workspaces.PrepareAsync(
             new ReviewRepositoryWorkspaceRequest(
                 job.Id,
@@ -74,8 +84,14 @@ public sealed partial class RunnerJobDispatchPreparer(
                 job.PullRequestId,
                 job.ReviewRevisionReference,
                 sourceBranch,
-                targetBranch),
+                targetBranch,
+                MaxRepositoryMegabytes: admissionPolicy.MaxRepositoryMegabytes),
             ct);
+
+        if (preparation.Failure?.RepositorySizeBreach is { } sizeBreach)
+        {
+            return RunnerJobDispatchPreparation.Failed(await this.RefuseOversizedRepositoryAsync(job, sizeBreach, ct));
+        }
 
         if (!preparation.Succeeded)
         {
@@ -107,6 +123,14 @@ public sealed partial class RunnerJobDispatchPreparer(
         // job leased to a runner neither re-pays finished work nor synthesizes over a different set than
         // the in-process path would have.
         await this.AdoptPriorWorkAsync(job, workspaceLease, targetBranch, changedPaths, ct);
+
+        // Both execution paths converge here: the workspace is prepared, prior work is adopted, and nothing has
+        // been spent. What the review would take on is measured against the bounds the client set before the
+        // manifest is built.
+        if (await this.RefuseOversizedReviewAsync(job, workspace, targetBranch, changedPaths, ct) is { } refusal)
+        {
+            return RunnerJobDispatchPreparation.Failed(refusal);
+        }
 
         var conversation = await this.ReadConversationAsync(job, ct);
 
@@ -140,7 +164,12 @@ public sealed partial class RunnerJobDispatchPreparer(
                     [.. changedPaths.Select(ChangedPathSnapshot.FromChangedFileSummary)],
                     Workspace: workspace,
                     WorkspaceLease: workspaceLease,
-                    WorkspaceFailure: preparation.Failure)),
+                    WorkspaceFailure: preparation.Failure,
+                    // The tools a runner reaches back through answer to the tenant's limit, as the in-process
+                    // tools do.
+                    MaxFileSizeBytes: clientRegistry is null
+                        ? null
+                        : (await clientRegistry.GetTenantReviewLimitsAsync(job.ClientId, ct))?.MaxFileSizeBytes)),
 
             // The same fact the in-process path gates its ProCursor tools on. Read from the gateway rather
             // than from the tools object, whose own answer is internal to the review assembly; a host with
@@ -314,6 +343,137 @@ public sealed partial class RunnerJobDispatchPreparer(
     }
 
     /// <summary>Fail-soft, like the in-process fetch: no rules beats no dispatch.</summary>
+    /// <summary>
+    ///     Refuses a review whose size exceeds a bound its client set, and returns the reason. The job ends
+    ///     carrying that reason and the reason is posted on the pull request. Null when the review may run.
+    /// </summary>
+    /// <remarks>
+    ///     The control plane holds the changed paths and the mirror here, so every size dimension is measured
+    ///     from the mirror: the diff bytes are counted while git streams the diff out, which keeps the same
+    ///     bound in force on both execution paths without the diff being loaded to weigh it.
+    /// </remarks>
+    private async Task<string?> RefuseOversizedReviewAsync(
+        ReviewJob job,
+        IReviewRepositoryWorkspace workspace,
+        string targetBranch,
+        IReadOnlyList<ChangedFileSummary> changedPaths,
+        CancellationToken ct)
+    {
+        if (clientRegistry is null)
+        {
+            return null;
+        }
+
+        var policy = await clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, ct) ?? ReviewAdmissionPolicy.None;
+        if (!policy.AnyDiffBoundConfigured)
+        {
+            return null;
+        }
+
+        var exclusionRules = await this.FetchExclusionRulesAsync(job, targetBranch, ct);
+        var adopted = priorRows is null
+            ? []
+            : (await priorRows.GetByIdWithFileResultsAsync(job.Id, ct))?.FileReviewResults
+            .Select(row => row.FilePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+
+        var toReview = changedPaths
+            .Where(file => !exclusionRules.Matches(file.Path) && !adopted.Contains(file.Path))
+            .Select(file => file.Path)
+            .ToList();
+
+        // An empty set is measured as zero, not left unmeasured: the evaluator treats a null dimension as one
+        // this point cannot answer, and a review with nothing to review can answer it.
+        int? changedLines = null;
+        if (policy.MaxChangedLines is not null)
+        {
+            changedLines = toReview.Count == 0 ? 0 : await workspace.CountChangedLinesAsync(toReview, ct);
+        }
+
+        long? diffBytes = null;
+        if (policy.MaxDiffBytes is not null)
+        {
+            diffBytes = toReview.Count == 0 ? 0 : await workspace.CountDiffBytesAsync(toReview, ct);
+        }
+
+        var decision = ReviewAdmissionEvaluator.Evaluate(
+            policy,
+            new ReviewAdmissionMeasurement(
+                toReview.Count,
+                changedLines,
+                diffBytes),
+            DateTimeOffset.UtcNow);
+        if (decision.Outcome != ReviewAdmissionOutcome.Refuse)
+        {
+            return null;
+        }
+
+        // The refusal is recorded before the notice goes out, and the store answers whether this call was the
+        // one that refused the job, so a re-dispatch of the same revision posts no second notice.
+        if (await jobs.SetAdmissionRefusedAsync(job.Id, decision.Reason!, policy.Fingerprint, ct))
+        {
+            await this.PostAdmissionNoticeAsync(job, decision.Reason!, ct);
+        }
+
+        return decision.Reason;
+    }
+
+    /// <summary>
+    ///     Refuses a job whose repository passed the client's repository-size bound while workspace
+    ///     preparation was transferring it, and returns the reason the dispatch reports.
+    /// </summary>
+    /// <param name="job">The refused job.</param>
+    /// <param name="breach">The size measured when the transfer was stopped, and the bound it passed.</param>
+    /// <param name="ct">The cancellation token.</param>
+    private async Task<string> RefuseOversizedRepositoryAsync(
+        ReviewJob job,
+        ReviewRepositorySizeBreach breach,
+        CancellationToken ct)
+    {
+        var decision = ReviewAdmissionEvaluator.RefuseOversizedRepository(breach.MeasuredMegabytes, breach.LimitMegabytes);
+
+        // The breach carries the measured size and the limit only, so the client's bounds are read here. The
+        // refusal records the bounds it was decided under. An automatic trigger compares them with the client's
+        // current bounds before it reviews this head again.
+        var policy = await clientRegistry.GetReviewAdmissionPolicyAsync(job.ClientId, ct) ?? ReviewAdmissionPolicy.None;
+
+        // The refusal is recorded before the notice goes out, and the store answers whether this call was the
+        // one that refused the job, so a re-dispatch of the same revision posts no second notice.
+        if (await jobs.SetAdmissionRefusedAsync(job.Id, decision.Reason!, policy.Fingerprint, ct))
+        {
+            await this.PostAdmissionNoticeAsync(job, decision.Reason!, ct);
+        }
+
+        return decision.Reason!;
+    }
+
+    /// <summary>
+    ///     Posts the refusal on the pull request. The job is already refused and carries the reason, so a
+    ///     provider that refuses the comment leaves the refusal standing and the failure logged.
+    /// </summary>
+    private async Task PostAdmissionNoticeAsync(ReviewJob job, string reason, CancellationToken ct)
+    {
+        if (admissionNotice is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // This path refuses before the pull request is fetched, so it has no threads to reply into.
+            await admissionNotice.PostAsync(job, reason, existingThreads: null, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogAdmissionNoticeNotPosted(logger, job.Id, ex);
+        }
+    }
+
+    [Microsoft.Extensions.Logging.LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The admission refusal for review job {JobId} could not be posted on the pull request; the job carries the reason")]
+    private static partial void LogAdmissionNoticeNotPosted(ILogger? logger, Guid jobId, Exception ex);
+
     private async Task<ReviewExclusionRules> FetchExclusionRulesAsync(ReviewJob job, string targetBranch, CancellationToken ct)
     {
         if (exclusionFetcher is null)

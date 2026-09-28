@@ -34,6 +34,7 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
     private static readonly DateTimeOffset Now = new(2026, 7, 15, 9, 14, 0, TimeSpan.Zero);
 
     private Guid _clientId;
+    private Guid _tenantId;
     private MeisterProPRDbContext _dbContext = null!;
     private TestDbContextFactory _factory = null!;
     private BudgetSpendResetRepository _resetRepository = null!;
@@ -49,12 +50,26 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
         this._factory = new TestDbContextFactory(options);
         this._resetRepository = new BudgetSpendResetRepository(this._factory);
 
+        this._tenantId = Guid.NewGuid();
+        this._dbContext.Tenants.Add(
+            new TenantRecord
+            {
+                Id = this._tenantId,
+                Slug = $"budget-caps-{this._tenantId:N}",
+                DisplayName = "Budget Caps Test Tenant",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                MonthlyBudgetSoftCapUsd = 700m,
+                MonthlyBudgetHardCapUsd = 900m,
+            });
+
         this._clientId = Guid.NewGuid();
         this._dbContext.Clients.Add(
             new ClientRecord
             {
                 Id = this._clientId,
-                TenantId = TenantCatalog.SystemTenantId,
+                TenantId = this._tenantId,
                 DisplayName = "Budget Caps Test Client",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -72,6 +87,7 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
 
         await this._dbContext.BudgetSpendResets.Where(r => r.ClientId == this._clientId).ExecuteDeleteAsync();
         await this._dbContext.Clients.Where(c => c.Id == this._clientId).ExecuteDeleteAsync();
+        await this._dbContext.Tenants.Where(t => t.Id == this._tenantId).ExecuteDeleteAsync();
         await this._dbContext.DisposeAsync();
     }
 
@@ -120,6 +136,32 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
 
         Assert.True(caps.AnyConfigured);
         Assert.Equal(100m, caps.MonthlyHardCapUsd);
+    }
+
+    [Fact]
+    public async Task GetCapsAsync_ReturnsTheCapsOfTheTenantTheClientBelongsTo()
+    {
+        var provider = this.CreateProvider();
+
+        var caps = await provider.GetCapsAsync(this._clientId);
+
+        Assert.Equal(700m, caps.TenantMonthlySoftCapUsd);
+        Assert.Equal(900m, caps.TenantMonthlyHardCapUsd);
+    }
+
+    [Fact]
+    public async Task GetCapsAsync_LeavesTheTenantCapsOutOfTheManualResetAllowance()
+    {
+        // A manual reset tops up the client's monthly caps. The tenant ceiling is raised by changing it, so the
+        // allowance must not move it.
+        await this.GrantResetAsync(Now.UtcDateTime, topUpHardUsd: 100m);
+        var provider = this.CreateProvider();
+
+        var caps = await provider.GetCapsAsync(this._clientId);
+
+        // The client cap absorbed the allowance, the tenant cap stayed where it was configured.
+        Assert.Equal(200m, caps.MonthlyHardCapUsd);
+        Assert.Equal(900m, caps.TenantMonthlyHardCapUsd);
     }
 
     [Fact]

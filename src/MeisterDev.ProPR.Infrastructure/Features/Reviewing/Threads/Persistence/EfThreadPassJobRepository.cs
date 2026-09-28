@@ -177,10 +177,10 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
     /// <inheritdoc />
     public async Task SetBudgetExceededAsync(
         Guid jobId,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default)
     {
         // Terminal only from the running state, on the same terms as completion: a cancelled pull request has

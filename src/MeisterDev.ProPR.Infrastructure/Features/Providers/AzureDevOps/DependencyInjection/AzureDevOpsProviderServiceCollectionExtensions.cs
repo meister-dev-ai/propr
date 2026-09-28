@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using Azure.Core;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
@@ -12,6 +13,7 @@ using MeisterDev.ProPR.Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 
@@ -19,6 +21,8 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
 {
     public static IServiceCollection AddAzureDevOpsProviderAdapters(this IServiceCollection services)
     {
+        services.AddPostedCommentComposer();
+
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IRepositoryDiscoveryProvider, AdoRepositoryDiscoveryProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewerIdentityService, AdoReviewerIdentityService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewQueryService, AdoCodeReviewQueryService>());
@@ -34,6 +38,8 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
         IConfiguration configuration,
         TokenCredential? credential = null)
     {
+        services.AddPostedCommentComposer();
+
         if (configuration.GetValue<bool>("ADO_STUB_PR"))
         {
             services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderPullRequestFetcher, StubPullRequestFetcher>());
@@ -56,7 +62,11 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
 
         ArgumentNullException.ThrowIfNull(credential);
 
-        services.TryAddSingleton(_ => new VssConnectionFactory(credential));
+        // Replaced instead of kept: a factory registered before this one was built without the installation's
+        // egress posture and would apply the strictest default to every Azure DevOps address, including the
+        // private one an operator opted in to reach.
+        services.RemoveAll<VssConnectionFactory>();
+        services.AddSingleton(sp => new VssConnectionFactory(credential, sp.GetRequiredService<EgressUrlPolicy>()));
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderPullRequestFetcher, AdoPrFetcher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ILinkedItemProvider, AdoLinkedItemProvider>());
         services.TryAddScoped<IPullRequestFetcher, ProviderPullRequestFetcher>();

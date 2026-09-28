@@ -19,7 +19,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
 
 internal sealed class ForgejoCodeReviewPublicationService(
     ForgejoConnectionVerifier connectionVerifier,
-    IHttpClientFactory httpClientFactory) : ICodeReviewPublicationService
+    IHttpClientFactory httpClientFactory,
+    IPostedCommentComposer composer) : ICodeReviewPublicationService
 {
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
 
@@ -44,7 +45,7 @@ internal sealed class ForgejoCodeReviewPublicationService(
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
         await this.DeletePendingReviewsAsync(review, reviewer, context.Connection.Secret, ct);
-        var payload = BuildPayload(revision, result, reviewer);
+        var payload = BuildPayload(revision, result, reviewer, composer);
         using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
             ForgejoConnectionVerifier.BuildApiUri(
                 review.Repository.Host,
@@ -205,7 +206,8 @@ internal sealed class ForgejoCodeReviewPublicationService(
     private static ForgejoCreatePullReviewRequest BuildPayload(
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity author)
+        ReviewerIdentity author,
+        IPostedCommentComposer composer)
     {
         var summaryBuilder = new StringBuilder();
         summaryBuilder.AppendLine($"## {author.DisplayName} Review");
@@ -220,7 +222,7 @@ internal sealed class ForgejoCodeReviewPublicationService(
             {
                 inlineComments.Add(
                     new ForgejoCreatePullReviewComment(
-                        $"{FormatSeverity(comment.Severity)}: {comment.Message}",
+                        composer.Append($"{FormatSeverity(comment.Severity)}: {comment.Message}"),
                         NormalizePath(comment.FilePath),
                         comment.LineNumber.Value,
                         0));
@@ -235,7 +237,7 @@ internal sealed class ForgejoCodeReviewPublicationService(
         ContextBudgetSummarySections.Append(summaryBuilder, result);
 
         return new ForgejoCreatePullReviewRequest(
-            summaryBuilder.ToString().Trim(),
+            composer.Append(summaryBuilder.ToString().Trim()),
             LooksLikeCommitSha(revision.HeadSha) ? revision.HeadSha : null,
             "COMMENT",
             inlineComments.Count == 0 ? null : inlineComments);

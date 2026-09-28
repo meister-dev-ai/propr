@@ -124,18 +124,18 @@ public interface IMentionReplyJobRepository
     ///     The increment resolved for the answer, or null when unknown. Recorded here because a refused answer
     ///     never reaches the write that would otherwise carry it.
     /// </param>
-    /// <param name="scope">The budget scope whose cap was reached.</param>
+    /// <param name="scope">The budget scope whose cap was reached, or null where the refusal named none.</param>
     /// <param name="capKind">Whether the cap was soft or hard.</param>
-    /// <param name="thresholdUsd">The configured cap.</param>
-    /// <param name="spentUsd">What the scope had spent.</param>
+    /// <param name="thresholdUsd">The configured cap, or null where the refusal named none.</param>
+    /// <param name="spentUsd">What the scope had spent, or null where the refusal named no cap.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task SetBudgetHeldAsync(
         Guid jobId,
         int? iterationId,
-        BudgetScopeKind scope,
+        BudgetScopeKind? scope,
         BudgetCapKind capKind,
-        decimal thresholdUsd,
-        decimal spentUsd,
+        decimal? thresholdUsd,
+        decimal? spentUsd,
         CancellationToken ct = default);
 
     /// <summary>Marks a job as failed with an error message.</summary>

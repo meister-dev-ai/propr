@@ -31,7 +31,7 @@ the rest.
 | Multiple SCM providers | `multiple-scm-providers` | One SCM provider connection per client |
 | Crawl configurations | `crawl-configs` | No scheduled crawling; reviews come from webhooks or the API |
 | Mention answering | `mention-answering` | A question asked of the reviewer in a pull request comment goes unanswered |
-| Budgeting | `budgeting` | Spend caps cannot be set or changed, and spend against them is not shown; caps already configured go on being enforced |
+| Budgeting | `budgeting` | Spend caps and a tenant's per-file review limits cannot be set or changed, and spend against the caps is not shown; caps and limits already configured go on being enforced |
 | Code Insights | `code-insights` | No quality analytics are collected or shown |
 | Multi-tenancy | `multi-tenancy` | One tenant only, the built-in System tenant, and nothing configured per tenant is reachable |
 
@@ -50,9 +50,10 @@ hand-defining a model is a tenant-scoped screen; see
 A capability that is off is refused with a message naming what is unavailable and what would make it
 available. The UI shows the feature as disabled instead of hiding it.
 
-Dropping back to Community deletes nothing. Crawl configurations, budget caps and additional provider
-connections stay in the database as you left them, and stop being exercised until the capability is available
-again. Budget caps are the exception: they go on being enforced in every edition, at every stage.
+Dropping back to Community deletes nothing. Crawl configurations and additional provider connections stay in
+the database as you left them, and stop being exercised until the capability is available again. Budget caps
+stay too, and they keep being enforced in every edition, at every stage: the capability governs setting and
+viewing them, not the protection a cap already set gives.
 
 If you are not sure whether the license caused a refusal, see
 [troubleshooting](../operate/troubleshooting.md).
@@ -71,8 +72,14 @@ or its term and grace window have both ended. `DELETE` on the same path removes 
 recorded.
 
 The accepted file is stored in your own database, protected at rest with the installation's
-[encryption key ring](security.md#the-encryption-key-ring). Restore the key ring together with the database:
-a stored license the key ring cannot open reads as no license until the file is activated again.
+[encryption key ring](security.md#the-encryption-key-ring). Restore the key ring together with the database.
+Where a key-ring protector is configured, the restore also needs what protects the ring: the certificate file
+`MEISTER_DATA_PROTECTION_CERTIFICATE_PATH` names, with
+`MEISTER_DATA_PROTECTION_CERTIFICATE_PASSWORD` set where that file is password-protected and left unset
+where it is not, or the vault key
+`MEISTER_DATA_PROTECTION_AZURE_KEY_VAULT_KEY_ID` names together with an identity that can unwrap it, and the
+blob holding the ring where one is configured. A stored license the key ring cannot open reads as no license
+until the file is activated again.
 
 Individual capabilities can be turned off on top of the license, through
 `PATCH /api/admin/licensing/overrides`. An override can only take away what the license grants.

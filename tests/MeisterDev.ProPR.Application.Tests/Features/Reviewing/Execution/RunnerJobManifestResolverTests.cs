@@ -123,7 +123,8 @@ public sealed class RunnerJobManifestResolverTests
         IScmProviderRegistry? providerRegistry = null,
         AiReviewOptions? reviewOptions = null,
         ILicensingCapabilityService? licensing = null,
-        IReviewJobExecutionStore? executionStore = null)
+        IReviewJobExecutionStore? executionStore = null,
+        ITenantReasoningCapturePolicyProvider? reasoningCapturePolicies = null)
     {
         return new RunnerJobManifestResolver(
             this._clients,
@@ -138,7 +139,61 @@ public sealed class RunnerJobManifestResolverTests
             providerRegistry: providerRegistry,
             reviewOptions: reviewOptions,
             licensing: licensing,
-            executionStore: executionStore);
+            executionStore: executionStore,
+            reasoningCapturePolicies: reasoningCapturePolicies);
+    }
+
+    // A runner binds its own reasoning-capture switch, so a manifest that left the field out would let the
+    // runner decide what a tenant's reasoning is allowed to leave behind.
+    [Theory]
+    [InlineData(ReasoningCapturePolicy.Disabled, false)]
+    [InlineData(ReasoningCapturePolicy.Enabled, true)]
+    public async Task TheManifest_CarriesTheTenantsReasoningCapturePolicy(
+        ReasoningCapturePolicy policy,
+        bool expected)
+    {
+        var job = JobWithRevision();
+        var policies = Substitute.For<ITenantReasoningCapturePolicyProvider>();
+        policies.GetForClientAsync(job.ClientId, Arg.Any<CancellationToken>()).Returns(policy);
+
+        var resolution = await this
+            .CreateResolver(
+                reviewOptions: new AiReviewOptions { CaptureReasoningInProtocol = !expected },
+                reasoningCapturePolicies: policies)
+            .ResolveAsync(RequestFor(job));
+
+        Assert.Equal(expected, resolution.Manifest!.Behaviour!.CaptureReasoning);
+    }
+
+    // A tenant that states nothing leaves the installation switch in charge, and the manifest states that
+    // resolved value so the runner's own switch does not decide it.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheManifest_CarriesTheInstallationSwitchWhenTheTenantStatesNothing(bool installationSwitch)
+    {
+        var job = JobWithRevision();
+        var policies = Substitute.For<ITenantReasoningCapturePolicyProvider>();
+        policies.GetForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReasoningCapturePolicy.InstallationDefault);
+
+        var resolution = await this
+            .CreateResolver(
+                reviewOptions: new AiReviewOptions { CaptureReasoningInProtocol = installationSwitch },
+                reasoningCapturePolicies: policies)
+            .ResolveAsync(RequestFor(job));
+
+        Assert.Equal(installationSwitch, resolution.Manifest!.Behaviour!.CaptureReasoning);
+    }
+
+    // The offline harness composes neither the policy provider nor the review options; the runner then keeps
+    // the default it had before the field existed.
+    [Fact]
+    public async Task TheManifest_LeavesTheFieldUnsetWhenThisHostStatesNothing()
+    {
+        var resolution = await this.CreateResolver().ResolveAsync(RequestFor(JobWithRevision()));
+
+        Assert.Null(resolution.Manifest!.Behaviour!.CaptureReasoning);
     }
 
     // The same stamp the in-process path writes at review start. Ingested spend is priced through the job's
@@ -501,12 +556,74 @@ public sealed class RunnerJobManifestResolverTests
                 new ReviewSpendBaseline(
                     new ReviewScopeSpend(30m, false),
                     new ReviewScopeSpend(5m, false),
-                    ReviewScopeSpend.None));
+                    ReviewScopeSpend.None, ReviewScopeSpend.None));
 
         var manifest = (await this.CreateResolver(caps, spend).ResolveAsync(RequestFor(job))).Manifest!;
 
         // Monthly leaves 70; the pull request leaves 15. The tighter one is what the executor may spend.
         Assert.Equal(15m, manifest.BudgetHeadroomUsd);
+    }
+
+    [Fact]
+    public async Task BudgetHeadroom_TakesTheTenantCapWhenItIsTheTighterOne()
+    {
+        var job = JobWithRevision();
+        var caps = Substitute.For<IBudgetCapsProvider>();
+        caps.GetCapsAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new BudgetCaps(null, 100m, null, null, null, null, null, 5_000m));
+        var spend = Substitute.For<IReviewSpendAccumulator>();
+        spend.GetBaselineAsync(Arg.Any<ReviewSpendSubject>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewSpendBaseline(
+                    new ReviewScopeSpend(30m, false),
+                    ReviewScopeSpend.None,
+                    ReviewScopeSpend.None,
+                    new ReviewScopeSpend(4_995m, false)));
+
+        var manifest = (await this.CreateResolver(caps, spend).ResolveAsync(RequestFor(job))).Manifest!;
+
+        // The client month leaves 70; the tenant month leaves 5.
+        Assert.Equal(5m, manifest.BudgetHeadroomUsd);
+    }
+
+    [Fact]
+    public async Task Behaviour_CarriesTheTenantPerFileLimits_OntoTheManifest()
+    {
+        var job = JobWithRevision();
+        this._clients.GetTenantReviewLimitsAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new TenantReviewLimits(262_144, 131_072));
+
+        var manifest = (await this.CreateResolver().ResolveAsync(RequestFor(job))).Manifest!;
+
+        Assert.Equal(262_144, manifest.Behaviour!.MaxFileSizeBytes);
+        Assert.Equal(131_072, manifest.Behaviour.MaxStructuralParseBytes);
+        Assert.Equal(RunnerContractVersion.Current, manifest.ContractVersion);
+    }
+
+    [Fact]
+    public async Task Behaviour_LeavesThePerFileLimitsUnstated_WhenTheTenantStatesNone()
+    {
+        var job = JobWithRevision();
+        // Stated explicitly: left unconfigured the substitute answers null and the test would exercise only
+        // the resolver's fallback, never a limits object whose two fields are both unset.
+        this._clients.GetTenantReviewLimitsAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(TenantReviewLimits.None);
+
+        var manifest = (await this.CreateResolver().ResolveAsync(RequestFor(job))).Manifest!;
+
+        Assert.Null(manifest.Behaviour!.MaxFileSizeBytes);
+        Assert.Null(manifest.Behaviour.MaxStructuralParseBytes);
+    }
+
+    [Fact]
+    public async Task Behaviour_LeavesThePerFileLimitsUnstated_WhenTheRegistryAnswersNothing()
+    {
+        var job = JobWithRevision();
+
+        var manifest = (await this.CreateResolver().ResolveAsync(RequestFor(job))).Manifest!;
+
+        Assert.Null(manifest.Behaviour!.MaxFileSizeBytes);
+        Assert.Null(manifest.Behaviour.MaxStructuralParseBytes);
     }
 
     [Fact]

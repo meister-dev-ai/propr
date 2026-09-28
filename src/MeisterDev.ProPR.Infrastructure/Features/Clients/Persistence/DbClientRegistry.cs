@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.ValueObjects;
@@ -269,5 +270,40 @@ public sealed class DbClientRegistry(
             .Where(c => c.Id == clientId)
             .Select(c => (Guid?)c.TenantId)
             .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewAdmissionPolicy> GetReviewAdmissionPolicyAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => new ReviewAdmissionPolicy(
+                       c.AdmissionMaxChangedFiles,
+                       c.AdmissionMaxChangedLines,
+                       c.AdmissionMaxDiffBytes,
+                       c.AdmissionMaxReviewsPerPullRequestPerHour,
+                       c.AdmissionMaxRepositoryMegabytes))
+                   .FirstOrDefaultAsync(ct)
+               ?? ReviewAdmissionPolicy.None;
+    }
+
+    /// <inheritdoc />
+    public async Task<TenantReviewLimits> GetTenantReviewLimitsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        // The tenant values are projected as nullables, so a client whose tenant row is missing reads as a
+        // tenant stating no limits. A null-forgiving dereference adds no runtime guard: it would let the
+        // materialisation fail instead of reaching the fallback below.
+        var limits = await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => new
+            {
+                MaxFileSizeBytes = c.Tenant == null ? null : c.Tenant.AiMaxFileSizeBytes,
+                MaxStructuralParseBytes = c.Tenant == null ? null : c.Tenant.AiMaxStructuralParseBytes,
+            })
+            .FirstOrDefaultAsync(ct);
+
+        return limits is null
+            ? TenantReviewLimits.None
+            : new TenantReviewLimits(limits.MaxFileSizeBytes, limits.MaxStructuralParseBytes);
     }
 }

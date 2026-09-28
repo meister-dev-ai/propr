@@ -454,7 +454,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 var response = await effectiveClient.GetResponseAsync(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
-                        this._options.CaptureReasoningInProtocol, baseContext.ActiveReasoningEffort), ct);
+                        baseContext.CapturesReasoning(this._options), baseContext.ActiveReasoningEffort), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_planning", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;
@@ -661,7 +661,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 var response = await effectiveClient.GetResponseAsync(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
-                        this._options.CaptureReasoningInProtocol, baseContext.ActiveReasoningEffort), ct);
+                        baseContext.CapturesReasoning(this._options), baseContext.ActiveReasoningEffort), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, $"pr_wide_investigation_{task.Id}", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;
@@ -1009,7 +1009,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 var response = await effectiveClient.GetResponseAsync(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
-                        this._options.CaptureReasoningInProtocol, baseContext.ActiveReasoningEffort), ct);
+                        baseContext.CapturesReasoning(this._options), baseContext.ActiveReasoningEffort), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_synthesis", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;
@@ -1072,7 +1072,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         var systemPrompt = GetSystemPrompt(messages);
         var outputSample = AssistantTurnOutputRecord.Build(
                                response.Messages.LastOrDefault(),
-                               this._options.CaptureReasoningInProtocol,
+                               context.CapturesReasoning(this._options),
                                this._options.MaxReasoningSummaryChars)
                            ?? response.Text;
         var usage = AiTokenUsageExtractor.FromResponse(response);

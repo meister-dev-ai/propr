@@ -36,6 +36,13 @@ public enum PullRequestSynchronizationReviewDecision
     ///     keeps running.
     /// </summary>
     SubsequentIncrementSkipped = 7,
+
+    /// <summary>
+    ///     Review admission already refused this pull request head under the bounds the client has now, so this
+    ///     automatic trigger created nothing. The head is reviewed again once it changes or an administrator
+    ///     changes a bound.
+    /// </summary>
+    AdmissionRefusedAtThisRevision = 8,
 }
 
 /// <summary>High-level lifecycle decision produced by shared pull-request synchronization.</summary>

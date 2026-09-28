@@ -112,8 +112,10 @@ public sealed partial class MentionReplyService(
         catch (BudgetHardCapReachedException ex)
         {
             // The cap was reached by this answer's own call, so the developer is told the same thing they
-            // would have been told had it been reached beforehand.
-            await this.HandleBudgetBlockAsync(job, ex.Breach, cancellationToken);
+            // would have been told had it been reached beforehand. A refusal relayed from the control plane
+            // names the condition without carrying the cap, and the scope this answer holds then names it.
+            // Where neither names it, the block is recorded with no cap detail and nothing is misreported.
+            await this.HandleBudgetBlockAsync(job, ex.ResolveBreach(budgetScope?.TrippedBreach), cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -150,7 +152,8 @@ public sealed partial class MentionReplyService(
             budgetScope.Caps,
             budgetScope.Baseline.ClientMonthToDate.KnownUsd,
             budgetScope.Baseline.PullRequest.KnownUsd,
-            budgetScope.Baseline.Increment.KnownUsd);
+            budgetScope.Baseline.Increment.KnownUsd,
+            budgetScope.Baseline.TenantMonthToDate.KnownUsd);
     }
 
     /// <summary>The soft cap this answer is being written past, if any. It reports rather than refuses.</summary>
@@ -159,7 +162,8 @@ public sealed partial class MentionReplyService(
         return BudgetEvaluator.FindSoftCapBreach(
             budgetScope.Caps,
             budgetScope.Baseline.ClientMonthToDate.KnownUsd,
-            budgetScope.Baseline.PullRequest.KnownUsd);
+            budgetScope.Baseline.PullRequest.KnownUsd,
+            budgetScope.Baseline.TenantMonthToDate.KnownUsd);
     }
 
     private async Task AnswerAsync(MentionReplyJob job, int? iterationId, CancellationToken cancellationToken)
@@ -292,9 +296,15 @@ public sealed partial class MentionReplyService(
     ///         it would be caught and overwrite the status just recorded with a failure.
     ///     </para>
     /// </remarks>
-    private async Task HandleBudgetBlockAsync(MentionReplyJob job, BudgetBreach breach, CancellationToken ct)
+    /// <param name="job">The answer job being refused.</param>
+    /// <param name="breach">
+    ///     The cap that refused the answer, or null where the refusal reached this job without naming one. The
+    ///     row then carries no scope, threshold or spend, and the developer is told the same thing either way.
+    /// </param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    private async Task HandleBudgetBlockAsync(MentionReplyJob job, BudgetBreach? breach, CancellationToken ct)
     {
-        LogAnswerHeldByBudget(logger, job.Id, breach.Scope, breach.ThresholdUsd, breach.SpentUsd);
+        LogAnswerHeldByBudget(logger, job.Id, breach?.Scope, breach?.ThresholdUsd, breach?.SpentUsd);
 
         try
         {
@@ -303,10 +313,10 @@ public sealed partial class MentionReplyService(
             await jobRepository.SetBudgetHeldAsync(
                 job.Id,
                 job.IterationId,
-                breach.Scope,
-                breach.CapKind,
-                breach.ThresholdUsd,
-                breach.SpentUsd,
+                breach?.Scope,
+                breach?.CapKind ?? BudgetCapKind.Hard,
+                breach?.ThresholdUsd,
+                breach?.SpentUsd,
                 ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -319,8 +329,10 @@ public sealed partial class MentionReplyService(
 
         await this.PostBudgetNoticeAsync(job, ct);
 
-        if (budgetEventPublisher is null)
+        if (budgetEventPublisher is null || breach is null)
         {
+            // No event for a cap nothing here read. An event row names a scope, a threshold and a spend, and
+            // inventing the three would report a cap the client never configured.
             return;
         }
 

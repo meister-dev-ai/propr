@@ -5,8 +5,12 @@
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Features.Licensing.Support;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -17,7 +21,9 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Administrative tenant endpoints for platform and tenant administrators.</summary>
 [ApiController]
 [Route("admin/tenants")]
-public sealed class TenantsController(ITenantAdminService tenantAdminService) : ControllerBase
+public sealed class TenantsController(
+    ITenantAdminService tenantAdminService,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     /// <summary>Lists tenants visible to the current caller.</summary>
     [HttpGet]
@@ -142,6 +148,29 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
 
         try
         {
+            if (request.Budget is not null || request.ReviewLimits is not null)
+            {
+                // Budgeting is a licensed capability, and it covers the tenant's caps and its per-file limits
+                // alike: both bound what the tenant's reviews may spend, so setting either requires the
+                // capability to be enabled for the installation. Values already stored keep being enforced in
+                // every edition. The lookup sits inside the same try as the update so a failure to resolve the
+                // capability returns the endpoint's error result instead of an unstructured 500.
+                var unavailableCapability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+                    licensingCapabilityService,
+                    PremiumCapabilityKey.Budgeting,
+                    ct);
+                if (unavailableCapability is not null)
+                {
+                    // The capability's own message describes budgets, and a request that carried only the
+                    // per-file limits would be refused with a message naming something it did not send. The
+                    // message therefore names the settings of this request, and the capability's message
+                    // follows it with why the capability is unavailable.
+                    return new PremiumFeatureUnavailableResult(
+                        unavailableCapability,
+                        $"Setting {DescribeRefusedSettings(request)} requires the budgeting capability. {unavailableCapability.Message}".TrimEnd());
+                }
+            }
+
             var updated = await tenantAdminService.PatchAsync(
                 tenantId,
                 request.DisplayName,
@@ -150,6 +179,9 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
                 request.AllowedAiProviderKinds,
                 request.AllowedAiEndpointHosts,
                 request.RemovedUnresolvedAiProviderKinds,
+                request.ReasoningCapturePolicy,
+                request.Budget,
+                request.ReviewLimits,
                 ct);
 
             return updated is null ? this.NotFound() : this.Ok(updated);
@@ -188,6 +220,20 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
             $"No installed provider family claims {string.Join(", ", unclaimed.Select(entry => $"'{entry}'"))} "
             + $"(available: {string.Join(", ", providerDrivers.RegisteredKinds)}).");
         return this.ValidationProblem();
+    }
+
+    /// <summary>Names the settings of this request that the budgeting capability covers.</summary>
+    /// <param name="request">The patch that was refused.</param>
+    private static string DescribeRefusedSettings(UpdateTenantRequest request)
+    {
+        if (request.Budget is null)
+        {
+            return "this tenant's per-file review limits";
+        }
+
+        return request.ReviewLimits is null
+            ? "this tenant's monthly spend caps"
+            : "this tenant's monthly spend caps and its per-file review limits";
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -229,10 +275,28 @@ public sealed record CreateTenantRequest(string Slug, string DisplayName);
 ///     the write, so a removal cannot happen as a side effect of saving the families. An entry the tenant does
 ///     not hold is ignored.
 /// </param>
+/// <param name="ReasoningCapturePolicy">
+///     Whether this tenant's review jobs capture model reasoning into the protocol, or null to leave it
+///     unchanged. <see cref="Domain.Enums.ReasoningCapturePolicy.InstallationDefault" /> clears the tenant's
+///     override and hands the decision back to the installation switch.
+/// </param>
+/// <param name="Budget">
+///     Monthly USD budget caps for the tenant, or null to leave both caps unchanged. A cap set to null inside the
+///     value clears that cap back to no limit.
+/// </param>
+/// <param name="ReviewLimits">
+///     Per-file byte limits for this tenant's reviews, or null to leave both unchanged. A value set to null
+///     inside the record puts the installation value back in force. The limits bound how much of one file the
+///     reviewer reads, so they bound what a review spends: setting them requires the budgeting capability, as
+///     <paramref name="Budget" /> does. Limits already stored are applied in every edition.
+/// </param>
 public sealed record UpdateTenantRequest(
     string? DisplayName,
     bool? IsActive,
     bool? LocalLoginEnabled,
     IReadOnlyList<string>? AllowedAiProviderKinds = null,
     IReadOnlyList<string>? AllowedAiEndpointHosts = null,
-    IReadOnlyList<string>? RemovedUnresolvedAiProviderKinds = null);
+    IReadOnlyList<string>? RemovedUnresolvedAiProviderKinds = null,
+    ReasoningCapturePolicy? ReasoningCapturePolicy = null,
+    TenantBudgetConfigDto? Budget = null,
+    TenantReviewLimitsDto? ReviewLimits = null);

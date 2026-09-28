@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Services;
 using Microsoft.Extensions.AI;
 using NSubstitute;
 
@@ -113,15 +114,23 @@ public sealed class RunnerBindingTranscriptEquivalenceTests
             JobId,
             new BudgetScope(
                 BudgetCaps.None,
-                new ReviewSpendBaseline(ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None)));
+                new ReviewSpendBaseline(ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None)));
         var models = Substitute.For<IRunnerRelayModelResolver>();
         models.ResolveAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new RunnerRelayModel(scripted, new ModelPricing(null, null)));
         var usage = Substitute.For<IRunnerRelayUsageRecorder>();
 
-        var relay = new RunnerAiRelay(authorizer, budgets, models, usage, new RunnerRelayReplayCache());
+        var reasoningCapture = Substitute.For<IRunnerJobReasoningCapturePolicy>();
+        reasoningCapture.CapturesReasoningAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var relay = new RunnerAiRelay(authorizer, budgets, models, usage, new RunnerRelayReplayCache(), reasoningCapture);
         var counter = 0;
-        var chat = new RelayChatClient(Call, "reviewer-medium", relay, () => $"call-{++counter}");
+        var chat = new RelayChatClient(
+            Call,
+            "reviewer-medium",
+            relay,
+            ReviewReasoningEffort.None,
+            () => $"call-{++counter}");
 
         return (tools, chat);
     }

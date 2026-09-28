@@ -25,16 +25,21 @@ synthesis call and nothing else, so the stages that run after it - comment dedup
 filter, pull-request-level verification - each stay on their own purpose, and their token usage is reported
 against the model they actually ran on.
 
-A purpose resolves in two layers, in this order:
+A purpose resolves in this order:
 
-1. **The purpose → logical model map.** Looked up for that one purpose. There is no fall-through inside this
-   layer: an unmapped purpose never borrows the logical model mapped to another purpose.
-2. **The purpose bindings on the client's active AI connection.** This layer does chain to a cheaper relative -
+1. **The purpose → logical model map.** A direct mapping takes precedence over connection bindings. A broken
+   direct mapping fails resolution.
+2. **The purpose bindings on the client's active AI connections.** ProPR searches every active client profile
+   for an enabled binding to the requested purpose with a configured model. If none matches, it searches every
+   active profile for each fallback purpose in order. Profiles are ordered by display name, then ID, within each
+   purpose. This allows chat and embedding bindings to use separate providers. This layer chains to a cheaper relative -
    Triage → Low effort → Review default; Verification → Triage → Low effort → Review default; and each per-tier
    review purpose → Review default. Review default, Embedding default and Memory reconsideration have no chain;
    each resolves only from its own binding.
+3. **Fallback logical-model mappings.** If no connection binding resolves, ProPR checks logical roles along
+   the same fallback chain. A mapped fallback role takes precedence over a missing-model failure.
 
-Only when neither layer yields a model does behaviour depend on which purpose it was. Most degrade; two fail.
+When no lookup yields a model, behavior depends on the requested purpose. Most degrade; two fail.
 
 | Purpose | If nothing resolves |
 |---|---|

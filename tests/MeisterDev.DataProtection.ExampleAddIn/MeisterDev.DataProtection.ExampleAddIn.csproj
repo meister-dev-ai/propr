@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <IsPackable>false</IsPackable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <!--
+        The contract assembly alone; an add-in author references this. Not copied to the output, so a staged
+        add-in folder holds the add-in and nothing the host already carries.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\MeisterDev.DataProtection\MeisterDev.DataProtection.csproj"
+                          Private="false"/>
+    </ItemGroup>
+
+</Project>

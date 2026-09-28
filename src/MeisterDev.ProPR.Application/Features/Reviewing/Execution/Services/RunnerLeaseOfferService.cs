@@ -271,7 +271,7 @@ public sealed partial class RunnerLeaseOfferService(
     }
 
     private static ReviewSpendBaseline EmptyBaseline { get; } =
-        new(ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None);
+        new(ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None);
 
     /// <summary>
     ///     Whether the client's pass list has a publishing pr_wide entry, cached per offer: the same

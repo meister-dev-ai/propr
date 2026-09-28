@@ -73,6 +73,7 @@ internal sealed class AdoCodeReviewPublicationService(
                     publicationContext?.ExistingThreads,
                     publicationContext?.GetProviderSpecificContext<AzureDevOpsPublicationContext>(),
                     publicationContext?.AuthorizedPublicationIdentity,
+                    publicationContext?.ReplyInExistingSummaryThread ?? false,
                     ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)

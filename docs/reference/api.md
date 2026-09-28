@@ -47,6 +47,84 @@ curl -k https://localhost:5443/api/clients \
 List tokens with `GET /api/users/me/pats` and revoke one with `DELETE /api/users/me/pats/<pat-id>`. What
 a PAT can do, and how it is stored, is in [automation credentials](security.md#automation-credentials).
 
+### Tenant machine credentials
+
+A platform administrator issues a tenant credential with
+`POST /api/admin/tenants/{tenantId}/machine-credentials` and a JSON body containing `label` and optional
+future `expiresAt`. The response contains the token once. List credential metadata with `GET` on the
+same path, and revoke one with
+`DELETE /api/admin/tenants/{tenantId}/machine-credentials/{credentialId}`. These lifecycle endpoints
+require a platform administrator JWT or PAT.
+
+An external application sends the issued token as `X-Tenant-Machine-Token`. It can look up its tenant's
+clients, list and retrieve reviews, submit a review by configured pull-request coordinates, and manage
+client-scoped SCM connections, scopes, AI connections, and repository review targets. The API checks each action and resolves
+client ownership from the database. Tenant creation, user administration, and unrelated administrative
+endpoints refuse this credential. The token must remain on the server side.
+The credential can read the effective logical-model list at `GET /api/clients/{clientId}/logical-models`
+and the purpose routes at `GET /api/clients/{clientId}/logical-models/purposes` for a client currently owned
+by its tenant. Logical-model overrides and purpose-route mutations require a user credential.
+Machine callers can use `POST /api/clients/{clientId}/ai-connections/{connectionId}/verify-update` to verify
+candidate profile edits before replacement. They can apply the Default, High, and Embedding model purposes with
+`POST /api/clients/{clientId}/ai-connections/select-purposes`; the body contains `default`, `high` and
+`embedding`, each with `connectionId` and `configuredModelId`. Selection requires verified client-owned
+models and refuses conflicting logical or managed bindings. The credential cannot change inherited profiles
+or logical mappings through these bounded operations. See [AI connection configuration](../ai/credentials.md).
+Effective logical-model entries include optional `referencedModel` metadata for authorized references:
+the remote model ID, connection display name, supported operations and protocol modes, embedding tokenizer,
+input limit and dimensions, profile activity, and verification status. Missing, forbidden, or unavailable
+references return `referencedModel.availability` as `unavailable` and omit model and profile metadata.
+Machine-token requests can return `429 Too Many Requests` when the API host's global request limit or
+that credential's verification limit is reached. Both limits use one-second windows. The global limit
+defaults to 256 requests per second per API host and can be set with
+`MEISTER_MACHINE_AUTH_GLOBAL_PERMITS_PER_SECOND` (clamped to 1–4096). Each credential is limited to
+16 BCrypt verifications per second. Retry after the next second.
+
+For a client with the crawl configuration capability, `GET /api/clients/{clientId}/review-targets`
+lists repository targets. `GET /api/clients/{clientId}/review-targets/repositories?connectionId={id}&scopePath={scope}`
+lists repositories reachable through an active, verified connection. For Azure DevOps, `scopePath` is an
+organization URL on the connection's origin; for GitHub, GitLab, and Forgejo it is an owner or namespace.
+Each returned entry contains `repositoryId`, `repositoryName`, `providerProjectKey`,
+`providerProjectDisplayName`, and `ownerOrNamespace`. For Azure DevOps,
+`providerProjectKey` is the stable project ID and `providerProjectDisplayName` is the project name used in
+browser URLs. For a repository in a nested namespace, `providerProjectKey` names the repository's full
+namespace even when `scopePath` queried a parent. Create a target with `POST /api/clients/{clientId}/review-targets` and a JSON body
+containing `connectionId`, `providerProjectKey`, `repositoryId`, `repositoryName`, and optional
+`providerScopePath`. Azure DevOps requires `providerScopePath` on the connection's origin; other providers
+derive it from the connection host. ProPR verifies the repository against the provider before creating a
+target. Creation returns `201` with `id`, `providerScopePath`,
+`providerProjectKey`, `repositoryId`, `repositoryName`, and `isActive: false`. An identical request returns
+`200` with the existing target. A different target for the same scope and project returns `409`.
+
+`GET /api/clients/{clientId}/review-targets/{targetId}/open-reviews?connectionId={id}` lists up to 100
+open pull requests for one configured target. The connection must be active, verified, client-owned, and
+cover the target's provider and host. The response contains `number`, `title`, `webUrl`, and `state` (`open`
+or `draft`); an unsafe provider URL is returned as `null`. The endpoint uses the provider's bounded first
+page, so a repository with more than 100 open pull requests requires another way to locate older requests.
+The tenant machine credential can call this endpoint only for a client owned by its tenant.
+
+`GET /api/clients/{clientId}/reviewing/dashboard` returns the selected client's processing reviews and a
+count of findings persisted in completed review results during the preceding 30 days. The count uses each
+job's completion time in the interval from `windowStart` inclusive to `windowEnd` exclusive. The response contains
+`windowStart`, `windowEnd`, `recentFindingCount`, and `runningReviews`. Each running review contains its
+`id`, `status`, `provider`, `repository`, `pullRequestNumber`, and `startedAt`. Pending and held reviews are
+not counted as running. The finding count comes from stored review results even when SCM comment posting is
+disabled. A tenant machine credential may call this endpoint only for a client currently owned by its tenant.
+
+`GET /api/clients/{clientId}/reviewing/history` reads a bounded page of persisted review metadata. The
+query accepts `page` (one-based, default 1), `pageSize` (1–100, default 25), and an optional named job
+`status`. Invalid bounds or statuses return 400. The response contains `totalCount`, `page`, `pageSize`
+and `items`. Each item contains `id`, `status`, `provider`, `repository`, `pullRequestNumber`,
+`submittedAt`, `completedAt` and `findingCount`. ProPR counts and pages within the specified client
+and status, ordered by submission time and review ID descending. PostgreSQL computes finding counts
+from persisted result JSON without transferring result text or protocol events for history.
+
+`GET /api/clients/{clientId}/reviewing/jobs/{jobId}/status` returns a job's status and persisted result
+when that client owns it. The database lookup checks both identifiers before reading the result. A
+foreign or missing job returns 404. Both routes require client access; tenant machine credentials also
+require current tenant ownership of the client. Persisted-result access remains client-scoped when
+SCM connections or targets are removed.
+
 ## Client management
 
 Create a client:

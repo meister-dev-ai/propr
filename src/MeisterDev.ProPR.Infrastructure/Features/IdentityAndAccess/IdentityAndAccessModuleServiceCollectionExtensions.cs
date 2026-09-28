@@ -3,6 +3,8 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.IdentityAndAccess.Authentication.Ports;
+using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Authentication.Persistence;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
@@ -38,6 +40,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
         // Tenant administration is EF-backed and must be available in test hosts that swap in
         // an in-memory DbContext without providing a full DB connection string.
         services.AddScoped<ITenantAdminService, TenantAdminService>();
+        services.AddScoped<ITenantMachineCredentialStore, EfTenantMachineCredentialStore>();
 
         services.AddOptions<AccountLockoutOptions>()
             .Configure(options =>

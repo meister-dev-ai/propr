@@ -39,11 +39,56 @@ internal static class ReviewReasoningRequest
         bool captureReasoning,
         ReviewReasoningEffort reasoningEffort)
     {
+        return Apply(chatOptions, captureReasoning, reasoningEffort, stateWhenNothingIsAsked: false);
+    }
+
+    /// <summary>
+    ///     Applies a reasoning decision the control plane resolved for a job, and states it on the request even
+    ///     when it asks for nothing.
+    /// </summary>
+    /// <remarks>
+    ///     The options this shapes were built elsewhere: by a runner, or by a pass that started before the
+    ///     decision was read. An absent reasoning request there is not the same as a stated refusal, because the
+    ///     opt-in those options carried would otherwise stand, so the resolved answer is written out either way.
+    ///     A refusal with no effort reaches the provider as the request it would have sent with no reasoning
+    ///     options at all.
+    /// </remarks>
+    /// <param name="chatOptions">The options to shape.</param>
+    /// <param name="captureReasoning">Whether this job may keep the model's reasoning.</param>
+    /// <param name="reasoningEffort">How hard the model is asked to reason.</param>
+    public static ChatOptions ApplyResolvedReasoning(
+        this ChatOptions chatOptions,
+        bool captureReasoning,
+        ReviewReasoningEffort reasoningEffort)
+    {
+        return Apply(chatOptions, captureReasoning, reasoningEffort, stateWhenNothingIsAsked: true);
+    }
+
+    /// <summary>Whether these options already carry a reasoning request this shaping produced.</summary>
+    /// <remarks>
+    ///     Answered from what the factory is bound to, without calling it. A factory a caller supplied builds a
+    ///     provider's own options object and may cast the client it is handed to a concrete provider type, so
+    ///     calling it to find out what it returns would run caller code against a client it was never given.
+    ///     Anything not bound to this shaping was put there by the caller for its own reasons.
+    /// </remarks>
+    /// <param name="chatOptions">The options to inspect.</param>
+    public static bool CarriesAReasoningRequest(this ChatOptions chatOptions)
+    {
+        return chatOptions.RawRepresentationFactory?.Target is ShapedReasoningRequest;
+    }
+
+    private static ChatOptions Apply(
+        ChatOptions chatOptions,
+        bool captureReasoning,
+        ReviewReasoningEffort reasoningEffort,
+        bool stateWhenNothingIsAsked)
+    {
         var effortLevel = MapEffortLevel(reasoningEffort);
 
         // Nothing to send: no summary requested and no effort configured. Leave the request exactly as it would have
         // been without any reasoning options — this is the default-none path and keeps current behavior byte-identical.
-        if (!captureReasoning && effortLevel is null)
+        // A resolved decision is stated even here, because it has to replace whatever the options already carried.
+        if (!captureReasoning && effortLevel is null && !stateWhenNothingIsAsked)
         {
             return chatOptions;
         }
@@ -59,36 +104,8 @@ internal static class ReviewReasoningRequest
             chatOptions.Temperature = null;
         }
 
-        chatOptions.RawRepresentationFactory = client =>
-        {
-            // Two arms, and both are load-bearing. A client speaking a provider's own protocol is handed the
-            // neutral request and maps it itself. Everything else is an OpenAI-adapter client, and that adapter
-            // reads only the OpenAI library's own options object - hand it the neutral form and the reasoning
-            // settings are silently dropped, so the OpenAI arm cannot be folded into the neutral one.
-            if (client is INativeProtocolChatClient)
-            {
-                return new ProviderReasoningRequest(MapNeutralEffort(reasoningEffort), captureReasoning);
-            }
-
-#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
-            var reasoningOptions = new ResponseReasoningOptions();
-
-            if (captureReasoning)
-            {
-                reasoningOptions.ReasoningSummaryVerbosity = ResponseReasoningSummaryVerbosity.Auto;
-            }
-
-            if (effortLevel is { } level)
-            {
-                reasoningOptions.ReasoningEffortLevel = level;
-            }
-
-            return new CreateResponseOptions
-            {
-                ReasoningOptions = reasoningOptions,
-            };
-#pragma warning restore OPENAI001
-        };
+        chatOptions.RawRepresentationFactory =
+            new ShapedReasoningRequest(captureReasoning, reasoningEffort, effortLevel).Build;
 
         return chatOptions;
     }
@@ -120,4 +137,56 @@ internal static class ReviewReasoningRequest
         };
 #pragma warning restore OPENAI001
     }
+
+    /// <summary>The reasoning request this shaping puts on a set of options, in the form each family reads.</summary>
+    /// <remarks>
+    ///     A named type and not a closure, so a factory built here is recognisable by what it is bound to and
+    ///     the question "did this shaping put that factory there" is answered without calling it.
+    /// </remarks>
+    /// <param name="captureReasoning">Whether the model is asked to return its reasoning.</param>
+    /// <param name="reasoningEffort">How hard the model is asked to reason.</param>
+    /// <param name="effortLevel">The same effort in the OpenAI library's vocabulary, or null for the default.</param>
+#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
+    private sealed class ShapedReasoningRequest(
+        bool captureReasoning,
+        ReviewReasoningEffort reasoningEffort,
+        ResponseReasoningEffortLevel? effortLevel)
+    {
+        /// <summary>The request as the client being called understands it.</summary>
+        /// <param name="client">The client the options are being built for.</param>
+        public object Build(IChatClient client)
+        {
+            // Native provider protocols map the neutral reasoning request themselves.
+            // OpenAI adapters require their provider-specific response options; supplying the neutral
+            // request to those adapters would omit the reasoning settings.
+            if (client is INativeProtocolChatClient)
+            {
+                return new ProviderReasoningRequest(MapNeutralEffort(reasoningEffort), captureReasoning);
+            }
+
+            var responseOptions = new CreateResponseOptions();
+
+            // A decision that asks for nothing is carried by the absence of the reasoning options: a request
+            // that named them empty would be rejected by models that take none.
+            if (captureReasoning || effortLevel is not null)
+            {
+                var reasoningOptions = new ResponseReasoningOptions();
+
+                if (captureReasoning)
+                {
+                    reasoningOptions.ReasoningSummaryVerbosity = ResponseReasoningSummaryVerbosity.Auto;
+                }
+
+                if (effortLevel is { } level)
+                {
+                    reasoningOptions.ReasoningEffortLevel = level;
+                }
+
+                responseOptions.ReasoningOptions = reasoningOptions;
+            }
+
+            return responseOptions;
+        }
+    }
+#pragma warning restore OPENAI001
 }

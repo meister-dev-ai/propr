@@ -27,6 +27,23 @@ public sealed partial class ReviewJobsController(
     SubmitReviewByCoordinatesHandler submitReviewByCoordinatesHandler,
     ILogger<ReviewJobsController> logger) : ControllerBase
 {
+    /// <summary>Returns a review result only when the specified client owns the job.</summary>
+    /// <param name="clientId">The owning client.</param>
+    /// <param name="jobId">The review job identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpGet("/clients/{clientId:guid}/reviewing/jobs/{jobId:guid}/status")]
+    [ProducesResponseType(typeof(ReviewStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetClientReview(Guid clientId, Guid jobId, CancellationToken ct)
+    {
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        if (roleCheck is not null) return roleCheck;
+        var status = await getReviewJobStatusHandler.HandleAsync(new GetReviewJobStatusQuery(jobId, clientId), ct);
+        return status is null ? this.NotFound() : this.Ok(MapStatusResponse(status));
+    }
+
     /// <summary>Get the status and result of a review job.</summary>
     /// <param name="jobId">The job identifier returned from POST /clients/{clientId}/reviewing/jobs.</param>
     /// <param name="ct">Cancellation token.</param>

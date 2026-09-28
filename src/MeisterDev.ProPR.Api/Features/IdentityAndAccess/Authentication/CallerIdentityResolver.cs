@@ -3,12 +3,14 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Security.Claims;
+using MeisterDev.ProPR.Application.Features.IdentityAndAccess.Authentication.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.EntityFrameworkCore;
 using MeisterDev.ProPR.Web;
@@ -44,6 +46,36 @@ public static class CallerIdentityResolver
         context.Items["IsAdmin"] = false;
         context.Items["ClientRoles"] = new Dictionary<Guid, ClientRole>();
         context.Items["TenantRoles"] = new Dictionary<Guid, TenantRole>();
+
+        if (context.Request.Headers.ContainsKey("X-Tenant-Machine-Token"))
+        {
+            var token = context.Request.Headers["X-Tenant-Machine-Token"].ToString();
+            var service = context.RequestServices.GetService<TenantMachineCredentialService>();
+            TenantMachineIdentity? credential;
+            try
+            {
+                credential = service is null ? null : await service.AuthenticateAsync(token, context.RequestAborted);
+            }
+            catch (TenantMachineCredentialThrottledException)
+            {
+                context.Items[TenantMachineAuthenticationThrottle.ThrottledItemKey] = true;
+                return CallerIdentityResolution.Anonymous;
+            }
+
+            if (credential is null)
+            {
+                return CallerIdentityResolution.Anonymous;
+            }
+
+            context.Items[TenantMachineOperationPolicy.TenantItemKey] = credential.TenantId;
+            var identity = new ClaimsIdentity(
+                [
+                    new Claim("machine_credential_id", credential.Id.ToString()),
+                    new Claim("machine_tenant_id", credential.TenantId.ToString())
+                ],
+                authenticationScheme);
+            return CallerIdentityResolution.ForPrincipal(new ClaimsPrincipal(identity));
+        }
 
         var bearer = await TryAuthenticateBearerAsync(context);
         if (bearer is not null)

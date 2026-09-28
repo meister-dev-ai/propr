@@ -27,13 +27,43 @@ public sealed class BudgetScopeTests
         scope.RecordCall(6m); // effective increment spend 4 + 6 = 10 >= 10
 
         var exception = Assert.Throws<BudgetHardCapReachedException>(scope.ThrowIfHardCapReached);
-        Assert.Equal(BudgetScopeKind.Increment, exception.Breach.Scope);
-        Assert.Equal(10m, exception.Breach.ThresholdUsd);
-        Assert.Equal(10m, exception.Breach.SpentUsd);
+        var breach = exception.Breach;
+        Assert.NotNull(breach);
+        Assert.Equal(BudgetScopeKind.Increment, breach.Scope);
+        Assert.Equal(10m, breach.ThresholdUsd);
+        Assert.Equal(10m, breach.SpentUsd);
 
         // The trip is recorded so a wrapped surfacing is still recognizable as a budget cut.
-        Assert.NotNull(scope.TrippedBreach);
-        Assert.Equal(BudgetScopeKind.Increment, scope.TrippedBreach!.Scope);
+        var tripped = scope.TrippedBreach;
+        Assert.NotNull(tripped);
+        Assert.Equal(BudgetScopeKind.Increment, tripped.Scope);
+    }
+
+    // A refusal relayed from the control plane names the condition without carrying the cap, and a caller
+    // holding no scope of its own has nothing else to name it by. The cap stays unknown, so no scope,
+    // threshold or spend is invented for the job that is about to record the stop.
+    [Fact]
+    public void ResolveBreach_WithNoCapOnEitherSide_LeavesTheCapUnknown()
+    {
+        Assert.Null(new BudgetHardCapReachedException(null).ResolveBreach(null));
+    }
+
+    [Fact]
+    public void ResolveBreach_WithACapTheCallersScopeTripped_NamesThatCap()
+    {
+        var tripped = new BudgetBreach(BudgetScopeKind.PullRequest, BudgetCapKind.Hard, 4m, 4.5m);
+
+        Assert.Same(tripped, new BudgetHardCapReachedException(null).ResolveBreach(tripped));
+    }
+
+    // The cap the refusal named outranks the caller's, because it is the one the call was refused against.
+    [Fact]
+    public void ResolveBreach_WithACapOnTheRefusal_KeepsIt()
+    {
+        var refused = new BudgetBreach(BudgetScopeKind.Increment, BudgetCapKind.Hard, 5m, 6m);
+        var tripped = new BudgetBreach(BudgetScopeKind.PullRequest, BudgetCapKind.Hard, 4m, 4.5m);
+
+        Assert.Same(refused, new BudgetHardCapReachedException(refused).ResolveBreach(tripped));
     }
 
     [Fact]
@@ -54,7 +84,7 @@ public sealed class BudgetScopeTests
             new BudgetCaps(
                 MonthlySoftCapUsd: 5m, MonthlyHardCapUsd: null, PullRequestSoftCapUsd: null, PullRequestHardCapUsd: null, IncrementSoftCapUsd: null,
                 IncrementHardCapUsd: null),
-            new ReviewSpendBaseline(new ReviewScopeSpend(1_000m, false), ReviewScopeSpend.None, ReviewScopeSpend.None));
+            new ReviewSpendBaseline(new ReviewScopeSpend(1_000m, false), ReviewScopeSpend.None, ReviewScopeSpend.None, ReviewScopeSpend.None));
 
         scope.ThrowIfHardCapReached();
         Assert.Null(scope.TrippedBreach);
@@ -93,6 +123,27 @@ public sealed class BudgetScopeTests
         Assert.Null(scope.IncrementSoftCapBreach);
     }
 
+    [Fact]
+    public void ThrowIfHardCapReached_CutsTheRun_WhenTheTenantHardCapIsReached()
+    {
+        var scope = new BudgetScope(
+            new BudgetCaps(
+                MonthlySoftCapUsd: null, MonthlyHardCapUsd: 10_000m, PullRequestSoftCapUsd: null, PullRequestHardCapUsd: null,
+                IncrementSoftCapUsd: null, IncrementHardCapUsd: null, TenantMonthlySoftCapUsd: null, TenantMonthlyHardCapUsd: 5_000m),
+            new ReviewSpendBaseline(
+                new ReviewScopeSpend(10m, false),
+                ReviewScopeSpend.None,
+                ReviewScopeSpend.None,
+                new ReviewScopeSpend(4_999m, false)));
+
+        scope.RecordCall(1m);
+
+        var ex = Assert.Throws<BudgetHardCapReachedException>(scope.ThrowIfHardCapReached);
+        Assert.Equal(BudgetScopeKind.TenantMonthly, ex.Breach.Scope);
+        Assert.Equal(BudgetCapKind.Hard, ex.Breach.CapKind);
+        Assert.Equal(BudgetScopeKind.TenantMonthly, scope.TrippedBreach!.Scope);
+    }
+
     private static BudgetScope MakeScope(decimal? incrementHardCapUsd, decimal incrementBaselineUsd, decimal? incrementSoftCapUsd = null)
     {
         var caps = new BudgetCaps(
@@ -105,7 +156,7 @@ public sealed class BudgetScopeTests
         var baseline = new ReviewSpendBaseline(
             ReviewScopeSpend.None,
             ReviewScopeSpend.None,
-            new ReviewScopeSpend(incrementBaselineUsd, false));
+            new ReviewScopeSpend(incrementBaselineUsd, false), ReviewScopeSpend.None);
         return new BudgetScope(caps, baseline);
     }
 }

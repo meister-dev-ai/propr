@@ -39,6 +39,11 @@ public static class ReviewWorkspaceServiceCollectionExtensions
                     options.MaxCacheSizeMegabytes = maxCacheSizeMegabytes;
                 }
 
+                if (int.TryParse(configuration["REVIEW_WORKSPACE_MIRROR_RETENTION_DAYS"], out var mirrorRetentionDays))
+                {
+                    options.MirrorRetentionDays = mirrorRetentionDays;
+                }
+
                 if (int.TryParse(configuration["REVIEW_WORKSPACE_MAX_CONCURRENT_PREPARATIONS"], out var maxConcurrentPreparations))
                 {
                     options.MaxConcurrentPreparations = maxConcurrentPreparations;

@@ -21,6 +21,7 @@ internal sealed partial class AdoThreadReplier(
     VssConnectionFactory connectionFactory,
     IClientScmConnectionRepository connectionRepository,
     IClientScmScopeRepository scopeRepository,
+    IPostedCommentComposer composer,
     ILogger<AdoThreadReplier> logger) : IReviewThreadReplyPublisher
 {
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
@@ -85,7 +86,7 @@ internal sealed partial class AdoThreadReplier(
         }
 
         var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
-        var renderedReplyText = FormatReplyText(replyText);
+        var renderedReplyText = FormatReplyText(replyText, composer);
 
         var comment = new Comment
         {
@@ -149,9 +150,12 @@ internal sealed partial class AdoThreadReplier(
               new InvalidOperationException("No Azure DevOps organization URL could be resolved for thread replies.");
     }
 
-    internal static string FormatReplyText(string replyText)
+    internal static string FormatReplyText(string replyText, IPostedCommentComposer composer)
     {
-        return HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText;
+        ArgumentNullException.ThrowIfNull(composer);
+
+        // The marker goes on after the rendering, so nothing in it is rewritten on its way to the provider.
+        return composer.Append(HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText);
     }
 
     [LoggerMessage(

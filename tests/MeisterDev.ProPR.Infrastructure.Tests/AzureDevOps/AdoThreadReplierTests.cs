@@ -10,11 +10,22 @@ public sealed class AdoThreadReplierTests
     {
         const string input = "Run dotnet \"$ProCursorDll\" after removing <script>alert('xss')</script>.";
 
-        var reply = AdoThreadReplier.FormatReplyText(input);
+        var reply = AdoThreadReplier.FormatReplyText(input, TestPostedCommentComposer.Default);
 
         Assert.Contains("\"$ProCursorDll\"", reply);
         Assert.DoesNotContain("&quot;", reply);
         Assert.Equal(-1, reply.IndexOf("<script>", StringComparison.Ordinal));
         Assert.Contains("<\u200Bscript>", reply);
+    }
+
+    [Fact]
+    public void FormatReplyText_EndsWithTheMarker()
+    {
+        var reply = AdoThreadReplier.FormatReplyText(
+            "Fixed in the latest push.",
+            TestPostedCommentComposer.Default);
+
+        Assert.StartsWith("Fixed in the latest push.", reply, StringComparison.Ordinal);
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, reply, StringComparison.Ordinal);
     }
 }

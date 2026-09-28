@@ -4,6 +4,7 @@
 
 using System.Text;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Events;
 using Microsoft.Extensions.Logging;
 using MeisterDev.ProPR.CodeInsights.Contracts;
@@ -28,6 +29,7 @@ public sealed partial class CodeInsightMissHarvester(
     ICodeInsightMissStore missStore,
     IHumanMissClassifier classifier,
     ICodeInsightsCollectionGate gate,
+    IPostedCommentComposer postedCommentComposer,
     ILogger<CodeInsightMissHarvester> logger) : ICodeInsightMissHarvester
 {
     public async Task HandleThreadObservedAsync(ThreadUpdatedEvent evt, CancellationToken ct = default)
@@ -72,7 +74,7 @@ public sealed partial class CodeInsightMissHarvester(
             }
 
             var discussion = BuildDiscussion(evt);
-            if (discussion.Length == 0 || !HarvestedThreadEligibility.IsHumanThread(discussion))
+            if (discussion.Length == 0 || !HarvestedThreadEligibility.IsHumanThread(discussion, postedCommentComposer.Text))
             {
                 // Either nothing was said, or nothing on the thread was said by a person: the provider recording
                 // its own activity, or ProPR's own summary on an installation that has no provenance for it. An

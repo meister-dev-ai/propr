@@ -81,6 +81,10 @@ export interface JobDetail {
     filesReviewed?: number
     filesInScope?: number | null
     budgetStatus?: components['schemas']['BudgetStatusDto'] | null
+    /** Why review admission refused this job, in the words posted on the pull request. */
+    admissionRefusalReason?: string | null
+    /** When the review-admission hold expires and the job may start by itself. */
+    heldUntil?: string | null
 }
 
 export interface CommentRelevanceEventDetails {

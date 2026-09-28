@@ -17,6 +17,18 @@ terminates TLS:
 | PostgreSQL | All durable state | yes |
 | Reverse proxy | Terminates TLS and routes to the API and the frontend | yes, in the example stack |
 
+The Clients module owns AI profile persistence and workspace purpose selection in PostgreSQL. Verified profile
+updates build and probe a detached candidate before opening a serializable promotion transaction. The transaction
+checks the saved configuration digest, client ownership and logical references before saving the candidate and
+its verification result together. Workspace selection validates all three models and effective logical mappings,
+then saves the selected purpose bindings and profile activation in one serializable transaction. Concurrent
+configuration changes return a conflict so the caller can reload and retry.
+
+The Reviewing Intake module owns the customer history reader port and PostgreSQL projection. It filters
+the owning client and optional status before counting and paging scalar metadata. PostgreSQL computes
+persisted finding counts without transferring result JSON or protocol events. Client-scoped result reads
+check the owning client in the database predicate before result deserialization.
+
 The example compose stack uses nginx for the proxy, and bundles Loki and Grafana for log browsing -
 conveniences nothing in ProPR depends on. What has to route where, and on which ports, is in
 [deployment topology](../operate/deploy.md#deployment-topology).

@@ -34,7 +34,8 @@ internal sealed class LocalGitReviewContextTools(
         request.TargetBranch,
         request.ChangedPathSnapshots,
         structuralAnalyzer,
-        providerRegistry), IAsyncDisposable
+        providerRegistry,
+        request.MaxFileSizeBytes), IAsyncDisposable
 {
     private readonly string? _normalizedTargetBranch = string.IsNullOrWhiteSpace(request.TargetBranch)
         ? null

@@ -36,6 +36,11 @@ public interface ITenantMembershipService
     /// <returns>The membership when found; otherwise <c>null</c>.</returns>
     Task<TenantMembershipDto?> GetByUserAsync(Guid tenantId, Guid userId, CancellationToken ct = default);
 
+    /// <summary>Creates a membership for an existing user without changing an existing membership.</summary>
+    /// <returns>The created membership, or <c>null</c> when the user does not exist.</returns>
+    /// <exception cref="InvalidOperationException">The user already belongs to the tenant or the tenant is not editable.</exception>
+    Task<TenantMembershipDto?> CreateAsync(Guid tenantId, Guid userId, TenantRole role, CancellationToken ct = default);
+
     /// <summary>
     ///     Creates or updates a tenant membership.
     /// </summary>

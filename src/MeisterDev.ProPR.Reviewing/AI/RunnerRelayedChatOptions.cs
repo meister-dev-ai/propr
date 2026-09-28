@@ -31,7 +31,14 @@ public static class RunnerRelayedChatOptions
 
     /// <summary>The options to hand the resolved client, or null when the runner sent none.</summary>
     /// <param name="wire">The options as they came off the wire.</param>
-    public static ChatOptions? ToChatOptions(RunnerChatOptions? wire)
+    /// <param name="captureReasoning">
+    ///     Whether this job may record the model's reasoning, as the control plane resolved it. It replaces the
+    ///     runner's own opt-in, so a runner that asks for a reasoning summary a tenant has forbidden does not
+    ///     get one. A resolved answer is stated on the request even when it asks for nothing, so the runner's
+    ///     opt-in cannot stand through an absent one. Null leaves the runner's request as it stands, for a
+    ///     caller that has not resolved the job's policy.
+    /// </param>
+    public static ChatOptions? ToChatOptions(RunnerChatOptions? wire, bool? captureReasoning = null)
     {
         if (wire is null)
         {
@@ -47,7 +54,11 @@ public static class RunnerRelayedChatOptions
                 : null,
         };
 
-        return options.ApplyReasoning(wire.CaptureReasoning, ParseEffort(wire.ReasoningEffort));
+        var effort = ParseEffort(wire.ReasoningEffort);
+
+        return captureReasoning is { } resolved
+            ? options.ApplyResolvedReasoning(resolved, effort)
+            : options.ApplyReasoning(wire.CaptureReasoning, effort);
     }
 
     /// <summary>

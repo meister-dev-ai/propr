@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.ProPR.Application.Features.Clients.Contracts;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 
@@ -12,6 +14,20 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 /// </summary>
 public sealed class NoOpAiConnectionRepository : IAiConnectionRepository
 {
+    public Task<IReadOnlyList<AiConnectionDto>> GetByIdsAsync(IReadOnlyCollection<Guid> connectionIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<AiConnectionDto>>([]);
+
+    public Task<AiVerifiedUpdateResult> VerifyUpdateAsync(
+        Guid clientId, AiConnectionDto original,
+        AiConnectionWriteRequestDto request, Func<AiConnectionDto, CancellationToken, Task<AiVerificationResultDto>> verify,
+        CancellationToken ct = default, Guid? authorizedTenantId = null) =>
+        throw new NotSupportedException("Offline Reviewing composition does not persist AI configuration.");
+
+    public Task<AiConfigurationResult> SelectPurposesAsync(
+        Guid clientId, AiWorkspacePurposeSelection selection,
+        CancellationToken ct = default, Guid? authorizedTenantId = null) =>
+        throw new NotSupportedException("Offline Reviewing composition does not persist AI configuration.");
+
     public Task<IReadOnlyList<AiConnectionDto>> GetByClientAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<AiConnectionDto>>([]);

@@ -10,21 +10,26 @@ namespace MeisterDev.Ai.Providers.Egress;
 /// <summary>
 ///     Builds a <see cref="SocketsHttpHandler" /> that refuses to connect to blocked egress addresses.
 ///     The destination IP is validated at connect time (defeating DNS-rebinding, since the check runs on the
-///     address the socket actually connects to), and automatic redirects are disabled so a 3xx response
-///     cannot bounce the request to an internal target.
+///     address the socket actually connects to).
 /// </summary>
 public static class GuardedEgressHttpHandler
 {
     /// <summary>Creates the guarded handler.</summary>
     /// <param name="allowPrivateEgress">
-    ///     When <c>true</c> (Development) the egress check is skipped so local providers — e.g. a localhost
-    ///     LiteLLM — remain reachable. Redirects stay disabled regardless.
+    ///     When <c>true</c> (Development) the egress check is skipped so local providers, for example a
+    ///     localhost LiteLLM, remain reachable.
     /// </param>
-    public static SocketsHttpHandler Create(bool allowPrivateEgress)
+    /// <param name="allowAutoRedirect">
+    ///     Whether a 3xx response is followed. Off for AI traffic, so a redirect cannot bounce a request to an
+    ///     internal target. On for source-control traffic, because GitHub and GitLab answer some routes with a
+    ///     redirect: a hop to another host opens another connection, which the same check runs on, and a hop to
+    ///     the same host reaches the host that was already checked.
+    /// </param>
+    public static SocketsHttpHandler Create(bool allowPrivateEgress, bool allowAutoRedirect = false)
     {
         var handler = new SocketsHttpHandler
         {
-            AllowAutoRedirect = false,
+            AllowAutoRedirect = allowAutoRedirect,
         };
 
         if (!allowPrivateEgress)

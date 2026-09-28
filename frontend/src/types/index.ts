@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns every assembly the loader saw, loaded and rejected. */
+        /** Returns every assembly the host saw, and every activation this installation holds. */
         get: {
             parameters: {
                 query?: never;
@@ -21,7 +21,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description The loaded families and the rejected assemblies. */
+                /** @description The loaded families, the passed-over assemblies, and the ones awaiting activation. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -59,6 +59,204 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/ai-provider-add-ins/activations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The decisions this installation's administrators have made, newest first. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The activations, each with whether the host is running it now. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProviderAddInActivationDto"][];
+                        "application/json": components["schemas"]["ProviderAddInActivationDto"][];
+                        "text/json": components["schemas"]["ProviderAddInActivationDto"][];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/ai-provider-add-ins/{contentHash}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lets this host run the add-in whose bytes hash to contentHash.
+         * @description The add-in is loaded by this call, so the family serves before the administrator leaves the page. It
+         *     is refused where the file has changed since the host read it, where what its driver declares
+         *     disagrees with what its assembly states, and where the identity is one this host already serves.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The bytes being approved, as the page listed them. */
+                    contentHash: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The add-in was loaded and is serving. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LoadedProviderAddInDto"];
+                        "application/json": components["schemas"]["LoadedProviderAddInDto"];
+                        "text/json": components["schemas"]["LoadedProviderAddInDto"];
+                    };
+                };
+                /** @description The add-in was not activated; the body says why. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        /**
+         * Withdraws the activation of one add-in.
+         * @description The add-in stays loaded until this host restarts. An assembly cannot be unloaded from under the
+         *     connections using it, and a review holding a client that family built is in flight. What this does is
+         *     stop the next start taking it.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The bytes whose activation is being withdrawn. */
+                    contentHash: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The activation was withdrawn. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description No activation holds those bytes. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -1677,7 +1875,7 @@ export interface paths {
         put?: never;
         /**
          * Issues a registration token. The value is returned here and never again. Single-use unless the
-         *     request asks for more, which is what a scaling group needs: its replicas start without an
+         *     request asks for more, which a scaling group needs: its replicas start without an
          *     operator present to issue each of them one.
          */
         post: {
@@ -5100,6 +5298,203 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/ai-connections/{connectionId}/verify-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verifies proposed client profile changes before atomically replacing the saved configuration. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The owning client identifier. */
+                    clientId: string;
+                    /** @description The client-owned connection identifier. */
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Proposed configuration. Blank credentials retain the protected saved values. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateAiConnectionRequest"];
+                    "text/json": components["schemas"]["UpdateAiConnectionRequest"];
+                    "application/*+json": components["schemas"]["UpdateAiConnectionRequest"];
+                };
+            };
+            responses: {
+                /** @description The verified configuration was applied. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiConnectionDto"];
+                        "application/json": components["schemas"]["AiConnectionDto"];
+                        "text/json": components["schemas"]["AiConnectionDto"];
+                    };
+                };
+                /** @description Configuration or provider verification failed; the saved profile is unchanged. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Authentication is required. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Client administrator access is required. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The client-owned profile does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The saved configuration changed during verification. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/ai-connections/select-purposes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Applies the Default, High and Embedding workspace purposes together using verified client-owned models. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description All three configured model and connection selections. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AiWorkspacePurposeSelection"];
+                    "text/json": components["schemas"]["AiWorkspacePurposeSelection"];
+                    "application/*+json": components["schemas"]["AiWorkspacePurposeSelection"];
+                };
+            };
+            responses: {
+                /** @description All selected purposes were applied together. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiConfigurationResult"];
+                        "application/json": components["schemas"]["AiConfigurationResult"];
+                        "text/json": components["schemas"]["AiConfigurationResult"];
+                    };
+                };
+                /** @description A selection is invalid or unverified; existing routing is unchanged. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Authentication is required. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Client administrator access is required. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description A logical or managed binding conflicts, or configuration changed concurrently. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiConfigurationResult"];
+                        "application/json": components["schemas"]["AiConfigurationResult"];
+                        "text/json": components["schemas"]["AiConfigurationResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/clients/{clientId}/budget/consumption": {
         parameters: {
             query?: never;
@@ -5713,7 +6108,7 @@ export interface paths {
         };
         /**
          * The logical models effective for this client — the client's overrides plus the tenant-catalog entries an
-         *     override does not shadow — for the pass and purpose editors' pickers.
+         *     override does not shadow — with authorized, nonsecret referenced model metadata for readiness checks.
          */
         get: {
             parameters: {
@@ -7659,6 +8054,332 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-targets/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists repositories reachable through a verified client connection. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Verified provider connection identifier. */
+                    connectionId?: string;
+                    /** @description Provider scope to inspect. */
+                    scopePath?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Repositories returned by the provider. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewTargetRepositoryResponse"][];
+                        "application/json": components["schemas"]["ClientReviewTargetRepositoryResponse"][];
+                        "text/json": components["schemas"]["ClientReviewTargetRepositoryResponse"][];
+                    };
+                };
+                /** @description The connection or scope is invalid, or the provider refused discovery. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller cannot administer this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Repository discovery is unavailable for the provider. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The crawl configuration capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists configured repository review targets for the client. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The configured review targets. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewTargetResponse"][];
+                        "application/json": components["schemas"]["ClientReviewTargetResponse"][];
+                        "text/json": components["schemas"]["ClientReviewTargetResponse"][];
+                    };
+                };
+                /** @description The caller cannot access this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The crawl configuration capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Creates an inactive review target for one repository. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Verified connection and repository coordinates. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateClientReviewTargetRequest"];
+                    "text/json": components["schemas"]["CreateClientReviewTargetRequest"];
+                    "application/*+json": components["schemas"]["CreateClientReviewTargetRequest"];
+                };
+            };
+            responses: {
+                /** @description The identical target already exists. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewTargetResponse"];
+                        "application/json": components["schemas"]["ClientReviewTargetResponse"];
+                        "text/json": components["schemas"]["ClientReviewTargetResponse"];
+                    };
+                };
+                /** @description The target was created. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewTargetResponse"];
+                        "application/json": components["schemas"]["ClientReviewTargetResponse"];
+                        "text/json": components["schemas"]["ClientReviewTargetResponse"];
+                    };
+                };
+                /** @description The coordinates or connection state are invalid. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller cannot administer this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The project already has a different configuration or the capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-targets/{targetId}/open-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists open pull requests for one configured repository review target. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Active, verified provider connection identifier. */
+                    connectionId?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                    /** @description Configured repository review target identifier. */
+                    targetId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Up to 100 open pull requests from the provider. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientOpenReviewResponse"][];
+                        "application/json": components["schemas"]["ClientOpenReviewResponse"][];
+                        "text/json": components["schemas"]["ClientOpenReviewResponse"][];
+                    };
+                };
+                /** @description The connection is invalid or does not cover the target. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller cannot access this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The target or provider adapter is unavailable. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The crawl configuration capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+                /** @description The provider could not list pull requests. */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -12796,6 +13517,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/reviewing/jobs/{jobId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns a review result only when the specified client owns the job. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The owning client. */
+                    clientId: string;
+                    /** @description The review job identifier. */
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewStatusResponse"];
+                        "application/json": components["schemas"]["ReviewStatusResponse"];
+                        "text/json": components["schemas"]["ReviewStatusResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reviewing/jobs/{jobId}/status": {
         parameters: {
             query?: never;
@@ -13722,6 +14519,153 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/reviewing/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reads a bounded page of persisted review metadata for the specified client. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description One-based page number. */
+                    page?: number;
+                    /** @description Number of rows, between 1 and 100. */
+                    pageSize?: number;
+                    /** @description Optional named job status. */
+                    status?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description The owning client. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerReviewHistory"];
+                        "application/json": components["schemas"]["CustomerReviewHistory"];
+                        "text/json": components["schemas"]["CustomerReviewHistory"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/reviewing/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get processing reviews and findings from jobs completed in the previous 30 days.
+         * @description The completion-time window includes `windowStart` and excludes `windowEnd`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description ID of the client whose dashboard is read. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Review activity for the client. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDashboard"];
+                        "application/json": components["schemas"]["CustomerDashboard"];
+                        "text/json": components["schemas"]["CustomerDashboard"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks the required role for this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -15498,6 +16442,212 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/machine-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists credential metadata without token hashes or secret material. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantMachineCredentialSummary"][];
+                        "application/json": components["schemas"]["TenantMachineCredentialSummary"][];
+                        "text/json": components["schemas"]["TenantMachineCredentialSummary"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Issues a credential and returns its secret once to the platform administrator. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["IssueTenantMachineCredentialRequest"];
+                    "text/json": components["schemas"]["IssueTenantMachineCredentialRequest"];
+                    "application/*+json": components["schemas"]["IssueTenantMachineCredentialRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IssuedTenantMachineCredential"];
+                        "application/json": components["schemas"]["IssuedTenantMachineCredential"];
+                        "text/json": components["schemas"]["IssuedTenantMachineCredential"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/machine-credentials/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revokes a credential so subsequent requests cannot authenticate. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants/{tenantId}/clients": {
         parameters: {
             query?: never;
@@ -15888,7 +17038,92 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /** Creates a tenant membership for an existing user. Only platform administrators may call this endpoint. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateTenantMembershipRequest"];
+                    "text/json": components["schemas"]["CreateTenantMembershipRequest"];
+                    "application/*+json": components["schemas"]["CreateTenantMembershipRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantMembershipDto"];
+                        "application/json": components["schemas"]["TenantMembershipDto"];
+                        "text/json": components["schemas"]["TenantMembershipDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -17885,6 +19120,13 @@ export interface components {
             /** @description Why this installation would refuse the value, or null when it permits it. */
             refusal?: string | null;
         };
+        /** @description The bounded configuration operation outcome without credential material. */
+        AiConfigurationResult: {
+            applied?: boolean;
+            error?: string | null;
+            conflict?: boolean;
+            conflictingPurposes?: components["schemas"]["AiPurpose"][] | null;
+        };
         /** @description One configured or discovered model that belongs to an AI connection profile. */
         AiConfiguredModelDto: {
             /** Format: uuid */
@@ -18066,7 +19308,7 @@ export interface components {
             } | null;
             /**
              * @description Which secret-marked declared fields hold a stored value. A console renders a field as set or not set
-             *     from this and offers to replace it, which is what the credential fields already do.
+             *     from this and offers to replace it, which the credential fields already do.
              */
             readonly declaredSecretNames?: string[] | null;
             /**
@@ -18494,6 +19736,19 @@ export interface components {
          * @enum {string}
          */
         AiVerificationStatus: "neverVerified" | "verified" | "failed";
+        /** @description A configured model and its owning connection selected for a workspace slot. */
+        AiWorkspaceModelSelection: {
+            /** Format: uuid */
+            connectionId?: string;
+            /** Format: uuid */
+            configuredModelId?: string;
+        };
+        /** @description The complete workspace selection applied in one operation. */
+        AiWorkspacePurposeSelection: {
+            default?: components["schemas"]["AiWorkspaceModelSelection"];
+            high?: components["schemas"]["AiWorkspaceModelSelection"];
+            embedding?: components["schemas"]["AiWorkspaceModelSelection"];
+        };
         AnnotatedRegion: Record<string, never>;
         /**
          * @description Global role assigned directly to an application user.
@@ -18574,6 +19829,33 @@ export interface components {
              * @description Distinct authors the month held, automation identities left out.
              */
             authorCount?: number;
+        };
+        /** @description One add-in found in the external directory that nobody has activated, so none of it has run. */
+        AwaitingProviderAddInDto: {
+            /** @description The assembly that was found. */
+            filePath?: string | null;
+            /** @description The SHA-256 of that file, which an activation is bound to. */
+            contentHash?: string | null;
+            /** @description The identity key it states, or null when it states no manifest. */
+            key?: string | null;
+            /** @description What it calls itself, or null when it states no manifest. */
+            label?: string | null;
+            /** @description The version it states, or null when it states no manifest. */
+            version?: string | null;
+            /** @description The contract version it was built against, or null when it states no manifest. */
+            contractVersion?: string | null;
+            /** @description The hosts it says it will contact. */
+            reachedHosts?: string[] | null;
+            /** @description The premium capability it needs, or null for none. */
+            requiredCapability?: string | null;
+            /** @description The assembly's own name, readable whether or not it states a manifest. */
+            assemblyName?: string | null;
+            /** @description The assembly's own version. */
+            assemblyVersion?: string | null;
+            /** @description Why it cannot be activated as it stands, or null when it can. */
+            refusal?: string | null;
+            /** @description Whether an administrator can activate it as it stands. */
+            canBeActivated?: boolean;
         };
         /** @description Identifies a pull request to block and, optionally, why. */
         BlockPullRequestRequest: {
@@ -18710,7 +19992,7 @@ export interface components {
          * @description The granularity at which a USD budget cap is enforced.
          * @enum {string}
          */
-        BudgetScopeKind: "clientMonthly" | "pullRequest" | "increment";
+        BudgetScopeKind: "clientMonthly" | "pullRequest" | "increment" | "tenantMonthly";
         /**
          * @description One manual spend reset an administrator performed on a client's monthly period: the extra allowance it
          *     granted and the audit record of who granted it and what the period's ceiling was before and after. The
@@ -18775,12 +20057,12 @@ export interface components {
          *     USD threshold, and the scope spend that reached it. Null when no budget blocked the job.
          */
         BudgetStatusDto: {
-            scope?: components["schemas"]["BudgetScopeKind"];
+            scope?: components["schemas"]["BudgetScopeKind"] | null;
             capKind?: components["schemas"]["BudgetCapKind"];
             /** Format: double */
-            thresholdUsd?: number;
+            thresholdUsd?: number | null;
             /** Format: double */
-            spentUsd?: number;
+            spentUsd?: number | null;
         };
         /**
          * @description Cache outcome recorded for one AI call.
@@ -18911,6 +20193,14 @@ export interface components {
             /** @description One entry per month in the window, oldest first (months with no spend are present with zero). */
             months?: components["schemas"]["BudgetMonthSpendDto"][] | null;
         };
+        /** @description Open pull request details available to a review target. */
+        ClientOpenReviewResponse: {
+            /** Format: int32 */
+            number?: number;
+            title?: string | null;
+            webUrl?: string | null;
+            state?: string | null;
+        };
         /** @description Client response — key, ADO secret, and credential metadata are never included. */
         ClientResponse: {
             /** Format: uuid */
@@ -18944,6 +20234,7 @@ export interface components {
             outputLanguage?: string | null;
             reviewEveryIncrementEnabled?: boolean;
             withholdOutOfScopeFindings?: boolean;
+            admissionPolicy?: components["schemas"]["ReviewAdmissionPolicyDto"];
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -18953,6 +20244,24 @@ export interface components {
             source?: components["schemas"]["ReviewProfileSource"];
             /** Format: date-time */
             updatedAtUtc?: string | null;
+        };
+        /** @description A repository reachable through a verified provider connection. */
+        ClientReviewTargetRepositoryResponse: {
+            repositoryId?: string | null;
+            repositoryName?: string | null;
+            providerProjectKey?: string | null;
+            ownerOrNamespace?: string | null;
+            providerProjectDisplayName?: string | null;
+        };
+        /** @description Client review target details. */
+        ClientReviewTargetResponse: {
+            /** Format: uuid */
+            id?: string;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
+            repositoryId?: string | null;
+            repositoryName?: string | null;
+            isActive?: boolean;
         };
         /** @description Client-scoped provider reviewer-trigger identity returned by admin APIs. */
         ClientReviewerIdentityDto: {
@@ -20145,6 +21454,15 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
         };
+        /** @description Repository coordinates for a client review target. */
+        CreateClientReviewTargetRequest: {
+            /** Format: uuid */
+            connectionId?: string;
+            providerProjectKey?: string | null;
+            repositoryId?: string | null;
+            repositoryName?: string | null;
+            providerScopePath?: string | null;
+        };
         /** @description Request to declare that a client answers mentions on repositories in one project. */
         CreateMentionConfigRequest: {
             /**
@@ -20185,6 +21503,12 @@ export interface components {
              */
             crawlConfigId?: string | null;
         };
+        /** @description Creates a membership for an existing user. */
+        CreateTenantMembershipRequest: {
+            /** Format: uuid */
+            userId?: string;
+            role?: string | null;
+        };
         /** @description Create-tenant request payload. */
         CreateTenantRequest: {
             slug?: string | null;
@@ -20208,6 +21532,57 @@ export interface components {
             username?: string | null;
             password?: string | null;
             globalRole?: components["schemas"]["AppUserRole"];
+        };
+        /**
+         * @description Client review activity in a fixed 30-day window. The start is inclusive and the end is exclusive;
+         *     the finding count uses the completion time of each review job.
+         */
+        CustomerDashboard: {
+            /** Format: date-time */
+            windowStart?: string;
+            /** Format: date-time */
+            windowEnd?: string;
+            /** Format: int64 */
+            recentFindingCount?: number;
+            runningReviews?: components["schemas"]["CustomerRunningReview"][] | null;
+        };
+        /** @description A page of persisted client reviews. */
+        CustomerReviewHistory: {
+            /** Format: int64 */
+            totalCount?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            items?: components["schemas"]["CustomerReviewHistoryItem"][] | null;
+        };
+        /** @description Scalar persisted review metadata and its finding count. */
+        CustomerReviewHistoryItem: {
+            /** Format: uuid */
+            id?: string;
+            status?: components["schemas"]["JobStatus"];
+            provider?: components["schemas"]["ScmProvider"];
+            repository?: string | null;
+            /** Format: int32 */
+            pullRequestNumber?: number;
+            /** Format: date-time */
+            submittedAt?: string;
+            /** Format: date-time */
+            completedAt?: string | null;
+            /** Format: int32 */
+            findingCount?: number;
+        };
+        /** @description A review currently processing for the selected client. */
+        CustomerRunningReview: {
+            /** Format: uuid */
+            id?: string;
+            status?: components["schemas"]["JobStatus"];
+            provider?: components["schemas"]["ScmProvider"];
+            repository?: string | null;
+            /** Format: int32 */
+            pullRequestNumber?: number;
+            /** Format: date-time */
+            startedAt?: string;
         };
         /** @description Request body for model discovery against a provider without persisting a profile. */
         DiscoverModelsRequest: {
@@ -20306,6 +21681,25 @@ export interface components {
              */
             maxUses?: number | null;
         };
+        /** @description Metadata required to issue a tenant machine credential. */
+        IssueTenantMachineCredentialRequest: {
+            label?: string | null;
+            /** Format: date-time */
+            expiresAt?: string | null;
+        };
+        /** @description A newly issued credential whose token is returned once. */
+        IssuedTenantMachineCredential: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            tenantId?: string;
+            label?: string | null;
+            token?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt?: string | null;
+        };
         /** @description Detailed response for a single job, including the per-tier token breakdown. */
         JobDetailResponse: {
             /** Format: uuid */
@@ -20338,6 +21732,9 @@ export interface components {
             costIsApproximate?: boolean;
             budgetStatus?: components["schemas"]["BudgetStatusDto"];
             resultSummary?: string | null;
+            admissionRefusalReason?: string | null;
+            /** Format: date-time */
+            heldUntil?: string | null;
         };
         /** @description Single job item in the list response. */
         JobListItem: {
@@ -20390,7 +21787,7 @@ export interface components {
          * @description Status of a review job.
          * @enum {string}
          */
-        JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "superseded" | "stopped" | "budgetHeld" | "budgetExceeded";
+        JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "superseded" | "stopped" | "budgetHeld" | "budgetExceeded" | "admissionRefused" | "admissionHeld";
         /**
          * @description What an operator did to the installation's license. An installation holds one license, so replacing it
          *     is recorded as a single action rather than as a removal followed by an activation: that keeps the record
@@ -20588,7 +21985,7 @@ export interface components {
         };
         /** @description One provider family the host loaded from an add-in directory. */
         LoadedProviderAddInDto: {
-            /** @description The family's identity key, which is what a connection is stored against. */
+            /** @description The family's identity key, which a connection is stored against. */
             key?: string | null;
             /** @description The family's human-readable name. Two families may share one, so the key is shown beside it. */
             label?: string | null;
@@ -20607,6 +22004,21 @@ export interface components {
             /** @description Which directory it came from: `built-in` or `external`. */
             origin?: string | null;
         };
+        /** @description Nonsecret model metadata for effective logical-model readiness. */
+        LogicalModelReferenceResponse: {
+            availability: string;
+            remoteModelId?: string | null;
+            connectionDisplayName?: string | null;
+            operationKinds?: components["schemas"]["AiOperationKind"][] | null;
+            supportedProtocolModes?: string[] | null;
+            tokenizerName?: string | null;
+            /** Format: int32 */
+            maxInputTokens?: number | null;
+            /** Format: int32 */
+            embeddingDimensions?: number | null;
+            isActive?: boolean | null;
+            verificationStatus?: components["schemas"]["AiVerificationStatus"];
+        };
         /** @description One logical model as returned to the client, tagged by the scope it came from (client override or tenant). */
         LogicalModelResponse: {
             /** Format: uuid */
@@ -20620,6 +22032,7 @@ export interface components {
             reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
             protocolMode?: string | null;
             scope?: string | null;
+            referencedModel?: components["schemas"]["LogicalModelReferenceResponse"];
         };
         /** @description Create/update payload for a logical model (the name is the business key within its scope). */
         LogicalModelWriteRequest: {
@@ -20880,6 +22293,7 @@ export interface components {
             outputLanguage?: string | null;
             reviewEveryIncrementEnabled?: boolean | null;
             withholdOutOfScopeFindings?: boolean | null;
+            admissionPolicy?: components["schemas"]["ReviewAdmissionPolicyDto"];
         };
         /** @description Patch payload for the installation's premium capability overrides. */
         PatchLicensingOverridesRequest: {
@@ -21859,12 +23273,38 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        /** @description One decision an administrator made to let this host run an add-in binary. */
+        ProviderAddInActivationDto: {
+            /** @description The bytes that were activated. */
+            contentHash?: string | null;
+            /** @description The identity the add-in stated at the time. */
+            key?: string | null;
+            /** @description What it called itself at the time. */
+            label?: string | null;
+            /** @description The version it stated at the time. */
+            version?: string | null;
+            /** @description Where the file sat at the time. */
+            filePath?: string | null;
+            /** @description The administrator who decided. */
+            activatedByDisplayName?: string | null;
+            /**
+             * Format: date-time
+             * @description When they decided.
+             */
+            activatedAt?: string;
+            /**
+             * @description Whether that add-in is one this host is running now. False for an activation whose file has since been
+             *     replaced or removed, and for one revoked since the host started.
+             */
+            isServing?: boolean;
+        };
         /** @description Every assembly the add-in loader saw when the host started. */
         ProviderAddInInventoryDto: {
             /** @description The families that were taken. */
             loaded?: components["schemas"]["LoadedProviderAddInDto"][] | null;
             /** @description The assemblies that were skipped, each with why. */
             rejected?: components["schemas"]["RejectedProviderAddInDto"][] | null;
+            awaiting?: components["schemas"]["AwaitingProviderAddInDto"][] | null;
         };
         /** @description Append-only operational audit entry for one provider connection change or verification result. */
         ProviderConnectionAuditEntryDto: {
@@ -22084,6 +23524,13 @@ export interface components {
             /** @description Operator-readable detail. */
             detail?: string | null;
         };
+        /**
+         * @description Whether a tenant's review jobs capture the model's reasoning into the protocol. Reasoning can contain
+         *     verbatim source excerpts, so a processor operating one installation for several controllers needs the
+         *     choice per tenant instead of only installation-wide.
+         * @enum {string}
+         */
+        ReasoningCapturePolicy: "installationDefault" | "enabled" | "disabled";
         /** @description Refresh token request payload. */
         RefreshRequest: {
             refreshToken?: string | null;
@@ -22265,6 +23712,24 @@ export interface components {
             updatedAt?: string;
             /** @description Comments belonging to the thread, in publication order. */
             comments?: components["schemas"]["RetainedCommentDto"][] | null;
+        };
+        /**
+         * @description A client's review admission bounds. Every bound is optional; a null bound means that dimension is
+         *     unbounded. A review measured past a bound is refused before any model call, with the measured value and
+         *     the bound named in the notice posted on the pull request. The reviews-per-hour bound holds a job instead
+         *     of refusing it, and releases it once the window has passed.
+         */
+        ReviewAdmissionPolicyDto: {
+            /** Format: int32 */
+            maxChangedFiles?: number | null;
+            /** Format: int32 */
+            maxChangedLines?: number | null;
+            /** Format: int32 */
+            maxDiffBytes?: number | null;
+            /** Format: int32 */
+            maxReviewsPerPullRequestPerHour?: number | null;
+            /** Format: int32 */
+            maxRepositoryMegabytes?: number | null;
         };
         /** @description Response returned by coordinate-addressed review submission, whatever the outcome. */
         ReviewByCoordinatesResponse: {
@@ -22697,7 +24162,7 @@ export interface components {
          *         because the tools carry their implementations. This record therefore carries the parts the
          *         provider needs to see: each tool as a declaration (name, description, parameter schema) and the
          *         reasoning settings in neutral terms. A relay that dropped any of this would turn a tool-using
-         *         review into a single-turn review, which is what happened before the options were sent.
+         *         review into a single-turn review, which happened before the options were sent.
          */
         RunnerChatOptions: {
             /**
@@ -23237,7 +24702,7 @@ export interface components {
          * @description A model the executor may call, named rather than connected.
          *
          *     The relay resolves LogicalModelName to a connection and a credential on the
-         *         control-plane side, which is what keeps the key off the executor. Everything else here is
+         *         control-plane side, and that keeps the key off the executor. Everything else here is
          *         non-secret description the pipeline needs before it makes a call: which tokenizer counts the
          *         prompt, what fits in the context window, and which behaviours the model supports.
          */
@@ -23466,6 +24931,17 @@ export interface components {
             temperature?: number | null;
             /** @description The pipeline profile the review runs under, when one is configured. */
             reviewPipelineProfileId?: string | null;
+            /**
+             * @description Whether this job may record the model's reasoning into the trace and ask the provider for a reasoning
+             *     summary. Reasoning can contain verbatim source, so the decision belongs to the tenant that owns the job
+             *     and is made on the control plane. Null from an older control plane leaves the runner's own switch in
+             *     charge, which is how the review behaved before the field existed.
+             */
+            captureReasoning?: boolean | null;
+            /** Format: int32 */
+            maxFileSizeBytes?: number | null;
+            /** Format: int32 */
+            maxStructuralParseBytes?: number | null;
         };
         /** @description One entry of the resolved pass list. */
         RunnerReviewPass: {
@@ -23831,6 +25307,18 @@ export interface components {
             expiresIn?: number;
             tokenType?: string | null;
         };
+        /**
+         * @description A tenant's monthly USD budget caps, covering the month-to-date spend of every client in the tenant. Both
+         *     values are optional; a null cap means no limit. The soft cap stops admitting new review jobs, the hard cap
+         *     cuts further model calls. The tenant scope is evaluated after the client scopes, so a tighter client cap
+         *     binds first.
+         */
+        TenantBudgetConfigDto: {
+            /** Format: double */
+            monthlySoftCapUsd?: number | null;
+            /** Format: double */
+            monthlyHardCapUsd?: number | null;
+        };
         /** @description One client's current-period spend against its monthly budget, as a row in the tenant overview. */
         TenantBudgetOverviewClientDto: {
             /**
@@ -23930,6 +25418,12 @@ export interface components {
              */
             updatedAt?: string;
             /**
+             * @description The current value of the installation-wide reasoning-capture switch, so a console can name what the
+             *     installation default does for this tenant. Stated on every construction and carrying no default of its
+             *     own: a caller that omitted it would report a switch value it never read.
+             */
+            installationDefaultCapturesReasoning?: boolean;
+            /**
              * @description Provider families this tenant's clients may use, by identity key, out of the entries a loaded family
              *     claims. Empty together with an empty UnresolvedAiProviderKinds means unrestricted; a
              *     tenant that has never stated a policy reads that way.
@@ -23946,6 +25440,9 @@ export interface components {
              *     so an operator can see which entry has to be corrected, and named on a write to remove one.
              */
             unresolvedAiProviderKinds?: string[] | null;
+            reasoningCapturePolicy?: components["schemas"]["ReasoningCapturePolicy"];
+            budget?: components["schemas"]["TenantBudgetConfigDto"];
+            reviewLimits?: components["schemas"]["TenantReviewLimitsDto"];
         };
         /** @description Tenant-local login request payload. */
         TenantLocalLoginRequest: {
@@ -23965,6 +25462,20 @@ export interface components {
             displayName?: string | null;
             providerKind?: string | null;
             providerLabel?: string | null;
+        };
+        /** @description Credential metadata returned without the issued token or verifier. */
+        TenantMachineCredentialSummary: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            tenantId?: string;
+            label?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt?: string | null;
+            /** Format: date-time */
+            revokedAt?: string | null;
         };
         /** @description A single client-access assignment held by a tenant member within a tenant. */
         TenantMemberClientAccessDto: {
@@ -23991,6 +25502,17 @@ export interface components {
             assignedAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        /**
+         * @description A tenant's per-file byte limits for reviews. Both values are optional; a null value leaves the
+         *     installation value in force. They bound what one file may contribute to a review, so they protect the
+         *     host that runs it.
+         */
+        TenantReviewLimitsDto: {
+            /** Format: int32 */
+            maxFileSizeBytes?: number | null;
+            /** Format: int32 */
+            maxStructuralParseBytes?: number | null;
         };
         /**
          * @description Tenant-scoped authorization role for a tenant membership.
@@ -24057,6 +25579,17 @@ export interface components {
              * @description When the most recent manual spend reset in this period was performed (UTC), or null when none.
              */
             lastResetAt?: string | null;
+            /**
+             * Format: double
+             * @description The tenant's own monthly soft cap, or null when the tenant has no soft cap. Unlike
+             *     MonthlySoftCapUsd this is a ceiling enforcement applies to the tenant's aggregate spend.
+             */
+            tenantMonthlySoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The tenant's own monthly hard cap, or null when the tenant has no hard cap.
+             */
+            tenantMonthlyHardCapUsd?: number | null;
         };
         /** @description Aggregated USD spend for a single calendar month across a tenant. */
         TenantSpendMonthDto: {
@@ -24322,6 +25855,9 @@ export interface components {
              *     not hold is ignored.
              */
             removedUnresolvedAiProviderKinds?: string[] | null;
+            reasoningCapturePolicy?: components["schemas"]["ReasoningCapturePolicy"];
+            budget?: components["schemas"]["TenantBudgetConfigDto"];
+            reviewLimits?: components["schemas"]["TenantReviewLimitsDto"];
         };
         /** @description Replace-tenant-provider request payload. */
         UpdateTenantSsoProviderRequest: {

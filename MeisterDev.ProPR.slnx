@@ -10,6 +10,8 @@
         <Project Path="src/MeisterDev.Ai.Providers.OpenAiAddIn/MeisterDev.Ai.Providers.OpenAiAddIn.csproj" />
         <Project Path="src/MeisterDev.Ai.Providers.AnthropicAddIn/MeisterDev.Ai.Providers.AnthropicAddIn.csproj" />
         <Project Path="src/MeisterDev.Ai.Providers/MeisterDev.Ai.Providers.csproj" />
+        <Project Path="src/MeisterDev.DataProtection/MeisterDev.DataProtection.csproj" />
+        <Project Path="src/MeisterDev.DataProtection.AzureKeyVaultAddIn/MeisterDev.DataProtection.AzureKeyVaultAddIn.csproj" />
         <Project Path="src/MeisterDev.ProPR.Api/MeisterDev.ProPR.Api.csproj" />
         <Project Path="src/MeisterDev.ProPR.Application/MeisterDev.ProPR.Application.csproj" />
         <Project Path="src/MeisterDev.ProPR.Domain/MeisterDev.ProPR.Domain.csproj" />
@@ -32,6 +34,9 @@
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/MeisterDev.Ai.Providers.AnthropicAddIn.Tests/MeisterDev.Ai.Providers.AnthropicAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.DataProtection.AzureKeyVaultAddIn.Tests/MeisterDev.DataProtection.AzureKeyVaultAddIn.Tests.csproj" />
+        <Project Path="tests/MeisterDev.DataProtection.ExampleAddIn/MeisterDev.DataProtection.ExampleAddIn.csproj" />
+        <Project Path="tests/MeisterDev.DataProtection.Tests/MeisterDev.DataProtection.Tests.csproj" />
         <Project Path="tests/MeisterDev.Ai.Providers.AzureOpenAiAddIn.Tests/MeisterDev.Ai.Providers.AzureOpenAiAddIn.Tests.csproj" />
         <Project Path="tests/MeisterDev.Ai.Providers.BedrockAddIn.Tests/MeisterDev.Ai.Providers.BedrockAddIn.Tests.csproj" />
         <Project Path="tests/MeisterDev.Ai.Providers.ExampleAddIn/MeisterDev.Ai.Providers.ExampleAddIn.csproj" />

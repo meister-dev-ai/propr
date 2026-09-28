@@ -603,19 +603,22 @@ public sealed class GitLabCodeReviewPublicationServiceTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
         Assert.Equal(2, postedBodies.Count);
         Assert.All(postedBodies, body => Assert.Equal("multipart/form-data", body.ContentType));
 
-        Assert.Contains("name=body", postedBodies[0].Body, StringComparison.Ordinal);
-        Assert.Contains("Looks solid overall.", postedBodies[0].Body, StringComparison.Ordinal);
-        Assert.Contains("No blocking issues found.", postedBodies[0].Body, StringComparison.Ordinal);
+        var overview = GitLabTestHelpers.ReadMultipartField(postedBodies[0].Body, "body");
+        Assert.Contains("Looks solid overall.", overview, StringComparison.Ordinal);
+        Assert.Contains("No blocking issues found.", overview, StringComparison.Ordinal);
+        TestPostedCommentComposer.AssertMarkedOnce(overview, TestPostedCommentComposer.DistinctiveMarker);
 
-        Assert.Contains("name=body", postedBodies[1].Body, StringComparison.Ordinal);
-        Assert.Contains("Warning: Guard this null case.", postedBodies[1].Body, StringComparison.Ordinal);
+        Assert.Equal(
+            "Warning: Guard this null case.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            GitLabTestHelpers.ReadMultipartField(postedBodies[1].Body, "body"));
         Assert.Contains("position[new_path]", postedBodies[1].Body, StringComparison.Ordinal);
         Assert.Contains("src/file.ts", postedBodies[1].Body, StringComparison.Ordinal);
         Assert.Contains("position[old_path]", postedBodies[1].Body, StringComparison.Ordinal);
@@ -677,7 +680,8 @@ public sealed class GitLabCodeReviewPublicationServiceTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -736,7 +740,8 @@ public sealed class GitLabCodeReviewPublicationServiceTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
@@ -779,7 +784,8 @@ public sealed class GitLabCodeReviewPublicationServiceTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         // The only discussion (the summary) is forbidden, so nothing posts — surfaced as a publication failure
         // whose inner exception carries the scope-aware provider detail.
@@ -850,7 +856,8 @@ public sealed class GitLabCodeReviewPublicationServiceTests
 
         var sut = new GitLabCodeReviewPublicationService(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory);
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
 
         // The summary posts; the single inline server error is isolated and recorded (not thrown), and its
         // targeted provider detail is preserved on the recorded failure.
@@ -1124,6 +1131,31 @@ internal static class GitLabTestHelpers
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient("GitLabProvider").Returns(new HttpClient(new StubHttpMessageHandler(responder)));
         return factory;
+    }
+
+    /// <summary>
+    ///     Reads one field out of a multipart form payload. GitLab takes a discussion as form data, so an
+    ///     assertion over the whole serialized payload cannot tell the comment text from the position fields
+    ///     around it, and cannot say where in the text something sits.
+    /// </summary>
+    public static string ReadMultipartField(string payload, string name)
+    {
+        var firstLineBreak = payload.IndexOf("\r\n", StringComparison.Ordinal);
+        Assert.True(firstLineBreak >= 0, "Multipart payload has no CRLF, so it carries no boundary line.");
+        var boundary = payload[..firstLineBreak];
+
+        var part = Assert.Single(
+            payload.Split(boundary, StringSplitOptions.RemoveEmptyEntries),
+            candidate => candidate.Contains($"name={name}\r\n", StringComparison.Ordinal)
+                         || candidate.Contains($"name=\"{name}\"", StringComparison.Ordinal));
+
+        var headerEnd = part.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+        Assert.True(
+            headerEnd >= 0,
+            $"Part '{name}' has no blank line between its headers and its value.");
+
+        var value = part[(headerEnd + 4)..];
+        return value.EndsWith("\r\n", StringComparison.Ordinal) ? value[..^2] : value;
     }
 
     public static HttpResponseMessage CreateJsonResponse<T>(T payload, HttpStatusCode statusCode = HttpStatusCode.OK)
