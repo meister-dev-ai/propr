@@ -225,12 +225,18 @@ public sealed partial class CodeInsightSealSweeper(
         var aggregateIds = quiet.Select(row => row.Id).ToList();
 
         // One job per aggregate is enough: the provider scope is a property of where the pull request lives, not
-        // of which review looked at it.
-        var jobByAggregate = await db.CodeInsightFindings
+        // of which review looked at it. The smallest job id is picked in memory because PostgreSQL 17 has no min()
+        // aggregate for uuid. The query loads one row per candidate and review job, which is the candidate cap
+        // times the number of reviews per pull request.
+        var pairs = await db.CodeInsightFindings
             .Where(finding => aggregateIds.Contains(finding.CodeInsightPullRequestId))
-            .GroupBy(finding => finding.CodeInsightPullRequestId)
-            .Select(group => new { AggregateId = group.Key, JobId = group.Min(finding => finding.JobId) })
-            .ToDictionaryAsync(row => row.AggregateId, row => row.JobId, ct);
+            .Select(finding => new { AggregateId = finding.CodeInsightPullRequestId, finding.JobId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        var jobByAggregate = pairs
+            .GroupBy(pair => pair.AggregateId)
+            .ToDictionary(group => group.Key, group => group.Min(pair => pair.JobId));
 
         return quiet
             .Where(row => jobByAggregate.ContainsKey(row.Id))

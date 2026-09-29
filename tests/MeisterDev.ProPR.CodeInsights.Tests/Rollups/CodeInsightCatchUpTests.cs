@@ -280,6 +280,44 @@ public sealed class CodeInsightCatchUpTests : IDisposable
     }
 
     [Fact]
+    public async Task AFailingCandidateSelectionEndsTheSweepWithoutSealingOrThrowing()
+    {
+        var aggregateId = await this.SeedQuietAsync(ClientA, "repo-1", 7, idleDays: 30);
+
+        // A disposed context makes every query of the candidate selection throw.
+        var failingContext = new MeisterProPRDbContext(
+            new DbContextOptionsBuilder<MeisterProPRDbContext>()
+                .UseInMemoryDatabase($"CodeInsightCatchUpTests-failing-{Guid.NewGuid():N}")
+                .Options);
+        await failingContext.DisposeAsync();
+
+        var sweeper = new CodeInsightSealSweeper(
+            failingContext,
+            this._sealer,
+            this._gate,
+            this._jobs,
+            NullLogger<CodeInsightSealSweeper>.Instance,
+            this._pullRequests,
+            this.CloseObserver);
+
+        Assert.Equal(0, await sweeper.SweepAsync(10, TimeSpan.FromDays(7)));
+
+        await this._pullRequests.DidNotReceive().FetchRefAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<int>(),
+            Arg.Any<Guid?>(),
+            Arg.Any<CancellationToken>());
+        await this._sealer.DidNotReceive().SealAsync(
+            Arg.Any<CodeInsightPullRequestKey>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        var aggregate = await this._dbContext.CodeInsightPullRequests.SingleAsync(row => row.Id == aggregateId);
+        Assert.Null(aggregate.LastSealAttemptAt);
+    }
+
+    [Fact]
     public async Task APullRequestWhoseReviewJobIsGoneIsLeftUnmeasuredRatherThanGuessedAt()
     {
         await this.SeedQuietAsync(ClientA, "repo-1", 7, idleDays: 30);

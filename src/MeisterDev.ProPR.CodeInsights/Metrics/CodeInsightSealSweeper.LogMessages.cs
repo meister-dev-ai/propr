@@ -14,8 +14,8 @@ public sealed partial class CodeInsightSealSweeper
     private static partial void LogSweepSealed(ILogger logger, int sealedCount);
 
     [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "Selecting unsealed code-insight pull requests failed; the next sweep retries.")]
+        Level = LogLevel.Error,
+        Message = "Selecting unsealed code-insight pull requests failed, so this seal sweep examined no pull request.")]
     private static partial void LogCandidateSelectionFailed(ILogger logger, Exception ex);
 
     [LoggerMessage(
