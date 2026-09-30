@@ -25,7 +25,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers;
 ///     numeric columns are the one place in this change where a wrong conversion rewrites stored configuration
 ///     instead of failing, and a fresh database has no row to get wrong.
 /// </remarks>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class StoreLogicalModelProtocolModeByNameMigrationTests(PostgresContainerFixture fixture)
 {
     private const string BeforeWidening = "CoverageGateRecall";
@@ -526,7 +526,7 @@ public sealed class StoreLogicalModelProtocolModeByNameMigrationTests(PostgresCo
 
         try
         {
-            await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+            await fixture.CreateDatabaseAtMigrationAsync(databaseName, BeforeWidening);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InsufficientPrivilege)
         {

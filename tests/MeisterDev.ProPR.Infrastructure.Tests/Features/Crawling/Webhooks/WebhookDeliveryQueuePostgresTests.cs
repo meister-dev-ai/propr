@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Crawling.Webhooks;
 ///     the claim is one conditional statement with <c>FOR UPDATE SKIP LOCKED</c>, and whether two replicas
 ///     can take the same delivery is not something an in-memory provider can answer.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class WebhookDeliveryQueuePostgresTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly Guid _tenantId = Guid.NewGuid();

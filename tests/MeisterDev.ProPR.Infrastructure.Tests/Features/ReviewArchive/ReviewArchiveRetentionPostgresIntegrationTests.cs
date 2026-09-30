@@ -29,7 +29,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.ReviewArchive;
 ///     no connectionId), the most-recently-active tie-break across connections, and the worker's purge
 ///     sequence leaving unrelated review and memory rows intact.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class ReviewArchiveRetentionPostgresIntegrationTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private ISecretProtectionCodec _codec = null!;

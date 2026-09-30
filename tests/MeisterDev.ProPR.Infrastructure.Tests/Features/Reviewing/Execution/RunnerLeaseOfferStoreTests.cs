@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     a LIMIT would drop whatever the limit cut off. For the fairness rule that would be a starvation bug,
 ///     and for the scope rule a cross-client leak. Both are asserted against the real database.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class RunnerLeaseOfferStoreTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly Guid TenantId = Guid.Parse("aaaaaaaa-1111-4111-8111-111111111111");

@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///     The month-and-author rollup. The upsert is what keeps a month counting people rather than completions,
 ///     and the month itself comes from the database clock, so both run against PostgreSQL.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class AuthorActivityRollupRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly ProviderHostRef AzureHost =

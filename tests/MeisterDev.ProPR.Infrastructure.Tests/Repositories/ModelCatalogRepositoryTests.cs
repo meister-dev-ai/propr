@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     the precedence of a narrower override, the asymmetry between price and capability, and that a sibling
 ///     tenant's rates are never visible.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class ModelCatalogRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly Guid _tenantId = Guid.NewGuid();

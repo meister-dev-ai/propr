@@ -9,91 +9,81 @@ set -eu
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 STAGED_FRONTEND_FILES=$(printf '%s\n' "$STAGED_FILES" | grep '^frontend/' || true)
 
-# CI runs cleanupcode over the whole solution, so it reformats every file type ReSharper
-# handles, not only C#. An MSBuild fragment a project pulls in as an item is one of them,
-# and a diff in one fails the CI format gate the same way a C# file does. Cleaning only
-# the staged .cs files therefore let a reformat of such a file reach main unnoticed.
-STAGED_FORMAT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -v '^frontend/' | grep -E '\.(cs|props|targets|resx|xaml|xml|config|json)$' || true)
+# format_changed.py selects the files ReSharper formats in the solution, and scans all of them when the
+# formatting settings change. The hook only needs to know whether it has anything to check.
+STAGED_FORMAT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -v '^frontend/' | grep -E '\.(cs|props|targets|resx|xaml|xml|config)$|(^|/)\.editorconfig$|\.DotSettings$' || true)
 
-# Build and test are gated on the narrower set that can change what the solution compiles
-# to, so a reformat-only file type does not pull a full build and test run behind it.
+# Build and test are gated on the files that can change what the solution compiles to.
 STAGED_BACKEND_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(cs|props|targets|csproj|slnx)$' || true)
 
-# Nothing that affects backend or frontend is staged (e.g. a docs-only commit):
-# skip the heavy checks entirely.
 if [ -z "$STAGED_FORMAT_FILES" ] && [ -z "$STAGED_BACKEND_FILES" ] && [ -z "$STAGED_FRONTEND_FILES" ]; then
     exit 0
 fi
 
-# ── 1. Backend: format ───────────────────────────────────────────────────────
+# MSBuild otherwise keeps its worker nodes alive after the build. Repeated hook runs then leave dozens of idle
+# nodes behind, and together they fill the memory of the machine.
+export MSBUILDDISABLENODEREUSE=1
+
+# The format, backend and frontend checks read separate inputs, so they run at the same time. Each writes to
+# its own log, and the logs are printed in a fixed order once all checks have finished. If formatting changes
+# a file, the commit fails, and all checks run again after the formatted file is staged.
+CHECK_DIR=$(mktemp -d)
+trap 'rm -rf "$CHECK_DIR"' EXIT
+
 if [ -n "$STAGED_FORMAT_FILES" ]; then
-    # --- JetBrains Cleanup Block ---
-    if command -v jb > /dev/null 2>&1; then
-        JB_FILES=$(printf '%s\n' "$STAGED_FORMAT_FILES" | tr '\n' ';')
-
-        echo "Running 'jb cleanupcode'..."
-
-        # Run cleanup when the local JetBrains toolchain is healthy, using the same profile CI verifies
-        # ("Built-in: Reformat Code") so locally-formatted files match the CI formatting check.
-        # If it is installed but broken, keep build/test enforcement active.
-        if jb cleanupcode "MeisterDev.ProPR.slnx" --profile="Built-in: Reformat Code" --include="$JB_FILES"; then
-            # Stage ONLY the files that were in our list.
-            printf '%s\n' "$STAGED_FORMAT_FILES" | xargs git add
-            echo "Cleanup complete and specific files staged."
-        else
-            echo "JetBrains 'jb cleanupcode' failed. Skipping cleanup and continuing with build/test checks."
-        fi
-    else
-        echo "JetBrains 'jb' not found. Skipping cleanup."
-    fi
-
-    echo "pre-commit: format check passed."
+    echo "pre-commit: checking source formatting..."
+    python3 scripts/format_changed.py --staged > "$CHECK_DIR/format.log" 2>&1 &
+    FORMAT_PID=$!
 fi
 
-# ── 2. Backend: build and test ───────────────────────────────────────────────
 if [ -n "$STAGED_BACKEND_FILES" ]; then
-    echo "pre-commit: running dotnet build..."
-    if ! dotnet build ./MeisterDev.ProPR.slnx --no-restore --configuration Release --nologo -m:1 -p:UseSharedCompilation=false -consoleLoggerParameters:NoSummary 2>&1; then
-        echo ""
-        echo "pre-commit: FAILED -- build errors detected."
-        echo "Fix the compilation errors and commit again."
-        exit 1
-    fi
-
-    echo "pre-commit: build passed."
-
-    echo "pre-commit: running dotnet test..."
-    if ! dotnet test ./MeisterDev.ProPR.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet -m:1 -p:UseSharedCompilation=false 2>&1; then
-        echo ""
-        echo "pre-commit: FAILED -- one or more backend tests failed."
-        echo "Fix the failing tests and commit again."
-        exit 1
-    fi
-
-    echo "pre-commit: all backend tests passed."
+    echo "pre-commit: running dotnet build and dotnet test..."
+    (
+        dotnet build ./MeisterDev.ProPR.slnx --configuration Release --nologo -consoleLoggerParameters:NoSummary \
+            || { echo "pre-commit: FAILED -- build errors detected."; exit 1; }
+        # At quiet verbosity, dotnet test names a failed test but omits its message and stack trace. The console
+        # logger at minimal verbosity adds them and still prints only a summary for passing tests.
+        dotnet test ./MeisterDev.ProPR.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet \
+            --logger "console;verbosity=minimal" \
+            || { echo "pre-commit: FAILED -- one or more backend tests failed."; exit 1; }
+    ) > "$CHECK_DIR/backend.log" 2>&1 &
+    BACKEND_PID=$!
 fi
 
-# ── 3. Frontend: type-check and tests ────────────────────────────────────────
 if [ -n "$STAGED_FRONTEND_FILES" ]; then
-    echo "pre-commit: running frontend type-check..."
-    if ! (cd frontend && npm run type-check); then
-        echo ""
-        echo "pre-commit: FAILED -- frontend type-check errors detected."
-        echo "Fix the type errors and commit again."
-        exit 1
-    fi
-
-    echo "pre-commit: frontend type-check passed."
-
-    echo "pre-commit: running frontend tests..."
-    if ! (cd frontend && npm run test); then
-        echo ""
-        echo "pre-commit: FAILED -- one or more frontend tests failed."
-        echo "Fix the failing tests and commit again."
-        exit 1
-    fi
-
-    echo "pre-commit: all frontend tests passed."
+    echo "pre-commit: running frontend type-check and tests..."
+    (
+        cd frontend
+        npm run type-check || { echo "pre-commit: FAILED -- frontend type-check errors detected."; exit 1; }
+        npm run test || { echo "pre-commit: FAILED -- one or more frontend tests failed."; exit 1; }
+    ) > "$CHECK_DIR/frontend.log" 2>&1 &
+    FRONTEND_PID=$!
 fi
 
-exit 0
+CHECK_FAILED=0
+
+# report NAME PID LOG: waits for one check, prints its log and records whether it failed.
+report() {
+    if wait "$2"; then
+        cat "$3"
+        echo "pre-commit: $1 passed."
+    else
+        cat "$3"
+        echo "pre-commit: FAILED -- $1."
+        CHECK_FAILED=1
+    fi
+}
+
+if [ -n "$STAGED_FORMAT_FILES" ]; then
+    report "format check" "$FORMAT_PID" "$CHECK_DIR/format.log"
+fi
+
+if [ -n "$STAGED_BACKEND_FILES" ]; then
+    report "backend build and tests" "$BACKEND_PID" "$CHECK_DIR/backend.log"
+fi
+
+if [ -n "$STAGED_FRONTEND_FILES" ]; then
+    report "frontend type-check and tests" "$FRONTEND_PID" "$CHECK_DIR/frontend.log"
+fi
+
+exit "$CHECK_FAILED"

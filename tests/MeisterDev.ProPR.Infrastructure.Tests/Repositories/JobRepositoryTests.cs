@@ -33,7 +33,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     Uses a shared <see cref="PostgresContainerFixture" /> (one container for the whole collection)
 ///     to avoid the Podman port-binding instability of starting a container per test method.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private MeisterProPRDbContext _dbContext = null!;

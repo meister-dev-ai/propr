@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///     connections they hang off are database rows, so the read and the exclusion it produces run against
 ///     PostgreSQL.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ConfiguredReviewerIdentityExclusionTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private const string AzureIdentityId = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";

@@ -12,7 +12,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 ///     The record of an operator-started add-in action: the terminal state a family writes against it long after
 ///     the dispatch returned, the window that closes it when nothing does, and the signal it watches.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class ProviderActionInvocationTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private ProviderHostPrimitiveHarness _harness = null!;

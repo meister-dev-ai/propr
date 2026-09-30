@@ -13,7 +13,7 @@ using MeisterDev.ProPR.TestSupport;
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
 /// <summary>Integration tests for <see cref="AppUserRepository" /> hard-delete and admin-count queries.</summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class AppUserRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly List<Guid> _seededTenantIds = [];

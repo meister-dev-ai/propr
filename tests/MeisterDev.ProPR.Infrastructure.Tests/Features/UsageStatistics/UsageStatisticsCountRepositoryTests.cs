@@ -271,7 +271,7 @@ public sealed class UsageStatisticsCountRepositoryTests
 ///         feature emits, so they are covered against a real server.
 ///     </para>
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class UsageStatisticsCountSourcePostgresTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly DateTimeOffset WindowEnd = new(2026, 8, 16, 12, 0, 0, TimeSpan.Zero);

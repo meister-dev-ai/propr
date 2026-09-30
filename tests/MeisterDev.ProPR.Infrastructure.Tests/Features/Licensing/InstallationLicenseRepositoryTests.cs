@@ -172,7 +172,7 @@ public sealed class InstallationLicenseRepositoryTests
     }
 }
 
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class InstallationLicenseRepositoryPostgresTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 19, 12, 0, 0, TimeSpan.Zero);

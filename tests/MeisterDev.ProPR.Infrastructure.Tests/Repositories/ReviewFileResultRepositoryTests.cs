@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     Integration tests for <see cref="ReviewFileResult" /> CRUD via <see cref="JobRepository" />
 ///     against a real PostgreSQL instance (Testcontainers).
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ReviewFileResultRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private MeisterProPRDbContext _dbContext = null!;

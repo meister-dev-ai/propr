@@ -312,7 +312,7 @@ public sealed class UsageStatisticsStateRepositoryTests
     }
 }
 
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class UsageStatisticsStateRepositoryPostgresTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 16, 12, 0, 0, TimeSpan.Zero);

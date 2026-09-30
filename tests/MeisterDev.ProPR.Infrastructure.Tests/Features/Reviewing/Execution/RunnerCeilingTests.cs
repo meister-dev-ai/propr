@@ -31,7 +31,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///         carry whatever the rest of the collection has written.
 ///     </para>
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class RunnerCeilingTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     /// <summary>

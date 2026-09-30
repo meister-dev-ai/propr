@@ -19,7 +19,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 ///     What a provider family reports about a connection's credential, and what the connection reflects once the
 ///     host has weighed that report against what it verified itself.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class ProviderCredentialHealthTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private ProviderHostPrimitiveHarness _harness = null!;

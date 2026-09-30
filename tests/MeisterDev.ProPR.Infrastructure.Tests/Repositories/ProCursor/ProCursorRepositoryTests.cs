@@ -19,7 +19,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories.ProCursor;
 /// <summary>
 ///     Integration tests for the ProCursor repository layer against PostgreSQL + pgvector.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly Guid ClientId = Guid.Parse("cccccccc-1000-0000-0000-000000000001");

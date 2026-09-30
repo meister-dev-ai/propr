@@ -13,7 +13,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     The ledger has to be tested against the real database: its whole mechanism is a unique index, and an
 ///     in-memory double would simply agree with whatever the code asked it.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class RunnerIngestLedgerTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private DbContextOptions<MeisterProPRDbContext> _options = null!;

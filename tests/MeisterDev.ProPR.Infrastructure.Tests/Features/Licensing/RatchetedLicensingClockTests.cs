@@ -572,7 +572,7 @@ public sealed class RatchetedLicensingClockTests
 ///     The clock over the production store. The in-memory store cannot show that the recorded instant survives a
 ///     new connection, and that makes the value resistant to a restart.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class RatchetedLicensingClockPostgresTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 19, 12, 0, 0, TimeSpan.Zero);

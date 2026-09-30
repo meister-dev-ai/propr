@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///     commercial edition has to come back to community with its activation stamp gone, an installation that never
 ///     declared one has to be left as it is, and applying the upgrade a second time has to leave the same result.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ClearDeclaredCommercialEditionMigrationTests(PostgresContainerFixture fixture)
 {
     private const string PreviousMigration = "RemoveEnabledCapabilityOverrides";
@@ -51,7 +51,7 @@ public sealed class ClearDeclaredCommercialEditionMigrationTests(PostgresContain
 
         try
         {
-            await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+            await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InsufficientPrivilege)
         {

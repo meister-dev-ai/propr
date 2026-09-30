@@ -24,7 +24,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Budgeting;
 ///     configured caps, that enforcement of them does not depend on the Budgeting capability, and the manual-reset
 ///     allowance folded into the monthly caps.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     /// <summary>

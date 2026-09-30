@@ -22,7 +22,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     Integration tests for <see cref="LogicalModelMigrationBackfill" /> against a real PostgreSQL instance: legacy
 ///     configured-model review passes migrate onto per-client logical-model overrides, idempotently, deduped by mapping.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class LogicalModelMigrationBackfillTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly Guid _tenantId = Guid.NewGuid();

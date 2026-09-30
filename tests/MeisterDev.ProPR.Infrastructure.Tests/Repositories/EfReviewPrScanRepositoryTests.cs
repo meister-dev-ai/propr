@@ -15,7 +15,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 /// <summary>
 ///     Integration tests for <see cref="EfReviewPrScanRepository" /> against a real PostgreSQL instance.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class EfReviewPrScanRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly Guid SeedClientId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");

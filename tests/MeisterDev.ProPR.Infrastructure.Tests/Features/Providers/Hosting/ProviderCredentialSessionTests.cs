@@ -23,7 +23,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 ///     nothing about any of it: the property being tested is that the database serialises callers that a
 ///     single-threaded test never puts in contention.
 /// </remarks>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class ProviderCredentialSessionTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     /// <summary>

@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Budgeting;
 /// <summary>
 ///     Integration tests for <see cref="ReviewSpendAccumulator" /> against a real PostgreSQL instance.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ReviewSpendAccumulatorTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private Guid _clientId;

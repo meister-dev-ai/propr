@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     The claims a thread pass depends on are held in the database, so two crawl configurations and two
 ///     deployed instances cannot both answer one pull request.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly Guid SeedClientId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");

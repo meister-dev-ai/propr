@@ -30,7 +30,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 /// <summary>
 ///     Tests for <see cref="DbClientRegistry" /> reviewer identity lookups.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly List<Guid> _seededClientIds = [];

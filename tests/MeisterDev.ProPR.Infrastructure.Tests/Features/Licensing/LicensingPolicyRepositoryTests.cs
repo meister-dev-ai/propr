@@ -121,7 +121,7 @@ public sealed class LicensingPolicyRepositoryTests
     }
 }
 
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class LicensingPolicyRepositoryPostgresTests : IAsyncLifetime
 {
     private readonly PostgresContainerFixture _fixture;

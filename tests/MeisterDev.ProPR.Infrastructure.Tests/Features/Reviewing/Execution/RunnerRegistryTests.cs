@@ -16,7 +16,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     is the kind of mapping that compiles and passes unit tests and then fails on the first real save.
 ///     These prove the round-trip against the database.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class RunnerRegistryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly Guid TenantId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");

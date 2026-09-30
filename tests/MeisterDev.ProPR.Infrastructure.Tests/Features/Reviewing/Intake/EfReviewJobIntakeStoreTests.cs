@@ -14,7 +14,7 @@ using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Intake;
 
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private MeisterProPRDbContext _dbContext = null!;

@@ -26,7 +26,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Clients;
 ///         carry whatever the rest of the collection has written.
 ///     </para>
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class ClientCeilingTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     /// <summary>

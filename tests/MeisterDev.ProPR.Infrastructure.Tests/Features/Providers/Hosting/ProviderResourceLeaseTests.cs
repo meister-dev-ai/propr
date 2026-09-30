@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 ///     the arbitration has to be the database's. A double held in memory would agree with itself on one replica
 ///     and let two replicas both bind the same port.
 /// </remarks>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class ProviderResourceLeaseTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(30);

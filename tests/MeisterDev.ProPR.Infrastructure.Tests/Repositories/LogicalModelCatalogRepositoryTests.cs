@@ -24,7 +24,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     Integration tests for <see cref="LogicalModelCatalogRepository" /> against a real PostgreSQL instance. Covers the
 ///     tenant-catalog + per-client-override scoping, name uniqueness within a scope, and the system-tenant rule.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly Guid _tenantId = Guid.NewGuid();

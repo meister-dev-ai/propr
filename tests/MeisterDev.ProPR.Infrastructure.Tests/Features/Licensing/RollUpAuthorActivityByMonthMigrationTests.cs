@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///     installation upgrading has mention jobs already stored, and none of them can be given an identifier
 ///     afterwards, so the column has to arrive nullable and empty on those rows.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class RollUpAuthorActivityByMonthMigrationTests(PostgresContainerFixture fixture)
 {
     private const string PreviousMigration = "RecordReviewedPullRequestAuthor";
@@ -36,7 +36,7 @@ public sealed class RollUpAuthorActivityByMonthMigrationTests(PostgresContainerF
 
         try
         {
-            await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+            await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InsufficientPrivilege)
         {

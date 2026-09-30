@@ -13,7 +13,7 @@ using FactAttribute = Xunit.SkippableFactAttribute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class AiConfigurationPostgresTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly Guid _tenantId = Guid.NewGuid();

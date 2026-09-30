@@ -16,7 +16,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 /// <summary>
 ///     Integration tests for <see cref="EfMentionScanRepository" /> against a real PostgreSQL instance.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     // Deterministic GUIDs so FK constraints are satisfied across test runs.

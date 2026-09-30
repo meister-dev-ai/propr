@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     nullable and a row written before the upgrade has to come through it empty, because the author is known
 ///     only from a fetch and a job that has already run will not be fetched again.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class RecordReviewedPullRequestAuthorMigrationTests(PostgresContainerFixture fixture)
 {
     private const string PreviousMigration = "RemoveRunnerSlotEntitlement";
@@ -44,7 +44,7 @@ public sealed class RecordReviewedPullRequestAuthorMigrationTests(PostgresContai
 
         try
         {
-            await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+            await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InsufficientPrivilege)
         {

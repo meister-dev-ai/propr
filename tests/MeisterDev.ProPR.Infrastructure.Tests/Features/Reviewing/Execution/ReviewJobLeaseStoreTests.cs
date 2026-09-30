@@ -27,7 +27,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     against the real database, because the claim relies on the database rather than the process to decide
 ///     which caller wins, and an in-memory double would prove nothing about that.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private const int ShortCeilingMinutes = 30;

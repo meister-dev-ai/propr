@@ -19,7 +19,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 ///     answers the same question the dispatch route answers from the caller's resolved roles, so an
 ///     administrator the route admits is one this admits and the other way round.
 /// </remarks>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class ProviderConnectionOwnerRoleTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private ProviderHostPrimitiveHarness _harness = null!;

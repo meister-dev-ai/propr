@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     conditional statements, so the tracked copies have to be brought up to date afterwards, and a caller
 ///     sharing the context must not lose its own unsaved work to that.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class ReviewAdmissionTrackedJobTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     // Every job this fixture makes carries this organization, so its cleanup reaches its own rows and leaves

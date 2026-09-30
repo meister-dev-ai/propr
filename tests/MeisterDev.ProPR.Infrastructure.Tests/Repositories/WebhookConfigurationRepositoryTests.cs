@@ -16,7 +16,7 @@ using MeisterDev.ProPR.TestSupport;
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
 /// <summary>Integration tests for webhook configuration and delivery-history repositories against PostgreSQL.</summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private Guid _clientId;

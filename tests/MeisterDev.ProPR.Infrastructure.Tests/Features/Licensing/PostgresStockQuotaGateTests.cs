@@ -31,7 +31,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///         whatever the rest of the collection has written.
 ///     </para>
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class PostgresStockQuotaGateTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private const string ClientsLockKey = "propr:quota:clients";

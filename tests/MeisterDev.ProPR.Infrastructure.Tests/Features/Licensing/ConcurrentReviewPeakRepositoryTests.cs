@@ -15,7 +15,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///     The record of the highest number of reviews seen executing at the same time on a UTC day. The day, the
 ///     count and the comparison all come from the database, so these run against PostgreSQL.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ConcurrentReviewPeakRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly List<Guid> _jobIds = [];

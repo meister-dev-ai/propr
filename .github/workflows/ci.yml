@@ -21,9 +21,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Restore dependencies
-        run: dotnet restore MeisterDev.ProPR.slnx
-
       - name: Install JetBrains cleanupcode
         # Pin the ReSharper CLI version: this is a gating step, and an unpinned tool
         # means a new JetBrains release can silently change formatting rules and fail
@@ -34,15 +31,11 @@ jobs:
       - name: Add .NET tools to PATH
         run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
-      - name: Build solution for cleanupcode
-        run: dotnet build MeisterDev.ProPR.slnx --no-restore --configuration Release
+      - name: Test the format and hook scripts
+        run: python3 -m unittest discover -s scripts/tests
 
-      - name: Run cleanupcode
-        run: |
-          jb cleanupcode MeisterDev.ProPR.slnx --profile="Built-in: Reformat Code" --verbosity=INFO --no-updates
-
-      - name: Verify formatting
-        run: git diff --exit-code
+      - name: Check repository formatting
+        run: python3 scripts/format_changed.py --all
 
   build:
     name: Build
@@ -63,8 +56,8 @@ jobs:
       - name: Build
         run: dotnet build MeisterDev.ProPR.slnx --no-restore --configuration Release
 
-  architecture-gates:
-    name: Architecture Gates
+  test:
+    name: Test
     runs-on: ubuntu-latest
     needs: [ format, build ]
     permissions:
@@ -80,71 +73,13 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore MeisterDev.ProPR.slnx
 
-      - name: Run architecture dependency tests
-        run: dotnet test tests/MeisterDev.ProPR.Application.Tests/MeisterDev.ProPR.Application.Tests.csproj --no-restore --configuration Release --filter "VerticalSliceDependencyTests"
-
-      - name: Run startup registration safety tests
-        run: dotnet test tests/MeisterDev.ProPR.Api.Tests/MeisterDev.ProPR.Api.Tests.csproj --no-restore --configuration Release --filter "ModuleRegistrationTests|WaveRegistrationSafetyTests"
-
-  reviewing-slice-gates:
-    name: Reviewing Slice Gates
-    runs-on: ubuntu-latest
-    needs: [ architecture-gates ]
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7.0.0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5.3.0
-        with:
-          global-json-file: global.json
-
-      - name: Restore dependencies
-        run: dotnet restore MeisterDev.ProPR.slnx
-
-      - name: Run Reviewing application slice tests
-        run: dotnet test tests/MeisterDev.ProPR.Application.Tests/MeisterDev.ProPR.Application.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleTests|SubmitReviewJobHandlerTests|GetReviewJobStatusHandlerTests"
-
-      - name: Run Reviewing API slice tests
-        run: dotnet test tests/MeisterDev.ProPR.Api.Tests/MeisterDev.ProPR.Api.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleIntegrationTests|ReviewJobsControllerTests|ReviewJobIntakeIntegrationTests|JobsControllerProtocolTests|ReviewJobWorkerTests"
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    needs: [ architecture-gates, reviewing-slice-gates ]
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7.0.0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5.3.0
-        with:
-          global-json-file: global.json
-
-      - name: Restore dependencies
-        run: dotnet restore MeisterDev.ProPR.slnx
-
-      - name: Run AI provider library tests
-        run: dotnet test tests/MeisterDev.Ai.Providers.Tests/MeisterDev.Ai.Providers.Tests.csproj --no-restore --configuration Release --verbosity normal
-
-      - name: Run domain tests
-        run: dotnet test tests/MeisterDev.ProPR.Domain.Tests/MeisterDev.ProPR.Domain.Tests.csproj --no-restore --configuration Release --verbosity normal
-
-      - name: Run application tests
-        run: dotnet test tests/MeisterDev.ProPR.Application.Tests/MeisterDev.ProPR.Application.Tests.csproj --no-restore --configuration Release --verbosity normal
-
-      - name: Run infrastructure tests
-        run: dotnet test tests/MeisterDev.ProPR.Infrastructure.Tests/MeisterDev.ProPR.Infrastructure.Tests.csproj --no-restore --configuration Release --verbosity normal
-
-      - name: Run API tests
-        run: dotnet test tests/MeisterDev.ProPR.Api.Tests/MeisterDev.ProPR.Api.Tests.csproj --no-restore --configuration Release --verbosity normal
+      - name: Run all solution tests
+        run: dotnet test MeisterDev.ProPR.slnx --no-restore --configuration Release --verbosity normal
 
   frontend-tests:
     name: Frontend tests
     runs-on: ubuntu-latest
-    needs: test
+    needs: [ format, build ]
     permissions:
       contents: read
     steps:

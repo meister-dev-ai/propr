@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     only show up on a second run or with an override present: import must be safely repeatable, and it must
 ///     leave scoped overrides alone.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ModelCatalogImportServiceTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly Guid _tenantId = Guid.NewGuid();

@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Budgeting;
 ///     Integration tests for the budget job-status transitions and the active-job queries that keep budget-blocked
 ///     jobs eligible for supersede and cancel, against a real PostgreSQL instance.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class JobBudgetStatusTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private MeisterProPRDbContext _dbContext = null!;

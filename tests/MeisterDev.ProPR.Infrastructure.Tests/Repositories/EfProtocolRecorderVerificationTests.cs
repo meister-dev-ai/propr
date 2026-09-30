@@ -14,7 +14,7 @@ using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class EfProtocolRecorderVerificationTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private MeisterProPRDbContext _db = null!;

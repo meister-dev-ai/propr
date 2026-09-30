@@ -19,7 +19,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///     switch a capability on have to go, the ones that turn a capability off have to stay, and applying the
 ///     upgrade a second time has to leave the same result.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class RemoveEnabledCapabilityOverridesMigrationTests(PostgresContainerFixture fixture)
 {
     private const string PreviousMigration = "TrackHighestObservedTime";
@@ -42,7 +42,7 @@ public sealed class RemoveEnabledCapabilityOverridesMigrationTests(PostgresConta
 
         try
         {
-            await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+            await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InsufficientPrivilege)
         {

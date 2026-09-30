@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 /// <summary>
 ///     Integration tests for <see cref="EfProtocolRecorder.RecordMemoryEventAsync" /> (T014).
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly string[] ValidEventNames =

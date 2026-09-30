@@ -19,7 +19,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     An absent thread watermark differs from every current revision, so a deployment that added the column
 ///     without seeding it would fire a thread pass for every open pull request on its first tick.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class AddThreadPassMigrationTests(PostgresContainerFixture fixture)
 {
     private const string PreviousMigration = "AllowUnchangedResubmissionOnReviewJob";
@@ -35,7 +35,7 @@ public sealed class AddThreadPassMigrationTests(PostgresContainerFixture fixture
         var scratch = new NpgsqlConnectionStringBuilder(fixture.ConnectionString) { Database = databaseName }
             .ConnectionString;
 
-        await ExecuteOnServerAsync(adminBuilder.ConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+        await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
 
         try
         {

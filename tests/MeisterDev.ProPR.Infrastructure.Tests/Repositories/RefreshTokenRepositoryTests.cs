@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     Verifies that <see cref="RefreshTokenRepository" /> enforces both session-policy bounds — the
 ///     absolute expiry and the idle timeout — and that a refresh advances the idle window.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class RefreshTokenRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly SessionPolicy Policy = new()

@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     pgvector. The cosine search is what decides whether a concern already raised on a pull request comes
 ///     back, so its scoping and its threshold are exercised against the real query planner.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     /// <summary>The host that issued the repository identifiers in this fixture.</summary>

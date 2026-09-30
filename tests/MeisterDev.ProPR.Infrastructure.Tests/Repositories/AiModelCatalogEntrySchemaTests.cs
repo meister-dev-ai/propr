@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     exist precisely because PostgreSQL treats NULLs in a plain unique index as distinct and would otherwise
 ///     accept duplicate global rows.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class AiModelCatalogEntrySchemaTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly Guid _tenantId = Guid.NewGuid();

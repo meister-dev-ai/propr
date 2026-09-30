@@ -20,7 +20,7 @@ Use the `-s` flag when committing:
 
 1. Fork the repository and create a new branch for your changes.
 2. Make your changes and commit them with clear and descriptive messages.
-3. Make sure to use the style and conventions used in the existing codebase. We recommend running `jb cleanupcode MeisterDev.ProPR.slnx --profile="Built-in: Reformat Code"` after installing `JetBrains.ReSharper.GlobalTools` with `dotnet tool install --global JetBrains.ReSharper.GlobalTools`.
+3. Make sure to use the style and conventions used in the existing codebase. Install the pre-commit hook with `bash scripts/setup-hooks.sh` or `scripts/setup-hooks.ps1`, and install the formatter version that CI uses with `dotnet tool install --global JetBrains.ReSharper.GlobalTools --version 2026.2.0`. The hook also needs Python 3.
 4. Push your changes to your fork and submit a pull request to the main repository.
 
 ## Licensing Boundaries
@@ -32,7 +32,9 @@ This repository uses one ELv2 source tree with explicit commercial-capability cl
 - Files that primarily implement commercial-only functionality may add a short notice saying that a commercial license is required to activate or use that functionality.
 - Do not claim a different source-code license for a file unless the repo's licensing model actually changes.
 
-Note: We recommend using the pre-commit hook we provide via `scripts/setup-hooks.[ps1|sh]`.
+The pre-commit hook checks the staged changes. For backend source files, it formats the files, builds the solution and runs the backend tests. For files under `frontend/`, it runs the type check and the frontend tests. The checks run in parallel. If the formatter changes a file, the commit fails. Stage the formatted file and commit again. A staged backend file that also has unstaged changes cannot be formatted, so the hook rejects the commit until the file is staged completely or restored.
+
+CI checks the formatting of all backend source files and runs the full backend and frontend test suites on every pull request.
 
 # Size of pull requests
 

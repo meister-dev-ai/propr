@@ -24,7 +24,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     Where reviews run, and whether a still queue is a stall. The predicate has four clauses and every
 ///     one of them is a way an installation can be wrongly told it has capacity.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class RunnerFleetMonitorTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly Guid TenantId = Guid.Parse("33333333-3333-3333-3333-333333333333");

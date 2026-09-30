@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     every existing row must keep carrying it, and a row with no owner or two is unreachable from one read
 ///     path and counted twice by the other.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ThreadPassSpendAndTraceMigrationTests(PostgresContainerFixture fixture)
 {
     private const string PreviousMigration = "AddThreadPass";
@@ -36,7 +36,7 @@ public sealed class ThreadPassSpendAndTraceMigrationTests(PostgresContainerFixtu
         var scratch = new NpgsqlConnectionStringBuilder(fixture.ConnectionString) { Database = databaseName }
             .ConnectionString;
 
-        await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+        await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
 
         try
         {

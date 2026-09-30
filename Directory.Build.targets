@@ -6,6 +6,16 @@
     -->
 
     <!--
+        A test host runs many test classes in parallel. With workstation GC, their allocations compete for one
+        heap. Server GC gives each core a heap of its own. Infrastructure.Tests ran about 15 % faster with it when
+        it ran alone. In a run of the whole solution, the difference stayed within the variation between runs, and
+        the test hosts together used about 1 GiB more memory at peak.
+    -->
+    <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+        <ServerGarbageCollection>true</ServerGarbageCollection>
+    </PropertyGroup>
+
+    <!--
         The provider stack stays publishable at the organisation level, which means no project in it may
         reference a project of the product that hosts it. The shipped families are also the reference
         implementations someone reads when writing a new one, so a family that pulled in host runtime would be a

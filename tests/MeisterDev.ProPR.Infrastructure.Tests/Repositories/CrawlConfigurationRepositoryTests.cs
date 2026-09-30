@@ -19,7 +19,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 /// <summary>
 ///     Integration tests for <see cref="CrawlConfigurationRepository" /> against a real PostgreSQL instance.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private Guid _clientId;

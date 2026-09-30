@@ -22,7 +22,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 ///     What the host does around a provider family's declared action: what it opens, what it bounds, what it
 ///     refuses, and what it records when the family answers, throws, or never answers at all.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ProviderActionDispatchTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private ProviderHostPrimitiveHarness _harness = null!;

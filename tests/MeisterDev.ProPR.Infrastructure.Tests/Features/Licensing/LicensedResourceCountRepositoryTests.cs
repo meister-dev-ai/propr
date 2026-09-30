@@ -220,7 +220,7 @@ public sealed class LicensedResourceCountRepositoryTests
 ///     The same counts over PostgreSQL, so the filters are known to translate to SQL rather than to run in
 ///     memory over rows the provider had to load first.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class LicensedResourceCountRepositoryPostgresTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private readonly List<Guid> _clientIds = [];

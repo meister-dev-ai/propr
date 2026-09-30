@@ -21,7 +21,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     database. Rows written before either existed have to survive it, and a pull request that the old claim
 ///     let two passes hold has to end up held by one.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class ThreadPassIdempotencyMigrationTests(PostgresContainerFixture fixture)
 {
     private const string PreviousMigration = "ThreadPassSpendAndTrace";
@@ -37,7 +37,7 @@ public sealed class ThreadPassIdempotencyMigrationTests(PostgresContainerFixture
         var scratch = new NpgsqlConnectionStringBuilder(fixture.ConnectionString) { Database = databaseName }
             .ConnectionString;
 
-        await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+        await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
 
         try
         {
@@ -93,7 +93,7 @@ public sealed class ThreadPassIdempotencyMigrationTests(PostgresContainerFixture
         var scratch = new NpgsqlConnectionStringBuilder(fixture.ConnectionString) { Database = databaseName }
             .ConnectionString;
 
-        await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+        await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
 
         try
         {

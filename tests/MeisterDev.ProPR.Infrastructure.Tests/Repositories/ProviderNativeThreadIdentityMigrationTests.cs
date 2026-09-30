@@ -21,7 +21,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     installation's identifiers are already the provider's own, so the digits have to arrive unchanged and
 ///     every key has to keep naming the thread it named before.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class ProviderNativeThreadIdentityMigrationTests(PostgresContainerFixture fixture)
 {
     private const string PreviousMigration = "ThreadPassIdempotencyAndClaims";
@@ -42,7 +42,7 @@ public sealed class ProviderNativeThreadIdentityMigrationTests(PostgresContainer
         var scratch = new NpgsqlConnectionStringBuilder(fixture.ConnectionString) { Database = databaseName }
             .ConnectionString;
 
-        await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+        await fixture.CreateDatabaseAtMigrationAsync(databaseName, PreviousMigration);
 
         try
         {

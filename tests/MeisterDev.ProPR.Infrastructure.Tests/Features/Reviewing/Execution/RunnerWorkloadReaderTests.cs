@@ -15,7 +15,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     lease records its owner as text rather than as a foreign key. Whether that join actually matches is
 ///     the kind of thing only a database can answer.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class RunnerWorkloadReaderTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly Guid TenantId = Guid.Parse("a1a1a1a1-1111-4111-8111-a1a1a1a1a1a1");

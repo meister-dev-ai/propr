@@ -299,7 +299,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('gpt-4.1')
     expect(wrapper.text()).toContain('Temperature')
     expect(wrapper.text()).toContain('0.35')
-  }, 10000)
+  })
 
   it('renders cached and effective input totals plus per-call cache evidence', async () => {
     mockGet.mockImplementation(createProtocolMock([

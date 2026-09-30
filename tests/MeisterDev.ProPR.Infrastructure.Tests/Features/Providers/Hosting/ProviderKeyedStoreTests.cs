@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 ///     statement, and a double that read and then wrote would let two callers both be told they won. A browser
 ///     delivering one callback twice is the ordinary case, not an unlikely one.
 /// </remarks>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ProviderKeyedStoreTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(30);

@@ -22,7 +22,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers;
 ///     another family that must be left exactly as it is, and daily usage samples under both spellings, including
 ///     the pair whose identities the unique index would refuse to merge by a plain update.
 /// </remarks>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class StoreAnthropicRowsUnderItsDeclaredNamesMigrationTests(PostgresContainerFixture fixture)
 {
     private const string BeforeMove = "CoverageGateRecall";
@@ -456,7 +456,7 @@ public sealed class StoreAnthropicRowsUnderItsDeclaredNamesMigrationTests(Postgr
 
         try
         {
-            await ExecuteOnServerAsync(adminConnectionString, $"CREATE DATABASE \"{databaseName}\";");
+            await fixture.CreateDatabaseAtMigrationAsync(databaseName, BeforeMove);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InsufficientPrivilege)
         {

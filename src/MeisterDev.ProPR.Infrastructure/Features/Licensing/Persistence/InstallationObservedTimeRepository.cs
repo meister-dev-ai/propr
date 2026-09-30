@@ -52,6 +52,13 @@ public sealed class InstallationObservedTimeRepository(MeisterProPRDbContext dbC
             await this.CreateAsync(instant, cancellationToken).ConfigureAwait(false);
             recorded = await this.GetAsync(cancellationToken).ConfigureAwait(false);
         }
+        else if (recorded < instant)
+        {
+            // Another replica created the row after the raise above found none, and it holds an earlier instant.
+            // The raise matched nothing at that time, so it is applied again now that the row exists.
+            await this.RaiseAsync(instant, cancellationToken).ConfigureAwait(false);
+            recorded = await this.GetAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         return AtLeast(recorded, instant);
     }

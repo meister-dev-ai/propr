@@ -4,13 +4,11 @@
 import { vi, beforeEach, afterEach } from 'vitest'
 import { config } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
-import * as vuetifyComponents from 'vuetify/components'
-import * as vuetifyDirectives from 'vuetify/directives'
 
-const vuetify = createVuetify({
-  components: vuetifyComponents,
-  directives: vuetifyDirectives,
-})
+// Components are not registered here. vite-plugin-vuetify with autoImport adds an import for each Vuetify
+// component a single-file component uses, as in the production build. Registering the whole library in this
+// file made every test file evaluate all Vuetify components, which took more time than running the tests.
+const vuetify = createVuetify()
 
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'matchMedia', {

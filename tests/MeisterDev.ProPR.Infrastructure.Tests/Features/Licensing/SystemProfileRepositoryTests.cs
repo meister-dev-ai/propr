@@ -24,7 +24,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///     The store behind the installation's observed profile. The upsert paths are what keep replicas observing
 ///     the same installation from recording one change several times, so they run against PostgreSQL.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration2")]
 public sealed class SystemProfileRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 19, 12, 0, 0, TimeSpan.Zero);
@@ -393,7 +393,7 @@ public sealed class SystemProfileRepositoryTests(PostgresContainerFixture fixtur
 ///     The whole observation over a real database: the probes read PostgreSQL, the configured hosts come out of
 ///     the connection table, and the result is what the installation persists.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class SystemProfileObservationTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private const string LicenseId = "f0a1a0d6-1f2b-4f7a-9c3f-2b4d6e8a1c05";

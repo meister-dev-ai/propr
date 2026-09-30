@@ -13,7 +13,7 @@ using MeisterDev.ProPR.TestSupport;
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Budgeting;
 
 /// <summary>Integration tests for <see cref="BudgetEventRepository" /> against a real PostgreSQL instance.</summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class BudgetEventRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private MeisterProPRDbContext _dbContext = null!;

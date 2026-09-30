@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 /// <summary>
 ///     Integration tests for <see cref="ThreadMemoryRepository" /> against a real PostgreSQL instance with pgvector.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     /// <summary>The host that issued the repository identifiers in this fixture.</summary>

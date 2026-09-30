@@ -24,7 +24,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 ///     administrator is at the provider, so the checks made when the action started are not checks at the moment
 ///     the credential is written.
 /// </remarks>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration4")]
 public sealed class ProviderActionCredentialGrantTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private const string CapabilityKey = "example-connections";

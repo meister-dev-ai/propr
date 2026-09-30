@@ -81,6 +81,10 @@ playwright-report/
 test-results/
 frontend/node_modules/
 
+# Python test runner
+__pycache__/
+*.pyc
+
 # Sonar
 sonar-project.properties
 .sonarqube

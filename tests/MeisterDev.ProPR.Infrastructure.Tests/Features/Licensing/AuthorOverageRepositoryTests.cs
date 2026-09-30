@@ -14,7 +14,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Licensing;
 ///     The record of the months whose counted authors went above the licensed number. The two counts only rise
 ///     and the ratchet is in the update statement, so these run against PostgreSQL.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class AuthorOverageRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private static readonly DateOnly August = new(2026, 8, 1);

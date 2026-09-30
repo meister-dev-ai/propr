@@ -25,7 +25,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 ///     Integration tests for <see cref="EfMentionReplyJobRepository" /> against a real PostgreSQL instance.
 ///     Uses a shared <see cref="PostgresContainerFixture" /> to avoid container-per-test instability.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration3")]
 public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     // Deterministic client ID so FK constraint is satisfied across test runs.

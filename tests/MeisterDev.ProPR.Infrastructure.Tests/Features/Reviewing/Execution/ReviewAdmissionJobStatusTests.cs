@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 ///     Integration tests for the review-admission job transitions against a real PostgreSQL instance: the hold
 ///     that resolves on its own, the refusal that carries its reason, and the burst count admission reads.
 /// </summary>
-[Collection("PostgresIntegration")]
+[Collection("PostgresIntegration1")]
 public sealed class ReviewAdmissionJobStatusTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private MeisterProPRDbContext _dbContext = null!;
