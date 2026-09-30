@@ -14,10 +14,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5.3.0
+        uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
 
@@ -50,10 +50,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5.3.0
+        uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
 
@@ -70,10 +70,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5.3.0
+        uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
 
@@ -93,10 +93,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5.3.0
+        uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
 
@@ -116,10 +116,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5.3.0
+        uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
 
@@ -148,10 +148,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -175,13 +175,13 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.1.0
+        uses: docker/setup-buildx-action@v4.3.0
 
       - name: Build backend image
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@v7.3.0
         with:
           context: .
           file: Dockerfile
@@ -193,7 +193,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan backend image
-        uses: anchore/scan-action@v7.4.0
+        uses: anchore/scan-action@v7.4.2
         id: scan-backend
         with:
           image: meisterpropr:ci-${{ github.run_number }}
@@ -216,13 +216,13 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.1.0
+        uses: docker/setup-buildx-action@v4.3.0
 
       - name: Build frontend image
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@v7.3.0
         with:
           context: .
           file: frontend/Dockerfile
@@ -234,7 +234,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan frontend image
-        uses: anchore/scan-action@v7.4.0
+        uses: anchore/scan-action@v7.4.2
         id: scan-frontend
         with:
           image: meisterpropr-frontend:ci-${{ github.run_number }}
@@ -260,13 +260,13 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.1.0
+        uses: docker/setup-buildx-action@v4.3.0
 
       - name: Build runner image
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@v7.3.0
         with:
           context: .
           file: Dockerfile.runner
@@ -278,7 +278,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan runner image
-        uses: anchore/scan-action@v7.4.0
+        uses: anchore/scan-action@v7.4.2
         id: scan-runner
         with:
           image: meisterpropr-runner:ci-${{ github.run_number }}
