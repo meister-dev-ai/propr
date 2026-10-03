@@ -493,6 +493,39 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
         Assert.All(maps, map => Assert.Equal("deep", map[AiPurpose.ReviewDefault]));
     }
 
+    // Logical-model resolution reads the client overrides and the tenant entries from the per-file review loop, which
+    // reviews several files at once, so these reads run concurrently as well.
+    [Fact]
+    public async Task CatalogReads_ServeConcurrentReaders()
+    {
+        await this._repo.AddClientOverrideAsync(this._clientA, Entry("fast"), default);
+        await this._repo.AddTenantEntryAsync(this._tenantId, Entry("deep"), default);
+
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .Options;
+        var concurrentRepo = new LogicalModelCatalogRepository(
+            this._dbContext,
+            Substitute.For<ILogicalModelCapabilityValidator>(),
+            Substitute.For<IAiConnectionRepository>(),
+            Substitute.For<IAiConnectionScopeGuard>(),
+            DeclaringProviderFamilies.None(),
+            new TestDbContextFactory(options));
+
+        var overrideReads = Enumerable.Range(0, 12)
+            .Select(_ => Task.Run(() => concurrentRepo.GetClientOverridesAsync(this._clientA, default)))
+            .ToList();
+        var tenantReads = Enumerable.Range(0, 12)
+            .Select(_ => Task.Run(() => concurrentRepo.GetTenantEntriesForClientAsync(this._clientA, default)))
+            .ToList();
+
+        var overrides = await Task.WhenAll(overrideReads);
+        var tenantEntries = await Task.WhenAll(tenantReads);
+
+        Assert.All(overrides, list => Assert.Contains(list, m => m.Name == "fast"));
+        Assert.All(tenantEntries, list => Assert.Contains(list, m => m.Name == "deep"));
+    }
+
     // A minimal factory so the concurrency tests get an independent context per read, the way dependency injection
     // supplies one at run time.
     private sealed class TestDbContextFactory(DbContextOptions<MeisterProPRDbContext> options)

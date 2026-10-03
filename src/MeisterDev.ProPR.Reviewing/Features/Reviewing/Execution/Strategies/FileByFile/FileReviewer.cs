@@ -45,6 +45,9 @@ internal sealed partial class FileReviewer(
     // Stage id recorded on the ProRV-lens applicability screen's protocol events.
     private const string ProRvLensStageId = "file-by-file.prorv-lens";
 
+    // The failure recorded for a resample pass when no resolver for its kind of model is registered.
+    private const string ResolverUnavailableFailure = "resolver_unavailable";
+
     // How many distinct anchored lines one file's symbol attribution will parse for. Findings per file are in the
     // handful; the cap exists so a generated file with hundreds of them cannot turn provenance into the cost centre.
     private const int SymbolAttributionLineBudget = 50;
@@ -594,14 +597,16 @@ internal sealed partial class FileReviewer(
                 continue;
             }
 
-            var resolved = await this.TryResolvePassRuntimeAsync(inputs.Job, inputs.File.Path, pass, passIndex, inputs.Ct);
-            if (resolved is null)
+            var resolution = await this.TryResolvePassRuntimeAsync(inputs.Job, inputs.File.Path, pass, passIndex, inputs.Ct);
+            if (resolution.Runtime is null)
             {
-                await this.RecordMultiPassUnionPassSkippedAsync(inputs.ProtocolId, inputs.File.Path, passIndex, pass.ConfiguredModelId, inputs.Tier, inputs.Ct);
+                await this.RecordMultiPassUnionPassSkippedAsync(
+                    inputs.ProtocolId, inputs.File.Path, passIndex, pass, resolution.Failure, inputs.Tier, inputs.Ct);
             }
             else
             {
-                var (runtime, effort) = resolved.Value;
+                var runtime = resolution.Runtime;
+                var effort = resolution.Effort;
                 passes.Add(
                     new PlannedResamplePass(
                         passIndex,
@@ -1002,10 +1007,11 @@ internal sealed partial class FileReviewer(
         };
     }
 
-    // Resolves the runtime for one production resample pass from its configured model id (connection implied).
-    // Returns null when the model cannot be resolved (deleted/unresolved model, or no resolver) so the caller skips
-    // that pass rather than resampling the tier model.
-    private async Task<(IResolvedAiChatRuntime Runtime, ReviewReasoningEffort Effort)?> TryResolvePassRuntimeAsync(
+    // Resolves the runtime for one production resample pass, from its logical model name or from its configured
+    // model id (connection implied). When the model cannot be resolved (deleted or unresolved model, or no resolver),
+    // the result carries no runtime and names the failure, so the caller skips that pass and does not resample the
+    // tier model.
+    private async Task<PassRuntimeResolution> TryResolvePassRuntimeAsync(
         ReviewJob job,
         string filePath,
         ReviewPassSpec pass,
@@ -1019,8 +1025,8 @@ internal sealed partial class FileReviewer(
         {
             if (logicalModelResolver is null)
             {
-                LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, Guid.Empty, passIndex, null);
-                return null;
+                LogMultiPassUnionLogicalModelPassUnresolved(logger, job.Id, filePath, pass.LogicalModelName, passIndex, ResolverUnavailableFailure, null);
+                return PassRuntimeResolution.Failed(ResolverUnavailableFailure);
             }
 
             try
@@ -1028,7 +1034,7 @@ internal sealed partial class FileReviewer(
                 var resolved = await logicalModelResolver
                     .ResolveChatRuntimeAsync(job.ClientId, pass.LogicalModelName, ct: ct)
                     .ConfigureAwait(false);
-                return (resolved.Runtime, resolved.ReasoningEffort);
+                return new PassRuntimeResolution(resolved.Runtime, resolved.ReasoningEffort, null);
             }
             catch (OperationCanceledException)
             {
@@ -1036,22 +1042,23 @@ internal sealed partial class FileReviewer(
             }
             catch (Exception ex)
             {
-                LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, Guid.Empty, passIndex, ex);
-                return null;
+                var failure = ex.GetType().Name;
+                LogMultiPassUnionLogicalModelPassUnresolved(logger, job.Id, filePath, pass.LogicalModelName, passIndex, failure, ex);
+                return PassRuntimeResolution.Failed(failure);
             }
         }
 
         if (aiRuntimeResolver is null)
         {
-            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, pass.ConfiguredModelId, passIndex, null);
-            return null;
+            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, pass.ConfiguredModelId, passIndex, ResolverUnavailableFailure, null);
+            return PassRuntimeResolution.Failed(ResolverUnavailableFailure);
         }
 
         try
         {
             var runtime = await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, pass.ConfiguredModelId, ct)
                 .ConfigureAwait(false);
-            return (runtime, pass.ReasoningEffort);
+            return new PassRuntimeResolution(runtime, pass.ReasoningEffort, null);
         }
         catch (OperationCanceledException)
         {
@@ -1059,8 +1066,22 @@ internal sealed partial class FileReviewer(
         }
         catch (Exception ex)
         {
-            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, pass.ConfiguredModelId, passIndex, ex);
-            return null;
+            var failure = ex.GetType().Name;
+            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, pass.ConfiguredModelId, passIndex, failure, ex);
+            return PassRuntimeResolution.Failed(failure);
+        }
+    }
+
+    // The outcome of resolving one resample pass. Runtime is null when the pass could not be resolved; Failure then
+    // holds the exception type name, or ResolverUnavailableFailure when no resolver for the pass kind is registered.
+    private readonly record struct PassRuntimeResolution(
+        IResolvedAiChatRuntime? Runtime,
+        ReviewReasoningEffort Effort,
+        string? Failure)
+    {
+        public static PassRuntimeResolution Failed(string failure)
+        {
+            return new PassRuntimeResolution(null, ReviewReasoningEffort.None, failure);
         }
     }
 
@@ -1100,7 +1121,8 @@ internal sealed partial class FileReviewer(
         Guid? protocolId,
         string filePath,
         int passIndex,
-        Guid configuredModelId,
+        ReviewPassSpec pass,
+        string? failure,
         FileComplexityTier tier,
         CancellationToken ct)
     {
@@ -1119,12 +1141,23 @@ internal sealed partial class FileReviewer(
                     tier = tier.ToString(),
                     passIndex,
                 }),
-            JsonSerializer.Serialize(
-                new
-                {
-                    configuredModelId,
-                    reason = "pass_model_unresolved",
-                }),
+            // A pass that names a logical model has no configured model id of its own, so the trace names the
+            // logical model and omits the empty id.
+            string.IsNullOrEmpty(pass.LogicalModelName)
+                ? JsonSerializer.Serialize(
+                    new
+                    {
+                        configuredModelId = pass.ConfiguredModelId,
+                        reason = "pass_model_unresolved",
+                        failure,
+                    })
+                : JsonSerializer.Serialize(
+                    new
+                    {
+                        logicalModelName = pass.LogicalModelName,
+                        reason = "pass_model_unresolved",
+                        failure,
+                    }),
             null,
             ct);
     }

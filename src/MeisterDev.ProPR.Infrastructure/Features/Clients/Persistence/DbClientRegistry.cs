@@ -15,13 +15,19 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
 
 /// <summary>Database-backed provider for per-client review settings.</summary>
+/// <remarks>
+///     The tenant lookup takes its own short-lived context when a factory is available. Logical-model resolution
+///     calls it from the per-file review loop, which reviews several files at once, and the scoped context serves one
+///     operation at a time.
+/// </remarks>
 public sealed class DbClientRegistry(
     MeisterProPRDbContext dbContext,
     IClientScmConnectionRepository connectionRepository,
     IClientReviewerIdentityRepository reviewerIdentityRepository,
     Func<ProviderHostRef, ClientScmConnectionCredentialDto, CancellationToken, Task<ReviewerIdentity?>>?
         deriveReviewerIdentityAsync = null,
-    ILogger<DbClientRegistry>? logger = null) : IClientRegistry
+    ILogger<DbClientRegistry>? logger = null,
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : IClientRegistry
 {
     private readonly Func<ProviderHostRef, ClientScmConnectionCredentialDto, CancellationToken, Task<ReviewerIdentity?>>?
         _deriveReviewerIdentityAsync = deriveReviewerIdentityAsync;
@@ -266,7 +272,19 @@ public sealed class DbClientRegistry(
     /// <inheritdoc />
     public async Task<Guid?> GetTenantIdAsync(Guid clientId, CancellationToken ct = default)
     {
-        return await dbContext.Clients
+        if (contextFactory is null)
+        {
+            return await ReadTenantIdAsync(dbContext, clientId, ct);
+        }
+
+        await using var isolated = await contextFactory.CreateDbContextAsync(ct);
+        return await ReadTenantIdAsync(isolated, clientId, ct);
+    }
+
+    private static async Task<Guid?> ReadTenantIdAsync(MeisterProPRDbContext context, Guid clientId, CancellationToken ct)
+    {
+        return await context.Clients
+            .AsNoTracking()
             .Where(c => c.Id == clientId)
             .Select(c => (Guid?)c.TenantId)
             .FirstOrDefaultAsync(ct);

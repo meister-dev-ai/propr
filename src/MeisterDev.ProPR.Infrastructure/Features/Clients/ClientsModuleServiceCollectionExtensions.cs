@@ -18,6 +18,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.DependencyInject
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -71,7 +72,8 @@ public static class ClientsModuleServiceCollectionExtensions
                         var login = app.Slug + "[bot]";
                         return new ReviewerIdentity(host, login, login, app.DisplayName, true);
                     },
-                    logger);
+                    logger,
+                    sp.GetService<IDbContextFactory<MeisterProPRDbContext>>());
             });
             services.AddScoped<IClientAdminService, ClientAdminService>();
             services.AddScoped<IClientScmConnectionRepository, ClientScmConnectionRepository>();

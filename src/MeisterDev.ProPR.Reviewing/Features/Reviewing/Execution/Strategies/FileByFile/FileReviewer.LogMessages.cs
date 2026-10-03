@@ -28,15 +28,29 @@ internal sealed partial class FileReviewer
     private static partial void LogSymbolAttributionFailed(ILogger logger, Guid jobId, string filePath, Exception ex);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Warning,
         Message = "Multi-pass union pass #{PassIndex} for job {JobId} could not resolve its configured model "
-                  + "{ConfiguredModelId}; skipping that pass for file {FilePath} (the other passes still run).")]
+                  + "{ConfiguredModelId} ({Failure}); skipping that pass for file {FilePath} (the other passes still run).")]
     private static partial void LogMultiPassUnionPassModelUnresolved(
         ILogger logger,
         Guid jobId,
         string filePath,
         Guid configuredModelId,
         int passIndex,
+        string failure,
+        Exception? ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Multi-pass union pass #{PassIndex} for job {JobId} could not resolve its logical model "
+                  + "{LogicalModelName} ({Failure}); skipping that pass for file {FilePath} (the other passes still run).")]
+    private static partial void LogMultiPassUnionLogicalModelPassUnresolved(
+        ILogger logger,
+        Guid jobId,
+        string filePath,
+        string logicalModelName,
+        int passIndex,
+        string failure,
         Exception? ex);
 
     [LoggerMessage(

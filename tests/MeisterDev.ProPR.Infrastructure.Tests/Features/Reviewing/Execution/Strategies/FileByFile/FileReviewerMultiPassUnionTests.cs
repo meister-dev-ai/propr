@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using System.Text.Json;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
@@ -15,6 +16,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -97,7 +99,8 @@ public sealed class FileReviewerMultiPassUnionTests
     private FileReviewer CreateReviewer(
         IAiRuntimeResolver? aiRuntimeResolver = null,
         ILogicalModelResolver? logicalModelResolver = null,
-        IStructuralCodeAnalyzer? structuralAnalyzer = null)
+        IStructuralCodeAnalyzer? structuralAnalyzer = null,
+        ILogger<FileByFileReviewOrchestrator>? logger = null)
     {
         this._aiCore
             .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -121,7 +124,7 @@ public sealed class FileReviewerMultiPassUnionTests
             this._recorder,
             this._jobRepository,
             new AiReviewOptions(),
-            NullLogger<FileByFileReviewOrchestrator>.Instance,
+            logger ?? NullLogger<FileByFileReviewOrchestrator>.Instance,
             null,
             null,
             aiRuntimeResolver,
@@ -613,6 +616,45 @@ public sealed class FileReviewerMultiPassUnionTests
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
+    // A pass that names a logical model has no configured model id. When its resolution fails, the warning and the
+    // skip event name the logical model and the exception type, so the cause is visible without the stack trace.
+    [Fact]
+    public async Task Production_UnresolvableLogicalModelPass_RecordsNameAndFailure()
+    {
+        var logicalResolver = Substitute.For<ILogicalModelResolver>();
+        logicalResolver
+            .ResolveChatRuntimeAsync(Arg.Any<Guid>(), "deep", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<ResolvedLogicalModelChatRuntime>(new InvalidOperationException("resolution failed")));
+        string? skipDetails = null;
+        this._recorder
+            .RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(), ReviewProtocolEventNames.MultiPassUnionPassSkipped,
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask)
+            .AndDoes(ci => skipDetails = ci.ArgAt<string?>(3));
+        var logger = new CapturingLogger();
+
+        var reviewer = this.CreateReviewer(logicalModelResolver: logicalResolver, logger: logger);
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1,
+            ProductionContextWithPasses("gpt-5.3-codex", new ReviewPassSpec(Guid.Empty, LogicalModelName: "deep")),
+            null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.NotNull(skipDetails);
+        using var details = JsonDocument.Parse(skipDetails!);
+        Assert.Equal("deep", details.RootElement.GetProperty("logicalModelName").GetString());
+        Assert.Equal(nameof(InvalidOperationException), details.RootElement.GetProperty("failure").GetString());
+        Assert.False(details.RootElement.TryGetProperty("configuredModelId", out _));
+
+        var warning = Assert.Single(logger.Entries, entry => entry.Exception is InvalidOperationException);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Contains("deep", warning.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(InvalidOperationException), warning.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task SecurityLens_RunsOnFlaggedFile_EvenAtLowTier()
     {
@@ -880,5 +922,35 @@ public sealed class FileReviewerMultiPassUnionTests
         await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         Assert.Equal(CodexThenGpt54Twice, this._observedModelIds.ToArray());
+    }
+
+    // Records every log entry with its level, rendered message and exception.
+    private sealed class CapturingLogger : ILogger<FileByFileReviewOrchestrator>
+    {
+        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            lock (this.Entries)
+            {
+                this.Entries.Add((logLevel, formatter(state, exception), exception));
+            }
+        }
     }
 }

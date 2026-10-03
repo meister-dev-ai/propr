@@ -23,10 +23,10 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 ///     and reads them back by scope.
 /// </summary>
 /// <remarks>
-///     The purpose-role reads take their own short-lived context when a factory is available. They are called from
-///     the per-file review loop, which reviews several files at once, and a scoped context serves one operation at a
-///     time — concurrent readers on the shared instance make Entity Framework refuse the second one. The write paths
-///     keep the scoped context: they run from a single request and rely on its change tracking.
+///     The purpose-role reads and the catalog reads take their own short-lived context when a factory is available.
+///     They are called from the per-file review loop, which reviews several files at once. A scoped context serves one
+///     operation at a time, and Entity Framework throws on the second concurrent operation on the same instance. The
+///     write paths keep the scoped context, because they run from a single request and rely on its change tracking.
 /// </remarks>
 public sealed class LogicalModelCatalogRepository(
     MeisterProPRDbContext db,
@@ -216,20 +216,36 @@ public sealed class LogicalModelCatalogRepository(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<LogicalModelDto>> GetTenantEntriesAsync(Guid tenantId, CancellationToken ct)
+    public Task<IReadOnlyList<LogicalModelDto>> GetTenantEntriesAsync(Guid tenantId, CancellationToken ct)
     {
-        var rows = await db.LogicalModels
+        return this.WithReadContextAsync(context => this.ReadTenantEntriesAsync(context, tenantId, ct), ct);
+    }
+
+    private async Task<IReadOnlyList<LogicalModelDto>> ReadTenantEntriesAsync(
+        MeisterProPRDbContext context,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        var rows = await context.LogicalModels
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId)
             .OrderBy(x => x.Name)
             .ToListAsync(ct);
-        return await this.ToDtosAsync(rows, ct);
+        return await this.ToDtosAsync(context, rows, ct);
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<LogicalModelDto>> GetTenantEntriesForClientAsync(Guid clientId, CancellationToken ct)
+    public Task<IReadOnlyList<LogicalModelDto>> GetTenantEntriesForClientAsync(Guid clientId, CancellationToken ct)
     {
-        var tenantId = await db.Clients
+        return this.WithReadContextAsync(context => this.ReadTenantEntriesForClientAsync(context, clientId, ct), ct);
+    }
+
+    private async Task<IReadOnlyList<LogicalModelDto>> ReadTenantEntriesForClientAsync(
+        MeisterProPRDbContext context,
+        Guid clientId,
+        CancellationToken ct)
+    {
+        var tenantId = await context.Clients
             .AsNoTracking()
             .Where(c => c.Id == clientId)
             .Select(c => (Guid?)c.TenantId)
@@ -242,18 +258,39 @@ public sealed class LogicalModelCatalogRepository(
             return [];
         }
 
-        return await this.GetTenantEntriesAsync(tenantId.Value, ct);
+        return await this.ReadTenantEntriesAsync(context, tenantId.Value, ct);
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<LogicalModelDto>> GetClientOverridesAsync(Guid clientId, CancellationToken ct)
+    public Task<IReadOnlyList<LogicalModelDto>> GetClientOverridesAsync(Guid clientId, CancellationToken ct)
     {
-        var rows = await db.LogicalModelOverrides
+        return this.WithReadContextAsync(context => this.ReadClientOverridesAsync(context, clientId, ct), ct);
+    }
+
+    private async Task<IReadOnlyList<LogicalModelDto>> ReadClientOverridesAsync(
+        MeisterProPRDbContext context,
+        Guid clientId,
+        CancellationToken ct)
+    {
+        var rows = await context.LogicalModelOverrides
             .AsNoTracking()
             .Where(x => x.ClientId == clientId)
             .OrderBy(x => x.Name)
             .ToListAsync(ct);
-        return await this.ToDtosAsync(rows, ct);
+        return await this.ToDtosAsync(context, rows, ct);
+    }
+
+    // Runs a no-tracking read on a short-lived context of its own when a factory is available, so concurrent readers
+    // do not share the scoped context. Without a factory the read falls back to the scoped context.
+    private async Task<T> WithReadContextAsync<T>(Func<MeisterProPRDbContext, Task<T>> read, CancellationToken ct)
+    {
+        if (contextFactory is null)
+        {
+            return await read(db);
+        }
+
+        await using var isolated = await contextFactory.CreateDbContextAsync(ct);
+        return await read(isolated);
     }
 
     /// <inheritdoc />
@@ -436,6 +473,7 @@ public sealed class LogicalModelCatalogRepository(
     }
 
     private async Task<IReadOnlyList<LogicalModelDto>> ToDtosAsync(
+        MeisterProPRDbContext context,
         IReadOnlyList<ILogicalModelMapping> rows,
         CancellationToken ct)
     {
@@ -444,7 +482,7 @@ public sealed class LogicalModelCatalogRepository(
             return [];
         }
 
-        var families = await this.FamiliesOfAsync(rows.Select(row => row.ConnectionId), ct);
+        var families = await this.FamiliesOfAsync(context, rows.Select(row => row.ConnectionId), ct);
         return rows
             .Select(row => this.ToDto(row, families.TryGetValue(row.ConnectionId, out var family) ? family : null))
             .ToList();
@@ -479,11 +517,12 @@ public sealed class LogicalModelCatalogRepository(
     // spelling its family superseded names the same family as one already rewritten. An identity no loaded
     // family claims yields no family at all, and only the host-reserved shapes resolve for such a row.
     private async Task<IReadOnlyDictionary<Guid, string>> FamiliesOfAsync(
+        MeisterProPRDbContext context,
         IEnumerable<Guid> connectionIds,
         CancellationToken ct)
     {
         var ids = connectionIds.Distinct().ToArray();
-        var identities = await db.AiConnectionProfiles
+        var identities = await context.AiConnectionProfiles
             .AsNoTracking()
             .Where(profile => ids.Contains(profile.Id))
             .Select(profile => new { profile.Id, profile.ProviderKind })
@@ -503,7 +542,7 @@ public sealed class LogicalModelCatalogRepository(
 
     private async Task<string?> FamilyOfAsync(Guid connectionId, CancellationToken ct)
     {
-        var families = await this.FamiliesOfAsync([connectionId], ct);
+        var families = await this.FamiliesOfAsync(db, [connectionId], ct);
         return families.TryGetValue(connectionId, out var family) ? family : null;
     }
 
