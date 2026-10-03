@@ -59,6 +59,11 @@ internal static class PromptTemplateCatalog
             [PromptStageKeys.SynthesisUser] = new(PromptStageKeys.SynthesisUser, PromptStageRole.User, "file-by-file/synthesis-user.hbs"),
             [PromptStageKeys.PrVerificationSystem] = new(PromptStageKeys.PrVerificationSystem, PromptStageRole.System, "shared/pr-verification-system.hbs"),
             [PromptStageKeys.PrVerificationUser] = new(PromptStageKeys.PrVerificationUser, PromptStageRole.User, "shared/pr-verification-user.hbs"),
+            ["evidence_verification_system"] = new(
+                "evidence_verification_system",
+                PromptStageRole.System,
+                "shared/evidence-verification-system.hbs"),
+            ["evidence_verification_user"] = new("evidence_verification_user", PromptStageRole.User, "shared/evidence-verification-user.hbs"),
             ["pr_wide_planning_system"] = new("pr_wide_planning_system", PromptStageRole.System, "pr-wide-agentic/planning-system.hbs"),
             ["pr_wide_planning_user"] = new("pr_wide_planning_user", PromptStageRole.User, "pr-wide-agentic/planning-user.hbs"),
             ["pr_wide_investigation_system"] = new(

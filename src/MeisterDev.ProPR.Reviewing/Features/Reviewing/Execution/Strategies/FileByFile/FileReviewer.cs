@@ -201,7 +201,10 @@ internal sealed partial class FileReviewer(
                 fileResult,
                 fileContext,
                 protocolId,
-                reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
+                reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? [])
+            {
+                LinkedItems = pr.LinkedItems,
+            };
 
             result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
 
@@ -903,6 +906,7 @@ internal sealed partial class FileReviewer(
                 reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? [])
             {
                 VerificationFileContext = inputs.FileContext,
+                LinkedItems = inputs.Pr.LinkedItems,
             };
 
             result = await this.RunReviewResultPipelineAsync(pipelineState, result, inputs.PipelineProfile, inputs.Ct);
@@ -1452,7 +1456,8 @@ internal sealed partial class FileReviewer(
         }
 
         // Supply the per-file context so an evidence-gathering verifier can read the anchor code,
-        // judge with the file's tier client, and substantiate (or refute) a withheld claim.
+        // judge with the file's tier client, and substantiate (or refute) a withheld claim. The intent inputs let the
+        // judge withhold a finding about behaviour that the pull request states as intended and that contradicts nothing.
         var verificationSource = state.VerificationFileContext ?? state.FileContext;
         var verificationContext = new ReviewVerificationContext(
             verificationSource.ReviewTools,
@@ -1461,7 +1466,18 @@ internal sealed partial class FileReviewer(
             verificationSource.ModelId,
             state.Job.ClientId,
             aiRuntimeResolver,
-            verificationSource.EnableEvidenceBackedVerification);
+            verificationSource.EnableEvidenceBackedVerification,
+            new ReviewVerificationIntent(
+                state.FilePullRequest.Title,
+                state.FilePullRequest.Description,
+                state.LinkedItems ?? [],
+                state.File.Path,
+                state.File.IsBinary ? null : state.File.UnifiedDiff),
+            state.ProtocolId);
+
+        // An inventory pass lists candidates from the diff text without reading the repository, so each of its
+        // findings must be confirmed by the evidence-backed verifier before it can enter the union.
+        var requireEvidenceForEveryFinding = string.Equals(state.FileContext.ActiveLens, ReviewPassLens.Inventory, StringComparison.Ordinal);
 
         return await localReviewVerificationExecutor.ApplyAsync(
             result,
@@ -1469,6 +1485,7 @@ internal sealed partial class FileReviewer(
             state.ProtocolId,
             state.InvariantFacts,
             verificationContext,
+            requireEvidenceForEveryFinding,
             ct);
     }
 
@@ -1859,6 +1876,10 @@ internal sealed partial class FileReviewer(
         // The file context whose tools, tier client, model and evidence flag local verification uses. Null means
         // the review context itself; a union pass sets the baseline file context here.
         public ReviewSystemContext? VerificationFileContext { get; init; }
+
+        // The linked work items of the pull request. The per-file pull request omits them, and the evidence-backed
+        // judge weighs them as statements of intent and requirements.
+        public IReadOnlyList<LinkedItem>? LinkedItems { get; init; }
     }
 
     // One planned resample pass (pass 2..k): its index, provenance label, resolved model id, the client +

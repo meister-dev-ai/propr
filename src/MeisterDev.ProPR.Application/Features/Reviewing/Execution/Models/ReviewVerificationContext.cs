@@ -16,6 +16,10 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 ///     verifier must then degrade to the conservative deterministic outcome.
 ///     <see cref="EvidenceVerificationEnabled" /> carries the per-client opt-in: when <see langword="false" />
 ///     the composite verifier behaves exactly like the deterministic verifier and never calls a model.
+///     <see cref="Intent" /> carries the pull request description, linked work items and file diff that the judge
+///     weighs against a finding to decide whether the behaviour is intended and whether it contradicts a stated
+///     requirement. It is <see langword="null" /> when the hosting path supplies none. <see cref="ProtocolId" /> names the
+///     review protocol in which the verifier records its judge calls; without it no call is recorded.
 /// </summary>
 public sealed record ReviewVerificationContext(
     IReviewContextTools? Tools,
@@ -24,4 +28,6 @@ public sealed record ReviewVerificationContext(
     string? ModelId,
     Guid ClientId = default,
     IAiRuntimeResolver? Resolver = null,
-    bool EvidenceVerificationEnabled = false);
+    bool EvidenceVerificationEnabled = false,
+    ReviewVerificationIntent? Intent = null,
+    Guid? ProtocolId = null);

@@ -165,4 +165,35 @@ public sealed class DeterministicReviewClaimExtractorTests
         Assert.Equal(CandidateReviewFinding.GenericReviewAssertionClaimKind, claim.ClaimKind);
         Assert.Equal(ClaimDescriptor.NeedsEvidenceMode, claim.VerificationMode);
     }
+
+    [Theory]
+    [InlineData("The loop exits before the last element is processed.", "per_file_comment", "CodeContract")]
+    [InlineData("The retry loop never backs off when the call times out.", "robustness", "OperationalRisk")]
+    [InlineData("ReviewComment.Message may be null when the model omits a message.", "per_file_comment", "CodeContract")]
+    public void ExtractClaims_FindingRequiringEvidenceVerification_NeedsEvidenceInEveryFamily(
+        string message,
+        string category,
+        string expectedFamily)
+    {
+        var sut = new DeterministicReviewClaimExtractor();
+        var finding = CreateFinding("finding-inventory-001", message, category);
+        var marked = new CandidateReviewFinding(
+            finding.FindingId,
+            finding.Provenance with { RequiresEvidenceVerification = true },
+            finding.Severity,
+            finding.Message,
+            finding.Category,
+            finding.FilePath,
+            finding.LineNumber);
+
+        var unmarkedClaim = Assert.Single(sut.ExtractClaims(finding));
+        var markedClaim = Assert.Single(sut.ExtractClaims(marked));
+
+        // Without the marker the family alone decides, and these families publish without evidence.
+        Assert.Equal(ClaimDescriptor.DeterministicOnlyMode, unmarkedClaim.VerificationMode);
+        Assert.Equal(ClaimDescriptor.NeedsEvidenceMode, markedClaim.VerificationMode);
+        Assert.Equal(expectedFamily, markedClaim.ClaimFamily);
+        Assert.Equal(unmarkedClaim.ClaimKind, markedClaim.ClaimKind);
+        Assert.Equal(unmarkedClaim.RequiresCrossFileEvidence, markedClaim.RequiresCrossFileEvidence);
+    }
 }

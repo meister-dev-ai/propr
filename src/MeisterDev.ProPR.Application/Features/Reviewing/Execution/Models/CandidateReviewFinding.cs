@@ -187,7 +187,7 @@ public sealed record CandidateReviewFinding
     /// <summary>
     ///     Gets the provenance describing how the finding was generated.
     /// </summary>
-    public CandidateFindingProvenance Provenance { get; }
+    public CandidateFindingProvenance Provenance { get; init; }
 
     /// <summary>
     ///     Gets the severity assigned to the finding.

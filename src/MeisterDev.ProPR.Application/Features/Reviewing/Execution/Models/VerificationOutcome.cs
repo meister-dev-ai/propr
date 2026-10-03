@@ -186,6 +186,14 @@ public sealed record VerificationOutcome
     public bool Degraded { get; }
 
     /// <summary>
+    ///     Gets the verdict kind the evidence-backed judge returned for the claim, one of the
+    ///     <see cref="EvidenceJudgeVerdicts" /> values, or <see langword="null" /> when no judge verdict was obtained: the
+    ///     claim was not escalated, the judge was skipped for lack of a client or anchor, or the judge call failed. The
+    ///     evidence summary of a failed call carries the cause.
+    /// </summary>
+    public string? JudgeVerdict { get; init; }
+
+    /// <summary>
     ///     Gets a value indicating whether the recommended disposition blocks publication.
     /// </summary>
     public bool BlocksPublication => string.Equals(this.RecommendedDisposition, FinalGateDecision.DropDisposition, StringComparison.Ordinal);

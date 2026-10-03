@@ -1,0 +1,45 @@
+CLAIM: {{assertionText}}
+Subject symbol: {{subjectIdentifier}}
+Anchor: {{anchorFilePath}}:{{anchorLine}}
+
+----- BEGIN PULL REQUEST TEXT {{boundary}} -----
+TITLE: {{pullRequestTitle}}
+
+DESCRIPTION:
+{{#if hasPullRequestDescription}}
+{{pullRequestDescription}}
+{{else}}
+(none)
+{{/if}}
+----- END PULL REQUEST TEXT {{boundary}} -----
+
+LINKED WORK ITEMS:
+{{#if hasLinkedItems}}
+----- BEGIN LINKED WORK ITEMS {{boundary}} -----
+{{#each linkedItems}}
+- {{itemType}} #{{providerKey}}: {{title}}
+{{#if hasDescription}}
+{{description}}
+{{/if}}
+{{/each}}
+----- END LINKED WORK ITEMS {{boundary}} -----
+{{#if hasOmittedLinkedItems}}
+({{omittedLinkedItemCount}} further linked work items not shown)
+{{/if}}
+{{else}}
+(none)
+{{/if}}
+
+{{#if diffHunkIsNearest}}
+DIFF HUNK NEAREST TO THE ANCHOR:
+{{else}}
+DIFF HUNK AT THE ANCHOR:
+{{/if}}
+{{#if hasDiffHunk}}
+{{diffHunk}}
+{{else}}
+(no diff hunk available for this anchor)
+{{/if}}
+
+CURRENT SOURCE OF {{anchorFilePath}} (source branch, starting at line {{sourceStartLine}}):
+{{anchorSource}}

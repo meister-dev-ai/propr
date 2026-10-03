@@ -179,6 +179,17 @@ public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
 
     private static ClaimProfile ResolveClaimProfile(CandidateReviewFinding finding)
     {
+        var profile = ResolveClaimProfileByFamily(finding);
+
+        // A finding from a pass without repository tools is a candidate that nobody has checked against the
+        // repository, so its claim needs evidence whatever family it belongs to.
+        return finding.Provenance.RequiresEvidenceVerification
+            ? profile with { VerificationMode = ClaimDescriptor.NeedsEvidenceMode }
+            : profile;
+    }
+
+    private static ClaimProfile ResolveClaimProfileByFamily(CandidateReviewFinding finding)
+    {
         foreach (var rule in ClaimKindRules)
         {
             if (rule.Matches(finding))

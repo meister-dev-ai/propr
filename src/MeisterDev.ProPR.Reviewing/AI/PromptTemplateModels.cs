@@ -165,6 +165,32 @@ internal static class PromptTemplateModels
 
     internal sealed record PromptLegacyChangedFileModel(string path, string changeType, bool isBinary, string? fullContent, string? unifiedDiff);
 
+    internal sealed record EvidenceVerificationUserModel(
+        string assertionText,
+        string subjectIdentifier,
+        string anchorFilePath,
+        string anchorLine,
+        int sourceStartLine,
+        string anchorSource,
+        string pullRequestTitle,
+        bool hasPullRequestDescription,
+        string? pullRequestDescription,
+        bool hasLinkedItems,
+        IReadOnlyList<EvidenceVerificationLinkedItemModel> linkedItems,
+        bool hasOmittedLinkedItems,
+        int omittedLinkedItemCount,
+        bool hasDiffHunk,
+        bool diffHunkIsNearest,
+        string? diffHunk,
+        string boundary);
+
+    internal sealed record EvidenceVerificationLinkedItemModel(
+        string itemType,
+        string providerKey,
+        string title,
+        bool hasDescription,
+        string? description);
+
     internal sealed record PromptLinkedItemModel(
         string itemType,
         string providerKey,

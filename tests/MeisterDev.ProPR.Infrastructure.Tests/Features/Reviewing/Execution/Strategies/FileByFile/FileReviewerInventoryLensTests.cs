@@ -154,6 +154,32 @@ public sealed class FileReviewerInventoryLensTests
             this._recorder);
     }
 
+    // The production claim extractor and verifiers. A plain review comment is a CodeContract claim, which the
+    // deterministic verifier publishes on its own unless the finding is marked as needing evidence.
+    private LocalReviewVerificationExecutor CreateProductionVerificationExecutor()
+    {
+        return new LocalReviewVerificationExecutor(
+            new DeterministicReviewClaimExtractor(),
+            new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier()),
+            this._recorder);
+    }
+
+    // Records the serialized outcome of every local verification decision, in call order.
+    private List<string> CaptureLocalDecisions()
+    {
+        var decisions = new List<string>();
+        this._recorder
+            .When(r => r.RecordVerificationEventAsync(
+                Arg.Any<Guid>(),
+                ReviewProtocolEventNames.VerificationLocalDecision,
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>()))
+            .Do(ci => decisions.Add(ci.ArgAt<string?>(3) ?? string.Empty));
+        return decisions;
+    }
+
     private static IChatClient JudgeReturning(string verdictJson)
     {
         var judge = Substitute.For<IChatClient>();
@@ -226,6 +252,83 @@ public sealed class FileReviewerInventoryLensTests
         resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>())
             .Returns<IResolvedAiChatRuntime>(_ => throw new InvalidOperationException("no binding"));
         return resolver;
+    }
+
+    [Fact]
+    public async Task BaselineAndInventoryFindings_JudgeReceivesPullRequestIntentAndAnchorHunk()
+    {
+        // The judge weighs every finding against the pull request description, the linked work items collected for
+        // the review, and the diff hunk at the anchor, for baseline findings and union-pass findings alike.
+        var userMessages = new List<string>();
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => userMessages.Add(messages.Last().Text)),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"visible at line 3\"}")));
+        var reviewer = this.CreateReviewer(
+            ResolverWithVerificationJudge("inventory-model", judge),
+            this.CreateEvidenceVerificationExecutor());
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = IntentFixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            CancellationToken.None);
+
+        Assert.Equal(2, userMessages.Count);
+        Assert.All(
+            userMessages,
+            message =>
+            {
+                Assert.Contains("Committed offsets skip unprocessable messages.", message, StringComparison.Ordinal);
+                Assert.Contains("User Story #42: Consumer must not stall", message, StringComparison.Ordinal);
+                Assert.Contains("@@ -1,1 +1,1 @@", message, StringComparison.Ordinal);
+            });
+    }
+
+    [Theory]
+    [InlineData("{\"verdict\":\"intended\",\"reason\":\"the description states the skip\"}", "intended", false)]
+    [InlineData(
+        "{\"verdict\":\"intended_contradicted\",\"reason\":\"failed offsets are committed\",\"contradicts\":\"linked work item #42\"}",
+        "intended_contradicted",
+        true)]
+    public async Task BaselineAndInventoryFindings_GetTheSameDispositionForAnIntentVerdict_AndRecordTheVerdictKind(
+        string verdictJson,
+        string expectedVerdict,
+        bool expectPublished)
+    {
+        var decisions = this.CaptureLocalDecisions();
+        var reviewer = this.CreateReviewer(
+            ResolverWithVerificationJudge("inventory-model", JudgeReturning(verdictJson)),
+            this.CreateEvidenceVerificationExecutor());
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = IntentFixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            CancellationToken.None);
+
+        Assert.Equal(2, decisions.Count);
+        Assert.All(
+            decisions,
+            decision =>
+            {
+                using var document = JsonDocument.Parse(decision);
+                Assert.Equal(expectedVerdict, document.RootElement.GetProperty("judgeVerdict").GetString());
+            });
+        Assert.NotNull(this._persistedResult);
+        Assert.Equal(expectPublished ? 2 : 0, this._persistedResult!.Comments?.Count ?? 0);
+    }
+
+    private static (ReviewJob job, PullRequest pr) IntentFixture(ChangedFile file)
+    {
+        var (job, pr) = Fixture(file);
+        return (job, pr with
+        {
+            Description = "Committed offsets skip unprocessable messages.",
+            LinkedItems = [new LinkedItem("42", "User Story", "Consumer must not stall", "Failed messages are retried.", null, [])],
+        });
     }
 
     [Fact]
@@ -432,5 +535,96 @@ public sealed class FileReviewerInventoryLensTests
         var root = document.RootElement;
         Assert.Equal(new[] { 1, 1 }, root.GetProperty("perPassPreFilterCounts").EnumerateArray().Select(e => e.GetInt32()).ToArray());
         Assert.Equal(new[] { 0, 0 }, root.GetProperty("perPassCatchCounts").EnumerateArray().Select(e => e.GetInt32()).ToArray());
+    }
+
+    [Fact]
+    public async Task InventoryLens_CodeContractFinding_IsConfirmedByEvidenceVerifierBeforeUnion()
+    {
+        // A plain comment is a CodeContract claim. On the baseline pass the deterministic verifier publishes it, but
+        // the inventory finding needs evidence, so only the inventory finding reaches the judge.
+        var decisions = this.CaptureLocalDecisions();
+        var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
+        var reviewer = this.CreateReviewer(
+            ResolverWithVerificationJudge("inventory-model", judge),
+            this.CreateProductionVerificationExecutor());
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            CancellationToken.None);
+
+        await judge.Received(1).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        Assert.Equal(2, decisions.Count);
+        Assert.Contains(VerificationOutcome.DeterministicRulesEvaluator, decisions[0], StringComparison.Ordinal);
+        Assert.Contains(VerificationOutcome.AiMicroVerifierEvaluator, decisions[1], StringComparison.Ordinal);
+        Assert.NotNull(this._persistedResult);
+        Assert.Equal(2, this._persistedResult!.Comments!.Count);
+        Assert.Contains(this._persistedResult.Comments!, c => c.OriginPassLens == ReviewPassLens.Inventory);
+    }
+
+    [Fact]
+    public async Task InventoryLens_CodeContractFindingNotConfirmed_IsRemovedBeforeUnion()
+    {
+        var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"key is checked at line 1\"}");
+        var reviewer = this.CreateReviewer(
+            ResolverWithVerificationJudge("inventory-model", judge),
+            this.CreateProductionVerificationExecutor());
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            CancellationToken.None);
+
+        await judge.Received(1).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        Assert.NotNull(this._persistedResult);
+        var remaining = Assert.Single(this._persistedResult!.Comments!);
+        Assert.Null(remaining.OriginPassLens);
+    }
+
+    [Fact]
+    public async Task InventoryLens_CodeContractFindingWithEvidenceVerificationDisabled_IsRemovedBeforeUnion()
+    {
+        // Without evidence verification nothing can confirm an inventory finding, so the deterministic withhold stands
+        // and the inventory pass contributes no comment. The baseline finding is published as before.
+        var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"confirmed\"}");
+        var reviewer = this.CreateReviewer(
+            ResolverWithVerificationJudge("inventory-model", judge),
+            this.CreateProductionVerificationExecutor());
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: false), null, Substitute.For<IChatClient>(),
+            CancellationToken.None);
+
+        await judge.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
+        Assert.NotNull(this._persistedResult);
+        var remaining = Assert.Single(this._persistedResult!.Comments!);
+        Assert.Null(remaining.OriginPassLens);
+    }
+
+    [Fact]
+    public async Task OrdinaryResamplePass_CodeContractFinding_IsPublishedWithoutJudge()
+    {
+        // A resample pass reviews with repository tools, so its CodeContract finding keeps the deterministic
+        // classification of a baseline finding.
+        var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"not present\"}");
+        var reviewer = this.CreateReviewer(
+            ResolverWithVerificationJudge("resample-model", judge),
+            this.CreateProductionVerificationExecutor());
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1, UnionContext(null, ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            CancellationToken.None);
+
+        await judge.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
+        Assert.NotNull(this._persistedResult);
+        Assert.Equal(2, this._persistedResult!.Comments!.Count);
+        // The second review call is the resample pass; its finding is published as union pass 2.
+        Assert.Contains(this._persistedResult.Comments!, c => c.Message == "Concrete defect 2." && c.OriginPassIndex == 2);
     }
 }

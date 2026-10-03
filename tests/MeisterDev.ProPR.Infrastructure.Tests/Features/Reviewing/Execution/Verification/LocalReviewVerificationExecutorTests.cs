@@ -8,7 +8,9 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
+using Microsoft.Extensions.AI;
 using NSubstitute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Verification;
@@ -227,6 +229,7 @@ public sealed class LocalReviewVerificationExecutorTests
             [],
             [enrichedFinding],
             null,
+            false,
             CancellationToken.None);
 
         var verifiedFinding = Assert.Single(verification.VerifiedCandidateFindings);
@@ -297,6 +300,7 @@ public sealed class LocalReviewVerificationExecutorTests
             [],
             [baselineFinding, prorvFinding],
             null,
+            false,
             CancellationToken.None);
 
         Assert.NotNull(capturedWorkItems);
@@ -324,6 +328,98 @@ public sealed class LocalReviewVerificationExecutorTests
             CandidateReviewFinding.PerFileCommentCategory,
             "src/Foo.cs",
             findingId == "finding-baseline" ? 10 : 20);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_FindingRequiringEvidenceContradictedByInvariant_IsDroppedWithoutJudge()
+    {
+        // The claim needs evidence because every finding of the pass does, but a known invariant fact already refutes
+        // it. The deterministic contradiction decides, and the judge, which would confirm, is never asked.
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"confirmed\"}")));
+        var tools = Substitute.For<IReviewContextTools>();
+        tools.GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("var comment = new ReviewComment(path, line, severity, message);");
+        var sut = new LocalReviewVerificationExecutor(
+            new DeterministicReviewClaimExtractor(),
+            new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier()),
+            CreateProtocolRecorder());
+        var result = new ReviewResult(
+            "summary",
+            [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "ReviewComment.Message may be null when the model omits a message.")]);
+        InvariantFact[] facts =
+        [
+            new(
+                DomainReviewInvariantFactProvider.ReviewCommentMessageRequiredInvariantId,
+                InvariantFact.DomainFamily,
+                "ReviewComment.Message required",
+                "ReviewComment constructor semantics",
+                "message_non_null_and_non_empty",
+                "ReviewComment requires a non-null, non-empty message value."),
+        ];
+
+        var actual = await sut.ApplyAsync(
+            result,
+            new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"),
+            Guid.NewGuid(),
+            facts,
+            new ReviewVerificationContext(tools, "feature/x", judge, "judge-model", EvidenceVerificationEnabled: true),
+            true,
+            CancellationToken.None);
+
+        Assert.Empty(actual.Comments);
+        Assert.Contains("dropped by deterministic verification", actual.Summary, StringComparison.Ordinal);
+        await judge.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ApplyAsync_FindingRequiringEvidence_IsWithheldWhenClaimExtractionFailsOrYieldsNothing(bool extractionThrows)
+    {
+        // An inventory-pass finding must be confirmed with evidence. Without a claim nothing can confirm it, so a failed
+        // or empty extraction withholds it, and the verifier is never asked.
+        var extractor = Substitute.For<IReviewClaimExtractor>();
+        if (extractionThrows)
+        {
+            extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>()).Returns(_ => throw new InvalidOperationException("extraction failed"));
+        }
+        else
+        {
+            extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>()).Returns([]);
+        }
+
+        var verifier = Substitute.For<IReviewFindingVerifier>();
+        var recorder = CreateProtocolRecorder();
+        var sut = new LocalReviewVerificationExecutor(extractor, verifier, recorder);
+        var result = new ReviewResult("summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Lookup may dereference null.")]);
+
+        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), Guid.NewGuid(), [], null, true, CancellationToken.None);
+
+        Assert.Empty(actual.Comments);
+        Assert.Contains("withheld pending stronger evidence", actual.Summary, StringComparison.Ordinal);
+        _ = verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default!);
+        await recorder.Received(1).RecordVerificationEventAsync(
+            Arg.Any<Guid>(),
+            ReviewProtocolEventNames.VerificationLocalDecision,
+            Arg.Any<string?>(),
+            Arg.Is<string?>(output => output != null && output.Contains(FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal)),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ApplyAsync_FindingNotRequiringEvidence_IsKeptWhenClaimExtractionFails()
+    {
+        var extractor = Substitute.For<IReviewClaimExtractor>();
+        extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>()).Returns(_ => throw new InvalidOperationException("extraction failed"));
+        var sut = new LocalReviewVerificationExecutor(extractor, Substitute.For<IReviewFindingVerifier>(), CreateProtocolRecorder());
+        var result = new ReviewResult("summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Lookup may dereference null.")]);
+
+        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), Guid.NewGuid(), [], null, false, CancellationToken.None);
+
+        Assert.Single(actual.Comments);
     }
 
     private static IProtocolRecorder CreateProtocolRecorder()

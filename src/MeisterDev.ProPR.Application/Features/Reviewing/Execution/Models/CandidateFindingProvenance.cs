@@ -181,6 +181,15 @@ public sealed record CandidateFindingProvenance
     public bool RequiresExplicitSupport { get; }
 
     /// <summary>
+    ///     Gets a value indicating whether every claim of this finding needs repository evidence before publication,
+    ///     regardless of its claim family. Local verification sets it for findings from a pass that reviewed the diff
+    ///     without repository tools. Unlike <see cref="RequiresExplicitSupport" />, it affects only local verification:
+    ///     the claim needs evidence, and a known invariant contradiction is still applied before any evidence is
+    ///     gathered. It has no effect on the finding gate or on PR-level verification.
+    /// </summary>
+    public bool RequiresEvidenceVerification { get; init; }
+
+    /// <summary>
     ///     Gets the stable origin identifier for deeper follow-up or repeated-judgment findings when available.
     /// </summary>
     public string? SourceOriginId { get; }

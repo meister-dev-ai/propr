@@ -107,7 +107,7 @@ internal sealed class RunnerReviewPipeline : IDisposable
         var claimExtractor = new DeterministicReviewClaimExtractor();
         var verifier = new CompositeReviewFindingVerifier(
             new DeterministicLocalReviewVerifier(),
-            new EvidenceBackedReviewVerifier());
+            new EvidenceBackedReviewVerifier(recorder));
         var invariantFactProviders = new IReviewInvariantFactProvider[]
         {
             new DomainReviewInvariantFactProvider(),

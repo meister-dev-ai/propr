@@ -30,7 +30,25 @@ internal sealed class LocalReviewVerificationExecutor(
         ReviewVerificationContext? verificationContext,
         CancellationToken ct)
     {
-        return (await this.ApplyDetailedAsync(result, fileResult, protocolId, invariantFacts, null, verificationContext, ct)).Result;
+        return await this.ApplyAsync(result, fileResult, protocolId, invariantFacts, verificationContext, false, ct);
+    }
+
+    /// <summary>
+    ///     Verifies the findings of one file review. When <paramref name="requireEvidenceForEveryFinding" /> is
+    ///     <see langword="true" />, every finding is marked so that its claims need repository evidence regardless of
+    ///     their claim family. The caller sets it for a pass that reviewed the diff without repository tools.
+    /// </summary>
+    public async Task<ReviewResult> ApplyAsync(
+        ReviewResult result,
+        ReviewFileResult fileResult,
+        Guid? protocolId,
+        IReadOnlyList<InvariantFact> invariantFacts,
+        ReviewVerificationContext? verificationContext,
+        bool requireEvidenceForEveryFinding,
+        CancellationToken ct)
+    {
+        return (await this.ApplyDetailedAsync(result, fileResult, protocolId, invariantFacts, null, verificationContext, requireEvidenceForEveryFinding, ct))
+            .Result;
     }
 
     public async Task<LocalVerificationApplicationResult> ApplyDetailedAsync(
@@ -40,6 +58,7 @@ internal sealed class LocalReviewVerificationExecutor(
         IReadOnlyList<InvariantFact> invariantFacts,
         IReadOnlyList<CandidateReviewFinding>? enrichedCandidateFindings,
         ReviewVerificationContext? verificationContext,
+        bool requireEvidenceForEveryFinding,
         CancellationToken ct)
     {
         if (reviewClaimExtractor is null || reviewFindingVerifier is null || result.Comments.Count == 0)
@@ -48,6 +67,10 @@ internal sealed class LocalReviewVerificationExecutor(
         }
 
         var candidateFindings = BuildCandidateFindings(result, fileResult, enrichedCandidateFindings);
+        if (requireEvidenceForEveryFinding)
+        {
+            candidateFindings = candidateFindings.Select(RequireEvidenceVerification).ToList();
+        }
 
         var claimsByFindingId = await this.ExtractClaimsByFindingAsync(candidateFindings, protocolId, ct);
         var workItems = candidateFindings
@@ -62,12 +85,22 @@ internal sealed class LocalReviewVerificationExecutor(
 
         await this.RecordExtractedClaimsAsync(protocolId, candidateFindings, claimsByFindingId, ct);
 
-        if (workItems.Count == 0)
+        // A finding that needs evidence but yielded no claim, because extraction failed or produced none, has nothing
+        // the verifiers could confirm. It is withheld, so a failed extraction never publishes it unverified.
+        var unclaimedEvidenceOutcomes = candidateFindings
+            .Where(finding => finding.Provenance.RequiresEvidenceVerification && claimsByFindingId[finding.FindingId].Count == 0)
+            .Select(WithholdForMissingClaims)
+            .ToList();
+
+        if (workItems.Count == 0 && unclaimedEvidenceOutcomes.Count == 0)
         {
             return new LocalVerificationApplicationResult(result, candidateFindings);
         }
 
-        var outcomes = await reviewFindingVerifier.VerifyAsync(workItems, invariantFacts, verificationContext, ct);
+        var verifiedOutcomes = workItems.Count == 0
+            ? []
+            : await reviewFindingVerifier.VerifyAsync(workItems, invariantFacts, verificationContext, ct);
+        IReadOnlyList<VerificationOutcome> outcomes = [.. verifiedOutcomes, .. unclaimedEvidenceOutcomes];
         var outcomesByFindingId = outcomes
             .GroupBy(outcome => outcome.FindingId, StringComparer.Ordinal)
             .ToDictionary(
@@ -189,6 +222,26 @@ internal sealed class LocalReviewVerificationExecutor(
         {
             MergedFinding = finding.MergedFinding,
         };
+    }
+
+    private static CandidateReviewFinding RequireEvidenceVerification(CandidateReviewFinding finding)
+    {
+        return finding with { Provenance = finding.Provenance with { RequiresEvidenceVerification = true } };
+    }
+
+    private static VerificationOutcome WithholdForMissingClaims(CandidateReviewFinding finding)
+    {
+        return new VerificationOutcome(
+            $"{finding.FindingId}:claim:none",
+            finding.FindingId,
+            VerificationOutcome.NonVerifiableKind,
+            FinalGateDecision.SummaryOnlyDisposition,
+            [ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport],
+            [],
+            VerificationOutcome.NoEvidence,
+            "The finding needs evidence verification, but no verifiable claim could be extracted from it.",
+            VerificationOutcome.DeterministicRulesEvaluator,
+            true);
     }
 
     private static CandidateReviewFinding AttachVerificationOutcome(

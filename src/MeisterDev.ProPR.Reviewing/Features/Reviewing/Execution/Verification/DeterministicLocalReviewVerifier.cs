@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics.CodeAnalysis;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 
@@ -38,13 +39,22 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
                     continue;
                 }
 
+                // A finding that needs evidence only because of its pass is still contradicted by a known invariant
+                // fact, so the evidence verifier never sees a claim the invariants already refute.
+                if (workItem.FindingProvenance.RequiresEvidenceVerification &&
+                    TryContradictWithInvariant(claim, invariantFacts, out var contradiction))
+                {
+                    outcomes.Add(contradiction);
+                    continue;
+                }
+
                 if (RequiresBoundedEvidence(workItem))
                 {
                     outcomes.Add(CreateConservativeLocalOutcome(claim));
                     continue;
                 }
 
-                if (!InvariantFact.TryGetBlockingInvariantId(claim.ClaimKind, out var invariantId))
+                if (!InvariantFact.TryGetBlockingInvariantId(claim.ClaimKind, out _))
                 {
                     outcomes.Add(
                         VerificationOutcome.Supported(
@@ -54,14 +64,9 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
                     continue;
                 }
 
-                if (invariantFacts.Any(fact => string.Equals(fact.InvariantId, invariantId, StringComparison.Ordinal)))
+                if (TryContradictWithInvariant(claim, invariantFacts, out var invariantContradiction))
                 {
-                    outcomes.Add(
-                        VerificationOutcome.Contradicted(
-                            claim,
-                            invariantId,
-                            ReviewFindingGateReasonCodes.InvariantContradiction,
-                            $"Claim kind '{claim.ClaimKind}' contradicts invariant '{invariantId}'."));
+                    outcomes.Add(invariantContradiction);
                     continue;
                 }
 
@@ -83,6 +88,26 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
         }
 
         return Task.FromResult<IReadOnlyList<VerificationOutcome>>(outcomes);
+    }
+
+    private static bool TryContradictWithInvariant(
+        ClaimDescriptor claim,
+        IReadOnlyList<InvariantFact> invariantFacts,
+        [NotNullWhen(true)] out VerificationOutcome? contradiction)
+    {
+        if (InvariantFact.TryGetBlockingInvariantId(claim.ClaimKind, out var invariantId) &&
+            invariantFacts.Any(fact => string.Equals(fact.InvariantId, invariantId, StringComparison.Ordinal)))
+        {
+            contradiction = VerificationOutcome.Contradicted(
+                claim,
+                invariantId,
+                ReviewFindingGateReasonCodes.InvariantContradiction,
+                $"Claim kind '{claim.ClaimKind}' contradicts invariant '{invariantId}'.");
+            return true;
+        }
+
+        contradiction = null;
+        return false;
     }
 
     private static bool RequiresBoundedEvidence(VerificationWorkItem workItem)

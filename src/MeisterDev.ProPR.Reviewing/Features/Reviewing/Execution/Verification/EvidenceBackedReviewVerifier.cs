@@ -2,9 +2,12 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -12,15 +15,31 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verificat
 /// <summary>
 ///     Evidence-gathering verifier for claims the deterministic verifier can only withhold for lack of
 ///     bounded evidence. For each work item it reads the anchor file via the review-context tools and asks a
-///     skeptical bounded judging call whether the asserted defect is actually present in the code. It can only
+///     skeptical bounded judging call whether the asserted defect is actually present in the code, whether the
+///     behaviour is what the implementer intended according to the pull request, its linked work items and the code
+///     comments, and whether intended behaviour contradicts a stated requirement or other functionality. A true
+///     finding is published unless it is intended and contradicts nothing. It can only
 ///     PROMOTE a claim to publication when the evidence confirms it; on refusal, missing context, or any
 ///     failure it returns the same conservative withhold the deterministic verifier produces — so it never
 ///     reduces precision below the current behavior, it only recovers real findings the gate was discarding.
 /// </summary>
-public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
+/// <remarks>
+///     When a protocol recorder and <see cref="ReviewVerificationContext.ProtocolId" /> are available, each judge call is
+///     recorded as an AI call with its token usage and model, so the spend and the judging model appear in the trace.
+/// </remarks>
+public sealed class EvidenceBackedReviewVerifier(IProtocolRecorder? protocolRecorder = null) : IReviewFindingVerifier
 {
+    private const string JudgeCallName = "ai_call_evidence_verification";
+
     private const int MaxAnchorChars = 8000;
     private const int MaxAnchorLines = 400;
+    private const string SystemPromptStageKey = "evidence_verification_system";
+    private const string UserPromptStageKey = "evidence_verification_user";
+
+    private static readonly HashSet<string> PlaceholderSources = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "none", "n/a", "na", "null", "-", "unknown", "nothing", "not applicable",
+    };
 
     public async Task<IReadOnlyList<VerificationOutcome>> VerifyAsync(
         IReadOnlyList<VerificationWorkItem> workItems,
@@ -99,35 +118,19 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
 
             var (boundedSource, boundedStartLine) = BoundAnchorChars(anchorSource, windowStart, claim.AnchorLineNumber);
 
+            var systemPrompt = BuildSystemPrompt();
+            var userMessage = BuildUserMessage(claim, boundedSource, boundedStartLine, context.Intent);
             var response = await judgeClient.GetResponseAsync(
                 [
-                    new ChatMessage(ChatRole.System, BuildSystemPrompt()),
-                    new ChatMessage(ChatRole.User, BuildUserMessage(claim, boundedSource, boundedStartLine)),
+                    new ChatMessage(ChatRole.System, systemPrompt),
+                    new ChatMessage(ChatRole.User, userMessage),
                 ],
                 new ChatOptions { ModelId = judgeModel },
                 ct).ConfigureAwait(false);
 
-            var verdict = TryParseVerdict(response.Text);
-            if (verdict is { Confirmed: true })
-            {
-                return new VerificationOutcome(
-                    claim.ClaimId,
-                    claim.FindingId,
-                    VerificationOutcome.SupportedKind,
-                    FinalGateDecision.PublishDisposition,
-                    [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
-                    [],
-                    VerificationOutcome.ModerateEvidence,
-                    Truncate(verdict.Reason, 280),
-                    VerificationOutcome.AiMicroVerifierEvaluator,
-                    false);
-            }
+            await this.RecordJudgeCallAsync(context.ProtocolId, response, systemPrompt, userMessage, judgeModel, ct).ConfigureAwait(false);
 
-            return ConservativeWithhold(
-                claim,
-                verdict is null
-                    ? "escalation degraded: judge response was not a parseable verdict"
-                    : $"judge did not confirm: {Truncate(verdict.Reason, 200)}");
+            return ToOutcome(claim, TryParseVerdict(response.Text));
         }
         catch (OperationCanceledException)
         {
@@ -138,6 +141,58 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
             // Degraded-safe: any failure preserves the conservative withhold rather than risk a bad publish,
             // but the cause is carried in the outcome so the recorded local decision shows what failed.
             return ConservativeWithhold(claim, $"escalation degraded: {ex.GetType().Name}: {Truncate(ex.Message, 160)}");
+        }
+    }
+
+    // Records the judge call and adds its tokens to the protocol, as the PR-level verifier does for its calls. A recording
+    // failure does not change the verification outcome.
+    private async Task RecordJudgeCallAsync(
+        Guid? protocolId,
+        ChatResponse response,
+        string systemPrompt,
+        string userMessage,
+        string? modelId,
+        CancellationToken ct)
+    {
+        if (protocolRecorder is null || !protocolId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var usage = AiTokenUsageExtractor.FromResponse(response);
+            await protocolRecorder.RecordAiCallAsync(
+                protocolId.Value,
+                0,
+                response.Usage?.InputTokenCount,
+                response.Usage?.OutputTokenCount,
+                userMessage,
+                systemPrompt,
+                response.Text,
+                ct,
+                JudgeCallName,
+                cachedInputTokens: usage.IsEstimated ? null : usage.CachedInputTokens,
+                cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
+                reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens).ConfigureAwait(false);
+            await protocolRecorder.AddTokensAsync(
+                protocolId.Value,
+                usage.InputTokens,
+                usage.OutputTokens,
+                AiConnectionModelCategory.Default,
+                modelId,
+                ct,
+                usage.CachedInputTokens,
+                usage.CacheWriteTokens,
+                usage.ReasoningTokens).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // The trace entry is lost; the verdict still applies.
         }
     }
 
@@ -215,7 +270,59 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
         return count;
     }
 
-    private static VerificationOutcome ConservativeWithhold(ClaimDescriptor claim, string? cause = null)
+    // Maps the judge verdict onto the local decision. A true finding is published unless the judge found the behaviour
+    // intended and contradicting nothing; an intended finding that contradicts a named source is published with that
+    // source in its summary. Every other response keeps the conservative withhold, so an unusable verdict never
+    // publishes a finding.
+    private static VerificationOutcome ToOutcome(ClaimDescriptor claim, ParsedVerdict? verdict)
+    {
+        if (verdict is null)
+        {
+            return ConservativeWithhold(claim, "escalation degraded: judge response was not a parseable verdict", EvidenceJudgeVerdicts.Unparseable);
+        }
+
+        switch (verdict.Kind)
+        {
+            case EvidenceJudgeVerdicts.Confirmed:
+                return Publish(claim, Truncate(verdict.Reason, 280), EvidenceJudgeVerdicts.Confirmed);
+            case EvidenceJudgeVerdicts.IntendedContradicted when NamesASource(verdict.Contradicts):
+                return Publish(
+                    claim,
+                    $"Intended behaviour that contradicts {Truncate(verdict.Contradicts.Trim(), 120)}: {Truncate(verdict.Reason, 240)}",
+                    EvidenceJudgeVerdicts.IntendedContradicted);
+            case EvidenceJudgeVerdicts.IntendedContradicted:
+                return ConservativeWithhold(
+                    claim, "escalation degraded: the contradiction verdict named no contradicted source", EvidenceJudgeVerdicts.Unparseable);
+            case EvidenceJudgeVerdicts.Intended:
+                return ConservativeWithhold(
+                    claim, $"judge found the behaviour intended and contradicting nothing: {Truncate(verdict.Reason, 200)}", EvidenceJudgeVerdicts.Intended);
+            case EvidenceJudgeVerdicts.NotConfirmed:
+                return ConservativeWithhold(claim, $"judge did not confirm: {Truncate(verdict.Reason, 200)}", EvidenceJudgeVerdicts.NotConfirmed);
+            default:
+                return ConservativeWithhold(
+                    claim, $"escalation degraded: judge returned the unknown verdict '{Truncate(verdict.Kind, 40)}'", EvidenceJudgeVerdicts.Unparseable);
+        }
+    }
+
+    private static VerificationOutcome Publish(ClaimDescriptor claim, string summary, string judgeVerdict)
+    {
+        return new VerificationOutcome(
+            claim.ClaimId,
+            claim.FindingId,
+            VerificationOutcome.SupportedKind,
+            FinalGateDecision.PublishDisposition,
+            [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+            [],
+            VerificationOutcome.ModerateEvidence,
+            summary,
+            VerificationOutcome.AiMicroVerifierEvaluator,
+            false)
+        {
+            JudgeVerdict = judgeVerdict,
+        };
+    }
+
+    private static VerificationOutcome ConservativeWithhold(ClaimDescriptor claim, string? cause = null, string? judgeVerdict = null)
     {
         var summary = string.IsNullOrWhiteSpace(cause)
             ? "Evidence-backed verification could not confirm this claim from the anchor source."
@@ -230,32 +337,20 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
             VerificationOutcome.NoEvidence,
             summary,
             VerificationOutcome.AiMicroVerifierEvaluator,
-            false);
+            false)
+        {
+            JudgeVerdict = judgeVerdict,
+        };
     }
 
     private static string BuildSystemPrompt()
     {
-        return "You are a strict code-review verifier. You are given a CLAIM that a code change introduces a "
-               + "defect, plus the current source of the file the claim concerns. Decide whether the claim's "
-               + "MECHANISM is exhibited by the code as written: the structural facts the claim asserts (a lock or "
-               + "guard that is absent, a call order, a value that is overwritten, a resource that is not released) "
-               + "must be visible in the provided source, and you must be able to cite the concrete line(s) or "
-               + "symbol(s) that show them. A defect whose damage only manifests at runtime (a race, a leak, a "
-               + "lifecycle or timing hazard) IS confirmable: confirm it when the code structurally contains the "
-               + "asserted mechanism, even though the failure itself cannot be observed statically. Do NOT confirm "
-               + "when the code contradicts the asserted mechanism, the mechanism is not visible in the provided "
-               + "source, or the claim rests on facts outside this file that you cannot see. Respond with ONLY a "
-               + "JSON object and nothing else: "
-               + "{\"verdict\":\"confirmed|not_confirmed\",\"reason\":\"<one sentence; cite the line or symbol>\"}.";
+        return PromptTemplateRuntime.RenderStage(SystemPromptStageKey);
     }
 
-    private static string BuildUserMessage(ClaimDescriptor claim, string anchorSource, int sourceStartLine)
+    private static string BuildUserMessage(ClaimDescriptor claim, string anchorSource, int sourceStartLine, ReviewVerificationIntent? intent)
     {
-        var subject = string.IsNullOrWhiteSpace(claim.SubjectIdentifier) ? "(none)" : claim.SubjectIdentifier;
-        var anchorLine = claim.AnchorLineNumber?.ToString() ?? "(unknown)";
-        var startLine = sourceStartLine.ToString();
-        return $"CLAIM: {claim.AssertionText}\nSubject symbol: {subject}\nAnchor: {claim.AnchorFilePath}:{anchorLine}\n\n"
-               + $"CURRENT SOURCE OF {claim.AnchorFilePath} (source branch, starting at line {startLine}):\n{anchorSource}";
+        return PromptTemplateRuntime.RenderStage(UserPromptStageKey, EvidenceJudgeInput.BuildUserModel(claim, anchorSource, sourceStartLine, intent));
     }
 
     private static ParsedVerdict? TryParseVerdict(string? text)
@@ -282,11 +377,7 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
                 return null;
             }
 
-            var confirmed = string.Equals(verdictEl.GetString()?.Trim(), "confirmed", StringComparison.OrdinalIgnoreCase);
-            var reason = root.TryGetProperty("reason", out var reasonEl) && reasonEl.ValueKind == JsonValueKind.String
-                ? reasonEl.GetString() ?? string.Empty
-                : string.Empty;
-            return new ParsedVerdict(confirmed, reason);
+            return new ParsedVerdict(NormalizeVerdictKind(verdictEl.GetString()), ReadString(root, "reason"), ReadString(root, "contradicts"));
         }
         catch (JsonException)
         {
@@ -294,10 +385,35 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
         }
     }
 
+    // Accepts the spelling variants a model produces for the same verdict ("Intended-Contradicted", "not confirmed",
+    // "confirmed.") and maps them onto the canonical snake_case kind.
+    private static string NormalizeVerdictKind(string? verdict)
+    {
+        return (verdict ?? string.Empty).Trim().TrimEnd('.').Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
+    }
+
+    // A contradiction verdict publishes only when it names the contradicted source. Placeholder values and phrases
+    // that deny a contradiction ("none found", "no contradiction") name none.
+    private static bool NamesASource(string contradicts)
+    {
+        var value = contradicts.Trim().TrimEnd('.').Trim();
+        return value.Length > 0
+               && !PlaceholderSources.Contains(value)
+               && !value.StartsWith("none ", StringComparison.OrdinalIgnoreCase)
+               && !value.StartsWith("no ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ReadString(JsonElement root, string propertyName)
+    {
+        return root.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.String
+            ? element.GetString() ?? string.Empty
+            : string.Empty;
+    }
+
     private static string Truncate(string value, int max)
     {
         return string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max];
     }
 
-    private sealed record ParsedVerdict(bool Confirmed, string Reason);
+    private sealed record ParsedVerdict(string Kind, string Reason, string Contradicts);
 }
