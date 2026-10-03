@@ -192,6 +192,7 @@ internal sealed partial class FileReviewer(
                 filePr,
                 fileContext,
                 ct);
+            var baselinePreFilterCount = result.Comments.Count;
 
             var pipelineState = new ReviewResultPipelineState(
                 job,
@@ -245,6 +246,7 @@ internal sealed partial class FileReviewer(
                     effectiveClient,
                     pipelineProfile,
                     result,
+                    baselinePreFilterCount,
                     ct));
 
             await this.CompleteReviewAsync(fileResult, fileContext, protocolId, result, ct);
@@ -410,12 +412,13 @@ internal sealed partial class FileReviewer(
         // The baseline pass is union pass 1; the planned passes are 2..k.
         var unionComments = new List<ReviewComment>(inputs.BaselineResult.Comments);
         var perPassCatchCounts = new List<int> { inputs.BaselineResult.Comments.Count };
+        var perPassPreFilterCounts = new List<int> { inputs.BaselinePreFilterCount };
         var perPassModels = new List<string?> { inputs.TierModelId };
         var perPassLenses = new List<string?> { null };
 
         foreach (var plannedPass in plannedPasses)
         {
-            var passResult = await this.RunUnionResamplePassAsync(
+            var (passResult, passPreFilterCount) = await this.RunUnionResamplePassAsync(
                 new MultiPassUnionPassInputs(
                     inputs.Job,
                     inputs.Pr,
@@ -445,6 +448,7 @@ internal sealed partial class FileReviewer(
                     plannedPass.ModelId,
                     plannedPass.LogicalModelName));
             perPassCatchCounts.Add(passResult.Comments.Count);
+            perPassPreFilterCounts.Add(passPreFilterCount);
             perPassModels.Add(plannedPass.ModelId);
             perPassLenses.Add(plannedPass.Lens);
 
@@ -469,6 +473,7 @@ internal sealed partial class FileReviewer(
                 armLabel,
                 inputs.Tier,
                 perPassCatchCounts,
+                perPassPreFilterCounts,
                 perPassModels,
                 perPassLenses,
                 unionComments.Count,
@@ -803,7 +808,9 @@ internal sealed partial class FileReviewer(
         return stamped;
     }
 
-    private async Task<ReviewResult> RunUnionResamplePassAsync(MultiPassUnionPassInputs inputs)
+    // Returns the pass result after its per-file pipeline together with the comment count the review core
+    // returned before that pipeline, so the union trace can show how many comments the pass's own filters removed.
+    private async Task<(ReviewResult Result, int PreFilterCount)> RunUnionResamplePassAsync(MultiPassUnionPassInputs inputs)
     {
         var tierCategory = TierCategory(inputs.Tier);
         var protocolId = await this.BeginAugmentationProtocolAsync(
@@ -834,7 +841,7 @@ internal sealed partial class FileReviewer(
                 if (focusedGuidance.Count == 0)
                 {
                     await this.CompleteAugmentationProtocolAsync(protocolId, null, "Completed", inputs.Ct);
-                    return new ReviewResult(string.Empty, []);
+                    return (new ReviewResult(string.Empty, []), 0);
                 }
             }
 
@@ -879,6 +886,13 @@ internal sealed partial class FileReviewer(
                 inputs.Ct);
 
             var result = await this.ReviewFileCoreAsync(inputs.FilePr, passContext, inputs.Ct);
+            var preFilterCount = result.Comments.Count;
+
+            // Local verification of a pass finding uses the evidence channel of the baseline file context. An
+            // inventory pass reviews without repository tools, and without this the evidence-backed verifier
+            // could never run for its findings, so every claim that needs evidence would be withheld. The judge
+            // runs on the model configured for review verification and, when none is configured, on the baseline
+            // tier client, as it does for baseline findings.
             var pipelineState = new ReviewResultPipelineState(
                 inputs.Job,
                 inputs.File,
@@ -886,11 +900,14 @@ internal sealed partial class FileReviewer(
                 transientFileResult,
                 passContext,
                 protocolId,
-                reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
+                reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? [])
+            {
+                VerificationFileContext = inputs.FileContext,
+            };
 
             result = await this.RunReviewResultPipelineAsync(pipelineState, result, inputs.PipelineProfile, inputs.Ct);
             await this.CompleteAugmentationProtocolAsync(protocolId, passContext, "Completed", inputs.Ct);
-            return result;
+            return (result, preFilterCount);
         }
         catch when (protocolId.HasValue)
         {
@@ -961,6 +978,7 @@ internal sealed partial class FileReviewer(
                 new
                 {
                     perPassCatchCounts = completion.PerPassCatchCounts,
+                    perPassPreFilterCounts = completion.PerPassPreFilterCounts,
                     perPassModels = completion.PerPassModels,
                     perPassLenses = completion.PerPassLenses,
                     unionCount = completion.UnionCount,
@@ -1435,14 +1453,15 @@ internal sealed partial class FileReviewer(
 
         // Supply the per-file context so an evidence-gathering verifier can read the anchor code,
         // judge with the file's tier client, and substantiate (or refute) a withheld claim.
+        var verificationSource = state.VerificationFileContext ?? state.FileContext;
         var verificationContext = new ReviewVerificationContext(
-            state.FileContext.ReviewTools,
+            verificationSource.ReviewTools,
             state.FilePullRequest.SourceBranch,
-            state.FileContext.TierChatClient,
-            state.FileContext.ModelId,
+            verificationSource.TierChatClient,
+            verificationSource.ModelId,
             state.Job.ClientId,
             aiRuntimeResolver,
-            state.FileContext.EnableEvidenceBackedVerification);
+            verificationSource.EnableEvidenceBackedVerification);
 
         return await localReviewVerificationExecutor.ApplyAsync(
             result,
@@ -1835,7 +1854,12 @@ internal sealed partial class FileReviewer(
         ReviewFileResult FileResult,
         ReviewSystemContext FileContext,
         Guid? ProtocolId,
-        IReadOnlyList<InvariantFact> InvariantFacts);
+        IReadOnlyList<InvariantFact> InvariantFacts)
+    {
+        // The file context whose tools, tier client, model and evidence flag local verification uses. Null means
+        // the review context itself; a union pass sets the baseline file context here.
+        public ReviewSystemContext? VerificationFileContext { get; init; }
+    }
 
     // One planned resample pass (pass 2..k): its index, provenance label, resolved model id, the client +
     // capabilities it runs on, and an optional specialist lens. Eval passes reuse the tier connection; production
@@ -1859,6 +1883,7 @@ internal sealed partial class FileReviewer(
         string ArmLabel,
         FileComplexityTier Tier,
         IReadOnlyList<int> PerPassCatchCounts,
+        IReadOnlyList<int> PerPassPreFilterCounts,
         IReadOnlyList<string?> PerPassModels,
         IReadOnlyList<string?> PerPassLenses,
         int UnionCount,
@@ -1881,6 +1906,7 @@ internal sealed partial class FileReviewer(
         IChatClient EffectiveClient,
         ReviewPipelineProfile PipelineProfile,
         ReviewResult BaselineResult,
+        int BaselinePreFilterCount,
         CancellationToken Ct);
 
     private sealed record MultiPassUnionPassInputs(

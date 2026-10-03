@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using System.Text.Json;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
@@ -12,6 +13,7 @@ using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterDev.ProPR.ProRV.Abstractions;
 using MeisterDev.ProPR.ProRV.Models;
 using Microsoft.Extensions.AI;
@@ -177,6 +179,33 @@ public sealed class FileReviewerProRvLensTests
         // The lens finding carries the prorv provenance for the "Pass N · ProRV" rendering.
         Assert.NotNull(this._persistedResult);
         Assert.Contains(this._persistedResult!.Comments!, c => c.OriginPassLens == ReviewPassLens.ProRV);
+    }
+
+    [Fact]
+    public async Task ProRvLens_NoApplicableChecks_RecordsZeroCountsForSkippedPassInUnionTrace()
+    {
+        // A skipped prorv pass made no review call, so the union trace records 0 for it before and after the
+        // per-file pipeline, next to the baseline's single comment.
+        string? unionOutput = null;
+        await this._recorder.RecordReviewStrategyEventAsync(
+            Arg.Any<Guid>(),
+            Arg.Is(ReviewProtocolEventNames.MultiPassUnionCompleted),
+            Arg.Any<string?>(),
+            Arg.Do<string?>(output => unionOutput = output),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        this.GivenPrefilterReturns(ProRVPrefilterStatus.Success);
+        var reviewer = this.CreateReviewer(ResolverForModel("prorv-model"));
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, ProRvLensContext(), null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.NotNull(unionOutput);
+        using var document = JsonDocument.Parse(unionOutput!);
+        var root = document.RootElement;
+        Assert.Equal(new[] { 1, 0 }, root.GetProperty("perPassPreFilterCounts").EnumerateArray().Select(e => e.GetInt32()).ToArray());
+        Assert.Equal(new[] { 1, 0 }, root.GetProperty("perPassCatchCounts").EnumerateArray().Select(e => e.GetInt32()).ToArray());
     }
 
     [Fact]
