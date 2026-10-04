@@ -50,6 +50,7 @@ async function mountHeader(routeName = 'reviews') {
     global: {
       stubs: {
         RouterLink: RouterLinkStub,
+        LicenseExpiryNotice: true,
       },
       mocks: {
         $route: {

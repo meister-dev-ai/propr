@@ -5,9 +5,8 @@
 /**
  * The consent notice, shown once to a platform administrator of a community installation.
  *
- * Rendering opens the send gate, so the acknowledgement is sent on mount rather than from a button: an
- * administrator who reads the notice and navigates away has still been informed. Dismissing hides the notice
- * and changes nothing about what is sent.
+ * Presenting the notice opens the send gate. A collapsed disclosure does not acknowledge it.
+ * Dismissing hides the notice and changes nothing about what is sent.
  *
  * Installations with a commercial license do not see it; the license relationship covers the notice.
  */
@@ -16,6 +15,7 @@ import { RouterLink } from 'vue-router'
 import { useSession } from '@/composables/useSession'
 import { useUsageStatistics } from '@/composables/useUsageStatistics'
 
+const props = withDefaults(defineProps<{ presented?: boolean }>(), { presented: true })
 const { isAdmin, isAuthenticated } = useSession()
 const { settings, noticeRequired, load, recordNoticeShown, dismissNotice } = useUsageStatistics()
 
@@ -30,7 +30,8 @@ const dismissing = ref(false)
  * notice that opens it is unaffected.
  */
 const visible = computed(() =>
-  isAuthenticated.value
+  props.presented
+  && isAuthenticated.value
   && isAdmin.value
   && noticeRequired.value
   && settings.value?.communityOptIn !== false,

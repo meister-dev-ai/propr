@@ -57,7 +57,7 @@ function summaryAt(stage: LicenseStage, daysRemaining: number | null = 12): Lice
 // them as well. Every mount is tracked and torn down between tests.
 const mounted: { unmount: () => void }[] = []
 
-async function mountNotice() {
+async function mountNotice(open = true) {
   const { default: LicenseExpiryNotice } =
     await import('@/features/licensing/components/LicenseExpiryNotice.vue')
 
@@ -67,10 +67,36 @@ async function mountNotice() {
   mounted.push(wrapper)
   await flushPromises()
 
+  if (open && wrapper.find('[data-testid="license-expiry-trigger"]').exists()) {
+    await wrapper.get('[data-testid="license-expiry-trigger"]').trigger('click')
+  }
+
   return wrapper
 }
 
 describe('LicenseExpiryNotice', () => {
+  it('discloses the license message on click and closes it with Escape', async () => {
+    summary.value = summaryAt('grace')
+    const wrapper = await mountNotice(false)
+
+    const trigger = wrapper.get('[data-testid="license-expiry-trigger"]')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('[data-testid="license-expiry-notice"]').exists()).toBe(false)
+    await trigger.trigger('click')
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('[data-testid="license-expiry-notice"]').text()).toContain('expired')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="license-expiry-notice"]').exists()).toBe(false)
+  })
+
+  it('closes the license disclosure when clicking outside it', async () => {
+    summary.value = summaryAt('warning')
+    const wrapper = await mountNotice()
+    document.body.click()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="license-expiry-notice"]').exists()).toBe(false)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     isAdmin.value = true

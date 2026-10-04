@@ -383,8 +383,10 @@ public sealed class CodeQualityController(
     /// <param name="pullRequestId">Narrows to one pull request.</param>
     /// <param name="filePath">Narrows to one file.</param>
     /// <param name="coreType">Narrows to one core type slug: what a click on a type series means.</param>
+    /// <param name="symbolName">Narrows to one definition in the file.</param>
     /// <param name="disposition">Narrows to one outcome.</param>
     /// <param name="limit">Maximum rows. Clamped to 1–200.</param>
+    /// <param name="offset">Number of matching findings to skip. Negative values are treated as zero.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The findings, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -404,6 +406,7 @@ public sealed class CodeQualityController(
         [FromQuery] string? symbolName = null,
         [FromQuery] string? disposition = null,
         [FromQuery] int limit = 50,
+        [FromQuery] int offset = 0,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
@@ -428,7 +431,8 @@ public sealed class CodeQualityController(
                 coreType,
                 CodeInsightQueries.ParseDisposition(disposition),
                 limit,
-                symbolName),
+                symbolName,
+                offset: offset),
             ct);
 
         return this.Ok(
@@ -446,7 +450,8 @@ public sealed class CodeQualityController(
                     row.CoreTags,
                     row.Disposition?.ToString(),
                     row.ProviderThreadId,
-                    row.ObservedAt))
+                    row.ObservedAt,
+                    row.RejectionReason?.ToString()))
                 .ToList());
     }
 

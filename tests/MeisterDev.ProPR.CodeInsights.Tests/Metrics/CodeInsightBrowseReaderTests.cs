@@ -178,6 +178,31 @@ public sealed class CodeInsightBrowseReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task FindingPagesDoNotRepeatEqualTimestampRowsAndKeepClientScope()
+    {
+        await this.SeedAsync(ClientA, "repo-1", 7, ["a.cs", "b.cs", "c.cs", "d.cs"]);
+        await this.SeedAsync(ClientB, "repo-1", 7, ["other.cs"]);
+
+        var all = await this._reader.ListFindingsAsync(this.Query(ClientA));
+        var first = await this._reader.ListFindingsAsync(this.Query(ClientA) with { Limit = 2 });
+        var second = await this._reader.ListFindingsAsync(this.Query(ClientA) with { Limit = 2, Offset = 2 });
+        var beyond = await this._reader.ListFindingsAsync(this.Query(ClientA) with { Offset = 4 });
+        var negative = await this._reader.ListFindingsAsync(this.Query(ClientA) with { Limit = 2, Offset = -10 });
+
+        Assert.Equal(4, all.Count);
+        Assert.Equal(2, first.Count);
+        Assert.Equal(2, second.Count);
+        Assert.All(all, row => Assert.Equal(ClientA, row.ClientId));
+        Assert.Equal(all.Select(row => row.Id), first.Concat(second).Select(row => row.Id));
+        Assert.Equal(["a.cs", "b.cs", "c.cs", "d.cs"], first.Concat(second).Select(row => row.FilePath).Order());
+        Assert.Equal(4, first.Concat(second).Select(row => row.Id).Distinct().Count());
+        Assert.All(first, row => Assert.Equal(ClientA, row.ClientId));
+        Assert.All(second, row => Assert.Equal(ClientA, row.ClientId));
+        Assert.Empty(beyond);
+        Assert.Equal(first.Select(row => row.Id), negative.Select(row => row.Id));
+    }
+
+    [Fact]
     public async Task HarvestedThreadsComeBackWithAllThreeJudgementsIncludingTheOnesThatDidNotQualify()
     {
         // The non-qualifying rows are the point: recall depends on where the line sits, and nobody can

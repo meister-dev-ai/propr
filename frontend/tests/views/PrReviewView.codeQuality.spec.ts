@@ -117,12 +117,13 @@ describe('PrReviewView. Code Quality tab', () => {
     expect(wrapper.find('.pr-code-quality-stub').exists()).toBe(false)
   })
 
-  it('is absent without the licence rather than present and empty', async () => {
+  it('omits the Code Quality tab and panel when the capability is unavailable', async () => {
     capabilityAvailable.mockReturnValue(false)
 
     const wrapper = await mountView()
 
     expect(wrapper.find('[data-testid="pr-tab-code-quality"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="pr-panel-code-quality"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="pr-tab-stats"]').exists()).toBe(true)
   })
 

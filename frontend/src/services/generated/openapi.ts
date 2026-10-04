@@ -9205,11 +9205,14 @@ export interface paths {
                     filePath?: string;
                     /** @description Narrows to one core type slug: what a click on a type series means. */
                     coreType?: string;
+                    /** @description Narrows to one definition in the file. */
                     symbolName?: string;
                     /** @description Narrows to one outcome. */
                     disposition?: string;
                     /** @description Maximum rows. Clamped to 1–200. */
                     limit?: number;
+                    /** @description Number of matching findings to skip. Negative values are treated as zero. */
+                    offset?: number;
                 };
                 header?: never;
                 path?: never;

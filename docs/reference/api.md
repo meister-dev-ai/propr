@@ -6,6 +6,18 @@ interactive configuration and these endpoints for scripting.
 Every example targets the evaluation stack's origin, `https://localhost:5443`. Its certificate is
 self-signed, so the examples pass `curl -k`. Behind your own ingress, substitute your API base URL.
 
+## PR finding metadata
+
+`GET /api/code-quality/findings` returns collected finding metadata to callers with client access and the
+Code Insights capability. Scope the read with `clientId`, `repositoryId`, and `pullRequestId`. `from` and
+`to` are inclusive dates; omit them for the default thirty-day window.
+
+`limit` is clamped to 1–200. `offset` skips matching rows and treats negative values as zero. Rows are
+ordered by review observation time descending and finding ID ascending. Read successive pages until a
+page contains fewer than `limit` rows. Each row includes the provider thread ID, severity, classified
+core tags, disposition, and nullable `rejectionReason`. An absent rejection reason represents an unknown
+or inapplicable reason.
+
 ## Admin authentication
 
 Exchange admin credentials for a JWT:

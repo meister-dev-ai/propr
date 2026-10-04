@@ -13231,6 +13231,7 @@
           {
             "name": "symbolName",
             "in": "query",
+            "description": "Narrows to one definition in the file.",
             "schema": {
               "type": "string"
             }
@@ -13251,6 +13252,16 @@
               "type": "integer",
               "format": "int32",
               "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of matching findings to skip. Negative values are treated as zero.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
             }
           }
         ],

@@ -16,6 +16,7 @@
                     :style="{ paddingLeft: `${row.depth * 1.1 + 0.5}rem` }"
                     :data-testid="`retained-file-folder`"
                     :data-folder-path="row.path"
+                    :aria-expanded="!isCollapsed(row.path)"
                     @click="toggleFolder(row.path)"
                 >
                     <v-icon
@@ -40,6 +41,7 @@
                     :style="{ paddingLeft: `${row.depth * 1.1 + 0.5}rem` }"
                     :data-testid="`retained-file-item`"
                     :data-file-path="row.file.filePath ?? ''"
+                    :aria-pressed="row.file.filePath === selectedFilePath"
                     @click="emit('select', row.file)"
                 >
                     <v-icon size="small" class="retained-file-icon" :icon="iconForChangeType(row.file.changeType)" />
@@ -47,6 +49,9 @@
                         {{ row.name }}
                     </span>
                     <span class="retained-file-badges">
+                        <v-chip v-if="findingCount && findingCount(row.file.filePath ?? '') > 0" size="x-small" variant="tonal" :title="`${findingCount(row.file.filePath ?? '')} finding(s)`" data-testid="retained-file-finding-badge">
+                            <v-icon size="x-small" icon="mdi-alert-circle-outline" start />{{ findingCount(row.file.filePath ?? '') }}
+                        </v-chip>
                         <v-chip
                             v-if="row.file.changeType"
                             size="x-small"
@@ -92,6 +97,8 @@ interface Props {
     selectedFilePath?: string | null
     commentCount: (filePath: string) => number
     threadCount: (filePath: string) => number
+    findingCount?: (filePath: string) => number
+    expandAll?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -116,6 +123,10 @@ const treeRows = computed<RetainedTreeRow[]>(() =>
 function isCollapsed(path: string): boolean {
     return collapsedFolders.value.has(path)
 }
+
+watch([() => props.files, () => props.expandAll], () => {
+    if (props.expandAll) collapsedFolders.value = new Set()
+})
 
 function toggleFolder(path: string): void {
     const next = new Set(collapsedFolders.value)

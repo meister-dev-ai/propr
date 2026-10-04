@@ -57,6 +57,8 @@
       </div>
     </nav>
     <div class="header-actions">
+      <slot name="notifications" />
+      <LicenseExpiryNotice />
       <a
         href="https://github.com/meister-dev-ai/propr"
         target="_blank"
@@ -68,7 +70,7 @@
         <span class="github-icon" aria-hidden="true" v-html="githubMark"></span>
         <span>GitHub</span>
       </a>
-      <RouterLink :to="{ name: 'settings' }" class="nav-link nav-link-button" :class="{ 'router-link-active': $route.name === 'settings' }">
+      <RouterLink :to="{ name: 'settings' }" class="nav-link nav-link-button" :class="{ 'router-link-active': $route.name === 'settings' }" aria-label="Settings" title="Settings">
         <i class="fi fi-rr-settings"></i>
         <span>Settings</span>
       </RouterLink>
@@ -87,6 +89,7 @@ import { useSession } from '@/composables/useSession'
 import { useUsageStatistics } from '@/composables/useUsageStatistics'
 import icon from '@/assets/logo_standalone.png'
 import githubMark from '@/assets/icons/github.svg?raw'
+import LicenseExpiryNotice from '@/features/licensing/components/LicenseExpiryNotice.vue'
 
 const router = useRouter()
 const { logout: endSession, isAdmin, clientRoles, tenantRoles, edition, isCapabilityAvailable } = useSession()

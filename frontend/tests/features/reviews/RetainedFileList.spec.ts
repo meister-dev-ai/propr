@@ -115,4 +115,17 @@ describe('RetainedFileList', () => {
     expect(wrapper.findAll('[data-testid="retained-file-item"]')).toHaveLength(0)
     expect(wrapper.findAll('[data-testid="retained-file-folder"]')).toHaveLength(0)
   })
+
+  it('expands new filter results while allowing their folders to collapse', async () => {
+    const wrapper = mountList()
+    await wrapper.find('[data-folder-path="src"]').trigger('click')
+    await wrapper.setProps({ expandAll: true, files: [files[0]] })
+    expect(wrapper.find('[data-file-path="src/auth/tokens.ts"]').exists()).toBe(true)
+    await wrapper.find('[data-folder-path="src"]').trigger('click')
+    expect(wrapper.find('[data-file-path="src/auth/tokens.ts"]').exists()).toBe(false)
+    expect(wrapper.find('[data-file-path="README.md"]').exists()).toBe(false)
+    await wrapper.setProps({ files: [files[0], files[2]] })
+    expect(wrapper.find('[data-file-path="README.md"]').exists()).toBe(true)
+    expect(wrapper.find('[data-file-path="src/auth/tokens.ts"]').exists()).toBe(true)
+  })
 })

@@ -59,6 +59,7 @@
                         View trace
                     </RouterLink>
                 </div>
+                <RetainedFindingBadges :finding="findingForComment(thread, comment, findings)" />
                 <div
                     class="retained-inline-comment-body markdown-content"
                     v-html="renderMarkdown(comment.body)"
@@ -71,12 +72,16 @@
 <script setup lang="ts">
 import { renderMarkdown } from '@/features/job-protocol/utils/formatters'
 import { buildProtocolHref, type RetainedThread } from '@/features/reviews/composables/useRetainedPrData'
+import type { CodeInsightFinding } from '@/services/codeInsightsAnalyticsService'
+import RetainedFindingBadges from './RetainedFindingBadges.vue'
+import { findingForComment } from './reviewBrowserFindings'
 
-defineProps<{
+withDefaults(defineProps<{
     thread: RetainedThread
     /** Tenant context used to build the per-comment "View trace" link to the originating review run. */
     clientId: string
-}>()
+    findings?: CodeInsightFinding[]
+}>(), { findings: () => [] })
 
 function statusClass(status: string | null | undefined): string {
     switch ((status ?? '').toLowerCase()) {
@@ -168,6 +173,7 @@ function formatDate(iso: string): string {
 
 .retained-inline-comment-meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.45rem;
     margin-bottom: 0.25rem;

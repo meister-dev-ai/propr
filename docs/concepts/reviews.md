@@ -5,6 +5,47 @@ deployment is made of and how a review gets started is on [how ProPR works](how-
 live in the repository, not in ProPR, are on
 [configuring ProPR from your repository](repository-configuration.md).
 
+## PR review screen
+
+Open a pull request from **Reviews**. The toolbar contains **Back to reviews**, the pull request number,
+and the **Stats**, **Conversation**, **Browser**, and licensed **Code Quality** tabs. Stats shows review
+jobs, thread passes, tokens, costs, and memory records.
+
+The Browser tab uses the available content height. The file list and diff scroll independently. Search
+matches file names and paths without regard to case. Finding filters select files with findings, without
+findings, or with comments. Code Insights adds filters for finding kind, severity, and outcome. Combined
+kind, severity, and outcome filters require recorded details and must match the same finding. Filtering
+preserves the selected diff while its file and retained revision remain in the list. Excluding the selected
+file or replacing its retained revision clears the diff and comments.
+**Clear filters** restores the file list. On narrow screens, **Files** opens the file pane and selecting
+a file returns to the diff.
+
+Retained user and ProPR comments appear next to their new-side lines in both Unified and Split layouts.
+Comments whose lines are absent from the diff appear under **Unanchored comments** in the diff pane.
+ProPR comments retain links to their originating review traces. When Code Insights collected metadata,
+the original finding comment displays severity, classified kinds, outcome, and a recorded rejection reason.
+**Duplicate** means the recorded rejection reason is Redundant. Replies retain their own authorship and
+are not assigned the original finding's classification.
+Recorded thread IDs take precedence when matching comments to findings. Text matching can supply missing
+provider identities but cannot override conflicting IDs. The Outcome filter matches recorded dispositions
+and duplicate rejection reasons; a Dismissed finding rejected as Redundant appears under both selections.
+
+Finding counts include recorded findings and AI-rooted retained threads without a matching record.
+Repeated copies of the same retained thread count once. Threads with distinct recorded identities remain
+separate observations even when their comment text matches.
+When thread and comment IDs are unavailable, identical job, location, and text snapshots count once;
+different locations or messages remain separate observations.
+
+Finding details load when Browser opens and refresh when review history changes. The last successful details
+for the same pull request remain visible with the loading or failure notice during a refresh. A failed metadata
+read leaves the diff and discussion available and offers **Retry**. Retention settings determine which files
+and comments are available; see
+[raw PR data retention](../reference/security.md#what-propr-stores).
+
+An actionable license stage appears as a warning button in the application header. Open it for the expiry
+or grace-period message and the licensing link. On the PR view, other installation notices also open from
+the header. Escape or an outside click closes the disclosure.
+
 ## What happens during a review
 
 ```mermaid

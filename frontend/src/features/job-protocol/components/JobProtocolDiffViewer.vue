@@ -2,7 +2,7 @@
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license information. -->
 
 <template>
-    <div class="job-protocol-diff-viewer" data-testid="job-protocol-diff-viewer">
+    <div class="job-protocol-diff-viewer" :class="{ 'diff-content-scroll': scrollMode === 'content' }" data-testid="job-protocol-diff-viewer">
         <div v-if="!fileResultId" class="diff-fallback diff-fallback--no-file" data-testid="diff-no-file">
             <i class="fi fi-rr-file-slash" aria-hidden="true"></i>
             <div class="diff-fallback-body">
@@ -158,10 +158,9 @@ import ProgressOrb from '@/components/ProgressOrb.vue'
 type FileDiffDto = components['schemas']['FileDiffDto']
 
 /**
- * A comment thread to anchor inline at a NEW-side diff line. Kept deliberately minimal and
- * provider-neutral so this shared viewer does not depend on any caller's domain types; the
- * caller renders the thread body through the `thread` slot. `T` lets the slot receive its own
- * richer thread shape back unchanged.
+ * A comment thread anchored at a NEW-side diff line. Provider-neutral fields keep the shared
+ * viewer independent of caller domain types. The caller renders the thread body through the
+ * slot, and `T` preserves its richer thread shape.
  */
 export interface InlineDiffThread<T = unknown> {
     /** Stable identity for keying and anchored/unanchored bookkeeping. */
@@ -190,6 +189,8 @@ const props = withDefaults(
          * job-protocol view — get exactly the original behavior.
          */
         inlineThreads?: InlineDiffThread[]
+        /** Use the containing pane for scrolling instead of the viewer's fixed-height scroll area. */
+        scrollMode?: 'viewport' | 'content'
     }>(),
     {
         fileResultId: null,
@@ -198,6 +199,7 @@ const props = withDefaults(
         diffError: null,
         onRetry: null,
         inlineThreads: () => [],
+        scrollMode: 'viewport',
     },
 )
 
@@ -210,6 +212,7 @@ const outputFormat = ref<'side-by-side' | 'line-by-line'>('line-by-line')
 const diffContainer = ref<HTMLElement | null>(null)
 const inlineThreadHost = ref<HTMLElement | null>(null)
 const anchoredThreads = ref<AnchoredThread[]>([])
+let threadResizeObserver: ResizeObserver | null = null
 
 const diffErrorMessage = computed(() => {
     if (props.diffError) return props.diffError
@@ -221,6 +224,8 @@ function setOutputFormat(value: 'side-by-side' | 'line-by-line') {
 }
 
 function clearInlineThreads() {
+    threadResizeObserver?.disconnect()
+    threadResizeObserver = null
     // Drop the teleport targets first so Vue moves the rendered widgets back into the
     // off-diff host before the injected rows are removed, then strip the injected rows.
     anchoredThreads.value = []
@@ -242,10 +247,8 @@ function clearContainer() {
  * Injects a placeholder row beneath the diff line matching each thread's NEW-side line number,
  * then records that placeholder as a teleport target so the thread widget renders inside it.
  *
- * Only runs in line-by-line mode: side-by-side splits old/new into separate tables, where a
- * single full-width inline row has no well-defined home, so those threads stay in the caller's
- * below-diff fallback. NEW-side anchoring reads `.line-num2` (line-by-line renders the new line
- * number there; deleted lines leave it empty so they never match).
+ * Split mode places comments in the new-side table. Matching spacer rows preserve alignment with
+ * the old-side table, including when comment content changes height.
  */
 function applyInlineThreads() {
     clearInlineThreads()
@@ -254,17 +257,20 @@ function applyInlineThreads() {
         emit('update:anchoredIds', [])
         return
     }
-    if (outputFormat.value !== 'line-by-line' || !diffContainer.value) {
-        // Nothing anchors: the caller renders every thread in the below-diff fallback.
+    if (!diffContainer.value) {
         emit('update:anchoredIds', [])
         return
     }
 
     // Map each NEW-side line number to its diff row (first occurrence wins).
     const rowByLine = new Map<number, HTMLTableRowElement>()
-    const rows = diffContainer.value.querySelectorAll<HTMLTableRowElement>('tr')
+    const splitTables = diffContainer.value.querySelectorAll<HTMLTableElement>('.d2h-file-side-diff .d2h-diff-table')
+    const split = outputFormat.value === 'side-by-side'
+    const newTable = split ? splitTables[1] : diffContainer.value
+    const oldRows = split ? [...(splitTables[0]?.querySelectorAll<HTMLTableRowElement>('tr') ?? [])] : []
+    const rows = [...(newTable?.querySelectorAll<HTMLTableRowElement>('tr') ?? [])]
     rows.forEach(row => {
-        const newNumberText = row.querySelector('.line-num2')?.textContent?.trim()
+        const newNumberText = row.querySelector(split ? '.d2h-code-side-linenumber' : '.line-num2')?.textContent?.trim()
         if (!newNumberText) return
         const lineNumber = Number.parseInt(newNumberText, 10)
         if (Number.isNaN(lineNumber) || rowByLine.has(lineNumber)) return
@@ -273,6 +279,8 @@ function applyInlineThreads() {
 
     const anchored: AnchoredThread[] = []
     const anchoredIds: string[] = []
+    const lastInserted = new Map<HTMLTableRowElement, HTMLTableRowElement>()
+    const spacers = new Map<HTMLElement, HTMLElement>()
 
     for (const thread of props.inlineThreads) {
         const line = thread.line ?? 0
@@ -286,13 +294,40 @@ function applyInlineThreads() {
         cell.colSpan = 2
         cell.className = 'd2h-inline-thread-cell'
         placeholderRow.appendChild(cell)
-        row.parentElement.insertBefore(placeholderRow, row.nextSibling)
+        const previous = lastInserted.get(row) ?? row
+        row.parentElement.insertBefore(placeholderRow, previous.nextSibling)
+        lastInserted.set(row, placeholderRow)
+
+        if (split) {
+            const oldRow = oldRows[rows.indexOf(row)]
+            if (oldRow?.parentElement) {
+                const spacer = document.createElement('tr')
+                spacer.className = 'd2h-inline-thread-row d2h-inline-thread-spacer'
+                spacer.setAttribute('aria-hidden', 'true')
+                const spacerCell = document.createElement('td')
+                spacerCell.colSpan = 2
+                spacer.appendChild(spacerCell)
+                const oldPrevious = lastInserted.get(oldRow) ?? oldRow
+                oldRow.parentElement.insertBefore(spacer, oldPrevious.nextSibling)
+                lastInserted.set(oldRow, spacer)
+                spacers.set(placeholderRow, spacer)
+            }
+        }
 
         anchored.push({ thread, target: cell })
         anchoredIds.push(thread.id)
     }
 
     anchoredThreads.value = anchored
+    if (spacers.size > 0) {
+        threadResizeObserver = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                const spacer = spacers.get(entry.target as HTMLElement)
+                if (spacer) spacer.style.height = `${entry.target.getBoundingClientRect().height}px`
+            }
+        })
+        for (const row of spacers.keys()) threadResizeObserver.observe(row)
+    }
     emit('update:anchoredIds', anchoredIds)
 }
 
@@ -353,11 +388,45 @@ onBeforeUnmount(clearContainer)
 
 <style scoped>
 .job-protocol-diff-viewer {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     width: 100%;
     min-width: 0;
+}
+
+.diff-content-scroll .diff-viewer-mount {
+    overflow: visible;
+}
+.diff-content-scroll .diff-viewer {
+    height: auto;
+    overflow: visible;
+}
+.diff-content-scroll .diff-file-header {
+    padding-right: 11rem;
+    min-height: 2.75rem;
+}
+.diff-content-scroll .diff-viewer-toolbar {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.5rem;
+}
+.diff-content-scroll .diff-viewer :deep(.d2h-wrapper) {
+    height: auto;
+}
+.diff-content-scroll .diff-viewer :deep(.d2h-file-diff),
+.diff-content-scroll .diff-viewer :deep(.d2h-file-side-diff) {
+    container-type: inline-size;
+}
+
+@media (max-width: 700px) {
+    .diff-content-scroll .diff-file-header {
+        padding-right: 0.9rem;
+    }
+    .diff-content-scroll .diff-viewer-toolbar {
+        position: static;
+    }
 }
 
 .diff-file-header {
@@ -620,8 +689,7 @@ onBeforeUnmount(clearContainer)
 
 /*
  * Off-diff parking host for inline-thread widgets. Each widget is teleported out of here into an
- * injected diff row; anything still parked (e.g. an unanchored thread, or while side-by-side mode
- * disables injection) must not be visible or take layout space.
+ * injected diff row. Unanchored threads must not be visible or take layout space here.
  */
 .diff-inline-thread-host {
     display: none;

@@ -2,10 +2,37 @@
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
 
 <template>
-    <div class="page-view pr-review-page">
+    <div class="page-view pr-review-page" role="main">
         <div class="header-stack">
             <div class="header-row">
                 <RouterLink class="back-link" :to="{ name: 'reviews' }">← Back to reviews</RouterLink>
+                <div class="pr-title-row">
+                    <h2>PR Review View</h2>
+                    <span v-if="data" class="pr-number">#{{ data.pullRequestId }}</span>
+                    <span
+                        v-if="isBlocked"
+                        class="blocked-badge"
+                        title="Blocked from review processing — new pushes are not reviewed"
+                    >
+                        <i class="fi fi-rr-ban"></i> Blocked
+                    </span>
+                </div>
+                <div v-if="data" class="pr-tabs" role="tablist" aria-label="Pull request review sections" @keydown="onTabKeydown">
+                    <button
+                        v-for="tab in visibleTabs"
+                        :id="'pr-tab-' + tab.slug"
+                        :key="tab.id"
+                        type="button"
+                        role="tab"
+                        class="tab-btn pr-tab-btn"
+                        :class="{ 'tab-active': activeTab === tab.id }"
+                        :aria-selected="activeTab === tab.id"
+                        :aria-controls="'pr-panel-' + tab.slug"
+                        :tabindex="activeTab === tab.id ? 0 : -1"
+                        :data-testid="'pr-tab-' + tab.slug"
+                        @click="activeTab = tab.id"
+                    >{{ tab.label }}</button>
+                </div>
                 <OverflowMenu v-if="canManage" class="pr-actions-menu" title="PR actions">
                     <template #default="{ close }">
                         <button
@@ -19,16 +46,6 @@
                         </button>
                     </template>
                 </OverflowMenu>
-            </div>
-            <div class="pr-title-row">
-                <h2>PR Review View</h2>
-                <span
-                    v-if="isBlocked"
-                    class="blocked-badge"
-                    title="Blocked from review processing — new pushes are not reviewed"
-                >
-                    <i class="fi fi-rr-ban"></i> Blocked
-                </span>
             </div>
             <p v-if="blockError" class="error block-error">{{ blockError }}</p>
 
@@ -62,57 +79,7 @@
         <p v-else-if="error" class="error">{{ error }}</p>
 
         <template v-else-if="data">
-            <div class="pr-tabs" role="tablist" aria-label="Pull request review sections">
-                <button
-                    type="button"
-                    role="tab"
-                    class="tab-btn pr-tab-btn"
-                    :class="{ 'tab-active': activeTab === 'stats' }"
-                    :aria-selected="activeTab === 'stats'"
-                    data-testid="pr-tab-stats"
-                    @click="activeTab = 'stats'"
-                >
-                    Stats
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    class="tab-btn pr-tab-btn"
-                    :class="{ 'tab-active': activeTab === 'conversation' }"
-                    :aria-selected="activeTab === 'conversation'"
-                    data-testid="pr-tab-conversation"
-                    @click="activeTab = 'conversation'"
-                >
-                    Conversation
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    class="tab-btn pr-tab-btn"
-                    :class="{ 'tab-active': activeTab === 'browser' }"
-                    :aria-selected="activeTab === 'browser'"
-                    data-testid="pr-tab-browser"
-                    @click="activeTab = 'browser'"
-                >
-                    Browser
-                </button>
-                <!-- Absent rather than disabled when the capability is not licensed: a licence is not a role, and a
-                     tab that can only apologise is worse than no tab. The server repeats the check. -->
-                <button
-                    v-if="canViewCodeQuality"
-                    type="button"
-                    role="tab"
-                    class="tab-btn pr-tab-btn"
-                    :class="{ 'tab-active': activeTab === 'codeQuality' }"
-                    :aria-selected="activeTab === 'codeQuality'"
-                    data-testid="pr-tab-code-quality"
-                    @click="activeTab = 'codeQuality'"
-                >
-                    Code Quality
-                </button>
-            </div>
-
-            <div v-show="activeTab === 'stats'" role="tabpanel" data-testid="pr-panel-stats">
+            <div v-show="activeTab === 'stats'" id="pr-panel-stats" class="pr-tab-panel" role="tabpanel" aria-labelledby="pr-tab-stats" data-testid="pr-panel-stats">
             <div class="pr-header-card">
                 <div class="pr-meta">
                     <span class="pr-id-badge">PR #{{ data.pullRequestId }}</span>
@@ -319,7 +286,7 @@
 
             </div>
 
-            <div v-show="activeTab === 'conversation'" role="tabpanel" data-testid="pr-panel-conversation">
+            <div v-show="activeTab === 'conversation'" id="pr-panel-conversation" class="pr-tab-panel" role="tabpanel" aria-labelledby="pr-tab-conversation" data-testid="pr-panel-conversation">
                 <RetainedConversationTab
                     v-if="retained && retainedIdentity"
                     :retained="retained"
@@ -327,17 +294,22 @@
                 />
             </div>
 
-            <div v-show="activeTab === 'browser'" role="tabpanel" data-testid="pr-panel-browser">
+            <div v-show="activeTab === 'browser'" id="pr-panel-browser" class="pr-tab-panel pr-browser-panel" role="tabpanel" aria-labelledby="pr-tab-browser" data-testid="pr-panel-browser">
                 <RetainedBrowserTab
                     v-if="retained && retainedIdentity"
                     :retained="retained"
                     :client-id="retainedIdentity.clientId"
+                    :findings="canViewCodeQuality ? findingMetadata.findings.value : []"
+                    :show-finding-filters="canViewCodeQuality"
+                    :metadata-loading="findingMetadata.loading.value"
+                    :metadata-error="findingMetadata.error.value"
+                    :on-retry-metadata="findingMetadata.load"
                 />
             </div>
 
             <!-- Rendered only once opened: the reads behind it are three requests nobody asked for while looking at
                  the stats. Everything it needs is already on this page's own scope. -->
-            <div v-show="activeTab === 'codeQuality'" role="tabpanel" data-testid="pr-panel-code-quality">
+            <div v-if="canViewCodeQuality" v-show="activeTab === 'codeQuality'" id="pr-panel-code-quality" class="pr-tab-panel" role="tabpanel" aria-labelledby="pr-tab-code-quality" data-testid="pr-panel-code-quality">
                 <PrCodeQualityTab
                     v-if="activeTab === 'codeQuality' && canViewCodeQuality && clientId && repositoryId && pullRequestId != null"
                     :client-id="clientId"
@@ -359,6 +331,7 @@ import OverflowMenu from '@/components/OverflowMenu.vue'
 import RetainedConversationTab from '@/features/reviews/components/RetainedConversationTab.vue'
 import RetainedBrowserTab from '@/features/reviews/components/RetainedBrowserTab.vue'
 import PrCodeQualityTab from '@/features/reviews/components/PrCodeQualityTab.vue'
+import { usePrFindingMetadata } from '@/features/reviews/composables/usePrFindingMetadata'
 import {
     useRetainedPrData,
     type RetainedPrIdentity,
@@ -387,7 +360,8 @@ const loading = ref(false)
 const error = ref('')
 const data = ref<PrReviewViewDto | null>(null)
 const memoryTab = ref<'originated' | 'contributed'>('originated')
-const activeTab = ref<'stats' | 'conversation' | 'browser' | 'codeQuality'>('stats')
+type PrTab = 'stats' | 'conversation' | 'browser' | 'codeQuality'
+const activeTab = ref<PrTab>('stats')
 
 const clientId = computed(() => route.query.clientId as string | undefined)
 const providerScopePath = computed(() => route.query.providerScopePath as string | undefined)
@@ -398,6 +372,28 @@ const pullRequestId = computed(() => route.query.pullRequestId ? Number(route.qu
 // The same rule as the top-level Code Quality area: client access (which this whole view already requires) plus
 // the licence.
 const canViewCodeQuality = computed(() => isCapabilityAvailable('code-insights'))
+const visibleTabs = computed(() => [
+    { id: 'stats' as const, slug: 'stats', label: 'Stats' },
+    { id: 'conversation' as const, slug: 'conversation', label: 'Conversation' },
+    { id: 'browser' as const, slug: 'browser', label: 'Browser' },
+    ...(canViewCodeQuality.value ? [{ id: 'codeQuality' as const, slug: 'code-quality', label: 'Code Quality' }] : []),
+])
+function onTabKeydown(event: KeyboardEvent): void {
+    const tabs = visibleTabs.value
+    const current = tabs.findIndex(tab => tab.id === activeTab.value)
+    let index = current
+    if (event.key === 'ArrowRight') index = (current + 1) % tabs.length
+    else if (event.key === 'ArrowLeft') index = (current + tabs.length - 1) % tabs.length
+    else if (event.key === 'Home') index = 0
+    else if (event.key === 'End') index = tabs.length - 1
+    else return
+    event.preventDefault()
+    activeTab.value = tabs[index]!.id
+    ;(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus()
+}
+watch(canViewCodeQuality, available => {
+    if (!available && activeTab.value === 'codeQuality') activeTab.value = 'stats'
+})
 
 // Block/unblock controls are admin-gated. The PR identity comes from the route query params.
 const isBlocked = ref(false)
@@ -546,6 +542,11 @@ const retainedIdentity = computed<RetainedPrIdentity | null>(() => {
 // a different pull request, so navigating between pull requests on the same component instance does not
 // leave the earlier pull request's retained data on screen.
 const retained = shallowRef<UseRetainedPrData | null>(null)
+const findingMetadata = usePrFindingMetadata(
+    retainedIdentity,
+    () => activeTab.value === 'browser' && canViewCodeQuality.value,
+    () => (data.value?.jobs ?? []).flatMap(job => job.submittedAt ? [job.submittedAt] : []),
+)
 
 watch(
     () => {
@@ -724,21 +725,59 @@ async function restartThreadPass(threadPassId: string): Promise<void> {
 </script>
 
 <style scoped>
-/* This view (esp. the Browser tab's diff) needs the room, so it spans the full
-   width instead of the shared centered page max-width. */
 .pr-review-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
     max-width: none;
+    overflow: hidden;
+    padding: 0.6rem 1rem;
+}
+.pr-tab-panel {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+.pr-browser-panel {
+    overflow: hidden;
+}
+.pr-number {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+.pr-title-row h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    white-space: nowrap;
+}
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+.back-link:hover {
+    text-decoration: underline;
+}
+.pr-actions-menu {
+    margin-left: auto;
 }
 
 .header-stack {
-    margin-bottom: 1.5rem;
+    flex: 0 0 auto;
+    margin-bottom: 0.5rem;
 }
 
 .header-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
+    gap: 0.5rem 1rem;
+    flex-wrap: wrap;
 }
 
 .block-error {
@@ -826,18 +865,6 @@ async function restartThreadPass(threadPassId: string): Promise<void> {
 
 .blocked-badge i {
     font-size: 0.7rem;
-}
-
-.back-link {
-    display: inline-block;
-    margin-bottom: 0.5rem;
-    color: var(--color-text-muted);
-    text-decoration: none;
-    font-size: 0.875rem;
-}
-
-.back-link:hover {
-    text-decoration: underline;
 }
 
 .pr-header-card {
@@ -1007,12 +1034,29 @@ async function restartThreadPass(threadPassId: string): Promise<void> {
 
 .pr-tabs {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1.25rem;
-    flex-wrap: wrap;
+    gap: 0.3rem;
+    min-width: 0;
+    overflow-x: auto;
+    margin: 0;
+    padding: 2px;
+}
+@media (max-width: 700px) {
+    .pr-review-page {
+        padding: 0.4rem;
+    }
+    .header-row {
+        gap: 0.35rem 0.6rem;
+    }
+    .pr-tabs {
+        order: 2;
+        width: 100%;
+    }
 }
 
 .pr-tab-btn {
+    flex: 0 0 auto;
+    margin: 0;
+    white-space: nowrap;
     padding: 0.55rem 1.1rem;
     font-size: 0.95rem;
     font-weight: 600;

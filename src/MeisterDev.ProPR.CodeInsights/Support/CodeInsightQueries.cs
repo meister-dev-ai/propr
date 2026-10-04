@@ -52,7 +52,8 @@ public static class CodeInsightQueries
         CodeInsightDisposition? disposition,
         int limit,
         string? symbolName = null,
-        CodeInsightRejectionReason? rejectionReason = null)
+        CodeInsightRejectionReason? rejectionReason = null,
+        int offset = 0)
     {
         var (start, end) = ResolveWindow(from, to);
         return new CodeInsightBrowseQuery(
@@ -66,7 +67,8 @@ public static class CodeInsightQueries
             disposition,
             Math.Clamp(limit, 1, 200),
             Trimmed(symbolName),
-            rejectionReason);
+            rejectionReason,
+            Math.Max(0, offset));
     }
 
     /// <summary>

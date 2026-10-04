@@ -9,6 +9,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using MeisterDev.ProPR.CodeInsights.Rollups;
 using MeisterDev.ProPR.CodeInsights.Http;
+using MeisterDev.ProPR.CodeInsights.Metrics;
 
 namespace MeisterDev.ProPR.CodeInsights.Tests.Controllers;
 
@@ -345,6 +346,42 @@ public sealed class CodeQualityControllerTests
         Assert.Equal("concurrency", query.CoreType);
         // A drill-through is a sample somebody is about to read, not an export.
         Assert.Equal(200, query.Limit);
+    }
+
+    [Theory]
+    [InlineData(200, 200)]
+    [InlineData(-10, 0)]
+    public async Task FindingPagesPassANonnegativeOffsetToTheScopedReader(int offset, int expected)
+    {
+        var harness = new CodeInsightAudienceHarness();
+
+        await harness.CodeQuality.GetFindings(offset: offset, pullRequestId: 42);
+
+        var query = Assert.Single(harness.RequestedBrowseScopes);
+        Assert.Equal(expected, query.Offset);
+        Assert.Equal(42, query.PullRequestId);
+        CodeInsightAudienceHarness.AssertExactly(query, CodeInsightAudienceHarness.MineA, CodeInsightAudienceHarness.MineB);
+    }
+
+    [Fact]
+    public async Task FindingsIncludeTheRecordedRejectionReason()
+    {
+        var harness = new CodeInsightAudienceHarness();
+        harness.Browse.ListFindingsAsync(Arg.Any<CodeInsightBrowseQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new[]
+                {
+                    new CodeInsightFindingRow(
+                        Guid.NewGuid(), CodeInsightAudienceHarness.MineA, "repo-1", 42,
+                        Guid.NewGuid(), "a.cs", 5, CommentSeverity.Warning, "Repeated concern", ["concurrency"],
+                        CodeInsightDisposition.Dismissed, "thread-1", DateTimeOffset.UtcNow, CodeInsightRejectionReason.Redundant),
+                });
+
+        var result = Assert.IsType<OkObjectResult>(await harness.CodeQuality.GetFindings());
+
+        var row = Assert.Single((IReadOnlyList<CodeInsightFindingResponse>)result.Value!);
+        Assert.Equal("Redundant", row.RejectionReason);
+        Assert.Equal("Dismissed", row.Disposition);
     }
 
     [Fact]

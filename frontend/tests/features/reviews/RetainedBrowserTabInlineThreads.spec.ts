@@ -171,4 +171,16 @@ describe('RetainedBrowserTab inline threads', () => {
     // The anchored thread is NOT duplicated in the fallback.
     expect(fallback.text()).not.toContain('swallows')
   })
+
+  it('keeps anchored comments inside the diff after switching to Split and back to Unified', async () => {
+    const wrapper = await mountTabWithThreads([anchoredThread, orphanThread])
+    await wrapper.get('[data-testid="diff-mode-side-by-side"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="diff-viewer"]').find('[data-testid="inline-thread"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="retained-thread-panel"]').text()).not.toContain('swallows')
+    await wrapper.get('[data-testid="diff-mode-line-by-line"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="diff-viewer"]').findAll('[data-testid="inline-thread"]')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })

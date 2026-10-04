@@ -99,4 +99,117 @@ describe('RetainedBrowserTab', () => {
     expect(stub.exists()).toBe(true)
     expect(stub.text()).toContain('@@ -1 +1 @@ changed')
   })
+
+  it('ignores a previous diff response when a later file is selected', async () => {
+    let resolveFirst!: (value: ReturnType<typeof okResponse>) => void
+    getMock.mockImplementation((path: string, options: { params: { query: { filePath?: string } } }) => {
+      if (path.endsWith('/threads')) return Promise.resolve(okResponse([]))
+      if (path.endsWith('/files')) return Promise.resolve(okResponse([{ filePath: 'first.ts' }, { filePath: 'second.ts' }]))
+      if (options.params.query.filePath === 'first.ts') return new Promise(resolve => { resolveFirst = resolve })
+      return Promise.resolve(okResponse({ filePath: 'second.ts', unifiedDiff: 'second diff' }))
+    })
+    const wrapper = await mountWithLoadedData()
+    await wrapper.get('[data-file-path="first.ts"]').trigger('click')
+    await wrapper.get('[data-file-path="second.ts"]').trigger('click')
+    await flushPromises()
+    resolveFirst(okResponse({ filePath: 'first.ts', unifiedDiff: 'first diff' }))
+    await flushPromises()
+    expect(wrapper.get('[data-testid="diff-viewer-stub"]').text()).toBe('second diff')
+  })
+
+  it('preserves the selected diff while the file still matches the filters', async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.endsWith('/threads')) return Promise.resolve(okResponse([]))
+      if (path.endsWith('/files')) return Promise.resolve(okResponse([{ filePath: 'src/Auth.ts' }, { filePath: 'src/Cache.ts' }]))
+      return Promise.resolve(okResponse({ filePath: 'src/Auth.ts', unifiedDiff: 'auth diff' }))
+    })
+    const wrapper = await mountWithLoadedData()
+    await wrapper.get('[data-file-path="src/Auth.ts"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[aria-label="Search files"]').setValue('AUTH')
+    expect(wrapper.findAll('[data-testid="retained-file-item"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="diff-viewer-stub"]').text()).toBe('auth diff')
+    await wrapper.get('[data-testid="browser-clear-filters"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="retained-file-item"]')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="diff-viewer-stub"]').text()).toBe('auth diff')
+  })
+
+  it('identifies a refresh and retained metadata after a refresh failure', async () => {
+    getMock.mockImplementation((path: string) => Promise.resolve(okResponse(
+      path.endsWith('/files') ? [{ filePath: 'src/Auth.ts' }] : [],
+    )))
+    const wrapper = await mountWithLoadedData()
+    const finding = {
+      id: 'f1', clientId: 'client-1', repositoryId: 'repo-a', pullRequestId: 42, jobId: 'job-1',
+      filePath: 'src/Auth.ts', lineNumber: 7, severity: 'Warning', message: 'Validate the token.',
+      coreTags: ['security'], disposition: 'Dismissed', rejectionReason: 'Redundant',
+      providerThreadId: 'thread-1', observedAt: '2026-01-01T00:00:00Z',
+    }
+    await wrapper.setProps({ findings: [finding], metadataLoading: true })
+    expect(wrapper.get('[role="status"]').text()).toBe('Refreshing finding details…')
+    await wrapper.setProps({ metadataLoading: false, metadataError: 'Refresh unavailable' })
+    expect(wrapper.get('[role="status"]').text()).toContain('Showing the last loaded details.')
+    expect(wrapper.get('[role="status"]').text()).toContain('Refresh unavailable')
+    await wrapper.setProps({ findings: [] })
+    expect(wrapper.get('[role="status"]').text()).toContain('Finding details unavailable.')
+    expect(wrapper.get('[role="status"]').text()).not.toContain('Showing the last loaded details.')
+    wrapper.unmount()
+  })
+
+  it.each([false, true])('clears a filtered-out selection, including an outstanding diff request (pending: %s)', async pending => {
+    let resolveDiff!: (value: ReturnType<typeof okResponse>) => void
+    getMock.mockImplementation((path: string) => {
+      if (path.endsWith('/threads')) return Promise.resolve(okResponse([]))
+      if (path.endsWith('/files')) return Promise.resolve(okResponse([{ filePath: 'src/Auth.ts' }, { filePath: 'src/Cache.ts' }]))
+      return new Promise(resolve => { resolveDiff = resolve })
+    })
+    const wrapper = await mountWithLoadedData()
+    await wrapper.get('[data-file-path="src/Auth.ts"]').trigger('click')
+    if (!pending) {
+      resolveDiff(okResponse({ filePath: 'src/Auth.ts', unifiedDiff: 'auth diff' }))
+      await flushPromises()
+    }
+    await wrapper.get('input[aria-label="Search files"]').setValue('CACHE')
+    expect(wrapper.findAll('[data-testid="retained-file-item"]')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="retained-no-selection"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="diff-viewer-stub"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="browser-clear-filters"]').trigger('click')
+    if (pending) {
+      resolveDiff(okResponse({ filePath: 'src/Auth.ts', unifiedDiff: 'obsolete diff' }))
+      await flushPromises()
+    }
+    expect(wrapper.find('[data-testid="retained-no-selection"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="diff-viewer-stub"]').exists()).toBe(false)
+    expect(wrapper.findAll('.retained-file-item--active')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it.each([false, true])('clears a selected revision when a newer retained revision replaces it (pending: %s)', async pending => {
+    let resolveDiff!: (value: ReturnType<typeof okResponse>) => void
+    getMock.mockImplementation((path: string, options: { params: { query: { revisionKey?: string } } }) => {
+      if (path.endsWith('/threads')) return Promise.resolve(okResponse([]))
+      if (path.endsWith('/files')) return Promise.resolve(okResponse([{ filePath: 'src/Auth.ts', revisionKey: 'rev-1' }]))
+      if (options.params.query.revisionKey === 'rev-2') return Promise.resolve(okResponse({ filePath: 'src/Auth.ts', unifiedDiff: 'current diff' }))
+      return new Promise(resolve => { resolveDiff = resolve })
+    })
+    const wrapper = await mountWithLoadedData()
+    await wrapper.get('[data-file-path="src/Auth.ts"]').trigger('click')
+    if (!pending) {
+      resolveDiff(okResponse({ filePath: 'src/Auth.ts', unifiedDiff: 'earlier diff' }))
+      await flushPromises()
+    }
+    wrapper.props('retained').files.value = [{ filePath: 'src/Auth.ts', revisionKey: 'rev-2' }]
+    await flushPromises()
+    expect(wrapper.find('[data-testid="retained-no-selection"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="diff-viewer-stub"]').exists()).toBe(false)
+    if (pending) {
+      resolveDiff(okResponse({ filePath: 'src/Auth.ts', unifiedDiff: 'obsolete diff' }))
+      await flushPromises()
+    }
+    expect(wrapper.find('[data-testid="diff-viewer-stub"]').exists()).toBe(false)
+    await wrapper.get('[data-file-path="src/Auth.ts"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="diff-viewer-stub"]').text()).toBe('current diff')
+    wrapper.unmount()
+  })
 })

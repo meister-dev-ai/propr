@@ -124,6 +124,7 @@ public sealed class CodeInsightBrowseReader(
                     .OrderByDescending(finding => finding.ObservedAt)
                     // A stable tie-break, so paging or a repeated read does not reshuffle equal timestamps.
                     .ThenBy(finding => finding.Id)
+                    .Skip(Math.Max(0, query.Offset))
                     .Take(Limit(query))
                     .Select(finding => new
                     {

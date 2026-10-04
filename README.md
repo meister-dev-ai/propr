@@ -62,6 +62,10 @@ operations. ProPR checks current tenant ownership of clients and review jobs. Se
 
 ## Documentation
 
+Open a pull request from **Reviews** to inspect its review history, discussion, and retained diffs. The
+**Browser** tab fills the content area with independently scrolling file and diff panes, file search, and
+finding filters. See [the PR review screen](docs/concepts/reviews.md#pr-review-screen).
+
 All documentation is under [docs/](docs/index.md), which maps every page and gives a reading order.
 Start at one of these:
 

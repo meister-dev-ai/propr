@@ -37,16 +37,28 @@ vi.mock('@/composables/useUsageStatistics', () => ({
   }),
 }))
 
-async function mountNotice() {
+async function mountNotice(presented = true) {
   const { default: UsageStatisticsNotice } =
     await import('@/features/usage-statistics/components/UsageStatisticsNotice.vue')
 
   return mount(UsageStatisticsNotice, {
+    props: { presented },
     global: { stubs: { RouterLink: RouterLinkStub } },
   })
 }
 
 describe('UsageStatisticsNotice', () => {
+  it('records disclosure only after a collapsed notice is presented', async () => {
+    const wrapper = await mountNotice(false)
+    await flushPromises()
+    expect(recordNoticeShownMock).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="usage-statistics-notice"]').exists()).toBe(false)
+    await wrapper.setProps({ presented: true })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="usage-statistics-notice"]').isVisible()).toBe(true)
+    expect(recordNoticeShownMock).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     isAdmin.value = true

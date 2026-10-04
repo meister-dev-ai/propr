@@ -30,6 +30,7 @@ namespace MeisterDev.ProPR.CodeInsights.Metrics;
 ///     Optional rejection-reason narrowing: what a click on a reason in the distribution means. Independent of
 ///     <paramref name="Disposition" />, because a reason already implies its outcome.
 /// </param>
+/// <param name="Offset">Number of matching findings to skip before returning a bounded page.</param>
 public sealed record CodeInsightBrowseQuery(
     IReadOnlyCollection<Guid> ClientIds,
     DateOnly From,
@@ -41,7 +42,8 @@ public sealed record CodeInsightBrowseQuery(
     CodeInsightDisposition? Disposition = null,
     int Limit = 100,
     string? SymbolName = null,
-    CodeInsightRejectionReason? RejectionReason = null);
+    CodeInsightRejectionReason? RejectionReason = null,
+    int Offset = 0);
 
 /// <summary>One collected finding as a drill-through shows it, with its text decrypted.</summary>
 /// <param name="Id">Surrogate identity of the finding.</param>

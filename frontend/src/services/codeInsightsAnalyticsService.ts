@@ -286,6 +286,7 @@ export interface CodeInsightFinding {
   disposition: string | null
   providerThreadId: string | null
   observedAt: string
+  rejectionReason?: string | null
 }
 
 export interface CodeInsightMiss {
@@ -604,9 +605,11 @@ export async function fetchFindings(
     disposition?: CodeInsightDisposition | null
     symbolName?: string | null
     limit?: number
+    offset?: number
   } = {},
 ): Promise<CodeInsightFinding[]> {
   const extra: Record<string, unknown> = { limit: options.limit ?? 50 }
+  if (options.offset != null) extra.offset = options.offset
   if (options.coreType) extra.coreType = options.coreType
   if (options.disposition) extra.disposition = options.disposition
   // Exact, so the drill from a symbol hotspot shows that definition's findings and no sibling's.

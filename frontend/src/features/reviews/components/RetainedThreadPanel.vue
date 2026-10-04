@@ -83,6 +83,7 @@
                                 View trace
                             </RouterLink>
                         </div>
+                        <RetainedFindingBadges :finding="findingForComment(thread, comment, findings)" />
                         <div
                             class="retained-comment-body markdown-content"
                             v-html="renderMarkdown(comment.body)"
@@ -97,6 +98,9 @@
 <script setup lang="ts">
 import { renderMarkdown } from '@/features/job-protocol/utils/formatters'
 import { buildProtocolHref, type RetainedThread } from '@/features/reviews/composables/useRetainedPrData'
+import type { CodeInsightFinding } from '@/services/codeInsightsAnalyticsService'
+import RetainedFindingBadges from './RetainedFindingBadges.vue'
+import { findingForComment } from './reviewBrowserFindings'
 
 interface Props {
     threads: RetainedThread[]
@@ -105,11 +109,13 @@ interface Props {
     emptyMessage?: string
     /** When true, each thread header surfaces its anchored file path (used in the combined conversation view). */
     showFilePath?: boolean
+    findings?: CodeInsightFinding[]
 }
 
 withDefaults(defineProps<Props>(), {
     emptyMessage: 'No comment threads retained for this selection.',
     showFilePath: false,
+    findings: () => [],
 })
 
 function statusClass(status: string | null | undefined): string {
@@ -229,6 +235,7 @@ function formatDate(iso: string): string {
 
 .retained-comment-meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.3rem;

@@ -29,6 +29,12 @@ the owning client and optional status before counting and paging scalar metadata
 persisted finding counts without transferring result JSON or protocol events. Client-scoped result reads
 check the owning client in the database predicate before result deserialization.
 
+The PR review frontend reads retained files and discussions through the Reviewing archive API. It loads
+Code Insights classifications separately, using client-scoped finding pages when that capability is
+available. A classification read failure leaves retained diffs and comments available. The Browser tab
+owns file selection and filtering, while the shared diff renderer places comments next to new-side lines
+in Unified and Split layouts. The file pane and diff pane each scroll within the available viewport height.
+
 The example compose stack uses nginx for the proxy, and bundles Loki and Grafana for log browsing -
 conveniences nothing in ProPR depends on. What has to route where, and on which ports, is in
 [deployment topology](../operate/deploy.md#deployment-topology).
