@@ -73,14 +73,6 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("scm_comment_posting_enabled")
             .HasDefaultValue(true);
 
-        builder.Property(c => c.EnableEvidenceBackedVerification)
-            .HasColumnName("enable_evidence_backed_verification")
-            .HasDefaultValue(false);
-
-        builder.Property(c => c.EnableLanguageRobustScreening)
-            .HasColumnName("enable_language_robust_screening")
-            .HasDefaultValue(false);
-
         builder.Property(c => c.EnableMultiPassUnion)
             .HasColumnName("enable_multi_pass_union")
             .HasDefaultValue(false);

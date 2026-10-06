@@ -175,31 +175,12 @@ public sealed class AiReviewOptions
     public int ConfidenceFloorWarning { get; set; } = 60;
 
     /// <summary>
-    ///     Minimum cosine similarity (0–1) to a hedged/vague exemplar centroid for the semantic comment screener
-    ///     to classify a comment as hedged or vague; below this the comment is kept as firm. Only consulted on the
-    ///     language-robust screening path (<c>EnableLanguageRobustScreening</c>). The default (0.40) was chosen from
-    ///     a de/fr/it validation sweep: firm comments were preserved 100% down to 0.30, while 0.50 caught only ~half
-    ///     of non-English hedge/vague; 0.40 recovers most of that recall while keeping a margin against demoting
-    ///     borderline-firm comments on harder inputs.
-    /// </summary>
-    [Range(0.0, 1.0, ErrorMessage = "CommentScreeningSimilarityThreshold must be between 0.0 and 1.0.")]
-    public double CommentScreeningSimilarityThreshold { get; set; } = 0.40;
-
-    /// <summary>
     ///     Minimum total comment count across all files before the cross-file quality filter AI pass
     ///     is invoked. Below this threshold, comments are posted as-is after per-file filtering.
     ///     Bound to <c>AI_QUALITY_FILTER_THRESHOLD</c>.
     /// </summary>
     [Range(1, 500, ErrorMessage = "QualityFilterThreshold must be between 1 and 500.")]
     public int QualityFilterThreshold { get; set; } = 20;
-
-    /// <summary>Maximum number of candidate findings kept after per-file importance ranking.</summary>
-    [Range(1, 100, ErrorMessage = "ImportanceRankingKeepTopN must be between 1 and 100.")]
-    public int ImportanceRankingKeepTopN { get; set; } = 8;
-
-    /// <summary>Minimum 1-10 importance score required for a ranked finding to survive.</summary>
-    [Range(1, 10, ErrorMessage = "ImportanceRankingMinScore must be between 1 and 10.")]
-    public int ImportanceRankingMinScore { get; set; } = 4;
 
     /// <summary>Maximum number of cross-file caller sites to prefetch into the prompt evidence channel.</summary>
     [Range(0, 20, ErrorMessage = "MaxPrefetchCallerSites must be between 0 and 20.")]

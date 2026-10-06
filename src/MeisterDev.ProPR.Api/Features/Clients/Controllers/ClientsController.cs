@@ -40,8 +40,6 @@ public sealed class ClientsController(
             client.CommentResolutionBehavior,
             client.CustomSystemMessage,
             client.ScmCommentPostingEnabled,
-            client.EnableEvidenceBackedVerification,
-            client.EnableLanguageRobustScreening,
             client.EnableMultiPassUnion,
             client.IncludeLinkedItemsInContext,
             client.ReviewPassesOrEmpty
@@ -394,8 +392,6 @@ public sealed class ClientsController(
             request.CustomSystemMessage,
             null,
             request.ScmCommentPostingEnabled,
-            request.EnableEvidenceBackedVerification,
-            request.EnableLanguageRobustScreening,
             request.EnableMultiPassUnion,
             request.IncludeLinkedItemsInContext,
             request.ReviewPasses?
@@ -425,8 +421,6 @@ public sealed record ClientResponse(
     CommentResolutionBehavior CommentResolutionBehavior,
     string? CustomSystemMessage,
     bool ScmCommentPostingEnabled,
-    bool EnableEvidenceBackedVerification,
-    bool EnableLanguageRobustScreening,
     bool EnableMultiPassUnion,
     bool IncludeLinkedItemsInContext,
     IReadOnlyList<ReviewPassEntry> ReviewPasses,
@@ -510,6 +504,8 @@ public sealed record CreateClientRequest(string DisplayName, [property: JsonRequ
 ///     Set <see cref="CustomSystemMessage" /> to <c>""</c> (empty string) to clear an existing value.
 ///     Set <see cref="AutoResolveSeverities" /> to an empty array to clear the auto-resolve set.
 ///     <see cref="OutputLanguage" /> is an IETF BCP 47 language tag; a blank value resets it to the default.
+///     <see cref="EnableEvidenceBackedVerification" /> and <see cref="EnableLanguageRobustScreening" /> are removed settings:
+///     a request that sets either of them is refused with 400 Bad Request, which states why the setting was removed.
 /// </summary>
 public sealed record PatchClientRequest(
     bool? IsActive = null,
@@ -517,8 +513,6 @@ public sealed record PatchClientRequest(
     CommentResolutionBehavior? CommentResolutionBehavior = null,
     string? CustomSystemMessage = null,
     bool? ScmCommentPostingEnabled = null,
-    bool? EnableEvidenceBackedVerification = null,
-    bool? EnableLanguageRobustScreening = null,
     bool? EnableMultiPassUnion = null,
     bool? IncludeLinkedItemsInContext = null,
     IReadOnlyList<ReviewPassEntry>? ReviewPasses = null,
@@ -530,4 +524,6 @@ public sealed record PatchClientRequest(
     string? OutputLanguage = null,
     bool? ReviewEveryIncrementEnabled = null,
     bool? WithholdOutOfScopeFindings = null,
-    ReviewAdmissionPolicyDto? AdmissionPolicy = null);
+    ReviewAdmissionPolicyDto? AdmissionPolicy = null,
+    bool? EnableEvidenceBackedVerification = null,
+    bool? EnableLanguageRobustScreening = null);

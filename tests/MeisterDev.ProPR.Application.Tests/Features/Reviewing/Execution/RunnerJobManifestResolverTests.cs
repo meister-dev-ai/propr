@@ -434,8 +434,6 @@ public sealed class RunnerJobManifestResolverTests
         var job = JobWithRevision();
         job.SetAiConfig(null, "gpt-5.6-luna", 0.25f);
         this._clients.GetMultiPassUnionEnabledAsync(job.ClientId, Arg.Any<CancellationToken>()).Returns(true);
-        this._clients.GetLanguageRobustScreeningEnabledAsync(job.ClientId, Arg.Any<CancellationToken>()).Returns(true);
-        this._clients.GetEvidenceBackedVerificationEnabledAsync(job.ClientId, Arg.Any<CancellationToken>()).Returns(true);
         this._clients.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, Arg.Any<CancellationToken>()).Returns(false);
 
         var resolution = await this.CreateResolver().ResolveAsync(RequestFor(job));
@@ -443,8 +441,6 @@ public sealed class RunnerJobManifestResolverTests
         var behaviour = resolution.Manifest!.Behaviour;
         Assert.NotNull(behaviour);
         Assert.True(behaviour!.EnableMultiPassUnion);
-        Assert.True(behaviour.EnableLanguageRobustScreening);
-        Assert.True(behaviour.EnableEvidenceBackedVerification);
         Assert.False(behaviour.IncludeLinkedItemsInContext);
         Assert.Equal(0.25f, behaviour.Temperature);
     }
@@ -459,8 +455,6 @@ public sealed class RunnerJobManifestResolverTests
         var behaviour = resolution.Manifest!.Behaviour;
         Assert.NotNull(behaviour);
         Assert.False(behaviour!.EnableMultiPassUnion);
-        Assert.False(behaviour.EnableLanguageRobustScreening);
-        Assert.False(behaviour.EnableEvidenceBackedVerification);
         Assert.Null(behaviour.Temperature);
     }
 

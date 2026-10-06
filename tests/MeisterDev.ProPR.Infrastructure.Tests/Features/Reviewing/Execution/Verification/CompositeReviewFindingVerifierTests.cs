@@ -13,42 +13,26 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Ver
 public sealed class CompositeReviewFindingVerifierTests
 {
     [Fact]
-    public async Task WhenContextFlagDisabled_PreservesDeterministicWithhold()
+    public async Task WhenNoEvidenceChannel_PreservesDeterministicWithhold()
     {
         var sut = CreateSut();
 
+        // Without review tools no evidence can be gathered, so the composite keeps the conservative deterministic
+        // outcome.
         var outcomes = await sut.VerifyAsync(
             [CreateWithheldWorkItem()],
             [],
-            new ReviewVerificationContext(null, "source", null, null, EvidenceVerificationEnabled: false),
-            CancellationToken.None);
-
-        var outcome = Assert.Single(outcomes);
-        Assert.Equal(VerificationOutcome.NonVerifiableKind, outcome.OutcomeKind);
-        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, outcome.RecommendedDisposition);
-        Assert.Equal(VerificationOutcome.DeterministicRulesEvaluator, outcome.EvaluatedBy);
-    }
-
-    [Fact]
-    public async Task WhenContextFlagEnabledButNoEvidenceChannel_PreservesDeterministicWithhold()
-    {
-        var sut = CreateSut();
-
-        // Tools null → no way to gather evidence → the composite must not escalate, leaving the
-        // conservative deterministic outcome untouched even when the per-client flag is on.
-        var outcomes = await sut.VerifyAsync(
-            [CreateWithheldWorkItem()],
-            [],
-            new ReviewVerificationContext(null, "source", null, null, EvidenceVerificationEnabled: true),
+            new ReviewVerificationContext(null, "source", null, null),
             CancellationToken.None);
 
         var outcome = Assert.Single(outcomes);
         Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, outcome.RecommendedDisposition);
         Assert.Equal(VerificationOutcome.DeterministicRulesEvaluator, outcome.EvaluatedBy);
+        Assert.Equal(EvidenceJudgeDegradations.Unavailable, outcome.JudgeDegradation);
     }
 
     [Fact]
-    public async Task WhenEnabledAndEvidenceConfirms_PromotesWithheldClaimToPublish()
+    public async Task WhenEvidenceConfirms_PromotesWithheldClaimToPublish()
     {
         const string anchorPath = "src/Service.cs";
 
@@ -70,7 +54,7 @@ public sealed class CompositeReviewFindingVerifierTests
         var outcomes = await sut.VerifyAsync(
             [CreateWithheldWorkItem(anchorPath)],
             [],
-            new ReviewVerificationContext(tools, "source", judge, "judge-model", EvidenceVerificationEnabled: true),
+            new ReviewVerificationContext(tools, "source", judge, "judge-model"),
             CancellationToken.None);
 
         var outcome = Assert.Single(outcomes);
@@ -80,7 +64,7 @@ public sealed class CompositeReviewFindingVerifierTests
     }
 
     [Fact]
-    public async Task WhenEnabledAndJudgeDoesNotConfirm_SurfacesEscalatedWithholdWithJudgeReason()
+    public async Task WhenJudgeDoesNotConfirm_SurfacesEscalatedWithholdWithJudgeReason()
     {
         const string anchorPath = "src/Service.cs";
 
@@ -101,7 +85,7 @@ public sealed class CompositeReviewFindingVerifierTests
         var outcomes = await sut.VerifyAsync(
             [CreateWithheldWorkItem(anchorPath)],
             [],
-            new ReviewVerificationContext(tools, "source", judge, "judge-model", EvidenceVerificationEnabled: true),
+            new ReviewVerificationContext(tools, "source", judge, "judge-model"),
             CancellationToken.None);
 
         // The disposition must not regress (still a SummaryOnly withhold), but the recorded outcome has to

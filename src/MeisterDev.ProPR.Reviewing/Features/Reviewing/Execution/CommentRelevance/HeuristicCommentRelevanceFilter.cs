@@ -50,8 +50,8 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
     {
         // Only language-agnostic, mechanical signals remain here: a mismatched file/line anchor, a
         // structurally cross-file claim (two or more distinct file references), and the absence of any
-        // concrete observable (code token / line reference). Text-shaped hedge/vague/tooling/severity
-        // screening now lives in the embedding-based semantic comment screener.
+        // concrete observable (code token / line reference). Whether a hedged or vague finding is true is decided
+        // later by the evidence-backed judge in local verification.
         var reasonCodes = new HashSet<string>(StringComparer.Ordinal);
 
         if (IsWrongFileOrAnchor(request, comment))

@@ -14,8 +14,8 @@ using NSubstitute;
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Strategies.FileByFile;
 
 /// <summary>
-///     Tests that the surviving deterministic per-file stages emit per-comment disposition traces, giving the
-///     info-strip and confidence-floor steps the same protocol observability as the semantic screening stage.
+///     Tests that the deterministic per-file stages emit per-comment disposition traces, so the effect of the
+///     info-strip and confidence-floor steps is observable in the protocol.
 /// </summary>
 public sealed class PipelineStageTracingTests
 {

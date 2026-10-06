@@ -30,7 +30,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             ],
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSemanticScreeningStage.StageIdConstant,
             ],
             [FinalizeStageFamilyId],
             false),
@@ -43,7 +42,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             ],
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSemanticScreeningStage.StageIdConstant,
             ],
             [FinalizeStageFamilyId],
             false,
@@ -57,8 +55,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             ],
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
             [FinalizeStageFamilyId],
             true,
@@ -71,10 +67,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                 FileByFileContextPrefetchStage.StageIdConstant,
                 FileByFileRiskMarkerStage.StageIdConstant,
             ],
-            [
-                FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileSelfReflectionRankingStage.StageIdConstant,
-            ],
+            [],
             [FinalizeStageFamilyId],
             false,
             ReviewAggressiveness.Assertive,

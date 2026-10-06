@@ -18,8 +18,6 @@ public sealed record EvaluationConfiguration(
     IReadOnlyDictionary<string, string>? RunMetadata = null,
     EvaluationAiConnection? AiConnection = null,
     float? Temperature = null,
-    bool EnableEvidenceBackedVerification = false,
-    bool EnableLanguageRobustScreening = false,
     bool EnableMultiPassUnion = false,
     int? MultiPassUnionPassCount = null,
     MultiPassDiversity? MultiPassDiversity = null,

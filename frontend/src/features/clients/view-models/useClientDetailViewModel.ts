@@ -45,12 +45,10 @@ export interface ClientDetailDto {
   defaultReviewPipelineProfileId?: string | null
   defaultReviewPipelineProfileUpdatedAtUtc?: string | null
   scmCommentPostingEnabled: boolean
-  enableEvidenceBackedVerification: boolean
   enableMultiPassUnion: boolean
   reviewEveryIncrementEnabled: boolean
   commentResolutionBehavior?: CommentResolutionBehavior | null
   includeLinkedItemsInContext: boolean
-  enableLanguageRobustScreening: boolean
   outputLanguage?: string | null
   reviewPasses?: ReviewPassEntry[] | null
   baselineReasoningEffort?: ReviewReasoningEffort | null
@@ -89,12 +87,10 @@ export interface ClientDetailViewModel {
   editedDisplayName: Ref<string>
   editedDefaultReviewPipelineProfileId: Ref<string>
   editedScmCommentPostingEnabled: Ref<boolean>
-  editedEnableEvidenceBackedVerification: Ref<boolean>
   editedEnableMultiPassUnion: Ref<boolean>
   editedReviewEveryIncrementEnabled: Ref<boolean>
   editedCommentResolutionBehavior: Ref<CommentResolutionBehavior>
   editedIncludeLinkedItemsInContext: Ref<boolean>
-  editedEnableLanguageRobustScreening: Ref<boolean>
   editedOutputLanguage: Ref<string>
   editedReviewPasses: Ref<ReviewPassEntry[]>
   editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
@@ -381,12 +377,10 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedDisplayName = ref('')
   const editedDefaultReviewPipelineProfileId = ref('file-by-file-balanced')
   const editedScmCommentPostingEnabled = ref(true)
-  const editedEnableEvidenceBackedVerification = ref(false)
   const editedEnableMultiPassUnion = ref(false)
   const editedReviewEveryIncrementEnabled = ref(false)
   const editedCommentResolutionBehavior = ref<CommentResolutionBehavior>('silent')
   const editedIncludeLinkedItemsInContext = ref(true)
-  const editedEnableLanguageRobustScreening = ref(false)
   const editedOutputLanguage = ref(DEFAULT_OUTPUT_LANGUAGE)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
   const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
@@ -458,12 +452,10 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedDisplayName.value = nextClient.displayName
     editedDefaultReviewPipelineProfileId.value = nextClient.defaultReviewPipelineProfileId ?? 'file-by-file-balanced'
     editedScmCommentPostingEnabled.value = Boolean(nextClient.scmCommentPostingEnabled)
-    editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
     editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
     editedReviewEveryIncrementEnabled.value = Boolean(nextClient.reviewEveryIncrementEnabled)
     editedCommentResolutionBehavior.value = nextClient.commentResolutionBehavior ?? 'silent'
     editedIncludeLinkedItemsInContext.value = Boolean(nextClient.includeLinkedItemsInContext)
-    editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
     editedOutputLanguage.value = nextClient.outputLanguage || DEFAULT_OUTPUT_LANGUAGE
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
     editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
@@ -651,12 +643,10 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     try {
       const patchBody: Record<string, unknown> = {
         scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
-        enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
         reviewEveryIncrementEnabled: editedReviewEveryIncrementEnabled.value,
         commentResolutionBehavior: editedCommentResolutionBehavior.value,
         includeLinkedItemsInContext: editedIncludeLinkedItemsInContext.value,
-        enableLanguageRobustScreening: editedEnableLanguageRobustScreening.value,
         outputLanguage: editedOutputLanguage.value.trim(),
         baselineReasoningEffort: editedBaselineReasoningEffort.value,
       }
@@ -848,12 +838,10 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       client.value !== null &&
       (
         editedScmCommentPostingEnabled.value !== Boolean(client.value.scmCommentPostingEnabled) ||
-        editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
         editedReviewEveryIncrementEnabled.value !== Boolean(client.value.reviewEveryIncrementEnabled) ||
         editedCommentResolutionBehavior.value !== (client.value.commentResolutionBehavior ?? 'silent') ||
         editedIncludeLinkedItemsInContext.value !== Boolean(client.value.includeLinkedItemsInContext) ||
-        editedEnableLanguageRobustScreening.value !== Boolean(client.value.enableLanguageRobustScreening) ||
         editedOutputLanguage.value.trim() !== (client.value.outputLanguage || DEFAULT_OUTPUT_LANGUAGE) ||
         editedBaselineReasoningEffort.value !== (client.value.baselineReasoningEffort ?? 'none') ||
         !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses))
@@ -921,12 +909,10 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedDisplayName,
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
-    editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
     editedReviewEveryIncrementEnabled,
     editedCommentResolutionBehavior,
     editedIncludeLinkedItemsInContext,
-    editedEnableLanguageRobustScreening,
     editedOutputLanguage,
     editedReviewPasses,
     editedBaselineReasoningEffort,

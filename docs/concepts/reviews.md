@@ -77,7 +77,28 @@ recorded before ProPR tracked resolutions, and memories an administrator created
 carry no resolution at all.
 
 **Verification.** ProPR checks findings against the code before publication, once per file and again
-across the whole pull request for anything that spans files.
+across the whole pull request for anything that spans files. Both checks use the same judge, and a finding the judge
+does not confirm is not posted. Per file, a judge on the low-effort model reads
+the code at each finding, together with short excerpts that contain the symbols the finding names: from the files the
+reviewing pass read, and from the same file outside the shown code. It decides four things: whether the finding is true, whether it leads to a concrete wrong
+outcome, failure or maintainability defect that the author would fix, whether the pull request states the behaviour as
+intended, and whether intended behaviour contradicts other functionality. Every
+finding of every per-file review pass from which ProPR extracts a claim reaches the judge unless a known invariant
+already contradicts it. Before it decides, the judge can make up to four read-only lookups in the repository: read a
+file, search the code, or find references or a definition. Each finding therefore costs one to five low-effort model
+calls, and the job protocol records each lookup in an `evidence_judge_tool_call` event. The judge can also answer that the code it needs to decide is not in
+its input. ProPR then publishes the finding if the pass that produced it read the repository with tools, and withholds
+it if the pass had no tools. The inventory lens reviews without tools. A finding from which ProPR extracts no claim is withheld
+without a verdict. When the judge cannot run, runs out of time or gives an unusable answer, the finding is withheld, and the
+job protocol records a `verification_degraded` event for the file with the number of affected findings and the
+reasons. If the judge could decide none of a file's findings, the file summary states that verification could not
+run. The job protocol records the verdict, the reason and the line for each finding.
+
+After verification, ProPR merges findings that describe the same defect at nearly the same line. The job
+protocol records each merge in a `finding_deduplication` event with the kept finding and the removed ones.
+
+On a runner, the judge runs on the default model the job manifest names, because a runner has no low-effort
+binding, and its tokens are reported against the default model.
 
 **Incremental reviews.** On a re-review, files with no new changes carry their previous results forward
 instead of being re-reviewed and re-billed.
@@ -90,7 +111,8 @@ A deterministic gate runs last, before publication. Every finding ends as **publ
 | Outcome | Applies to |
 |---|---|
 | Dropped | Findings the verification step contradicted |
-| Dropped | Non-actionable findings, and "consider …"-style suggestions |
+| Summary-only | Findings the per-file judge did not confirm, judged true but without a concrete consequence, found intended without contradicting anything, or could not judge |
+| Dropped | Findings the gate classifies as non-actionable, and "consider …"-style suggestions |
 | Dropped | Repeated-pass findings where the passes disagreed and nothing supported the claim |
 | Summary-only | Cross-file findings without verified supporting evidence |
 | Summary-only | Broad categories: architecture, documentation, test, UI, configuration, robustness |
@@ -126,12 +148,10 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Logical model per purpose | Tenant or client | Which model does review generation, triage, verification and embeddings - see [purposes, effort and protocol](../ai/purposes.md) |
 | Reasoning effort | Per logical model | How hard the model thinks wherever that logical model is used - see [reasoning effort](../ai/purposes.md#reasoning-effort) |
 | Baseline reasoning effort | Per client | Reasoning effort for the baseline review pass. `None` by default, which sends no reasoning effort at all and leaves cost unchanged |
-| Review aggressiveness | Per client | `Calm`, `Balanced` or `Assertive`. Calm posts only what survives the strictest screening; Balanced adds design-level observations; Assertive keeps those and lets less certain findings through |
+| Review aggressiveness | Per client | `Calm`, `Balanced` or `Assertive`. Calm keeps only what passes the strictest certainty gate; Balanced adds design-level observations; Assertive keeps those and lets less certain findings through |
 | Review temperature | Crawl and webhook configurations | More deterministic or more creative than the model default, `0.0`–`2.0` |
 | Multi-pass union | Per client | Review higher-complexity files across several independent passes and union the findings before deduplication. Costs more per file |
 | Review pass list | Per client | Which extra passes run, on which model, and with which lens - see [Review passes](#review-passes) |
-| Evidence-backed verification | Per client | Lets the reviewer read the anchor code to confirm findings the deterministic verifier would otherwise withhold - fewer correct findings lost to caution, at the cost of extra model calls |
-| Language-robust comment screening | Per client | Screens hedged or vague comments by meaning using multilingual embeddings instead of English phrase lists, folding low-confidence ones into the summary. Off by default |
 | Output language | Per client | The language the review writes in - see [Output language](#output-language) |
 | Linked work items and issues | Per client | Pulls the work items or issues linked to the pull request into the review context, so the change is judged against its intended direction. On by default |
 | Exclusion rules | Per repository | Glob patterns read from the repository - see [configuring ProPR from your repository](repository-configuration.md) |
@@ -311,7 +331,7 @@ override replaces one named segment in full. The model sees what you enter in pl
 | `SystemPrompt` | The reviewer's standing brief: what it is looking for and how it must report it |
 | `AgenticLoopGuidance` | How the reviewer uses its context-gathering tools before it decides |
 | `PerFileContextPrompt` | How one changed file and its surrounding context are framed |
-| `QualityFilterSystemPrompt` | The screening call that judges whether a produced comment is worth posting |
+| `QualityFilterSystemPrompt` | The text-only screening call that judges whether a produced comment is worth posting. Live reviews do not make this call, because the per-file judge decides every finding |
 | `SynthesisSystemPrompt` | The cross-file pass that summarises findings and removes duplicates |
 | `MemoryReconsiderationSystemPrompt` | The pass that re-judges draft findings against how similar threads were settled before |
 

@@ -136,6 +136,21 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
                 null);
         }
 
+        // A per-file comment reaches the gate only after local verification published it, so it carries no outcome
+        // of its own here. Any other finding without a verification outcome was not decided by the evidence judge and
+        // is held back.
+        if (!string.Equals(finding.Provenance.OriginKind, CandidateFindingProvenance.PerFileCommentOrigin, StringComparison.Ordinal))
+        {
+            return new FinalGateDecision(
+                finding.FindingId,
+                FinalGateDecision.SummaryOnlyDisposition,
+                [ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport],
+                "unverified_finding_rules",
+                [],
+                finding.Evidence,
+                finding.CandidateSummaryText ?? "Potential concern noted, but it was not verified for publication as a review thread.");
+        }
+
         return new FinalGateDecision(
             finding.FindingId,
             FinalGateDecision.PublishDisposition,

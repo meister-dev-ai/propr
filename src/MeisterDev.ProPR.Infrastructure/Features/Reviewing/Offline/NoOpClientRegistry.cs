@@ -50,16 +50,6 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult(true);
     }
 
-    public Task<bool> GetEvidenceBackedVerificationEnabledAsync(Guid clientId, CancellationToken ct = default)
-    {
-        return Task.FromResult(false);
-    }
-
-    public Task<bool> GetLanguageRobustScreeningEnabledAsync(Guid clientId, CancellationToken ct = default)
-    {
-        return Task.FromResult(false);
-    }
-
     public Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult(false);

@@ -91,12 +91,10 @@ describe('ClientDetailView', () => {
         isActive: true,
         createdAt: '2026-04-25T10:00:00Z',
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         reviewEveryIncrementEnabled: false,
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
       },
       response: { status: 200 },
     })
@@ -107,12 +105,10 @@ describe('ClientDetailView', () => {
         isActive: true,
         createdAt: '2026-04-25T10:00:00Z',
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         reviewEveryIncrementEnabled: false,
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
       },
     })
   })
@@ -148,10 +144,8 @@ describe('ClientDetailView', () => {
     await flushPromises()
 
     expect(adminWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(true)
-    expect(adminWrapper.find('input[name="enableEvidenceBackedVerification"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="enableMultiPassUnion"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="reviewEveryIncrementEnabled"]').exists()).toBe(true)
-    expect(adminWrapper.find('input[name="enableLanguageRobustScreening"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="outputLanguage"]').exists()).toBe(true)
 
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole === 0)
@@ -160,37 +154,9 @@ describe('ClientDetailView', () => {
     await flushPromises()
 
     expect(userWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(false)
-    expect(userWrapper.find('input[name="enableEvidenceBackedVerification"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="enableMultiPassUnion"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="reviewEveryIncrementEnabled"]').exists()).toBe(false)
-    expect(userWrapper.find('input[name="enableLanguageRobustScreening"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="outputLanguage"]').exists()).toBe(false)
-  })
-
-  it('sends enableEvidenceBackedVerification when saving advanced settings', async () => {
-    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
-
-    const wrapper = await mountView()
-    await flushPromises()
-
-    await wrapper.find('input[name="enableEvidenceBackedVerification"]').setValue(true)
-    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
-    await flushPromises()
-
-    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
-      params: { path: { clientId: 'client-1' } },
-      body: {
-        scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: true,
-        enableMultiPassUnion: false,
-        reviewEveryIncrementEnabled: false,
-        commentResolutionBehavior: 'silent',
-        includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
-        outputLanguage: 'en',
-        baselineReasoningEffort: 'none',
-      },
-    })
   })
 
   it('sends enableMultiPassUnion when saving advanced settings', async () => {
@@ -207,12 +173,10 @@ describe('ClientDetailView', () => {
       params: { path: { clientId: 'client-1' } },
       body: {
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: true,
         reviewEveryIncrementEnabled: false,
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
         outputLanguage: 'en',
         baselineReasoningEffort: 'none',
       },
@@ -233,12 +197,10 @@ describe('ClientDetailView', () => {
       params: { path: { clientId: 'client-1' } },
       body: {
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         reviewEveryIncrementEnabled: true,
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
         outputLanguage: 'en',
         baselineReasoningEffort: 'none',
       },
@@ -264,12 +226,10 @@ describe('ClientDetailView', () => {
       params: { path: { clientId: 'client-1' } },
       body: {
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         reviewEveryIncrementEnabled: false,
         commentResolutionBehavior: 'withReply',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
         outputLanguage: 'en',
         baselineReasoningEffort: 'none',
       },
@@ -285,12 +245,10 @@ describe('ClientDetailView', () => {
         isActive: true,
         createdAt: '2026-04-25T10:00:00Z',
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         reviewEveryIncrementEnabled: false,
         commentResolutionBehavior: 'disabled',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
       },
       response: { status: 200 },
     })
@@ -301,32 +259,6 @@ describe('ClientDetailView', () => {
     expect(
       wrapper.find<HTMLSelectElement>('select[name="commentResolutionBehavior"]').element.value,
     ).toBe('disabled')
-  })
-
-  it('sends enableLanguageRobustScreening when saving advanced settings', async () => {
-    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
-
-    const wrapper = await mountView()
-    await flushPromises()
-
-    await wrapper.find('input[name="enableLanguageRobustScreening"]').setValue(true)
-    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
-    await flushPromises()
-
-    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
-      params: { path: { clientId: 'client-1' } },
-      body: {
-        scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
-        enableMultiPassUnion: false,
-        reviewEveryIncrementEnabled: false,
-        commentResolutionBehavior: 'silent',
-        includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: true,
-        outputLanguage: 'en',
-        baselineReasoningEffort: 'none',
-      },
-    })
   })
 
   it('sends the configured output language when saving advanced settings', async () => {
@@ -343,12 +275,10 @@ describe('ClientDetailView', () => {
       params: { path: { clientId: 'client-1' } },
       body: {
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         reviewEveryIncrementEnabled: false,
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
         outputLanguage: 'de',
         baselineReasoningEffort: 'none',
       },
@@ -364,12 +294,10 @@ describe('ClientDetailView', () => {
         isActive: true,
         createdAt: '2026-04-25T10:00:00Z',
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         reviewEveryIncrementEnabled: true,
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
       },
       response: { status: 200 },
     })
@@ -391,12 +319,10 @@ describe('ClientDetailView', () => {
         isActive: true,
         createdAt: '2026-04-25T10:00:00Z',
         scmCommentPostingEnabled: true,
-        enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         reviewEveryIncrementEnabled: false,
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
-        enableLanguageRobustScreening: false,
         outputLanguage: 'pt-BR',
       },
       response: { status: 200 },

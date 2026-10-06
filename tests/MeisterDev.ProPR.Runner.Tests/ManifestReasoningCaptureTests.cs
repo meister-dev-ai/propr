@@ -66,7 +66,7 @@ public sealed class ManifestReasoningCaptureTests
 
     private static RunnerReviewBehaviour Behaviour(bool? captureReasoning)
     {
-        return new RunnerReviewBehaviour(false, false, false, true, null, null, captureReasoning);
+        return new RunnerReviewBehaviour(false, true, null, null, captureReasoning);
     }
 
     private static async Task<MeisterDev.ProPR.Application.ValueObjects.ReviewSystemContext> BuildContextAsync(

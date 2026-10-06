@@ -9,7 +9,7 @@ different times, so the two will disagree eventually.
 The contract carries a single integer version covering all operations. A runner reports the version it
 speaks when it asks for a lease, and the control plane validates it before offering any work.
 
-- **Current version**: 2
+- **Current version**: 3
 - **Compatibility window**: one prior version
 
 A runner inside the window is served. One outside it is refused with a diagnostic naming both the version
@@ -20,10 +20,14 @@ newer one sent, so a control plane can add to the manifest without refusing ever
 upgraded yet.
 
 A field whose meaning or structure moved is a shape change, and tolerance does not cover it. A version that
-changes shapes raises the **manifest floor** (`OldestManifestCompatible`, currently 2). The floor clamps the
+changes shapes raises the **manifest floor** (`OldestManifestCompatible`, currently 3). The floor clamps the
 whole served window: a runner below it is refused by the offer, the heartbeat and the execution surface
 alike, with one diagnostic naming the shape change. While the floor equals the current version, as it does
-at 2, no older runner is served at all. The one-prior window resumes at the next additive version.
+at 3, no older runner is served at all. The one-prior window resumes at the next additive version.
+
+Version 3 removed the comment-screening and evidence-verification switches from the review behaviour,
+because the runner judges every finding. A runner of version 2 would still run the removed stages, so a
+version 3 control plane refuses it. Upgrade the runner image together with the control plane.
 
 The heartbeat carries the runner's version too, so a control-plane deploy mid-review shows up as a refused
 renewal naming the skew. A runner old enough not to send it is gated at its next lease.
@@ -116,9 +120,8 @@ checks eligibility. The in-process worker logs a warning for each such job. Shad
 remain eligible for runner dispatch because they do not publish findings.
 
 `behaviour` contains client settings unavailable to a runner without database access: multi-pass union,
-semantic screening, evidence-backed verification, linked-item context, temperature, pipeline profile, and
-reasoning capture. The field is optional. An omitted field uses the runner defaults, including disabled
-multi-pass union.
+linked-item context, temperature, pipeline profile, and reasoning capture. The field is optional. An
+omitted field uses the runner defaults, including disabled multi-pass union.
 
 `behaviour.captureReasoning` contains the tenant policy combined with the installation setting at dispatch.
 It overrides the runner's `AI_CAPTURE_REASONING_IN_PROTOCOL` environment setting when present. A manifest

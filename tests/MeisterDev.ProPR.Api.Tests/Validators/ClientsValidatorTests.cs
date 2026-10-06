@@ -449,14 +449,14 @@ public sealed class ClientsValidatorTests
         Assert.True(result.IsValid);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void PatchClient_EnableEvidenceBackedVerificationBoolean_Passes(bool value)
+    [Fact]
+    public void PatchClient_RemovedSettings_AreRefused()
     {
-        var result = PatchClientValidator.Validate(new PatchClientRequest(EnableEvidenceBackedVerification: value));
+        var result = PatchClientValidator.Validate(new PatchClientRequest(EnableEvidenceBackedVerification: false, EnableLanguageRobustScreening: false));
 
-        Assert.True(result.IsValid);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.PropertyName == nameof(PatchClientRequest.EnableEvidenceBackedVerification));
+        Assert.Contains(result.Errors, error => error.PropertyName == nameof(PatchClientRequest.EnableLanguageRobustScreening));
     }
 
     [Theory]

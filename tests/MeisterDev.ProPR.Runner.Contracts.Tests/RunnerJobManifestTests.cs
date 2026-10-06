@@ -41,7 +41,7 @@ public sealed class RunnerJobManifestTests
             [new RunnerRepositoryInstruction("guide.md", "House style", "Always", "Prefer records.")],
             12.5m,
             new RunnerTraceContext("00-trace-span-01", null),
-            new RunnerReviewBehaviour(true, false, true, true, 0.2f, "file_by_file_balanced"),
+            new RunnerReviewBehaviour(true, true, 0.2f, "file_by_file_balanced"),
             [
                 new RunnerLinkedItem(
                     "AB#7", "User Story", "Add the widget", "So the widget exists.", "https://items.invalid/7",
@@ -84,6 +84,25 @@ public sealed class RunnerJobManifestTests
 
         Assert.NotNull(restored);
         Assert.Equal(SampleManifest().JobId, restored!.JobId);
+    }
+
+    // A control plane of the previous version still sends the two retired review switches in the behaviour section.
+    // A production reader accepts that manifest and keeps the settings that still exist.
+    [Fact]
+    public void ABehaviourSectionWithTheRetiredScreeningAndVerificationSwitches_IsReadByAProductionReader()
+    {
+        var json = JsonSerializer.Serialize(SampleManifest(), RunnerContractJson.Options);
+        var withRetired = json.Replace(
+            "\"behaviour\":{",
+            "\"behaviour\":{\"enableLanguageRobustScreening\":true,\"enableEvidenceBackedVerification\":true,",
+            StringComparison.Ordinal);
+        Assert.NotEqual(json, withRetired);
+
+        var restored = JsonSerializer.Deserialize<RunnerJobManifest>(withRetired, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(restored?.Behaviour);
+        Assert.True(restored!.Behaviour!.EnableMultiPassUnion);
+        Assert.Equal("file_by_file_balanced", restored.Behaviour.ReviewPipelineProfileId);
     }
 
     // The strict options exist for the round-trip test above: refusing unknown members is what makes a

@@ -91,35 +91,6 @@
                 </div>
                 <div class="inline-field-row review-publication-row">
                     <div class="form-field flex-1 review-publication-field">
-                        <label class="checkbox-field" for="enableEvidenceBackedVerification">
-                            <input id="enableEvidenceBackedVerification"
-                                v-model="editedEnableEvidenceBackedVerification"
-                                name="enableEvidenceBackedVerification" type="checkbox" />
-                            <strong>Enable evidence-backed verification</strong>
-                            <p class="muted review-publication-copy">
-                                Enable this to let the reviewer read anchor code and confirm candidate
-                                findings the deterministic verifier would otherwise withhold.
-                            </p>
-                        </label>
-                    </div>
-                </div>
-                <div class="inline-field-row review-publication-row">
-                    <div class="form-field flex-1 review-publication-field">
-                        <label class="checkbox-field" for="enableLanguageRobustScreening">
-                            <input id="enableLanguageRobustScreening"
-                                v-model="editedEnableLanguageRobustScreening"
-                                name="enableLanguageRobustScreening" type="checkbox" />
-                            <strong>Enable language-robust comment screening</strong>
-                            <p class="muted review-publication-copy">
-                                Screen hedged or vague review comments by meaning (multilingual embeddings)
-                                rather than English phrase lists, folding low-confidence comments into the
-                                summary instead of posting them as threads. Off by default.
-                            </p>
-                        </label>
-                    </div>
-                </div>
-                <div class="inline-field-row review-publication-row">
-                    <div class="form-field flex-1 review-publication-field">
                         <label class="checkbox-field" for="includeLinkedItemsInContext">
                             <input id="includeLinkedItemsInContext"
                                 v-model="editedIncludeLinkedItemsInContext"
@@ -266,12 +237,10 @@ const {
     editedDisplayName,
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
-    editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
     editedReviewEveryIncrementEnabled,
     editedCommentResolutionBehavior,
     editedIncludeLinkedItemsInContext,
-    editedEnableLanguageRobustScreening,
     editedOutputLanguage,
     editedBaselineReasoningEffort,
     reviewProfiles,

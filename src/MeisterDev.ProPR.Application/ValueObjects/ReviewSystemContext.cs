@@ -58,6 +58,13 @@ public sealed class ReviewSystemContext
     public ReviewLoopMetrics? LoopMetrics { get; set; }
 
     /// <summary>
+    ///     The file ranges the review loop read through its file-content tool and that returned source. Populated by
+    ///     <c>ToolAwareAiReviewCore</c> after the loop completes, and empty for a pass without repository tools. Local
+    ///     verification passes them to the evidence judge.
+    /// </summary>
+    public IReadOnlyList<ReviewerFileRead> ReviewerFileReads { get; set; } = [];
+
+    /// <summary>
     ///     Populated by <c>ToolAwareAiReviewCore</c> during pre-flight context-window budgeting: whether the
     ///     file was reviewed normally, degraded to diff-only, or skipped because even the minimal payload
     ///     exceeded the model window. Read after <see cref="MeisterDev.ProPR.Application.Interfaces.IAiReviewCore.ReviewAsync" />
@@ -168,19 +175,6 @@ public sealed class ReviewSystemContext
     ///     The effective review temperature to pass into chat calls for this job-scoped execution context.
     /// </summary>
     public float? Temperature { get; set; }
-
-    /// <summary>
-    ///     Controls whether evidence-backed local verification escalates conservatively-withheld claims for this
-    ///     execution context. When <see langword="false" /> the composite verifier behaves exactly like the
-    ///     deterministic verifier.
-    /// </summary>
-    public bool EnableEvidenceBackedVerification { get; set; } = false;
-
-    /// <summary>
-    ///     When set, comment screening uses language-robust structured signals + evidence routing instead of the
-    ///     English phrase-list filters (self-report / classifier detector, demote-don't-delete dispositions).
-    /// </summary>
-    public bool EnableLanguageRobustScreening { get; set; } = false;
 
     /// <summary>
     ///     Controls whether multi-pass union generation runs for this execution context. When <see langword="false" />
@@ -338,6 +332,7 @@ public sealed class ReviewSystemContext
         var clone = (ReviewSystemContext)this.MemberwiseClone();
         clone.ContextBudgetOutcome = ReviewContextBudgetOutcome.Normal;
         clone.ActiveLens = null;
+        clone.ReviewerFileReads = [];
         return clone;
     }
 }

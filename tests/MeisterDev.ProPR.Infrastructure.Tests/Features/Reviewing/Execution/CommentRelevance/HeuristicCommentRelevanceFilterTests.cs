@@ -81,7 +81,7 @@ public sealed class HeuristicCommentRelevanceFilterTests
     {
         // Member-access expressions (job.ClientId, job.IterationId) must not be miscounted as file
         // references. This single-file finding names its own file once and is otherwise concrete, so it
-        // survives screening instead of being discarded as an unverifiable cross-file claim.
+        // passes the filter and is not discarded as an unverifiable cross-file claim.
         var filter = new HeuristicCommentRelevanceFilter();
         var comment = CommentRelevanceFilterTestData.CreateComment(
             "GetFileDiffHandler.cs resolves the stored diff with job.ClientId, job.RepositoryId and "

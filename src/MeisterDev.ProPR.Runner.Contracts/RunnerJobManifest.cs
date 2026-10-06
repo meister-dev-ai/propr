@@ -115,8 +115,8 @@ public sealed record RunnerLinkedItemRef(
 ///     <para>
 ///         Carried because the executor cannot read them: they live on the client record, which a runner
 ///         has no database to reach. Absent, every one of them falls to its default and the review becomes
-///         a different review, with multi-pass union off, screening off, verification off, temperature
-///         unset and profile Balanced, and nothing in the result stating this.
+///         a different review, with multi-pass union off, linked items included, temperature unset and
+///         profile Balanced, and nothing in the result stating this.
 ///     </para>
 ///     <para>
 ///         Optional on the contract so a manifest from an older control plane still deserializes. A runner
@@ -127,8 +127,6 @@ public sealed record RunnerLinkedItemRef(
 ///     Whether the pass list is actually unioned. Off, the carefully-bound passes in this manifest are
 ///     decorative: the baseline result is returned as-is and the semantic deduplicator never runs.
 /// </param>
-/// <param name="EnableLanguageRobustScreening">Whether the semantic screener runs over candidates.</param>
-/// <param name="EnableEvidenceBackedVerification">Whether findings are verified against collected evidence.</param>
 /// <param name="IncludeLinkedItemsInContext">Whether linked work items and issues are offered to the review.</param>
 /// <param name="Temperature">The review temperature, when the job pins one.</param>
 /// <param name="ReviewPipelineProfileId">The pipeline profile the review runs under, when one is configured.</param>
@@ -140,8 +138,6 @@ public sealed record RunnerLinkedItemRef(
 /// </param>
 public sealed record RunnerReviewBehaviour(
     bool EnableMultiPassUnion,
-    bool EnableLanguageRobustScreening,
-    bool EnableEvidenceBackedVerification,
     bool IncludeLinkedItemsInContext,
     float? Temperature,
     string? ReviewPipelineProfileId,

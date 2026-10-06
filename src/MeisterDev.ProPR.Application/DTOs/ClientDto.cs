@@ -20,8 +20,6 @@ public sealed record ClientDto(
     string? DefaultReviewPipelineProfileId,
     DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc,
     bool ScmCommentPostingEnabled,
-    bool EnableEvidenceBackedVerification = false,
-    bool EnableLanguageRobustScreening = false,
     bool EnableMultiPassUnion = false,
     bool IncludeLinkedItemsInContext = true,
     IReadOnlyList<ReviewPassDto>? ReviewPasses = null,

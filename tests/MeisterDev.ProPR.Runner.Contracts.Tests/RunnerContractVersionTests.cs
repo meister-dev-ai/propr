@@ -75,6 +75,15 @@ public sealed class RunnerContractVersionTests
         Assert.Contains("manifest shape changed", message, StringComparison.Ordinal);
     }
 
+    // A runner of version 2 still runs the removed ranking stages and publishes findings without the evidence judge,
+    // so this control plane refuses it, and the refusal tells the operator to upgrade the runner image.
+    [Fact]
+    public void ARunnerOfVersionTwo_IsRefusedWithAnUpgradeInstruction()
+    {
+        Assert.False(RunnerContractVersion.IsSupported(2));
+        Assert.Contains("upgrade the runner image", RunnerContractVersion.DescribeMismatch(2), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheTypedError_CarriesTheStableCodeAndTheDiagnostic()
     {

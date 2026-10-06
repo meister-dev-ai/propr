@@ -194,33 +194,16 @@ public sealed record VerificationOutcome
     public string? JudgeVerdict { get; init; }
 
     /// <summary>
+    ///     Gets the reason why the evidence-backed judge could not decide the claim, one of the
+    ///     <see cref="EvidenceJudgeDegradations" /> values, or <see langword="null" /> when the judge decided the claim or
+    ///     the claim did not need the judge.
+    /// </summary>
+    public string? JudgeDegradation { get; init; }
+
+    /// <summary>
     ///     Gets a value indicating whether the recommended disposition blocks publication.
     /// </summary>
     public bool BlocksPublication => string.Equals(this.RecommendedDisposition, FinalGateDecision.DropDisposition, StringComparison.Ordinal);
-
-    /// <summary>
-    ///     Creates a supported verification outcome for the supplied claim.
-    /// </summary>
-    /// <param name="claim">Claim that was supported.</param>
-    /// <param name="reasonCode">Reason code describing the support.</param>
-    /// <param name="evidenceSummary">Evidence summary backing the support.</param>
-    /// <returns>A supported verification outcome.</returns>
-    public static VerificationOutcome Supported(ClaimDescriptor claim, string reasonCode, string evidenceSummary)
-    {
-        ArgumentNullException.ThrowIfNull(claim);
-
-        return new VerificationOutcome(
-            claim.ClaimId,
-            claim.FindingId,
-            SupportedKind,
-            FinalGateDecision.PublishDisposition,
-            [reasonCode],
-            [],
-            StrongEvidence,
-            evidenceSummary,
-            DeterministicRulesEvaluator,
-            false);
-    }
 
     /// <summary>
     ///     Creates a contradicted verification outcome for the supplied claim.

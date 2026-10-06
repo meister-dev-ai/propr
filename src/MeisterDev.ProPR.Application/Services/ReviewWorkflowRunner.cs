@@ -152,8 +152,6 @@ public sealed class ReviewWorkflowRunner(
                 ExclusionRules = exclusionRules,
                 ModelId = request.Configuration?.ModelSelection.ModelId ?? request.ModelId,
                 Temperature = request.Configuration?.Temperature,
-                EnableEvidenceBackedVerification = request.Configuration?.EnableEvidenceBackedVerification ?? false,
-                EnableLanguageRobustScreening = request.Configuration?.EnableLanguageRobustScreening ?? false,
                 EnableMultiPassUnion = request.Configuration?.EnableMultiPassUnion ?? false,
                 MultiPassUnionPassCount = request.Configuration?.MultiPassUnionPassCount,
                 MultiPassDiversity = request.Configuration?.MultiPassDiversity,

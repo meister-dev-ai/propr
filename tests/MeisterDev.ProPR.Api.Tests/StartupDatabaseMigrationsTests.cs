@@ -96,6 +96,60 @@ public sealed class StartupDatabaseMigrationsTests(PostgresContainerFixture fixt
         }
     }
 
+    /// <summary>
+    ///     The client model no longer maps the screening and verification switches, but this release keeps their columns,
+    ///     so a control plane of the previous version can still run during a rolling deploy and a rollback finds them.
+    ///     Both columns keep a default, because rows that this version inserts do not name them.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_KeepsTheRetiredClientSwitchColumnsWithTheirDefaults()
+    {
+        fixture.SkipIfUnavailable();
+
+        var databaseName = $"propr_retired_columns_{Guid.NewGuid():N}";
+        var admin = new NpgsqlConnectionStringBuilder(fixture.ConnectionString).ConnectionString;
+        var scratch = new NpgsqlConnectionStringBuilder(fixture.ConnectionString) { Database = databaseName }
+            .ConnectionString;
+
+        await ExecuteOnServerAsync(admin, $"CREATE DATABASE \"{databaseName}\";");
+
+        try
+        {
+            var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+                .UseNpgsql(scratch, o => o.UseVector())
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+                .Options;
+            await using (var dbContext = new MeisterProPRDbContext(options))
+            {
+                await StartupDatabaseMigrations.ApplyAsync(dbContext, NullLogger.Instance);
+            }
+
+            await using var connection = new NpgsqlConnection(scratch);
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(
+                "SELECT column_name, is_nullable, column_default FROM information_schema.columns "
+                + "WHERE table_name = 'clients' AND column_name IN ('enable_evidence_backed_verification', 'enable_language_robust_screening') "
+                + "ORDER BY column_name;",
+                connection);
+            var columns = new List<(string Name, string Nullable, string? Default)>();
+            await using (var reader = await command.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    columns.Add((reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
+                }
+            }
+
+            Assert.Equal(["enable_evidence_backed_verification", "enable_language_robust_screening"], columns.Select(column => column.Name));
+            Assert.All(columns, column => Assert.Equal("false", column.Default));
+            Assert.All(columns, column => Assert.Equal("NO", column.Nullable));
+        }
+        finally
+        {
+            await ExecuteOnServerAsync(admin, $"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE);");
+        }
+    }
+
     private static async Task ExecuteOnServerAsync(string connectionString, string sql)
     {
         await using var connection = new NpgsqlConnection(connectionString);

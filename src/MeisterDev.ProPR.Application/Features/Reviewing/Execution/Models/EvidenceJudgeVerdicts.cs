@@ -11,8 +11,25 @@ public static class EvidenceJudgeVerdicts
     /// <summary>The finding is true and the behaviour is not shown to be intended. The finding is published.</summary>
     public const string Confirmed = "confirmed";
 
-    /// <summary>The finding is not true, or the code shown does not exhibit it. The finding is withheld.</summary>
+    /// <summary>
+    ///     The provided code contradicts the claim, or the claimed mechanism is absent where the provided code would
+    ///     show it. The finding is withheld.
+    /// </summary>
     public const string NotConfirmed = "not_confirmed";
+
+    /// <summary>
+    ///     The mechanism may be real, but the code needed to decide is not in the provided inputs. A finding from a pass
+    ///     that reviewed with repository tools is published, because that pass could read the code the judge does not
+    ///     receive. A finding from a pass without repository tools is withheld.
+    /// </summary>
+    public const string InsufficientContext = "insufficient_context";
+
+    /// <summary>
+    ///     The finding is true, but it leads to no concrete wrong outcome, failure or maintainability defect that a
+    ///     reviewer would ask the author to fix, or its conclusion does not follow from the mechanism. The finding is
+    ///     withheld.
+    /// </summary>
+    public const string NotActionable = "not_actionable";
 
     /// <summary>The finding is true, the behaviour is stated as intended, and it contradicts nothing. The finding is withheld.</summary>
     public const string Intended = "intended";

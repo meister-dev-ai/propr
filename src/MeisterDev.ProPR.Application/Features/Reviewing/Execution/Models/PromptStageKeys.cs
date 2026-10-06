@@ -44,12 +44,6 @@ public static class PromptStageKeys
     /// <summary>Synthesis user prompt stage key.</summary>
     public const string SynthesisUser = "synthesis_user";
 
-    /// <summary>PR verification system prompt stage key.</summary>
-    public const string PrVerificationSystem = "pr_verification_system";
-
-    /// <summary>PR verification user prompt stage key.</summary>
-    public const string PrVerificationUser = "pr_verification_user";
-
     /// <summary>Memory-augmented reconsideration system prompt stage key.</summary>
     public const string MemoryReconsiderationSystem = "memory_reconsideration_system";
 

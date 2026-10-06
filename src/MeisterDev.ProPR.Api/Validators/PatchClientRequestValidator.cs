@@ -22,17 +22,21 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .WithMessage("CustomSystemMessage must not exceed 20,000 characters.")
             .When(r => r.CustomSystemMessage is not null);
 
+        // Two settings that earlier versions accepted are removed. A request that still sets one is refused, so a script
+        // written against an earlier version learns that the setting no longer has an effect.
+        this.RuleFor(r => r.EnableEvidenceBackedVerification)
+            .Null()
+            .WithMessage(
+                "enableEvidenceBackedVerification has been removed: evidence verification now runs for every finding. Remove the setting from the request.");
+
+        this.RuleFor(r => r.EnableLanguageRobustScreening)
+            .Null()
+            .WithMessage(
+                "enableLanguageRobustScreening has been removed: language-robust comment screening no longer exists. Remove the setting from the request.");
+
         this.RuleFor(r => r.ScmCommentPostingEnabled)
             .Must(_ => true)
             .When(r => r.ScmCommentPostingEnabled.HasValue);
-
-        this.RuleFor(r => r.EnableEvidenceBackedVerification)
-            .Must(_ => true)
-            .When(r => r.EnableEvidenceBackedVerification.HasValue);
-
-        this.RuleFor(r => r.EnableLanguageRobustScreening)
-            .Must(_ => true)
-            .When(r => r.EnableLanguageRobustScreening.HasValue);
 
         this.RuleFor(r => r.EnableMultiPassUnion)
             .Must(_ => true)

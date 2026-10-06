@@ -109,8 +109,6 @@ public sealed class ClientAdminService(
         string? customSystemMessage = null,
         string? defaultReviewPipelineProfileId = null,
         bool? scmCommentPostingEnabled = null,
-        bool? enableEvidenceBackedVerification = null,
-        bool? enableLanguageRobustScreening = null,
         bool? enableMultiPassUnion = null,
         bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
@@ -147,8 +145,6 @@ public sealed class ClientAdminService(
             customSystemMessage,
             defaultReviewPipelineProfileId,
             scmCommentPostingEnabled,
-            enableEvidenceBackedVerification,
-            enableLanguageRobustScreening,
             enableMultiPassUnion,
             includeLinkedItemsInContext,
             baselineReasoningEffort,
@@ -174,8 +170,6 @@ public sealed class ClientAdminService(
         string? customSystemMessage,
         string? defaultReviewPipelineProfileId,
         bool? scmCommentPostingEnabled,
-        bool? enableEvidenceBackedVerification,
-        bool? enableLanguageRobustScreening,
         bool? enableMultiPassUnion,
         bool? includeLinkedItemsInContext,
         ReviewReasoningEffort? baselineReasoningEffort,
@@ -202,8 +196,6 @@ public sealed class ClientAdminService(
         }
 
         ApplyIfHasValue(scmCommentPostingEnabled, value => client.ScmCommentPostingEnabled = value);
-        ApplyIfHasValue(enableEvidenceBackedVerification, value => client.EnableEvidenceBackedVerification = value);
-        ApplyIfHasValue(enableLanguageRobustScreening, value => client.EnableLanguageRobustScreening = value);
         ApplyIfHasValue(enableMultiPassUnion, value => client.EnableMultiPassUnion = value);
         ApplyIfHasValue(codeInsightsCollectionEnabled, value => client.CodeInsightsCollectionEnabled = value);
         ApplyIfHasValue(includeLinkedItemsInContext, value => client.IncludeLinkedItemsInContext = value);
@@ -500,8 +492,6 @@ public sealed class ClientAdminService(
             client.DefaultReviewPipelineProfileId,
             client.DefaultReviewPipelineProfileUpdatedAtUtc,
             client.ScmCommentPostingEnabled,
-            client.EnableEvidenceBackedVerification,
-            client.EnableLanguageRobustScreening,
             client.EnableMultiPassUnion,
             client.IncludeLinkedItemsInContext,
             reviewPasses,

@@ -30007,12 +30007,6 @@
           "scmCommentPostingEnabled": {
             "type": "boolean"
           },
-          "enableEvidenceBackedVerification": {
-            "type": "boolean"
-          },
-          "enableLanguageRobustScreening": {
-            "type": "boolean"
-          },
           "enableMultiPassUnion": {
             "type": "boolean"
           },
@@ -33928,14 +33922,6 @@
             "type": "boolean",
             "nullable": true
           },
-          "enableEvidenceBackedVerification": {
-            "type": "boolean",
-            "nullable": true
-          },
-          "enableLanguageRobustScreening": {
-            "type": "boolean",
-            "nullable": true
-          },
           "enableMultiPassUnion": {
             "type": "boolean",
             "nullable": true
@@ -33985,10 +33971,18 @@
           },
           "admissionPolicy": {
             "$ref": "#/components/schemas/ReviewAdmissionPolicyDto"
+          },
+          "enableEvidenceBackedVerification": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "enableLanguageRobustScreening": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default."
+        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableEvidenceBackedVerification and MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableLanguageRobustScreening are removed settings:\na request that sets either of them is refused with 400 Bad Request, which states why the setting was removed."
       },
       "PatchLicensingOverridesRequest": {
         "type": "object",
@@ -39743,14 +39737,6 @@
             "type": "boolean",
             "description": "Whether the pass list is actually unioned. Off, the carefully-bound passes in this manifest are\ndecorative: the baseline result is returned as-is and the semantic deduplicator never runs."
           },
-          "enableLanguageRobustScreening": {
-            "type": "boolean",
-            "description": "Whether the semantic screener runs over candidates."
-          },
-          "enableEvidenceBackedVerification": {
-            "type": "boolean",
-            "description": "Whether findings are verified against collected evidence."
-          },
           "includeLinkedItemsInContext": {
             "type": "boolean",
             "description": "Whether linked work items and issues are offered to the review."
@@ -39783,7 +39769,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "The per-client decisions that change what a review does rather than which model runs it.\n\nCarried because the executor cannot read them: they live on the client record, which a runner\n    has no database to reach. Absent, every one of them falls to its default and the review becomes\n    a different review, with multi-pass union off, screening off, verification off, temperature\n    unset and profile Balanced, and nothing in the result stating this.\nOptional on the contract so a manifest from an older control plane still deserializes. A runner\n    reading one without this reverts to the behaviour it had before the field existed."
+        "description": "The per-client decisions that change what a review does rather than which model runs it.\n\nCarried because the executor cannot read them: they live on the client record, which a runner\n    has no database to reach. Absent, every one of them falls to its default and the review becomes\n    a different review, with multi-pass union off, linked items included, temperature unset and\n    profile Balanced, and nothing in the result stating this.\nOptional on the contract so a manifest from an older control plane still deserializes. A runner\n    reading one without this reverts to the behaviour it had before the field existed."
       },
       "RunnerReviewPass": {
         "type": "object",

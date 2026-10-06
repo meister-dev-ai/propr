@@ -17,7 +17,6 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
-using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -40,7 +39,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
     IReviewEvidenceCollector? reviewEvidenceCollector = null,
     ISummaryReconciliationService? summaryReconciliationService = null,
     IReviewFindingVerifier? reviewFindingVerifier = null,
-    ISemanticCommentScreener? semanticCommentScreener = null)
+    IAiRuntimeResolver? aiRuntimeResolver = null)
     : IPrWideAgenticReviewOrchestrator, IPrWideCandidateGenerator
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
@@ -57,9 +56,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                                                                               .ToList()
                                                                           ?? [];
 
-    private readonly ISemanticCommentScreener? _semanticCommentScreener = semanticCommentScreener;
-
     private readonly ISummaryReconciliationService? _summaryReconciliationService = summaryReconciliationService;
+    private readonly IAiRuntimeResolver? _aiRuntimeResolver = aiRuntimeResolver;
 
     /// <inheritdoc />
     public async Task<ReviewResult> ReviewAsync(
@@ -1146,7 +1144,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 new CandidateFindingProvenance(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, "pr_wide_synthesis")))
             .ToList();
 
-        candidateFindings = await this.VerifyCandidateFindingsAsync(candidateFindings, baseContext, pr, ct);
+        candidateFindings = await this.VerifyCandidateFindingsAsync(candidateFindings, baseContext, pr, job.ClientId, ct);
 
         var gateDecisions = await this._deterministicReviewFindingGate!.EvaluateAsync(candidateFindings, this._reviewInvariantFacts, ct);
         var reconciliation = ReviewSummaryGrounding.Ground(
@@ -1170,30 +1168,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         // every finding.
         var publishedComments = FindingDeduplicator.CollapseSameFileDuplicates(MaterializePublishedComments(candidateFindings, gateDecisions));
         var result = new ReviewResult(reconciliation.FinalSummary, publishedComments);
-        result = await this.ApplySemanticScreeningAsync(job, baseContext, result, ct);
 
         await this.RecordNativeCompletionAsync(job, baseContext, candidateFindings, gateDecisions, reconciliation, result, ct);
         return result;
-    }
-
-    // Language-robust screening for the PR-wide native path: mirrors the file-by-file screening stage via the shared
-    // applier so hedged/vague comments fold to summary here too. Opt-in per client; no-op when the flag is off, no
-    // screener is bound, or there are no comments.
-    private async Task<ReviewResult> ApplySemanticScreeningAsync(
-        ReviewJob job,
-        ReviewSystemContext baseContext,
-        ReviewResult result,
-        CancellationToken ct)
-    {
-        if (!baseContext.EnableLanguageRobustScreening
-            || this._semanticCommentScreener is null
-            || result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var applier = new SemanticScreeningApplier(this._semanticCommentScreener, baseContext.ProtocolRecorder);
-        return await applier.ApplyAsync(result, job.ClientId, baseContext.ActiveProtocolId, ct);
     }
 
     private async Task<PrWideReviewPlan> RecordPlanAsync(
@@ -1229,6 +1206,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         IReadOnlyList<CandidateReviewFinding> synthesizedFindings,
         ReviewSystemContext baseContext,
         PullRequest pr,
+        Guid clientId,
         CancellationToken ct)
     {
         if (synthesizedFindings.Count == 0 || this._reviewClaimExtractor is null)
@@ -1237,22 +1215,38 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         }
 
         var screenedFindings = this.ApplyDeterministicScreening(synthesizedFindings, pr, baseContext);
-        var prLevelVerifier = new AiMicroReviewFindingVerifier();
+        var verificationContext = this.BuildVerificationContext(baseContext, pr, clientId);
         var verified = new List<CandidateReviewFinding>(screenedFindings.Count);
 
         foreach (var finding in screenedFindings)
         {
-            verified.Add(await this.VerifySingleFindingAsync(finding, baseContext, pr, prLevelVerifier, ct));
+            verified.Add(await this.VerifySingleFindingAsync(finding, baseContext, pr, verificationContext, ct));
         }
 
         return verified;
+    }
+
+    // The evidence judge decides PR-wide findings as it decides file findings: on the low-effort model, with the review
+    // tools of this strategy for its lookups and the pull request text as statements of intent.
+    private ReviewVerificationContext BuildVerificationContext(ReviewSystemContext baseContext, PullRequest pr, Guid clientId)
+    {
+        return new ReviewVerificationContext(
+            baseContext.ReviewTools,
+            pr.SourceBranch,
+            baseContext.DefaultReviewChatClient ?? baseContext.TierChatClient,
+            baseContext.DefaultReviewModelId ?? baseContext.ModelId ?? this._options.ModelId,
+            clientId,
+            this._aiRuntimeResolver,
+            new ReviewVerificationIntent(pr.Title, pr.Description, pr.LinkedItems ?? [], null, null),
+            baseContext.ActiveProtocolId,
+            PassReviewedWithRepositoryTools: baseContext.ReviewTools is not null);
     }
 
     private async Task<CandidateReviewFinding> VerifySingleFindingAsync(
         CandidateReviewFinding finding,
         ReviewSystemContext baseContext,
         PullRequest pr,
-        AiMicroReviewFindingVerifier prLevelVerifier,
+        ReviewVerificationContext verificationContext,
         CancellationToken ct)
     {
         if (finding.VerificationOutcome is not null)
@@ -1318,7 +1312,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         var claim = claims[0];
         if (string.Equals(claim.Stage, ClaimDescriptor.LocalStage, StringComparison.Ordinal))
         {
-            return await this.VerifyLocalClaimAsync(finding, claims, claim, baseContext, ct);
+            return await this.VerifyLocalClaimAsync(finding, claims, claim, baseContext, verificationContext, ct);
         }
 
         if (this._reviewEvidenceCollector is null)
@@ -1326,7 +1320,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             return finding;
         }
 
-        return await this.VerifyCrossFileClaimAsync(finding, claim, baseContext, pr, prLevelVerifier, ct);
+        return await this.VerifyCrossFileClaimAsync(finding, claim, baseContext, pr, verificationContext, ct);
     }
 
     private async Task<CandidateReviewFinding> VerifyLocalClaimAsync(
@@ -1334,6 +1328,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         IReadOnlyList<ClaimDescriptor> claims,
         ClaimDescriptor claim,
         ReviewSystemContext baseContext,
+        ReviewVerificationContext verificationContext,
         CancellationToken ct)
     {
         var workItems = claims
@@ -1349,7 +1344,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         IReadOnlyList<VerificationOutcome> outcomes;
         try
         {
-            outcomes = await this._reviewFindingVerifier!.VerifyAsync(workItems, this._reviewInvariantFacts, null, ct);
+            outcomes = await this._reviewFindingVerifier!.VerifyAsync(workItems, this._reviewInvariantFacts, verificationContext, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -1407,7 +1402,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         ClaimDescriptor claim,
         ReviewSystemContext baseContext,
         PullRequest pr,
-        AiMicroReviewFindingVerifier prLevelVerifier,
+        ReviewVerificationContext verificationContext,
         CancellationToken ct)
     {
         var workItem = new VerificationWorkItem(
@@ -1501,7 +1496,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             VerificationWorkItem.CrossFileScope,
             true,
             updatedEvidence);
-        var outcome = (await prLevelVerifier.VerifyAsync([evidenceBackedWorkItem], [], null, ct))[0];
+        var outcome = SelectPrimaryOutcome(
+            await this._reviewFindingVerifier!.VerifyAsync([evidenceBackedWorkItem], this._reviewInvariantFacts, verificationContext, ct),
+            finding.FindingId);
 
         if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
         {
@@ -1658,8 +1655,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
     private static CommentRelevanceFilterDecision? EvaluateDeterministicHardGuards(ReviewComment comment)
     {
-        // Phrase-based hedge/vague hard guards were removed with the language-robust screening change (no phrase
-        // list survives in the screening path). The info-severity guard is enum-based and remains.
+        // No phrase-based hedge or vague guard runs here. The info-severity guard is based on the severity value and
+        // remains.
         var result = new ReviewResult(string.Empty, [comment]);
         if (ReviewCommentProcessing.StripInfoComments(result).Comments.Count == 0)
         {

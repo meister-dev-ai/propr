@@ -74,12 +74,12 @@ export const purposeSectionLabels: Record<PurposeSection, string> = {
 
 export const purposeOptions: Array<{ value: AiPurpose; label: string; description: string; defaultEnabled: boolean; section: PurposeSection }> = [
   { value: 'reviewDefault', label: 'Review Default', description: 'Primary review generation and mentions.', defaultEnabled: true, section: 'generation' },
-  { value: 'reviewLowEffort', label: 'Review Low Effort', description: 'Low-complexity file review.', defaultEnabled: true, section: 'generation' },
+  { value: 'reviewLowEffort', label: 'Review Low Effort', description: 'Low-complexity file review, and the per-file judge that verifies every finding.', defaultEnabled: true, section: 'generation' },
   { value: 'reviewMediumEffort', label: 'Review Medium Effort', description: 'Medium-complexity file review.', defaultEnabled: true, section: 'generation' },
   { value: 'reviewHighEffort', label: 'Review High Effort', description: 'High-complexity review and synthesis.', defaultEnabled: true, section: 'generation' },
   { value: 'proRvPrefilter', label: 'ProRV Prefilter', description: 'Optional focused-review guidance prefilter.', defaultEnabled: false, section: 'support' },
   { value: 'reviewTriage', label: 'Review Triage', description: 'Cheap per-file complexity triage. Falls back to Review Low Effort when unset.', defaultEnabled: false, section: 'support' },
-  { value: 'reviewVerification', label: 'Review Verification', description: 'Evidence-gathering verification of candidate findings. Falls back to Review Triage when unset.', defaultEnabled: false, section: 'support' },
+  { value: 'reviewVerification', label: 'Review Verification', description: 'Duplicate-finding judge and acceptance forecast. Falls back to Review Triage when unset.', defaultEnabled: false, section: 'support' },
   { value: 'memoryReconsideration', label: 'Memory Reconsideration', description: 'Thread-memory reconsideration calls.', defaultEnabled: true, section: 'memory' },
   { value: 'embeddingDefault', label: 'Embedding Default', description: 'Embedding generation for memory and ProCursor.', defaultEnabled: true, section: 'memory' },
   { value: 'insightsClassification', label: 'Insights Classification', description: 'Classifies collected findings for quality analytics. Falls back to Review Triage when unset.', defaultEnabled: false, section: 'insights' },

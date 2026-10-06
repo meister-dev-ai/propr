@@ -340,8 +340,6 @@ public sealed partial class RunnerJobExecutor(
             // Without them every one falls to its default and the review becomes a different review. The
             // clearest case is the pass list above, which has no effect unless the union is on.
             EnableMultiPassUnion = manifest.Behaviour?.EnableMultiPassUnion ?? false,
-            EnableLanguageRobustScreening = manifest.Behaviour?.EnableLanguageRobustScreening ?? false,
-            EnableEvidenceBackedVerification = manifest.Behaviour?.EnableEvidenceBackedVerification ?? false,
             // Each fallback is the property's own default, so a manifest without this section leaves the
             // review behaving exactly as it did before the section existed. Linked items default on.
             IncludeLinkedItemsInContext = manifest.Behaviour?.IncludeLinkedItemsInContext ?? true,

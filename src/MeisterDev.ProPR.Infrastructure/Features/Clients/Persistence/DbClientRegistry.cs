@@ -143,26 +143,6 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
-    public async Task<bool> GetEvidenceBackedVerificationEnabledAsync(Guid clientId, CancellationToken ct = default)
-    {
-        return await dbContext.Clients
-                   .Where(c => c.Id == clientId)
-                   .Select(c => (bool?)c.EnableEvidenceBackedVerification)
-                   .FirstOrDefaultAsync(ct)
-               ?? false;
-    }
-
-    /// <inheritdoc />
-    public async Task<bool> GetLanguageRobustScreeningEnabledAsync(Guid clientId, CancellationToken ct = default)
-    {
-        return await dbContext.Clients
-                   .Where(c => c.Id == clientId)
-                   .Select(c => (bool?)c.EnableLanguageRobustScreening)
-                   .FirstOrDefaultAsync(ct)
-               ?? false;
-    }
-
-    /// <inheritdoc />
     public async Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.Clients

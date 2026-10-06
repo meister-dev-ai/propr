@@ -58,8 +58,8 @@ public sealed class RelayAiRuntimeResolver(RunnerJobManifest manifest, Func<stri
         int? expectedDimensions = null,
         CancellationToken ct = default)
     {
-        // Everything that embeds, meaning deduplication and the semantic screener, runs where findings are
-        // published. A stub returning zeros would corrupt every similarity comparison downstream of it.
+        // Everything that embeds, meaning deduplication, runs where findings are published. A stub returning
+        // zeros would corrupt every similarity comparison downstream of it.
         throw new NotSupportedException("A runner relays chat completions; embeddings are computed in the control plane.");
     }
 

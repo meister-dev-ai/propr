@@ -27,9 +27,6 @@ public sealed class ReviewPromptExperimentModelsTests
             definitions, definition => definition.StageKey == PromptStageKeys.AgenticFileInvestigationUser && definition.PromptRole == PromptStageRole.User);
         Assert.Contains(definitions, definition => definition.StageKey == PromptStageKeys.SynthesisSystem && definition.PromptRole == PromptStageRole.System);
         Assert.Contains(definitions, definition => definition.StageKey == PromptStageKeys.SynthesisUser && definition.PromptRole == PromptStageRole.User);
-        Assert.Contains(
-            definitions, definition => definition.StageKey == PromptStageKeys.PrVerificationSystem && definition.PromptRole == PromptStageRole.System);
-        Assert.Contains(definitions, definition => definition.StageKey == PromptStageKeys.PrVerificationUser && definition.PromptRole == PromptStageRole.User);
         Assert.Contains(definitions, definition => definition.StageKey == "pr_wide_planning_system" && definition.PromptRole == PromptStageRole.System);
         Assert.Contains(definitions, definition => definition.StageKey == "pr_wide_planning_user" && definition.PromptRole == PromptStageRole.User);
         Assert.Contains(definitions, definition => definition.StageKey == "pr_wide_investigation_system" && definition.PromptRole == PromptStageRole.System);

@@ -61,6 +61,9 @@ const verificationEventNames = new Set([
     'verification_pr_decision',
     'verification_degraded',
     'summary_reconciliation',
+    'finding_deduplication',
+    'evidence_judge_tool_call',
+    'quality_filter_applied',
 ])
 
 const agenticInvestigationEventNames = new Set([

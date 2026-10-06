@@ -1,6 +1,7 @@
 CLAIM: {{assertionText}}
 Subject symbol: {{subjectIdentifier}}
 Anchor: {{anchorFilePath}}:{{anchorLine}}
+Source branch: {{sourceBranch}}
 
 ----- BEGIN PULL REQUEST TEXT {{boundary}} -----
 TITLE: {{pullRequestTitle}}
@@ -41,5 +42,37 @@ DIFF HUNK AT THE ANCHOR:
 (no diff hunk available for this anchor)
 {{/if}}
 
+{{#if hasAnchorSource}}
 CURRENT SOURCE OF {{anchorFilePath}} (source branch, starting at line {{sourceStartLine}}):
 {{anchorSource}}
+{{else}}
+{{#if hasSupportingFiles}}
+CURRENT SOURCE: (the claim names no anchor file; the files the finding cites follow below, and the lookups read any other code)
+{{else}}
+CURRENT SOURCE: (the claim names no anchor file; use the lookups to read the code it concerns)
+{{/if}}
+{{/if}}
+{{#if hasSupportingFiles}}
+
+FILES THE FINDING CITES (source branch excerpts; around a symbol the claim names, or the start of the file):
+----- BEGIN SUPPORTING FILES {{boundary}} -----
+{{#each supportingFiles}}
+--- {{filePath}}, lines {{startLine}}-{{endLine}} ---
+{{text}}
+{{/each}}
+----- END SUPPORTING FILES {{boundary}} -----
+{{/if}}
+{{#if hasReviewerExcerpts}}
+
+CODE THE REVIEWING PASS READ (source branch excerpts that contain symbols the claim names; files the reviewer read, or this file outside the source above):
+----- BEGIN REVIEWER READS {{boundary}} -----
+{{#each reviewerExcerpts}}
+{{#if isSameFile}}
+--- {{filePath}}, lines {{startLine}}-{{endLine}} (same file, outside the source above) ---
+{{else}}
+--- {{filePath}}, lines {{startLine}}-{{endLine}} ---
+{{/if}}
+{{text}}
+{{/each}}
+----- END REVIEWER READS {{boundary}} -----
+{{/if}}

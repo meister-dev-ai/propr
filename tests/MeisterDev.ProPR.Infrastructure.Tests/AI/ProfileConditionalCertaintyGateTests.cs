@@ -99,23 +99,14 @@ public sealed class ProfileConditionalCertaintyGateTests
         Assert.Equal(nullPrompt, balancedPrompt);
     }
 
-    // T116 — Sanity guard: Assertive profile has Aggressiveness == Assertive AND
-    // contains file-by-file.self-reflection-ranking in PerFileStageIds.
-    // The relaxed certainty gate must never ship without the LLM ranker.
     [Fact]
-    public void AssertiveProfile_HasSelfReflectionRankingAndAssertiveAggressiveness()
+    public void AssertiveProfile_KeepsAssertiveAggressiveness()
     {
-        // The relaxed certainty gate must never ship without the LLM ranker.
         var provider = new ReviewPipelineProfileProvider();
-        var profiles = provider.GetProfiles();
-        var assertiveProfile = profiles.FirstOrDefault(p =>
+        var assertiveProfile = provider.GetProfiles().FirstOrDefault(p =>
             string.Equals(p.ProfileId, ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId, StringComparison.Ordinal));
 
         Assert.NotNull(assertiveProfile);
         Assert.Equal(ReviewAggressiveness.Assertive, assertiveProfile!.Aggressiveness);
-        Assert.Contains(
-            FileByFileSelfReflectionRankingStage.StageIdConstant,
-            assertiveProfile.PerFileStageIds,
-            StringComparer.Ordinal);
     }
 }

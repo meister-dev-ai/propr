@@ -145,7 +145,6 @@ const sampleClient = {
   defaultReviewPipelineProfileId: 'file-by-file-balanced',
   defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
-  enableEvidenceBackedVerification: false,
   enableMultiPassUnion: false,
   reviewEveryIncrementEnabled: false,
   includeLinkedItemsInContext: true,
@@ -267,7 +266,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, enableLanguageRobustScreening: false, outputLanguage: 'en', baselineReasoningEffort: 'none' },
+          body: { scmCommentPostingEnabled: false, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, outputLanguage: 'en', baselineReasoningEffort: 'none' },
         })
     )
   })
@@ -295,7 +294,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, enableLanguageRobustScreening: false, outputLanguage: 'en', baselineReasoningEffort: 'none' },
+          body: { scmCommentPostingEnabled: true, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, outputLanguage: 'en', baselineReasoningEffort: 'none' },
         })
     )
   })

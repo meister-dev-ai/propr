@@ -9,10 +9,10 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.CodeAnalysis;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
-using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -85,29 +85,24 @@ internal sealed class RunnerReviewPipeline : IDisposable
         var options = reviewOptions.Value;
         var logger = loggerFactory.CreateLogger<FileByFileReviewOrchestrator>();
 
-        // The same seven stages the control plane registers, in the same construction. The screener is
-        // handed the relay resolver, which cannot serve embeddings. The stage then degrades to keep-all and
-        // records comment_screening_degraded per file, so the divergence is recorded on the trace.
+        // The same stages the control plane registers, in the same construction.
         var perFilePipeline = new ReviewPipelineRunner<PerFileReviewContext>(
         [
             new FileByFileContextPrefetchStage(options, recorder, structuralAnalyzer),
             new FileByFileRiskMarkerStage(),
             new FileByFileConfidenceFloorStage(options, recorder),
-            new FileByFileSemanticScreeningStage(
-                new EmbeddingSemanticCommentScreener(
-                    reviewOptions,
-                    aiRuntimeResolver,
-                    loggerFactory.CreateLogger<EmbeddingSemanticCommentScreener>()),
-                recorder),
             new FileByFileInfoCommentStripStage(recorder),
-            new FileByFileImportanceRankingStage(options),
-            new FileByFileSelfReflectionRankingStage(options, loggerFactory.CreateLogger<FileByFileSelfReflectionRankingStage>()),
         ]);
 
         var claimExtractor = new DeterministicReviewClaimExtractor();
         var verifier = new CompositeReviewFindingVerifier(
             new DeterministicLocalReviewVerifier(),
-            new EvidenceBackedReviewVerifier(recorder));
+            // The relay resolves every purpose to the manifest's default model, so the judge runs on that model here
+            // and its tokens are recorded under the default category.
+            new EvidenceBackedReviewVerifier(
+                recorder,
+                loggerFactory.CreateLogger<EvidenceBackedReviewVerifier>(),
+                AiConnectionModelCategory.Default));
         var invariantFactProviders = new IReviewInvariantFactProvider[]
         {
             new DomainReviewInvariantFactProvider(),
@@ -146,7 +141,11 @@ internal sealed class RunnerReviewPipeline : IDisposable
             aiRuntimeResolver,
             new CommentRelevanceFilterExecutor(relevanceRegistry, recorder),
             invariantFactProviders,
-            new LocalReviewVerificationExecutor(claimExtractor, verifier, recorder),
+            new LocalReviewVerificationExecutor(
+                claimExtractor,
+                verifier,
+                recorder,
+                loggerFactory.CreateLogger<LocalReviewVerificationExecutor>()),
             new ReviewPipelineProfileProvider(),
             proRvPrefilter,
             classifier,
@@ -174,7 +173,7 @@ internal sealed class RunnerReviewPipeline : IDisposable
             reviewSynthesisExecutor: null,
             candidateFindingFactory: null,
             qualityFilterExecutor: null,
-            new PrLevelReviewVerificationExecutor(claimExtractor, new ReviewContextEvidenceCollector(), recorder, options),
+            new PrLevelReviewVerificationExecutor(claimExtractor, new ReviewContextEvidenceCollector(), recorder, options, verifier, invariantFactProviders),
             aiRuntimeResolver,
             new DeterministicReviewFindingGate(),
             invariantFactProviders,
@@ -212,7 +211,7 @@ internal sealed class RunnerReviewPipeline : IDisposable
             new("logger", supplied, "this host's logger"),
             new(
                 "perFilePipeline", supplied,
-                "the same seven stages; semantic screening degrades per file with a trace event because the relay serves no embeddings"),
+                "the same per-file stages the control plane registers"),
             new("memoryService", supplied, "proxied to the control plane, the fourth proxied lookup"),
             new("aiRuntimeResolver", supplied, "the relay resolver; every purpose resolves to the manifest's model bindings"),
             new("commentRelevanceFilterExecutor", supplied, "the same three filters and the same selected id"),

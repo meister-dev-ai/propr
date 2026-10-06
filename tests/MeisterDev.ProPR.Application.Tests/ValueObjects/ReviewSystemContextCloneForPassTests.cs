@@ -25,8 +25,6 @@ public sealed class ReviewSystemContextCloneForPassTests
         {
             MaxContextTokens = 123_456,
             TokenizerName = "o200k_base",
-            EnableEvidenceBackedVerification = true,
-            EnableLanguageRobustScreening = true,
             EnableMultiPassUnion = true,
             MultiPassUnionPassCount = 3,
             IncludeLinkedItemsInContext = true,
@@ -41,8 +39,6 @@ public sealed class ReviewSystemContextCloneForPassTests
 
         Assert.Equal(123_456, clone.MaxContextTokens);
         Assert.Equal("o200k_base", clone.TokenizerName);
-        Assert.True(clone.EnableEvidenceBackedVerification);
-        Assert.True(clone.EnableLanguageRobustScreening);
         Assert.True(clone.EnableMultiPassUnion);
         Assert.Equal(3, clone.MultiPassUnionPassCount);
         Assert.True(clone.IncludeLinkedItemsInContext);

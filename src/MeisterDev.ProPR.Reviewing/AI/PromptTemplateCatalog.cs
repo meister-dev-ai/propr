@@ -57,8 +57,6 @@ internal static class PromptTemplateCatalog
                 "agentic-file-by-file/investigation-user.hbs"),
             [PromptStageKeys.SynthesisSystem] = new(PromptStageKeys.SynthesisSystem, PromptStageRole.System, "file-by-file/synthesis-system.hbs"),
             [PromptStageKeys.SynthesisUser] = new(PromptStageKeys.SynthesisUser, PromptStageRole.User, "file-by-file/synthesis-user.hbs"),
-            [PromptStageKeys.PrVerificationSystem] = new(PromptStageKeys.PrVerificationSystem, PromptStageRole.System, "shared/pr-verification-system.hbs"),
-            [PromptStageKeys.PrVerificationUser] = new(PromptStageKeys.PrVerificationUser, PromptStageRole.User, "shared/pr-verification-user.hbs"),
             ["evidence_verification_system"] = new(
                 "evidence_verification_system",
                 PromptStageRole.System,
@@ -76,8 +74,6 @@ internal static class PromptTemplateCatalog
                 "pr-wide-agentic/investigation-user.hbs"),
             ["pr_wide_synthesis_system"] = new("pr_wide_synthesis_system", PromptStageRole.System, "pr-wide-agentic/synthesis-system.hbs"),
             ["pr_wide_synthesis_user"] = new("pr_wide_synthesis_user", PromptStageRole.User, "pr-wide-agentic/synthesis-user.hbs"),
-            ["importance_ranking_system"] = new("importance_ranking_system", PromptStageRole.System, "shared/importance-ranking-system.hbs"),
-            ["importance_ranking_user"] = new("importance_ranking_user", PromptStageRole.User, "shared/importance-ranking-user.hbs"),
         };
 
     internal static PromptTemplateDescriptor Get(string stageKey)

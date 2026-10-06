@@ -107,16 +107,16 @@ public sealed class FileReviewerInventoryLensTests
         return resolver;
     }
 
-    // A resolver that also binds the review-verification purpose to the given judge client, so the evidence verifier
-    // judges on the configured verification model and never on the inventory pass model.
-    private static IAiRuntimeResolver ResolverWithVerificationJudge(string passModelId, IChatClient judge)
+    // A resolver that also binds the low-effort purpose to the given judge client, so the evidence verifier judges on
+    // the low-effort model and never on the pass model.
+    private static IAiRuntimeResolver ResolverWithLowEffortJudge(string passModelId, IChatClient judge)
     {
         var resolver = ResolverForModel(passModelId);
         var verificationRuntime = Substitute.For<IResolvedAiChatRuntime>();
         verificationRuntime.ChatClient.Returns(judge);
         verificationRuntime.Model.Returns(
-            new AiConfiguredModelDto(Guid.NewGuid(), "verification-model", "verification-model", [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));
-        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewVerification, Arg.Any<CancellationToken>())
+            new AiConfiguredModelDto(Guid.NewGuid(), "low-effort-model", "low-effort-model", [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewLowEffort, Arg.Any<CancellationToken>())
             .Returns(verificationRuntime);
         return resolver;
     }
@@ -222,16 +222,15 @@ public sealed class FileReviewerInventoryLensTests
         return (job, pr);
     }
 
-    private static ReviewSystemContext InventoryLensContext(IReviewContextTools? tools = null, bool evidenceVerification = false)
+    private static ReviewSystemContext InventoryLensContext(IReviewContextTools? tools = null)
     {
-        return UnionContext(ReviewPassLens.Inventory, tools, evidenceVerification);
+        return UnionContext(ReviewPassLens.Inventory, tools);
     }
 
-    private static ReviewSystemContext UnionContext(string? passLens, IReviewContextTools? tools, bool evidenceVerification)
+    private static ReviewSystemContext UnionContext(string? passLens, IReviewContextTools? tools)
     {
         return new ReviewSystemContext(null, [], tools)
         {
-            EnableEvidenceBackedVerification = evidenceVerification,
             DefaultReviewChatClient = Substitute.For<IChatClient>(),
             EnableMultiPassUnion = true,
             ModelId = "gpt-5.3-codex",
@@ -267,13 +266,13 @@ public sealed class FileReviewerInventoryLensTests
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"visible at line 3\"}")));
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", judge),
+            ResolverWithLowEffortJudge("inventory-model", judge),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = IntentFixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
         Assert.Equal(2, userMessages.Count);
@@ -293,20 +292,21 @@ public sealed class FileReviewerInventoryLensTests
         "{\"verdict\":\"intended_contradicted\",\"reason\":\"failed offsets are committed\",\"contradicts\":\"linked work item #42\"}",
         "intended_contradicted",
         true)]
-    public async Task BaselineAndInventoryFindings_GetTheSameDispositionForAnIntentVerdict_AndRecordTheVerdictKind(
+    [InlineData("{\"verdict\":\"not_actionable\",\"reason\":\"no reachable caller passes zero\"}", "not_actionable", false)]
+    public async Task BaselineAndInventoryFindings_GetTheSameDispositionForAJudgeVerdict_AndRecordTheVerdictKind(
         string verdictJson,
         string expectedVerdict,
         bool expectPublished)
     {
         var decisions = this.CaptureLocalDecisions();
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", JudgeReturning(verdictJson)),
+            ResolverWithLowEffortJudge("inventory-model", JudgeReturning(verdictJson)),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = IntentFixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
         Assert.Equal(2, decisions.Count);
@@ -392,21 +392,20 @@ public sealed class FileReviewerInventoryLensTests
         var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
         var tools = ToolsWithAnchorSource();
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", judge),
+            ResolverWithLowEffortJudge("inventory-model", judge),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
-        await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(tools, evidenceVerification: true), null, Substitute.For<IChatClient>(), CancellationToken.None);
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, InventoryLensContext(tools), null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         // The inventory review call itself still ran without tools.
         Assert.Equal(new[] { true, false }, this._observedHasTools.ToArray());
-        // One judge call per pass: the baseline finding and the inventory finding were both escalated, on the
-        // configured verification model.
+        // One judge call per pass: the baseline finding and the inventory finding were both judged on the low-effort
+        // model.
         await judge.Received(2).GetResponseAsync(
             Arg.Any<IEnumerable<ChatMessage>>(),
-            Arg.Is<ChatOptions?>(o => o != null && o.ModelId == "verification-model"),
+            Arg.Is<ChatOptions?>(o => o != null && o.ModelId == "low-effort-model"),
             Arg.Any<CancellationToken>());
         await tools.Received(2).GetFileContentAsync("Program.cs", "feature/x", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
         Assert.NotNull(this._persistedResult);
@@ -416,7 +415,7 @@ public sealed class FileReviewerInventoryLensTests
     [Fact]
     public async Task InventoryLens_NoVerificationModelConfigured_JudgesOnBaselineClient()
     {
-        // Without a review-verification binding the judge falls back to the baseline file context's client, as for
+        // Without a low-effort binding the judge falls back to the baseline file context's client, as for
         // baseline findings, and never to the client of the inventory pass model.
         var baselineClient = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
         var passClient = Substitute.For<IChatClient>();
@@ -427,7 +426,7 @@ public sealed class FileReviewerInventoryLensTests
         var (job, pr) = Fixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, baselineClient,
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, baselineClient,
             CancellationToken.None);
 
         await baselineClient.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
@@ -440,7 +439,7 @@ public sealed class FileReviewerInventoryLensTests
     public async Task OrdinaryResamplePass_NoVerificationModelConfigured_JudgesOnBaselineClient()
     {
         // An ordinary resample pass keeps the repository tools and reviews on its own pass client. Without a
-        // review-verification binding its findings are still judged on the baseline client, so verification never
+        // low-effort binding its findings are still judged on the baseline client, so verification never
         // runs on the pass model.
         var baselineClient = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
         var passClient = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"confirmed\"}");
@@ -451,7 +450,7 @@ public sealed class FileReviewerInventoryLensTests
         var (job, pr) = Fixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, UnionContext(null, ToolsWithAnchorSource(), evidenceVerification: true), null, baselineClient,
+            job, pr, file, 1, 1, UnionContext(null, ToolsWithAnchorSource()), null, baselineClient,
             CancellationToken.None);
 
         // Both passes reviewed with tools and without a lens.
@@ -470,37 +469,16 @@ public sealed class FileReviewerInventoryLensTests
         // keeps its withheld disposition and does not enter the union.
         var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"key is checked at line 1\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", judge),
+            ResolverWithLowEffortJudge("inventory-model", judge),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
         await judge.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
-        Assert.NotNull(this._persistedResult);
-        Assert.DoesNotContain(this._persistedResult!.Comments ?? [], c => c.OriginPassLens == ReviewPassLens.Inventory);
-    }
-
-    [Fact]
-    public async Task InventoryLens_EvidenceVerificationDisabled_NeverCallsJudge()
-    {
-        // With the client's evidence verification off, union-pass verification stays deterministic, as on the
-        // baseline pass, even though the baseline context has tools.
-        var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"confirmed\"}");
-        var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", judge),
-            this.CreateEvidenceVerificationExecutor());
-        var file = FileForTier(FileComplexityTier.High);
-        var (job, pr) = Fixture(file);
-
-        await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: false), null, Substitute.For<IChatClient>(),
-            CancellationToken.None);
-
-        await judge.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
         Assert.NotNull(this._persistedResult);
         Assert.DoesNotContain(this._persistedResult!.Comments ?? [], c => c.OriginPassLens == ReviewPassLens.Inventory);
     }
@@ -521,13 +499,13 @@ public sealed class FileReviewerInventoryLensTests
             Arg.Any<CancellationToken>());
         var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"not present\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", judge),
+            ResolverWithLowEffortJudge("inventory-model", judge),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
         Assert.NotNull(unionOutput);
@@ -538,90 +516,170 @@ public sealed class FileReviewerInventoryLensTests
     }
 
     [Fact]
-    public async Task InventoryLens_CodeContractFinding_IsConfirmedByEvidenceVerifierBeforeUnion()
+    public async Task BaselineAndInventoryCodeContractFindings_AreBothJudgedBeforeUnion()
     {
-        // A plain comment is a CodeContract claim. On the baseline pass the deterministic verifier publishes it, but
-        // the inventory finding needs evidence, so only the inventory finding reaches the judge.
+        // A plain comment is a CodeContract claim. Every finding needs evidence, so the baseline finding and the
+        // inventory finding both reach the judge before the union.
         var decisions = this.CaptureLocalDecisions();
         var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", judge),
+            ResolverWithLowEffortJudge("inventory-model", judge),
             this.CreateProductionVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
-        await judge.Received(1).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        await judge.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         Assert.Equal(2, decisions.Count);
-        Assert.Contains(VerificationOutcome.DeterministicRulesEvaluator, decisions[0], StringComparison.Ordinal);
-        Assert.Contains(VerificationOutcome.AiMicroVerifierEvaluator, decisions[1], StringComparison.Ordinal);
+        Assert.All(decisions, decision => Assert.Contains(VerificationOutcome.AiMicroVerifierEvaluator, decision, StringComparison.Ordinal));
         Assert.NotNull(this._persistedResult);
         Assert.Equal(2, this._persistedResult!.Comments!.Count);
         Assert.Contains(this._persistedResult.Comments!, c => c.OriginPassLens == ReviewPassLens.Inventory);
     }
 
     [Fact]
-    public async Task InventoryLens_CodeContractFindingNotConfirmed_IsRemovedBeforeUnion()
+    public async Task BaselineAndInventoryCodeContractFindingsNotConfirmed_AreBothWithheld()
     {
         var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"key is checked at line 1\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", judge),
+            ResolverWithLowEffortJudge("inventory-model", judge),
             this.CreateProductionVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
-        await judge.Received(1).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        await judge.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         Assert.NotNull(this._persistedResult);
-        var remaining = Assert.Single(this._persistedResult!.Comments!);
-        Assert.Null(remaining.OriginPassLens);
+        Assert.Empty(this._persistedResult!.Comments ?? []);
     }
 
     [Fact]
-    public async Task InventoryLens_CodeContractFindingWithEvidenceVerificationDisabled_IsRemovedBeforeUnion()
+    public async Task JudgeReceivesTheReadsOfThePassThatProducedTheFinding()
     {
-        // Without evidence verification nothing can confirm an inventory finding, so the deterministic withhold stands
-        // and the inventory pass contributes no comment. The baseline finding is published as before.
-        var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"confirmed\"}");
+        // The baseline pass read src/Map.cs, the inventory pass read nothing. The judge of the baseline finding gets an
+        // excerpt of that read; the judge of the inventory finding does not.
+        var userMessages = new List<string>();
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => userMessages.Add(messages.Last().Text)),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"visible\"}")));
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("inventory-model", judge),
+            ResolverWithLowEffortJudge("inventory-model", judge),
             this.CreateProductionVerificationExecutor());
+        this._aiCore
+            .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var ctx = ci.ArgAt<ReviewSystemContext>(1);
+                ctx.LoopMetrics = new ReviewLoopMetrics(0, null, null, 90, 100, 10, 1);
+                this._aiCallCount++;
+                if (ctx.ReviewTools is not null)
+                {
+                    ctx.ReviewerFileReads = [new ReviewerFileRead("src/Map.cs", 1, 2)];
+                }
+
+                return new ReviewResult(
+                    "summary",
+                    [
+                        new ReviewComment(
+                            "Program.cs", 10 + (this._aiCallCount * 10), CommentSeverity.Warning,
+                            $"`LookupEntry` throws for a missing key ({this._aiCallCount}).")
+                    ]);
+            });
+        var tools = Substitute.For<IReviewContextTools>();
+        tools.GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("var entry = LookupEntry(key);");
+        tools.GetFileContentAsync("src/Map.cs", Arg.Any<string>(), 1, 2, Arg.Any<CancellationToken>())
+            .Returns("public Entry LookupEntry(string key)\n    => _map[key];");
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource(), evidenceVerification: false), null, Substitute.For<IChatClient>(),
+            job, pr, file, 1, 1, InventoryLensContext(tools), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
-        await judge.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
-        Assert.NotNull(this._persistedResult);
-        var remaining = Assert.Single(this._persistedResult!.Comments!);
-        Assert.Null(remaining.OriginPassLens);
+        Assert.Equal(2, userMessages.Count);
+        var baseline = Assert.Single(userMessages, message => message.Contains("(1).", StringComparison.Ordinal));
+        Assert.Contains("--- src/Map.cs, lines 1-2 ---", baseline, StringComparison.Ordinal);
+        Assert.Contains("public Entry LookupEntry(string key)", baseline, StringComparison.Ordinal);
+        var inventory = Assert.Single(userMessages, message => message.Contains("(2).", StringComparison.Ordinal));
+        Assert.DoesNotContain("src/Map.cs", inventory, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task OrdinaryResamplePass_CodeContractFinding_IsPublishedWithoutJudge()
+    public async Task InsufficientContext_PublishesTheBaselineFinding_AndWithholdsTheInventoryFinding()
     {
-        // A resample pass reviews with repository tools, so its CodeContract finding keeps the deterministic
-        // classification of a baseline finding.
-        var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"not present\"}");
+        // The baseline pass reviewed with repository tools and the inventory pass without. The judge answers that the
+        // code it needs is missing for both findings, so only the baseline finding is published.
+        var decisions = this.CaptureLocalDecisions();
+        var judge = JudgeReturning("{\"verdict\":\"insufficient_context\",\"reason\":\"the body of createEvent is not shown\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithVerificationJudge("resample-model", judge),
+            ResolverWithLowEffortJudge("inventory-model", judge),
             this.CreateProductionVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
         await reviewer.ReviewAsync(
-            job, pr, file, 1, 1, UnionContext(null, ToolsWithAnchorSource(), evidenceVerification: true), null, Substitute.For<IChatClient>(),
+            job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
-        await judge.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
+        Assert.Equal(2, decisions.Count);
+        Assert.All(
+            decisions,
+            decision =>
+            {
+                using var document = JsonDocument.Parse(decision);
+                Assert.Equal(EvidenceJudgeVerdicts.InsufficientContext, document.RootElement.GetProperty("judgeVerdict").GetString());
+            });
+        Assert.NotNull(this._persistedResult);
+        var published = Assert.Single(this._persistedResult!.Comments!);
+        Assert.Null(published.OriginPassLens);
+        Assert.Equal("Concrete defect 1.", published.Message);
+    }
+
+    [Fact]
+    public async Task InsufficientContext_PublishesTheFindingOfAnOrdinaryResamplePass()
+    {
+        var judge = JudgeReturning("{\"verdict\":\"insufficient_context\",\"reason\":\"the caller is in another file\"}");
+        var reviewer = this.CreateReviewer(
+            ResolverWithLowEffortJudge("resample-model", judge),
+            this.CreateProductionVerificationExecutor());
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1, UnionContext(null, ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
+            CancellationToken.None);
+
+        Assert.NotNull(this._persistedResult);
+        Assert.Equal(2, this._persistedResult!.Comments!.Count);
+    }
+
+    [Fact]
+    public async Task OrdinaryResamplePass_CodeContractFinding_IsJudgedLikeTheBaseline()
+    {
+        // A resample pass reviews with repository tools. Its CodeContract finding still reaches the judge, as the
+        // baseline finding does, and both are published once the judge confirms them.
+        var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"present at line 3\"}");
+        var reviewer = this.CreateReviewer(
+            ResolverWithLowEffortJudge("resample-model", judge),
+            this.CreateProductionVerificationExecutor());
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1, UnionContext(null, ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
+            CancellationToken.None);
+
+        await judge.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         Assert.NotNull(this._persistedResult);
         Assert.Equal(2, this._persistedResult!.Comments!.Count);
         // The second review call is the resample pass; its finding is published as union pass 2.

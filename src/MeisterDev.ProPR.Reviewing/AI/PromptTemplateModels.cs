@@ -35,12 +35,6 @@ internal static class PromptTemplateModels
 
     internal sealed record TriageUserModel(string filePath, string blastRadius, string prScope, string diff);
 
-    internal sealed record ImportanceRankingSystemModel;
-
-    internal sealed record ImportanceRankingUserModel(IReadOnlyList<PromptImportanceRankingCandidateModel> candidates);
-
-    internal sealed record PromptImportanceRankingCandidateModel(int index, string severity, string message, int deterministicScore, bool hedging);
-
     internal sealed record QualityFilterUserModel(IReadOnlyList<PromptQualityFilterCommentModel> comments);
 
     internal sealed record MemoryReconsiderationUserModel(
@@ -114,21 +108,6 @@ internal static class PromptTemplateModels
         string findingIdInstructionSuffix,
         bool jsonResponseRequested);
 
-    internal sealed record PrVerificationUserModel(
-        string claimId,
-        string findingId,
-        string claimKind,
-        string claimFamily,
-        string assertionText,
-        string coverageState,
-        bool hasProCursorAttempt,
-        string? proCursorResultStatus,
-        string? retrievalNotes,
-        bool hasEvidenceItems,
-        IReadOnlyList<PromptEvidenceItemModel> evidenceItems,
-        bool hasEvidenceAttempts,
-        IReadOnlyList<PromptEvidenceAttemptModel> evidenceAttempts);
-
     internal sealed record PrWidePlanningSystemModel;
 
     internal sealed record PrWidePlanningUserModel(
@@ -182,7 +161,20 @@ internal static class PromptTemplateModels
         bool hasDiffHunk,
         bool diffHunkIsNearest,
         string? diffHunk,
-        string boundary);
+        string boundary,
+        bool hasReviewerExcerpts,
+        IReadOnlyList<EvidenceVerificationExcerptModel> reviewerExcerpts,
+        bool hasAnchorSource,
+        string sourceBranch,
+        bool hasSupportingFiles,
+        IReadOnlyList<EvidenceVerificationExcerptModel> supportingFiles);
+
+    internal sealed record EvidenceVerificationExcerptModel(
+        string filePath,
+        int startLine,
+        int endLine,
+        bool isSameFile,
+        string text);
 
     internal sealed record EvidenceVerificationLinkedItemModel(
         string itemType,
@@ -225,10 +217,6 @@ internal static class PromptTemplateModels
     internal sealed record PromptCommentItem(string filePath, string severity, string message);
 
     internal sealed record PromptCandidateFindingItem(string findingId, string filePath, string severity, string message);
-
-    internal sealed record PromptEvidenceItemModel(string kind, string? sourceId, string summary, string? payloadReference);
-
-    internal sealed record PromptEvidenceAttemptModel(string sourceFamily, string status, string coverageImpact, string scopeSummary, string? failureReason);
 
     internal sealed record PromptInvestigationResultModel(
         string taskId,

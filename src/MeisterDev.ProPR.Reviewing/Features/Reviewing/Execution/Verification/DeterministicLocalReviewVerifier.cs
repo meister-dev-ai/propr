@@ -8,7 +8,9 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 
 /// <summary>
-///     Applies deterministic contradiction checks to local verification work items.
+///     Applies the deterministic contradiction check ahead of the evidence judge. A claim that a known invariant fact
+///     contradicts is dropped. Every other claim is withheld for lack of bounded evidence, which hands it to the
+///     evidence judge; this verifier never publishes a finding.
 /// </summary>
 public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
 {
@@ -28,53 +30,10 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
             ct.ThrowIfCancellationRequested();
             try
             {
-                var claim = workItem.Claim;
-                if (SupportsObjectiveDeterministicVerification(claim) && !RequiresBoundedEvidence(workItem))
-                {
-                    outcomes.Add(
-                        VerificationOutcome.Supported(
-                            claim,
-                            ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport,
-                            "Deterministic objective verification confirmed the follow-up finding."));
-                    continue;
-                }
-
-                // A finding that needs evidence only because of its pass is still contradicted by a known invariant
-                // fact, so the evidence verifier never sees a claim the invariants already refute.
-                if (workItem.FindingProvenance.RequiresEvidenceVerification &&
-                    TryContradictWithInvariant(claim, invariantFacts, out var contradiction))
-                {
-                    outcomes.Add(contradiction);
-                    continue;
-                }
-
-                if (RequiresBoundedEvidence(workItem))
-                {
-                    outcomes.Add(CreateConservativeLocalOutcome(claim));
-                    continue;
-                }
-
-                if (!InvariantFact.TryGetBlockingInvariantId(claim.ClaimKind, out _))
-                {
-                    outcomes.Add(
-                        VerificationOutcome.Supported(
-                            claim,
-                            ReviewFindingGateReasonCodes.DefaultPublish,
-                            "No known contradiction invariant applies to this claim family."));
-                    continue;
-                }
-
-                if (TryContradictWithInvariant(claim, invariantFacts, out var invariantContradiction))
-                {
-                    outcomes.Add(invariantContradiction);
-                    continue;
-                }
-
                 outcomes.Add(
-                    VerificationOutcome.Supported(
-                        claim,
-                        ReviewFindingGateReasonCodes.DefaultPublish,
-                        "No contradicting invariant fact was present."));
+                    TryContradictWithInvariant(workItem.Claim, invariantFacts, out var contradiction)
+                        ? contradiction
+                        : CreateConservativeLocalOutcome(workItem.Claim));
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
@@ -108,25 +67,6 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
 
         contradiction = null;
         return false;
-    }
-
-    private static bool RequiresBoundedEvidence(VerificationWorkItem workItem)
-    {
-        return !string.Equals(workItem.Claim.VerificationMode, ClaimDescriptor.DeterministicOnlyMode, StringComparison.Ordinal) ||
-               workItem.Claim.RequiresCrossFileEvidence ||
-               workItem.Claim.RequiresSymbolEvidence ||
-               (workItem.FindingProvenance.RequiresExplicitSupport &&
-                workItem.FindingProvenance.FindingProvenanceKind == FindingProvenanceKind.ProRVOnly);
-    }
-
-    private static bool SupportsObjectiveDeterministicVerification(ClaimDescriptor claim)
-    {
-        return claim.ClaimKind is CandidateReviewFinding.DockerFinalStageRootUserClaimKind
-            or CandidateReviewFinding.GitHubActionsSecretEchoClaimKind
-            or CandidateReviewFinding.TerraformPublicIngressClaimKind
-            or CandidateReviewFinding.ManifestLockfileMisalignmentClaimKind
-            or CandidateReviewFinding.WiringMissingRegistrationClaimKind
-            or CandidateReviewFinding.ShellUnquotedVariableClaimKind;
     }
 
     private static VerificationOutcome CreateConservativeLocalOutcome(ClaimDescriptor claim)

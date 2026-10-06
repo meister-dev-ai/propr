@@ -143,6 +143,10 @@ compatibility window covers that. A runner outside the window is refused, and th
 lease, not a crash. Update runners together with the control plane, because skipping enough versions in
 one jump leaves the window.
 
+Contract version 3 removed the comment-screening and evidence-verification switches from the job
+manifest, because every finding is now judged on the runner. A version 3 control plane refuses runners
+of version 2, so upgrade the runner image together with the control plane.
+
 **Identity.** A replaced replica does not keep its registry row. The credential is held in memory only,
 so the new one enrolls afresh. Rows from replicas that are gone are removed by the prune sweep; see
 `RUNNER_PRUNE_UNSEEN_DAYS` in [the configuration reference](configuration.md).

@@ -15,23 +15,24 @@ using Microsoft.Extensions.AI;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 
-internal sealed record RepeatedJudgmentOutcome(string SourceOriginId, VerificationOutcome VerificationOutcome);
-
 /// <summary>
-///     Verifies synthesized PR-level findings against bounded repository evidence before they enter the
-///     deterministic final gate. This stage extracts the strongest cross-file claim, gathers repository
-///     evidence, optionally invokes the PR micro-verifier model, records verification protocol events,
-///     and returns findings annotated with their verification outcomes.
+///     Verifies synthesized PR-level findings and PR-wide pass findings before they enter the deterministic final gate.
+///     For each finding it extracts the strongest claim, collects repository evidence for the trace and the gate, and
+///     lets the evidence judge decide the claim with the same rule, verdicts, low-effort model, bounds and trace as a
+///     file finding. A finding without a claim, or without a judge, is withheld.
 /// </summary>
 internal sealed class PrLevelReviewVerificationExecutor(
     IReviewClaimExtractor? reviewClaimExtractor,
     IReviewEvidenceCollector? reviewEvidenceCollector,
     IProtocolRecorder protocolRecorder,
-    AiReviewOptions options)
+    AiReviewOptions options,
+    IReviewFindingVerifier? reviewFindingVerifier = null,
+    IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders = null)
 {
-    private const string RepeatedJudgmentAgreementStateAgreed = "Agreed";
-    private const string RepeatedJudgmentAgreementStateDisagreed = "Disagreed";
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly IReadOnlyList<InvariantFact> invariantFacts =
+        reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? [];
 
     /// <summary>
     ///     Applies bounded PR-level verification to synthesized cross-file findings.
@@ -42,20 +43,35 @@ internal sealed class PrLevelReviewVerificationExecutor(
         string sourceBranch,
         Guid? protocolId,
         IChatClient? fallbackChatClient,
-        CancellationToken ct)
+        CancellationToken ct,
+        Guid clientId = default,
+        ReviewVerificationIntent? intent = null,
+        IAiRuntimeResolver? aiRuntimeResolver = null)
     {
         if (synthesizedFindings.Count == 0 || reviewClaimExtractor is null || reviewEvidenceCollector is null)
         {
             return synthesizedFindings;
         }
 
-        var prVerificationClient = reviewContext.DefaultReviewChatClient ?? reviewContext.TierChatClient ?? fallbackChatClient;
-        var prVerificationModelId = reviewContext.DefaultReviewModelId ?? reviewContext.ModelId ?? options.ModelId;
-        var verified = new List<CandidateReviewFinding>(synthesizedFindings.Count);
+        var verificationContext = new ReviewVerificationContext(
+            reviewContext.ReviewTools,
+            sourceBranch,
+            reviewContext.DefaultReviewChatClient ?? reviewContext.TierChatClient ?? fallbackChatClient,
+            reviewContext.DefaultReviewModelId ?? reviewContext.ModelId ?? options.ModelId,
+            clientId,
+            aiRuntimeResolver,
+            intent,
+            protocolId);
 
-        foreach (var finding in synthesizedFindings)
+        // Each finding keeps its position in the result. A finding that the judge decides is collected first and all
+        // of them are judged in one verifier call, so the judge runtime is resolved and the source reads are cached
+        // once for the whole set.
+        var verified = new CandidateReviewFinding?[synthesizedFindings.Count];
+        var pendingJudgements = new List<PendingJudgement>();
+
+        for (var index = 0; index < synthesizedFindings.Count; index++)
         {
-            var effectiveFinding = ElevateProRvOnlyFinding(finding);
+            var effectiveFinding = ElevateProRvOnlyFinding(synthesizedFindings[index]);
 
             IReadOnlyList<ClaimDescriptor> claims;
             try
@@ -76,13 +92,14 @@ internal sealed class PrLevelReviewVerificationExecutor(
                     ex.Message,
                     ct);
 
-                verified.Add(CreateClaimExtractionDegradedFinding(effectiveFinding, ex.Message));
+                verified[index] = CreateClaimExtractionDegradedFinding(effectiveFinding, ex.Message);
                 continue;
             }
 
             if (claims.Count == 0)
             {
-                verified.Add(finding);
+                // Nothing the judge could decide, so the finding is withheld.
+                verified[index] = WithOutcome(effectiveFinding, effectiveFinding.Evidence, CreateNoClaimOutcome(effectiveFinding));
                 continue;
             }
 
@@ -115,7 +132,7 @@ internal sealed class PrLevelReviewVerificationExecutor(
                     ex.Message,
                     ct);
 
-                verified.Add(CreateEvidenceCollectionDegradedFinding(effectiveFinding, claim, ex.Message));
+                verified[index] = CreateEvidenceCollectionDegradedFinding(effectiveFinding, claim, ex.Message);
                 continue;
             }
 
@@ -128,38 +145,83 @@ internal sealed class PrLevelReviewVerificationExecutor(
                 claim.Stage,
                 VerificationWorkItem.CrossFileScope,
                 true,
-                updatedEvidence);
+                updatedEvidence)
+            {
+                ProducedWithRepositoryTools = ProducedWithRepositoryTools(effectiveFinding, reviewContext),
+            };
 
-            var outcome = await this.VerifyClaimAsync(
-                effectiveFinding,
-                claim,
-                evidence,
-                updatedEvidence,
-                reviewContext,
-                prVerificationClient,
-                prVerificationModelId,
-                protocolId,
-                ct);
-
-            await this.RecordDecisionAsync(protocolId, outcome, evidenceBackedWorkItem, ct);
-
-            verified.Add(
-                new CandidateReviewFinding(
-                    effectiveFinding.FindingId,
-                    effectiveFinding.Provenance,
-                    effectiveFinding.Severity,
-                    effectiveFinding.Message,
-                    effectiveFinding.Category,
-                    effectiveFinding.FilePath,
-                    effectiveFinding.LineNumber,
-                    evidenceBackedWorkItem.ExistingEvidence,
-                    effectiveFinding.CandidateSummaryText,
-                    effectiveFinding.InvariantCheckContext,
-                    outcome,
-                    effectiveFinding.ScopeRelation));
+            pendingJudgements.Add(new PendingJudgement(index, effectiveFinding, evidenceBackedWorkItem, updatedEvidence));
         }
 
-        return verified;
+        var outcomes = await this.VerifyClaimsAsync(pendingJudgements, verificationContext, ct);
+        for (var pendingIndex = 0; pendingIndex < pendingJudgements.Count; pendingIndex++)
+        {
+            var (index, effectiveFinding, workItem, _) = pendingJudgements[pendingIndex];
+            var outcome = outcomes[pendingIndex];
+
+            await this.RecordDecisionAsync(protocolId, outcome, workItem, ct);
+
+            verified[index] = new CandidateReviewFinding(
+                effectiveFinding.FindingId,
+                effectiveFinding.Provenance,
+                effectiveFinding.Severity,
+                effectiveFinding.Message,
+                effectiveFinding.Category,
+                effectiveFinding.FilePath,
+                effectiveFinding.LineNumber,
+                workItem.ExistingEvidence,
+                effectiveFinding.CandidateSummaryText,
+                effectiveFinding.InvariantCheckContext,
+                outcome,
+                effectiveFinding.ScopeRelation);
+        }
+
+        return verified.Select(finding => finding!).ToList();
+    }
+
+    // Whether the pass that produced the finding could read the repository. A PR-wide pass investigates with the
+    // review tools of this run, so its findings could; a synthesized cross-file finding comes from the synthesis call,
+    // which runs without repository tools. The judge publishes an undecided finding only when its producer could read
+    // the repository.
+    private static bool ProducedWithRepositoryTools(CandidateReviewFinding finding, ReviewSystemContext reviewContext)
+    {
+        return reviewContext.ReviewTools is not null
+               && string.Equals(finding.Provenance.OriginKind, CandidateFindingProvenance.PrWidePassOrigin, StringComparison.Ordinal);
+    }
+
+    private static VerificationOutcome CreateNoClaimOutcome(CandidateReviewFinding finding)
+    {
+        return new VerificationOutcome(
+            $"{finding.FindingId}:claim:none",
+            finding.FindingId,
+            VerificationOutcome.NonVerifiableKind,
+            FinalGateDecision.SummaryOnlyDisposition,
+            [ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport],
+            [],
+            VerificationOutcome.NoEvidence,
+            "No verifiable claim could be extracted from the finding, so the evidence judge could not decide it.",
+            VerificationOutcome.DeterministicRulesEvaluator,
+            false);
+    }
+
+    private static CandidateReviewFinding WithOutcome(CandidateReviewFinding finding, EvidenceReference? evidence, VerificationOutcome outcome)
+    {
+        return new CandidateReviewFinding(
+            finding.FindingId,
+            finding.Provenance,
+            finding.Severity,
+            finding.Message,
+            finding.Category,
+            finding.FilePath,
+            finding.LineNumber,
+            evidence,
+            finding.CandidateSummaryText,
+            finding.InvariantCheckContext,
+            outcome,
+            finding.ScopeRelation)
+        {
+            MergedFinding = finding.MergedFinding,
+        };
     }
 
     private static CandidateReviewFinding ElevateProRvOnlyFinding(CandidateReviewFinding finding)
@@ -198,168 +260,65 @@ internal sealed class PrLevelReviewVerificationExecutor(
         };
     }
 
-    public async Task<RepeatedJudgmentOutcome?> RunRepeatedJudgmentAsync(
-        CandidateReviewFinding finding,
-        ReviewSystemContext reviewContext,
-        string sourceBranch,
-        Guid? protocolId,
-        IChatClient? fallbackChatClient,
+    // The evidence judge decides the claims with the same rule, verdicts, model tier, bounds and trace as file
+    // findings, in one call for all of them. The collected evidence is recorded and kept on the finding; the judge
+    // receives excerpts of the cited files and makes its own lookups. Without a judge every claim is withheld. The
+    // outcomes are returned in the order of the pending judgements and matched to them by claim and finding.
+    private async Task<IReadOnlyList<VerificationOutcome>> VerifyClaimsAsync(
+        IReadOnlyList<PendingJudgement> pendingJudgements,
+        ReviewVerificationContext verificationContext,
         CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(finding);
-
-        if (reviewClaimExtractor is null || reviewEvidenceCollector is null || finding.VerificationOutcome is null)
+        if (pendingJudgements.Count == 0)
         {
-            return null;
+            return [];
         }
 
-        var claims = reviewClaimExtractor.ExtractClaims(finding);
-        if (claims.Count == 0)
+        if (reviewFindingVerifier is null)
         {
-            return null;
+            return pendingJudgements.Select(pending => CreateNoJudgeOutcome(pending.WorkItem.Claim, pending.UpdatedEvidence)).ToList();
         }
 
-        var claim = claims[0];
-        var initialWorkItem = new VerificationWorkItem(
-            claim,
-            finding.Provenance,
-            claim.Stage,
-            VerificationWorkItem.CrossFileScope,
-            true,
-            finding.Evidence);
-
-        var evidence = await reviewEvidenceCollector.CollectEvidenceAsync(initialWorkItem, reviewContext.ReviewTools, sourceBranch, ct);
-        var updatedEvidence = BuildUpdatedEvidence(finding, evidence);
-        var client = reviewContext.DefaultReviewChatClient ?? reviewContext.TierChatClient ?? fallbackChatClient;
-        if (client is null)
-        {
-            return null;
-        }
-
-        var systemPrompt = ReviewPrompts.BuildPrVerificationSystemPrompt(reviewContext);
-        var userMessage = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence, reviewContext);
-        var response = await client.GetResponseAsync(
-            [
-                new ChatMessage(ChatRole.System, systemPrompt),
-                new ChatMessage(ChatRole.User, userMessage),
-            ],
-            new ChatOptions
-            {
-                ModelId = reviewContext.DefaultReviewModelId ?? reviewContext.ModelId ?? options.ModelId, Temperature = reviewContext.Temperature,
-            },
-            ct);
-
-        var responseText = response.Text ?? string.Empty;
-        await this.RecordAiUsageAsync(
-            protocolId, response, userMessage, systemPrompt, responseText, reviewContext.DefaultReviewModelId ?? reviewContext.ModelId ?? options.ModelId, ct);
-        if (!TryParsePrVerificationResponse(responseText, claim, out var repeatedOutcome))
-        {
-            return null;
-        }
-
-        var agreementState = string.Equals(repeatedOutcome.RecommendedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal)
-            ? RepeatedJudgmentAgreementStateAgreed
-            : RepeatedJudgmentAgreementStateDisagreed;
-        await this.RecordRepeatedJudgmentDecisionAsync(protocolId, finding, repeatedOutcome, agreementState, updatedEvidence, ct);
-
-        return new RepeatedJudgmentOutcome(
-            finding.Provenance.SourceOriginId ?? $"repeated-judgment-{finding.FindingId}",
-            repeatedOutcome);
+        var outcomes = await reviewFindingVerifier
+            .VerifyAsync(pendingJudgements.Select(pending => pending.WorkItem).ToList(), invariantFacts ?? [], verificationContext, ct)
+            .ConfigureAwait(false);
+        var outcomesByClaim = outcomes.ToLookup(outcome => (outcome.ClaimId, outcome.FindingId));
+        return pendingJudgements
+            .Select(pending => SelectOutcome(
+                pending.WorkItem.Claim, outcomesByClaim[(pending.WorkItem.Claim.ClaimId, pending.WorkItem.Claim.FindingId)].ToList()))
+            .ToList();
     }
 
-    private async Task<VerificationOutcome> VerifyClaimAsync(
-        CandidateReviewFinding finding,
-        ClaimDescriptor claim,
-        EvidenceBundle evidence,
-        EvidenceReference updatedEvidence,
-        ReviewSystemContext reviewContext,
-        IChatClient? prVerificationClient,
-        string? prVerificationModelId,
-        Guid? protocolId,
-        CancellationToken ct)
+    // A claim with several outcomes is withheld when any of them withholds it.
+    private static VerificationOutcome SelectOutcome(ClaimDescriptor claim, IReadOnlyList<VerificationOutcome> outcomes)
     {
-        if (prVerificationClient is null)
-        {
-            return new VerificationOutcome(
-                claim.ClaimId,
-                claim.FindingId,
-                VerificationOutcome.UnresolvedKind,
-                FinalGateDecision.SummaryOnlyDisposition,
-                [
-                    updatedEvidence.HasResolvedMultiFileEvidence
-                        ? ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport
-                        : ReviewFindingGateReasonCodes.MissingMultiFileEvidence,
-                ],
-                [],
-                VerificationOutcome.WeakEvidence,
-                "Retrieved context is treated as a verification hint until a bounded claim outcome supports publication.",
-                VerificationOutcome.AiMicroVerifierEvaluator,
-                false);
-        }
+        return outcomes.FirstOrDefault(outcome => !string.Equals(
+                   outcome.RecommendedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
+               ?? outcomes.FirstOrDefault()
+               ?? VerificationOutcome.DegradedUnresolved(
+                   claim,
+                   VerificationOutcome.AiMicroVerifierEvaluator,
+                   ReviewFindingGateReasonCodes.VerificationDegraded,
+                   "The evidence judge returned no outcome.");
+    }
 
-        var systemPrompt = ReviewPrompts.BuildPrVerificationSystemPrompt(reviewContext);
-        var userMessage = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence, reviewContext);
-        await PromptStageEvidenceRecorder.RecordAsync(reviewContext, PromptStageKeys.PrVerificationSystem, systemPrompt, null, ct);
-        await PromptStageEvidenceRecorder.RecordAsync(reviewContext, PromptStageKeys.PrVerificationUser, null, userMessage, ct);
-
-        try
-        {
-            var response = await prVerificationClient.GetResponseAsync(
-                [
-                    new ChatMessage(ChatRole.System, systemPrompt),
-                    new ChatMessage(ChatRole.User, userMessage),
-                ],
-                new ChatOptions { ModelId = prVerificationModelId, Temperature = reviewContext.Temperature },
-                ct);
-
-            var responseText = response.Text ?? string.Empty;
-            await this.RecordAiUsageAsync(protocolId, response, userMessage, systemPrompt, responseText, prVerificationModelId, ct);
-
-            if (TryParsePrVerificationResponse(responseText, claim, out var outcome))
-            {
-                return outcome;
-            }
-
-            await this.RecordDegradedAsync(
-                protocolId,
-                new
-                {
-                    findingId = finding.FindingId,
-                    claimId = claim.ClaimId,
-                    stage = ClaimDescriptor.PrLevelStage,
-                    degradedComponent = "bounded_ai_response_parse",
-                },
-                responseText,
-                "PR-level verification response could not be parsed.",
-                ct);
-
-            return VerificationOutcome.DegradedUnresolved(
-                claim,
-                VerificationOutcome.AiMicroVerifierEvaluator,
-                ReviewFindingGateReasonCodes.VerificationDegraded,
-                "AI micro-verification degraded: response could not be parsed.");
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            await this.RecordDegradedAsync(
-                protocolId,
-                new
-                {
-                    findingId = finding.FindingId,
-                    claimId = claim.ClaimId,
-                    stage = ClaimDescriptor.PrLevelStage,
-                    degradedComponent = "bounded_ai_verification",
-                },
-                null,
-                ex.Message,
-                ct);
-
-            return VerificationOutcome.DegradedUnresolved(
-                claim,
-                VerificationOutcome.AiMicroVerifierEvaluator,
-                ReviewFindingGateReasonCodes.VerificationDegraded,
-                $"AI micro-verification degraded: {ex.Message}");
-        }
+    private static VerificationOutcome CreateNoJudgeOutcome(ClaimDescriptor claim, EvidenceReference updatedEvidence)
+    {
+        return new VerificationOutcome(
+            claim.ClaimId,
+            claim.FindingId,
+            VerificationOutcome.UnresolvedKind,
+            FinalGateDecision.SummaryOnlyDisposition,
+            [
+                updatedEvidence.HasResolvedMultiFileEvidence
+                    ? ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport
+                    : ReviewFindingGateReasonCodes.MissingMultiFileEvidence,
+            ],
+            [],
+            VerificationOutcome.WeakEvidence,
+            "No evidence judge is available, so the claim is withheld.",
+            VerificationOutcome.AiMicroVerifierEvaluator,
+            false);
     }
 
     private async Task RecordEvidenceCollectedAsync(
@@ -413,85 +372,6 @@ internal sealed class PrLevelReviewVerificationExecutor(
             JsonSerializer.Serialize(outcome, FinalGateJsonOptions),
             null,
             ct);
-    }
-
-    private async Task RecordRepeatedJudgmentDecisionAsync(
-        Guid? protocolId,
-        CandidateReviewFinding finding,
-        VerificationOutcome outcome,
-        string agreementState,
-        EvidenceReference updatedEvidence,
-        CancellationToken ct)
-    {
-        if (!protocolId.HasValue)
-        {
-            return;
-        }
-
-        await protocolRecorder.RecordReviewStrategyEventAsync(
-            protocolId.Value,
-            ReviewProtocolEventNames.RepeatedJudgmentDecision,
-            JsonSerializer.Serialize(
-                new
-                {
-                    findingId = finding.FindingId,
-                    evidenceSetId = finding.Provenance.EvidenceSetId,
-                    sourceOriginId = finding.Provenance.SourceOriginId,
-                }),
-            JsonSerializer.Serialize(
-                new
-                {
-                    agreementState,
-                    outcome.RecommendedDisposition,
-                    usedSameEvidenceSet = true,
-                    reasonCodes = outcome.ReasonCodes,
-                    evidenceSource = updatedEvidence.EvidenceSource,
-                },
-                FinalGateJsonOptions),
-            null,
-            ct);
-    }
-
-    private async Task RecordAiUsageAsync(
-        Guid? protocolId,
-        ChatResponse response,
-        string userMessage,
-        string systemPrompt,
-        string responseText,
-        string? modelId,
-        CancellationToken ct)
-    {
-        if (!protocolId.HasValue)
-        {
-            return;
-        }
-
-        var usage = AiTokenUsageExtractor.FromResponse(response);
-
-        await protocolRecorder.RecordAiCallAsync(
-            protocolId.Value,
-            0,
-            response.Usage?.InputTokenCount,
-            response.Usage?.OutputTokenCount,
-            userMessage,
-            systemPrompt,
-            responseText,
-            ct,
-            "ai_call_pr_verification",
-            cachedInputTokens: usage.IsEstimated ? null : usage.CachedInputTokens,
-            cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
-            reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens);
-
-        await protocolRecorder.AddTokensAsync(
-            protocolId.Value,
-            usage.InputTokens,
-            usage.OutputTokens,
-            AiConnectionModelCategory.Default,
-            modelId,
-            ct,
-            usage.CachedInputTokens,
-            usage.CacheWriteTokens,
-            usage.ReasoningTokens);
     }
 
     private async Task RecordDegradedAsync(
@@ -588,122 +468,9 @@ internal sealed class PrLevelReviewVerificationExecutor(
                 finding.Evidence.EvidenceSource);
     }
 
-    private static bool TryParsePrVerificationResponse(
-        string? responseText,
-        ClaimDescriptor claim,
-        out VerificationOutcome outcome)
-    {
-        ArgumentNullException.ThrowIfNull(claim);
-
-        outcome = VerificationOutcome.DegradedUnresolved(
-            claim,
-            VerificationOutcome.AiMicroVerifierEvaluator,
-            ReviewFindingGateReasonCodes.VerificationDegraded,
-            "AI micro-verification degraded: response could not be parsed.");
-
-        if (string.IsNullOrWhiteSpace(responseText))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(StripMarkdownCodeFences(responseText));
-            var root = doc.RootElement;
-
-            if (!root.TryGetProperty("verdict", out var verdictEl) ||
-                !root.TryGetProperty("recommended_disposition", out var dispositionEl))
-            {
-                return false;
-            }
-
-            var verdict = verdictEl.GetString();
-            var disposition = dispositionEl.GetString();
-            if (string.IsNullOrWhiteSpace(verdict) || string.IsNullOrWhiteSpace(disposition))
-            {
-                return false;
-            }
-
-            var reasonCodes = root.TryGetProperty("reason_codes", out var reasonCodesEl) && reasonCodesEl.ValueKind == JsonValueKind.Array
-                ? reasonCodesEl.EnumerateArray()
-                    .Where(element => element.ValueKind == JsonValueKind.String)
-                    .Select(element => element.GetString())
-                    .Where(value => !string.IsNullOrWhiteSpace(value))
-                    .Cast<string>()
-                    .ToArray()
-                : [];
-
-            if (reasonCodes.Length == 0)
-            {
-                reasonCodes =
-                [
-                    string.Equals(disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal)
-                        ? ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport
-                        : ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport,
-                ];
-            }
-
-            var summary = root.TryGetProperty("summary", out var summaryEl)
-                ? summaryEl.GetString()
-                : null;
-            var normalizedDisposition = string.Equals(disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal)
-                ? FinalGateDecision.PublishDisposition
-                : FinalGateDecision.SummaryOnlyDisposition;
-            var normalizedVerdict = string.Equals(verdict, "supported", StringComparison.OrdinalIgnoreCase)
-                ? VerificationOutcome.SupportedKind
-                : VerificationOutcome.UnresolvedKind;
-            var evidenceStrength = string.Equals(normalizedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal)
-                ? VerificationOutcome.StrongEvidence
-                : VerificationOutcome.WeakEvidence;
-
-            outcome = new VerificationOutcome(
-                claim.ClaimId,
-                claim.FindingId,
-                normalizedVerdict,
-                normalizedDisposition,
-                reasonCodes,
-                [],
-                evidenceStrength,
-                summary,
-                VerificationOutcome.AiMicroVerifierEvaluator,
-                false);
-
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static string StripMarkdownCodeFences(string text)
-    {
-        var trimmed = text.Trim();
-        if (!trimmed.StartsWith("```", StringComparison.Ordinal))
-        {
-            return trimmed;
-        }
-
-        var firstNewline = trimmed.IndexOf('\n');
-        if (firstNewline >= 0)
-        {
-            trimmed = trimmed[(firstNewline + 1)..];
-        }
-        else
-        {
-            var braceStart = trimmed.IndexOf('{');
-            if (braceStart >= 0)
-            {
-                trimmed = trimmed[braceStart..];
-            }
-        }
-
-        var closingFence = trimmed.LastIndexOf("```", StringComparison.Ordinal);
-        if (closingFence >= 0)
-        {
-            trimmed = trimmed[..closingFence];
-        }
-
-        return trimmed.Trim();
-    }
+    private sealed record PendingJudgement(
+        int Index,
+        CandidateReviewFinding Finding,
+        VerificationWorkItem WorkItem,
+        EvidenceReference UpdatedEvidence);
 }

@@ -10,8 +10,8 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 
 /// <summary>
-///     Emits per-comment disposition traces for the surviving deterministic per-file pipeline stages so their
-///     effect on the posted comment set is observable in the protocol, mirroring the semantic screening stage.
+///     Emits per-comment disposition traces for the deterministic per-file pipeline stages so their effect on the
+///     posted comment set is observable in the protocol.
 ///     Every method is a no-op when no recorder or protocol id is available.
 /// </summary>
 internal static class PipelineStageTracing

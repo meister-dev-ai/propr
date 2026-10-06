@@ -10,8 +10,9 @@ using MeisterDev.ProPR.Infrastructure.AI;
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 
 /// <summary>
-///     Builds the bounded intent inputs of the evidence-backed judge: the pull request title and description, the
-///     linked work items, and the diff hunk at the claim's anchor. Each input has a character cap. A truncated text
+///     Builds the bounded inputs of the evidence-backed judge: the pull request title and description, the linked work
+///     items, the diff hunk at the claim's anchor, the excerpts of code the reviewing pass read, and for a claim without an
+///     anchor file the excerpts of the files the finding cites. Each input has a character cap. A truncated text
 ///     keeps its head, or for the diff hunk the part around the anchor line, and carries an explicit truncation marker,
 ///     so the judge can tell that text was omitted. Linked items beyond the item cap are counted, not shown.
 /// </summary>
@@ -29,7 +30,9 @@ internal static partial class EvidenceJudgeInput
         ClaimDescriptor claim,
         string anchorSource,
         int sourceStartLine,
-        ReviewVerificationIntent? intent)
+        ReviewVerificationIntent? intent,
+        IReadOnlyList<JudgeExcerpt>? excerpts = null,
+        string? sourceBranch = null)
     {
         // A token generated per call marks the BEGIN and END lines of the untrusted text. Author-written text cannot
         // predict it, so a forged END line inside that text does not end the quoted section.
@@ -54,10 +57,24 @@ internal static partial class EvidenceJudgeInput
             .ToList();
         var omittedItemCount = Math.Max(0, linkedItems.Count - MaxLinkedItems);
 
+        // Repository code is written by the change author as well, so the excerpts are quoted between the same
+        // tokenised BEGIN and END lines, and the token is removed from their text. Excerpts of the files a finding
+        // cites are rendered in a section of their own.
+        PromptTemplateModels.EvidenceVerificationExcerptModel ToModel(JudgeExcerpt excerpt) => new(
+            Untrusted(SingleLine(excerpt.Path), boundary) ?? string.Empty,
+            excerpt.StartLine,
+            excerpt.EndLine,
+            string.Equals(excerpt.Origin, JudgeExcerpt.SameFileOrigin, StringComparison.Ordinal),
+            Untrusted(excerpt.Text, boundary) ?? string.Empty);
+
+        bool IsSupportingFile(JudgeExcerpt excerpt) => string.Equals(excerpt.Origin, JudgeExcerpt.SupportingFileOrigin, StringComparison.Ordinal);
+        var excerptModels = (excerpts ?? []).Where(excerpt => !IsSupportingFile(excerpt)).Select(ToModel).ToList();
+        var supportingFileModels = (excerpts ?? []).Where(IsSupportingFile).Select(ToModel).ToList();
+
         return new PromptTemplateModels.EvidenceVerificationUserModel(
             claim.AssertionText,
             string.IsNullOrWhiteSpace(claim.SubjectIdentifier) ? "(none)" : claim.SubjectIdentifier,
-            claim.AnchorFilePath ?? string.Empty,
+            string.IsNullOrWhiteSpace(claim.AnchorFilePath) ? "(none)" : claim.AnchorFilePath,
             claim.AnchorLineNumber?.ToString() ?? "(unknown)",
             sourceStartLine,
             anchorSource,
@@ -71,7 +88,13 @@ internal static partial class EvidenceJudgeInput
             diffHunk is not null,
             diffHunk is { ContainsAnchor: false },
             diffHunk?.Text,
-            boundary);
+            boundary,
+            excerptModels.Count > 0,
+            excerptModels,
+            !string.IsNullOrWhiteSpace(anchorSource),
+            string.IsNullOrWhiteSpace(sourceBranch) ? "(unknown)" : sourceBranch,
+            supportingFileModels.Count > 0,
+            supportingFileModels);
     }
 
     // Removes the boundary token from untrusted text, so the text can never reproduce a real END line.

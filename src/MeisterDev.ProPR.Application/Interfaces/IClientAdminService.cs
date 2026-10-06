@@ -43,8 +43,6 @@ public interface IClientAdminService
     ///     Pass an empty string to clear an existing value (sets the stored value to <see langword="null" />).
     /// </param>
     /// <param name="scmCommentPostingEnabled">When non-null, sets whether new review comments are posted back to SCM.</param>
-    /// <param name="enableEvidenceBackedVerification">When non-null, sets whether evidence-backed local verification runs for new reviews.</param>
-    /// <param name="enableLanguageRobustScreening">When non-null, sets whether language-robust evidence-based comment screening runs for new reviews.</param>
     /// <param name="enableMultiPassUnion">When non-null, sets whether multi-pass union generation runs for new reviews.</param>
     /// <param name="includeLinkedItemsInContext">When non-null, sets whether linked work items / issues are included in the review context.</param>
     /// <param name="reviewPasses">
@@ -86,8 +84,6 @@ public interface IClientAdminService
         string? customSystemMessage = null,
         string? defaultReviewPipelineProfileId = null,
         bool? scmCommentPostingEnabled = null,
-        bool? enableEvidenceBackedVerification = null,
-        bool? enableLanguageRobustScreening = null,
         bool? enableMultiPassUnion = null,
         bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,

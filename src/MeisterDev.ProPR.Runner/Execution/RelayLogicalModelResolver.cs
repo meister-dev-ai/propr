@@ -88,8 +88,8 @@ public sealed class RelayLogicalModelResolver : ILogicalModelResolver
         Guid? protocolId = null,
         CancellationToken ct = default)
     {
-        // The relay serves chat completions and nothing else. Everything that embeds, meaning deduplication
-        // and the semantic screener, runs where findings are published. A request here is therefore a wiring
+        // The relay serves chat completions and nothing else. Everything that embeds, meaning deduplication,
+        // runs where findings are published. A request here is therefore a wiring
         // mistake rather than a capability gap, and a stub returning zeros would corrupt a similarity
         // comparison.
         throw new NotSupportedException("A runner relays chat completions; embeddings are computed in the control plane.");

@@ -104,6 +104,33 @@ public sealed class GoogleGenerateContentChatClientTests
         Assert.Equal("read_file", contents[2].GetProperty("parts")[0].GetProperty("functionResponse").GetProperty("name").GetString());
     }
 
+    // A turn that forbids tool calls keeps the declarations and switches function calling off.
+    [Fact]
+    public async Task AToolModeOfNoneKeepsTheDeclarationsAndSwitchesFunctionCallingOff()
+    {
+        var endpoint = new FakeGoogleEndpoint().Responds(TextResponse("done"));
+        var tool = AIFunctionFactory.Create(() => "contents", "read_file");
+
+        await Client(endpoint).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "read a.cs")],
+            new ChatOptions { Tools = [tool], ToolMode = ChatToolMode.None });
+
+        var body = JsonDocument.Parse(endpoint.Bodies[0]).RootElement;
+        Assert.Equal("read_file", body.GetProperty("tools")[0].GetProperty("functionDeclarations")[0].GetProperty("name").GetString());
+        Assert.Equal("NONE", body.GetProperty("toolConfig").GetProperty("functionCallingConfig").GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task ToolsWithoutAToolModeSendNoToolConfig()
+    {
+        var endpoint = new FakeGoogleEndpoint().Responds(TextResponse("done"));
+        var tool = AIFunctionFactory.Create(() => "contents", "read_file");
+
+        await Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "read a.cs")], new ChatOptions { Tools = [tool] });
+
+        Assert.False(JsonDocument.Parse(endpoint.Bodies[0]).RootElement.TryGetProperty("toolConfig", out _));
+    }
+
     // Gemini matches a tool result to the call it answers by the function's name. A real call id is opaque and
     // is not the name, so writing it into 'name' put an identifier where the model reads a function and the
     // result answered a call it never made. The id still travels, in the field the protocol has for it.

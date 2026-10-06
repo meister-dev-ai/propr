@@ -133,6 +133,14 @@ public sealed record VerificationWorkItem
     /// </summary>
     public IReadOnlyList<string> ExistingHints { get; }
 
+    /// <summary>
+    ///     Gets a value indicating whether the pass that produced the finding could read the repository through tools,
+    ///     or <see langword="null" /> when <see cref="ReviewVerificationContext.PassReviewedWithRepositoryTools" />
+    ///     states it for every work item of the verification run. A caller that verifies findings of different passes
+    ///     in one run sets it per work item.
+    /// </summary>
+    public bool? ProducedWithRepositoryTools { get; init; }
+
     private static IReadOnlyList<string> BuildDefaultVerifierFamilies(string evidenceScope, bool supportsAiMicroVerification)
     {
         var families = new List<string> { DeterministicStructureVerifier };

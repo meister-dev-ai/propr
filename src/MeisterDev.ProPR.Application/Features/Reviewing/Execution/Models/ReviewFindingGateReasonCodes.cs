@@ -64,11 +64,6 @@ public static class ReviewFindingGateReasonCodes
     public const string DiagnosticsOnlyFollowUp = "diagnostics_only_follow_up";
 
     /// <summary>
-    ///     Reason code used when deterministic objective verification explicitly supported a claim.
-    /// </summary>
-    public const string ObjectiveDeterministicSupport = "objective_deterministic_support";
-
-    /// <summary>
     ///     Reason code used when repeated judgment did not agree on publication.
     /// </summary>
     public const string RepeatedJudgmentDisagreement = "repeated_judgment_disagreement";

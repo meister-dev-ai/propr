@@ -20568,8 +20568,6 @@ export interface components {
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean;
-            enableEvidenceBackedVerification?: boolean;
-            enableLanguageRobustScreening?: boolean;
             enableMultiPassUnion?: boolean;
             includeLinkedItemsInContext?: boolean;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
@@ -22633,6 +22631,8 @@ export interface components {
          *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `""` (empty string) to clear an existing value.
          *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.
          *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default.
+         *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableEvidenceBackedVerification and MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableLanguageRobustScreening are removed settings:
+         *     a request that sets either of them is refused with 400 Bad Request, which states why the setting was removed.
          */
         PatchClientRequest: {
             isActive?: boolean | null;
@@ -22640,8 +22640,6 @@ export interface components {
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean | null;
-            enableEvidenceBackedVerification?: boolean | null;
-            enableLanguageRobustScreening?: boolean | null;
             enableMultiPassUnion?: boolean | null;
             includeLinkedItemsInContext?: boolean | null;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
@@ -22654,6 +22652,8 @@ export interface components {
             reviewEveryIncrementEnabled?: boolean | null;
             withholdOutOfScopeFindings?: boolean | null;
             admissionPolicy?: components["schemas"]["ReviewAdmissionPolicyDto"];
+            enableEvidenceBackedVerification?: boolean | null;
+            enableLanguageRobustScreening?: boolean | null;
         };
         /** @description Patch payload for the installation's premium capability overrides. */
         PatchLicensingOverridesRequest: {
@@ -25488,8 +25488,8 @@ export interface components {
          *
          *     Carried because the executor cannot read them: they live on the client record, which a runner
          *         has no database to reach. Absent, every one of them falls to its default and the review becomes
-         *         a different review, with multi-pass union off, screening off, verification off, temperature
-         *         unset and profile Balanced, and nothing in the result stating this.
+         *         a different review, with multi-pass union off, linked items included, temperature unset and
+         *         profile Balanced, and nothing in the result stating this.
          *     Optional on the contract so a manifest from an older control plane still deserializes. A runner
          *         reading one without this reverts to the behaviour it had before the field existed.
          */
@@ -25499,10 +25499,6 @@ export interface components {
              *     decorative: the baseline result is returned as-is and the semantic deduplicator never runs.
              */
             enableMultiPassUnion?: boolean;
-            /** @description Whether the semantic screener runs over candidates. */
-            enableLanguageRobustScreening?: boolean;
-            /** @description Whether findings are verified against collected evidence. */
-            enableEvidenceBackedVerification?: boolean;
             /** @description Whether linked work items and issues are offered to the review. */
             includeLinkedItemsInContext?: boolean;
             /**

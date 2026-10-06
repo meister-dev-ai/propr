@@ -24,9 +24,10 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategie
 
 /// <summary>
 ///     Synthesizes the final PR-level review result from completed per-file results. This executor gathers fresh
-///     file summaries and comments, resolves the synthesis model/runtime, performs the synthesis and optional JSON
-///     repair pass, runs comment deduplication and optional quality filtering, then combines synthesized cross-file
-///     findings with final-gate evaluation to produce the final review summary and publishable comments.
+///     file summaries and comments, resolves the synthesis model/runtime, deduplicates the comments, applies the
+///     quality filter only when the run skipped local verification, performs the synthesis and optional JSON repair
+///     pass on the remaining findings, then combines synthesized cross-file findings with final-gate evaluation to
+///     produce the final review summary and publishable comments.
 /// </summary>
 internal sealed class ReviewSynthesisExecutor(
     IReviewFileResultStore jobRepository,
@@ -45,6 +46,8 @@ internal sealed class ReviewSynthesisExecutor(
     IReviewFindingFinalizationPipeline? reviewFindingFinalizationPipeline = null,
     AcceptanceForecastExecutor? acceptanceForecastExecutor = null)
 {
+    private const int MaxRecordedMessageChars = 280;
+
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
 
     // Default deduplicator used whenever the client has not opted into multi-pass union: the existing
@@ -58,7 +61,8 @@ internal sealed class ReviewSynthesisExecutor(
         IChatClient effectiveClient,
         IReadOnlyList<CandidateReviewFinding>? prWideCandidateFindings,
         FileReviewDispatchPlanner.BudgetSoftCapSummary budgetSoftCap,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool fileFindingsJudged = false)
     {
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct);
 
@@ -107,28 +111,27 @@ internal sealed class ReviewSynthesisExecutor(
 
         var protocolId = await this.BeginSynthesisProtocolAsync(job, synthesisRuntime.ModelId, synthesisRuntime.LogicalModelName, ct);
 
+        // Deduplication and the quality filter run before the synthesis call. The synthesis model then receives only
+        // the findings that reach the gate, so its summary and its supporting finding ids cannot name a finding that
+        // one of these steps removed.
+        var deduped = await this.DeduplicateAsync(job, baseContext, allComments, protocolId, ct);
+        deduped = await this.ApplyQualityFilterAsync(job, baseContext, effectiveClient, deduped, fileFindingsJudged, protocolId, ct);
+
+        var changedLineRangesByPath = ReviewDiffProcessor.BuildChangedLineRangesByPath(pr.ChangedFiles);
+        var baselineFindings = candidateFindingFactory.Build(freshResults, deduped, changedLineRangesByPath: changedLineRangesByPath);
+
         var synthesisOutcome = await this.RunSynthesisCoreAsync(
             job,
             pr,
             baseContext,
-            freshResults,
             perFileSummaries,
-            allComments,
+            deduped,
+            baselineFindings,
             synthesisClient,
             synthesisRuntime.EffectiveModelId,
             protocolId,
             ct);
 
-        var deduped = await this.DeduplicateAsync(job, baseContext, allComments, ct);
-        var effectiveQualityFilterThreshold = ResolveQualityFilterThreshold(job, options);
-        if (deduped.Count >= effectiveQualityFilterThreshold
-            && !await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.QualityFilter, ct))
-        {
-            deduped = await qualityFilterExecutor.ApplyAsync(job.Id, deduped, baseContext, effectiveClient, ct);
-        }
-
-        var changedLineRangesByPath = ReviewDiffProcessor.BuildChangedLineRangesByPath(pr.ChangedFiles);
-        var baselineFindings = candidateFindingFactory.Build(freshResults, deduped, changedLineRangesByPath: changedLineRangesByPath);
         var mergedPerFileFindings = CandidateFindingFactory.MergeFindings(baselineFindings, []);
 
         // Job-level PR-wide pass candidates join the synthesized cross-cutting findings and flow through the same
@@ -192,7 +195,10 @@ internal sealed class ReviewSynthesisExecutor(
                 pr.SourceBranch,
                 protocolId,
                 defaultChatClient,
-                ct);
+                ct,
+                job.ClientId,
+                new ReviewVerificationIntent(pr.Title, pr.Description, pr.LinkedItems ?? [], null, null),
+                aiRuntimeResolver);
 
         var candidateFindings = mergedPerFileFindings
             .Concat(prLevelFindings)
@@ -354,9 +360,9 @@ internal sealed class ReviewSynthesisExecutor(
         ReviewJob job,
         PullRequest pr,
         ReviewSystemContext baseContext,
-        IReadOnlyList<ReviewFileResult> freshResults,
         IReadOnlyList<(string FilePath, string Summary)> perFileSummaries,
         IReadOnlyList<ReviewComment> allComments,
+        IReadOnlyList<CandidateReviewFinding> perFileCandidateFindings,
         IChatClient synthesisClient,
         string? synthesisModelId,
         Guid? protocolId,
@@ -371,7 +377,6 @@ internal sealed class ReviewSynthesisExecutor(
         try
         {
             var expectsJson = allComments.Count > 0;
-            var perFileCandidateFindings = candidateFindingFactory.Build(freshResults);
             var systemPrompt = ReviewPrompts.BuildSynthesisSystemPrompt(baseContext, expectsJson);
             synthesisSystemPrompt = systemPrompt;
             var userMessage = ReviewPrompts.BuildSynthesisUserMessage(
@@ -571,18 +576,134 @@ internal sealed class ReviewSynthesisExecutor(
     // deduplicator is available, the unioned candidate set is collapsed semantically (same file + overlapping
     // anchor + same defect class); otherwise the exact token-Jaccard pipeline runs, so flag-off behavior is
     // byte-identical to before.
+    // Every merge is recorded in the job protocol with the kept and the removed comments, so a comment that
+    // deduplication removes after local verification can be traced to the comment that replaced it.
     private async Task<List<ReviewComment>> DeduplicateAsync(
         ReviewJob job,
         ReviewSystemContext baseContext,
         IReadOnlyList<ReviewComment> allComments,
+        Guid? protocolId,
         CancellationToken ct)
     {
-        var deduplicator = baseContext.EnableMultiPassUnion && findingDeduplicator is not null
-            ? findingDeduplicator
-            : DefaultFindingDeduplicator;
+        var semantic = baseContext.EnableMultiPassUnion && findingDeduplicator is not null;
+        var deduplicator = semantic ? findingDeduplicator! : DefaultFindingDeduplicator;
 
-        var deduped = await deduplicator.DeduplicateAsync(allComments, job.ClientId, ct);
-        return deduped.ToList();
+        var deduplication = await deduplicator.DeduplicateAsync(allComments, job.ClientId, ct);
+        await this.RecordCommentRemovalAsync(
+            protocolId,
+            ReviewProtocolEventNames.FindingDeduplication,
+            semantic ? "semantic" : "token_similarity",
+            allComments.Count,
+            deduplication,
+            ct);
+        return deduplication.Comments.ToList();
+    }
+
+    // The quality filter judges comment text alone, without the code. When local verification decided the fresh file
+    // findings with the evidence judge, which reads the code, the filter does not run. It runs when the run skipped
+    // local verification or the file reviewer has no complete local verifier, so nothing judged the findings.
+    private async Task<List<ReviewComment>> ApplyQualityFilterAsync(
+        ReviewJob job,
+        ReviewSystemContext baseContext,
+        IChatClient effectiveClient,
+        List<ReviewComment> comments,
+        bool fileFindingsJudged,
+        Guid? protocolId,
+        CancellationToken ct)
+    {
+        if (comments.Count < ResolveQualityFilterThreshold(job, options))
+        {
+            return comments;
+        }
+
+        if (fileFindingsJudged)
+        {
+            if (protocolId.HasValue)
+            {
+                await protocolRecorder.RecordReviewStrategyEventAsync(
+                    protocolId.Value,
+                    ReviewProtocolEventNames.ReviewStepSkipped,
+                    JsonSerializer.Serialize(new { stepId = FileByFileReviewStepIds.QualityFilter, scope = "synthesis" }),
+                    JsonSerializer.Serialize(new { skipped = true, reason = "findings_decided_by_evidence_judge" }),
+                    null,
+                    ct);
+            }
+
+            return comments;
+        }
+
+        if (await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.QualityFilter, ct))
+        {
+            return comments;
+        }
+
+        var filtered = await qualityFilterExecutor.ApplyAsync(job.Id, comments, baseContext, effectiveClient, ct);
+        await this.RecordCommentRemovalAsync(
+            protocolId,
+            ReviewProtocolEventNames.QualityFilterApplied,
+            "quality_filter",
+            comments.Count,
+            // The filter rebuilds every comment it keeps, so input and output are matched by their content.
+            FindingDeduplicationResult.FromDifference(comments, filtered, "quality_filter", CommentContentComparer.Instance),
+            ct);
+        return filtered;
+    }
+
+    private async Task RecordCommentRemovalAsync(
+        Guid? protocolId,
+        string eventName,
+        string stage,
+        int inputCount,
+        FindingDeduplicationResult result,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        var details = new
+        {
+            stage,
+            inputCount,
+            outputCount = result.Comments.Count,
+            mergeCount = result.Merges.Count,
+            removedCount = result.Merges.Sum(merge => merge.Removed.Count),
+        };
+        var output = new
+        {
+            details.stage,
+            details.inputCount,
+            details.outputCount,
+            merges = result.Merges.Select(merge => new
+            {
+                merge.Reason,
+                kept = merge.Kept.Select(DescribeComment).ToList(),
+                removed = merge.Removed.Select(DescribeComment).ToList(),
+            }).ToList(),
+        };
+        await protocolRecorder.RecordVerificationEventAsync(
+            protocolId.Value,
+            eventName,
+            JsonSerializer.Serialize(details, FinalGateJsonOptions),
+            JsonSerializer.Serialize(output, FinalGateJsonOptions),
+            null,
+            ct);
+    }
+
+    // The identity of a comment in the trace: its anchor, severity, producing pass and the head of its message.
+    private static object DescribeComment(ReviewComment comment)
+    {
+        return new
+        {
+            comment.FilePath,
+            comment.LineNumber,
+            Severity = comment.Severity.ToString(),
+            comment.OriginPassKind,
+            comment.OriginPassIndex,
+            comment.OriginPassLens,
+            Message = comment.Message.Length <= MaxRecordedMessageChars ? comment.Message : comment.Message[..MaxRecordedMessageChars],
+        };
     }
 
     internal static IReadOnlyList<ReviewComment> MaterializePublishedComments(
@@ -720,4 +841,25 @@ internal sealed class ReviewSynthesisExecutor(
         string FinalSummary,
         IReadOnlyList<CandidateReviewFinding> SynthesizedFindings,
         IReadOnlyList<string> SummaryFindingIds);
+
+    // Matches two comments by anchor, severity and message.
+    private sealed class CommentContentComparer : IEqualityComparer<ReviewComment>
+    {
+        public static readonly CommentContentComparer Instance = new();
+
+        public bool Equals(ReviewComment? x, ReviewComment? y)
+        {
+            return ReferenceEquals(x, y)
+                   || (x is not null && y is not null
+                                     && string.Equals(x.FilePath, y.FilePath, StringComparison.Ordinal)
+                                     && x.LineNumber == y.LineNumber
+                                     && x.Severity == y.Severity
+                                     && string.Equals(x.Message, y.Message, StringComparison.Ordinal));
+        }
+
+        public int GetHashCode(ReviewComment obj)
+        {
+            return HashCode.Combine(obj.FilePath, obj.LineNumber, obj.Severity, obj.Message);
+        }
+    }
 }

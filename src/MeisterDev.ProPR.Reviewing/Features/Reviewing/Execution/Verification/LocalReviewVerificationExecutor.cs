@@ -10,33 +10,31 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 
 internal sealed class LocalReviewVerificationExecutor(
     IReviewClaimExtractor? reviewClaimExtractor,
     IReviewFindingVerifier? reviewFindingVerifier,
-    IProtocolRecorder protocolRecorder)
+    IProtocolRecorder protocolRecorder,
+    ILogger<LocalReviewVerificationExecutor>? logger = null)
 {
+    private const int MaxRecordedReasonChars = 280;
+
+    private const string JudgeUnavailableSummary =
+        "Verification could not run for this file, so its findings were withheld. The verification_degraded event in the review protocol states the cause.";
+
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
 
     public bool IsEnabled => reviewClaimExtractor is not null && reviewFindingVerifier is not null;
 
-    public async Task<ReviewResult> ApplyAsync(
-        ReviewResult result,
-        ReviewFileResult fileResult,
-        Guid? protocolId,
-        IReadOnlyList<InvariantFact> invariantFacts,
-        ReviewVerificationContext? verificationContext,
-        CancellationToken ct)
-    {
-        return await this.ApplyAsync(result, fileResult, protocolId, invariantFacts, verificationContext, false, ct);
-    }
-
     /// <summary>
-    ///     Verifies the findings of one file review. When <paramref name="requireEvidenceForEveryFinding" /> is
-    ///     <see langword="true" />, every finding is marked so that its claims need repository evidence regardless of
-    ///     their claim family. The caller sets it for a pass that reviewed the diff without repository tools.
+    ///     Verifies the findings of one file review. Every finding is marked so that its claim needs evidence, so each
+    ///     finding that no invariant fact contradicts reaches the evidence-backed judge before it can be published.
     /// </summary>
     public async Task<ReviewResult> ApplyAsync(
         ReviewResult result,
@@ -44,11 +42,9 @@ internal sealed class LocalReviewVerificationExecutor(
         Guid? protocolId,
         IReadOnlyList<InvariantFact> invariantFacts,
         ReviewVerificationContext? verificationContext,
-        bool requireEvidenceForEveryFinding,
         CancellationToken ct)
     {
-        return (await this.ApplyDetailedAsync(result, fileResult, protocolId, invariantFacts, null, verificationContext, requireEvidenceForEveryFinding, ct))
-            .Result;
+        return (await this.ApplyDetailedAsync(result, fileResult, protocolId, invariantFacts, null, verificationContext, ct)).Result;
     }
 
     public async Task<LocalVerificationApplicationResult> ApplyDetailedAsync(
@@ -58,7 +54,6 @@ internal sealed class LocalReviewVerificationExecutor(
         IReadOnlyList<InvariantFact> invariantFacts,
         IReadOnlyList<CandidateReviewFinding>? enrichedCandidateFindings,
         ReviewVerificationContext? verificationContext,
-        bool requireEvidenceForEveryFinding,
         CancellationToken ct)
     {
         if (reviewClaimExtractor is null || reviewFindingVerifier is null || result.Comments.Count == 0)
@@ -66,11 +61,12 @@ internal sealed class LocalReviewVerificationExecutor(
             return new LocalVerificationApplicationResult(result, []);
         }
 
-        var candidateFindings = BuildCandidateFindings(result, fileResult, enrichedCandidateFindings);
-        if (requireEvidenceForEveryFinding)
-        {
-            candidateFindings = candidateFindings.Select(RequireEvidenceVerification).ToList();
-        }
+        // The judge decides every finding by truth, intent and contradiction. A finding is never published on the
+        // strength of its wording or its claim family alone.
+        var commentFindings = BuildCandidateFindings(result, fileResult, enrichedCandidateFindings)
+            .Select(pair => (pair.Comment, Finding: RequireEvidenceVerification(pair.Finding)))
+            .ToList();
+        var candidateFindings = commentFindings.Select(pair => pair.Finding).ToList();
 
         var claimsByFindingId = await this.ExtractClaimsByFindingAsync(candidateFindings, protocolId, ct);
         var workItems = candidateFindings
@@ -108,7 +104,8 @@ internal sealed class LocalReviewVerificationExecutor(
                 group => (IReadOnlyList<VerificationOutcome>)group.ToList(),
                 StringComparer.Ordinal);
 
-        await this.RecordOutcomesAsync(protocolId, outcomes, ct);
+        await this.RecordOutcomesAsync(protocolId, candidateFindings, outcomes, ct);
+        var judgeUnavailableForFile = await this.RecordJudgeDegradationAsync(protocolId, fileResult.FilePath, workItems.Count, verifiedOutcomes, ct);
 
         var withheldFindingIds = outcomesByFindingId
             .Where(entry => !AreLocalOutcomesPublishable(entry.Value))
@@ -122,13 +119,21 @@ internal sealed class LocalReviewVerificationExecutor(
         }
 
         var verifiedFindings = candidateFindings
-            .Where(finding => !outcomesByFindingId.TryGetValue(finding.FindingId, out var findingOutcomes) || AreLocalOutcomesPublishable(findingOutcomes))
+            .Where(finding => !withheldFindingIds.Contains(finding.FindingId))
             .Select(finding => AttachVerificationOutcome(finding, outcomesByFindingId))
             .ToList();
-        var verifiedComments = verifiedFindings
-            .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
+
+        // The published comments are the reviewer's own comment objects, so the read grounding, the producing pass,
+        // the model and the symbol attribution they carry reach synthesis and the trace unchanged.
+        var verifiedComments = commentFindings
+            .Where(pair => !withheldFindingIds.Contains(pair.Finding.FindingId))
+            .Select(pair => pair.Comment)
             .ToList();
         var verifiedSummary = RewriteLocalVerificationSummary(candidateFindings, verifiedFindings, outcomesByFindingId);
+        if (judgeUnavailableForFile)
+        {
+            verifiedSummary = string.Concat(verifiedSummary, Environment.NewLine, Environment.NewLine, JudgeUnavailableSummary);
+        }
 
         return new LocalVerificationApplicationResult(
             result with
@@ -139,7 +144,9 @@ internal sealed class LocalReviewVerificationExecutor(
             candidateFindings.Select(finding => AttachVerificationOutcome(finding, outcomesByFindingId)).ToList());
     }
 
-    private static List<CandidateReviewFinding> BuildCandidateFindings(
+    // Pairs each review comment with its candidate finding. With enriched candidates, a comment without a matching
+    // candidate is left out, as before.
+    private static List<(ReviewComment Comment, CandidateReviewFinding Finding)> BuildCandidateFindings(
         ReviewResult result,
         ReviewFileResult fileResult,
         IReadOnlyList<CandidateReviewFinding>? enrichedCandidateFindings)
@@ -147,7 +154,7 @@ internal sealed class LocalReviewVerificationExecutor(
         if (enrichedCandidateFindings is not { Count: > 0 })
         {
             return result.Comments
-                .Select((comment, index) => new CandidateReviewFinding(
+                .Select((comment, index) => (comment, new CandidateReviewFinding(
                     FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, index + 1),
                     new CandidateFindingProvenance(
                         CandidateFindingProvenance.PerFileCommentOrigin,
@@ -159,7 +166,7 @@ internal sealed class LocalReviewVerificationExecutor(
                     comment.Message,
                     FileByFileReviewOrchestrator.DetermineCategory(comment),
                     comment.FilePath,
-                    FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber)))
+                    FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber))))
                 .ToList();
         }
 
@@ -176,13 +183,13 @@ internal sealed class LocalReviewVerificationExecutor(
             queue.Enqueue(finding);
         }
 
-        var candidateFindings = new List<CandidateReviewFinding>(result.Comments.Count);
+        var candidateFindings = new List<(ReviewComment Comment, CandidateReviewFinding Finding)>(result.Comments.Count);
         foreach (var comment in result.Comments)
         {
             var signature = CreateCommentSignature(comment);
             if (enrichedBySignature.TryGetValue(signature, out var queue) && queue.Count > 0)
             {
-                candidateFindings.Add(ElevateProRvOnlyFinding(queue.Dequeue()));
+                candidateFindings.Add((comment, ElevateProRvOnlyFinding(queue.Dequeue())));
             }
         }
 
@@ -363,8 +370,11 @@ internal sealed class LocalReviewVerificationExecutor(
         }
     }
 
+    // Records one decision per finding claim with the anchor, the judge verdict and the reason, so the trace shows why
+    // each finding was published or withheld.
     private async Task RecordOutcomesAsync(
         Guid? protocolId,
+        IReadOnlyList<CandidateReviewFinding> candidateFindings,
         IReadOnlyList<VerificationOutcome> outcomes,
         CancellationToken ct)
     {
@@ -373,8 +383,12 @@ internal sealed class LocalReviewVerificationExecutor(
             return;
         }
 
+        var findingsById = candidateFindings
+            .GroupBy(finding => finding.FindingId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         foreach (var outcome in outcomes)
         {
+            findingsById.TryGetValue(outcome.FindingId, out var finding);
             await protocolRecorder.RecordVerificationEventAsync(
                 protocolId.Value,
                 ReviewProtocolEventNames.VerificationLocalDecision,
@@ -383,11 +397,75 @@ internal sealed class LocalReviewVerificationExecutor(
                     {
                         findingId = outcome.FindingId,
                         claimId = outcome.ClaimId,
+                        filePath = finding?.FilePath,
+                        lineNumber = finding?.LineNumber,
+                        disposition = outcome.RecommendedDisposition,
+                        judgeVerdict = outcome.JudgeVerdict,
+                        evaluator = outcome.EvaluatedBy,
+                        reason = TruncateReason(outcome.EvidenceSummary),
                     }),
                 JsonSerializer.Serialize(outcome, FinalGateJsonOptions),
                 null,
                 ct);
         }
+    }
+
+    // Counts the claims the judge could not decide and, when there is at least one, records a verification_degraded
+    // event for the file with the counts per reason and logs a warning. Returns true when the judge could decide none of
+    // the file's claims, so the caller can state in the summary that verification did not run.
+    private async Task<bool> RecordJudgeDegradationAsync(
+        Guid? protocolId,
+        string filePath,
+        int judgedClaimCount,
+        IReadOnlyList<VerificationOutcome> outcomes,
+        CancellationToken ct)
+    {
+        var degraded = outcomes.Where(outcome => outcome.JudgeDegradation is not null).ToList();
+        if (degraded.Count == 0)
+        {
+            return false;
+        }
+
+        var reasons = degraded
+            .GroupBy(outcome => outcome.JudgeDegradation!, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var allDegraded = degraded.Count == judgedClaimCount;
+        this._logger.LogWarning(
+            "The evidence judge could not decide {DegradedCount} of {ClaimCount} claims in {FilePath}; the affected findings were withheld. Reasons: {Reasons}",
+            degraded.Count,
+            judgedClaimCount,
+            filePath,
+            string.Join(", ", reasons.Select(reason => $"{reason.Key}={reason.Value}")));
+
+        if (protocolId.HasValue)
+        {
+            var record = new
+            {
+                filePath,
+                stage = ClaimDescriptor.LocalStage,
+                degradedComponent = "evidence_judge",
+                claimCount = judgedClaimCount,
+                summaryOnlyCount = degraded.Count,
+                degradedCount = degraded.Count,
+                allClaimsDegraded = allDegraded,
+                reasons,
+            };
+            await protocolRecorder.RecordVerificationEventAsync(
+                protocolId.Value,
+                ReviewProtocolEventNames.VerificationDegraded,
+                JsonSerializer.Serialize(record),
+                JsonSerializer.Serialize(record, FinalGateJsonOptions),
+                $"The evidence judge could not decide {degraded.Count} of {judgedClaimCount} claims; the affected findings were withheld.",
+                ct);
+        }
+
+        return allDegraded;
+    }
+
+    private static string? TruncateReason(string? reason)
+    {
+        return reason is null || reason.Length <= MaxRecordedReasonChars ? reason : reason[..MaxRecordedReasonChars];
     }
 
     private static bool AreLocalOutcomesPublishable(IReadOnlyList<VerificationOutcome> outcomes)

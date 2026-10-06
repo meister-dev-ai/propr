@@ -15,13 +15,14 @@ namespace MeisterDev.ProPR.Application.Services;
 public sealed class TokenJaccardFindingDeduplicator : IFindingDeduplicator
 {
     /// <inheritdoc />
-    public Task<IReadOnlyList<ReviewComment>> DeduplicateAsync(
+    public Task<FindingDeduplicationResult> DeduplicateAsync(
         IReadOnlyList<ReviewComment> comments,
         Guid clientId,
         CancellationToken ct = default)
     {
         _ = clientId;
-        var deduped = FindingDeduplicator.Deduplicate(FindingDeduplicator.CollapseSameFileDuplicates(comments));
-        return Task.FromResult(deduped);
+        var merges = new List<FindingMergeRecord>();
+        var deduped = FindingDeduplicator.Deduplicate(FindingDeduplicator.CollapseSameFileDuplicates(comments, merges), merges);
+        return Task.FromResult(new FindingDeduplicationResult(deduped, merges));
     }
 }

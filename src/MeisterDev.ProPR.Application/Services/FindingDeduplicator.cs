@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Application.Services;
@@ -55,6 +56,18 @@ public static class FindingDeduplicator
     /// <returns>Deduplicated list; order is deterministic but not necessarily preserved.</returns>
     public static IReadOnlyList<ReviewComment> Deduplicate(IReadOnlyList<ReviewComment> comments)
     {
+        return Deduplicate(comments, null);
+    }
+
+    /// <summary>
+    ///     Consolidates cross-file duplicates like <see cref="Deduplicate(IReadOnlyList{ReviewComment})" /> and adds one
+    ///     merge record per consolidated group to <paramref name="merges" />, naming the consolidated comment and the
+    ///     comments it replaced.
+    /// </summary>
+    /// <param name="comments">Input comments from the review orchestrator.</param>
+    /// <param name="merges">Receives the merge records; <see langword="null" /> records nothing.</param>
+    public static IReadOnlyList<ReviewComment> Deduplicate(IReadOnlyList<ReviewComment> comments, ICollection<FindingMergeRecord>? merges)
+    {
         if (comments.Count <= 1)
         {
             return comments;
@@ -77,7 +90,17 @@ public static class FindingDeduplicator
             var anchor = fileLevelComments[i];
             var group = CollectCrossFileDuplicateGroup(fileLevelComments, i, anchor, consumed);
 
-            merged.Add(group.Count > 1 ? BuildConsolidatedComment(anchor, group) : anchor);
+            if (group.Count > 1)
+            {
+                var consolidated = BuildConsolidatedComment(anchor, group);
+                merged.Add(consolidated);
+                merges?.Add(new FindingMergeRecord([consolidated], group, FindingDeduplicationResult.TokenSimilarityReason));
+            }
+            else
+            {
+                merged.Add(anchor);
+            }
+
             consumed.Add(i);
         }
 
@@ -160,23 +183,55 @@ public static class FindingDeduplicator
     /// <returns>The input list with same-file near-duplicates removed.</returns>
     public static IReadOnlyList<ReviewComment> CollapseSameFileDuplicates(IReadOnlyList<ReviewComment> comments)
     {
+        return CollapseSameFileDuplicates(comments, null);
+    }
+
+    /// <summary>
+    ///     Collapses same-file near-duplicates like <see cref="CollapseSameFileDuplicates(IReadOnlyList{ReviewComment})" />
+    ///     and adds one merge record per surviving comment that absorbed duplicates to <paramref name="merges" />.
+    /// </summary>
+    /// <param name="comments">Input comments from the review orchestrator.</param>
+    /// <param name="merges">Receives the merge records; <see langword="null" /> records nothing.</param>
+    public static IReadOnlyList<ReviewComment> CollapseSameFileDuplicates(
+        IReadOnlyList<ReviewComment> comments,
+        ICollection<FindingMergeRecord>? merges)
+    {
         if (comments.Count <= 1)
         {
             return comments;
         }
 
         var kept = new List<ReviewComment>(comments.Count);
+        var absorbed = new Dictionary<ReviewComment, List<ReviewComment>>(ReferenceEqualityComparer.Instance);
         foreach (var comment in comments)
         {
-            var isDuplicate = comment.FilePath is not null
-                              && kept.Any(existing =>
-                                  existing.FilePath is not null
-                                  && string.Equals(existing.FilePath, comment.FilePath, StringComparison.OrdinalIgnoreCase)
-                                  && existing.Severity == comment.Severity
-                                  && JaccardSimilarity(existing.Message, comment.Message) >= SameFileDuplicateThreshold);
-            if (!isDuplicate)
+            var survivor = comment.FilePath is null
+                ? null
+                : kept.FirstOrDefault(existing =>
+                    existing.FilePath is not null
+                    && string.Equals(existing.FilePath, comment.FilePath, StringComparison.OrdinalIgnoreCase)
+                    && existing.Severity == comment.Severity
+                    && JaccardSimilarity(existing.Message, comment.Message) >= SameFileDuplicateThreshold);
+            if (survivor is null)
             {
                 kept.Add(comment);
+                continue;
+            }
+
+            if (!absorbed.TryGetValue(survivor, out var removed))
+            {
+                removed = [];
+                absorbed[survivor] = removed;
+            }
+
+            removed.Add(comment);
+        }
+
+        if (merges is not null)
+        {
+            foreach (var survivor in kept.Where(absorbed.ContainsKey))
+            {
+                merges.Add(new FindingMergeRecord([survivor], absorbed[survivor], FindingDeduplicationResult.TokenSimilarityReason));
             }
         }
 

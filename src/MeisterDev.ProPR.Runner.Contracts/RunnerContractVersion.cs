@@ -21,9 +21,11 @@ public static class RunnerContractVersion
     /// <summary>
     ///     The version this build speaks. Version 2 put the review's title, description, and branches on the
     ///     target, and replaced the pass list's bare model name with a full binding, so an executor can count
-    ///     tokens and budget its context without asking the control plane what it is about to call.
+    ///     tokens and budget its context without asking the control plane what it is about to call. Version 3
+    ///     removed the screening and evidence-verification switches from the review behaviour: every finding is
+    ///     judged on the executor, so an executor of version 2 would review the same job differently.
     /// </summary>
-    public const int Current = 2;
+    public const int Current = 3;
 
     /// <summary>
     ///     How many older versions are still accepted. One, so a control-plane deploy does not refuse every
@@ -34,11 +36,12 @@ public static class RunnerContractVersion
     /// <summary>
     ///     The oldest version that can read this build's job manifest. Evolution inside the window is
     ///     additive and a tolerant reader ignores what it does not know, but a version that changes shapes,
-    ///     as 2 did to the pass list's model binding, moves this floor. Every operation serves leased jobs,
+    ///     as 2 did to the pass list's model binding, moves this floor. Version 3 moves it as well, because an
+    ///     executor of version 2 still runs the removed ranking stages and publishes findings without the judge. Every operation serves leased jobs,
     ///     so a version that cannot read a manifest cannot be served at all: the floor clamps the whole
     ///     window rather than gating one call.
     /// </summary>
-    public const int OldestManifestCompatible = 2;
+    public const int OldestManifestCompatible = 3;
 
     /// <summary>
     ///     The oldest version this build will still serve: the compatibility window, clamped by the manifest

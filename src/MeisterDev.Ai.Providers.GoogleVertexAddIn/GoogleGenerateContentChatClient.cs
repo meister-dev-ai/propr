@@ -233,6 +233,16 @@ public sealed class GoogleGenerateContentChatClient : INativeProtocolChatClient
         if (options?.Tools is { Count: > 0 } tools && ToFunctionDeclarations(tools) is { Count: > 0 } declared)
         {
             payload["tools"] = new JsonArray { new JsonObject { ["functionDeclarations"] = declared } };
+
+            // A caller that declares tools but forbids calling them gets the declarations with function calling
+            // switched off, so the model answers in text.
+            if (options.ToolMode is NoneChatToolMode)
+            {
+                payload["toolConfig"] = new JsonObject
+                {
+                    ["functionCallingConfig"] = new JsonObject { ["mode"] = "NONE" },
+                };
+            }
         }
 
         return payload;

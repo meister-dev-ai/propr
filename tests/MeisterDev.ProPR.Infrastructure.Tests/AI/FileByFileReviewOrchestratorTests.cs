@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
@@ -13,6 +14,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterDev.ProPR.ProRV.Abstractions;
 using MeisterDev.ProPR.ProRV.Models;
 using Microsoft.Extensions.AI;
@@ -83,7 +85,9 @@ public class FileByFileReviewOrchestratorTests
         IOptions<AiReviewOptions>? options = null,
         IAiRuntimeResolver? aiRuntimeResolver = null,
         IReviewPipelineProfileProvider? pipelineProfileProvider = null,
-        IProRVPrefilter? proRvPrefilter = null)
+        IProRVPrefilter? proRvPrefilter = null,
+        IReviewClaimExtractor? reviewClaimExtractor = null,
+        IReviewFindingVerifier? reviewFindingVerifier = null)
     {
         return new FileByFileReviewOrchestrator(
             aiCore,
@@ -97,13 +101,37 @@ public class FileByFileReviewOrchestratorTests
             null,
             null,
             null,
-            null,
-            null,
+            reviewClaimExtractor,
+            reviewFindingVerifier,
             null,
             null,
             null,
             pipelineProfileProvider,
             proRvPrefilter);
+    }
+
+    // A verifier that publishes every claim, standing in for an evidence judge that confirmed every finding.
+    private static IReviewFindingVerifier VerifierPublishingEverything()
+    {
+        var verifier = Substitute.For<IReviewFindingVerifier>();
+        verifier.VerifyAsync(
+                Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<ReviewVerificationContext?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.FromResult<IReadOnlyList<VerificationOutcome>>(
+                callInfo.ArgAt<IReadOnlyList<VerificationWorkItem>>(0)
+                    .Select(item => new VerificationOutcome(
+                        item.Claim.ClaimId,
+                        item.Claim.FindingId,
+                        VerificationOutcome.SupportedKind,
+                        FinalGateDecision.PublishDisposition,
+                        [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+                        [],
+                        VerificationOutcome.ModerateEvidence,
+                        "Confirmed.",
+                        VerificationOutcome.AiMicroVerifierEvaluator,
+                        false))
+                    .ToList()));
+        return verifier;
     }
 
     private static IJobRepository CreateJobRepo(ReviewJob? jobWithResults = null)
@@ -911,7 +939,6 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSemanticScreeningStage.StageIdConstant,
             ],
             legacyBaseline.PerFileStageIds);
 
@@ -920,7 +947,6 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSemanticScreeningStage.StageIdConstant,
             ],
             calm.PerFileStageIds);
 
@@ -929,19 +955,12 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
             balanced.PerFileStageIds);
 
         Assert.False(assertive.IsBaseline);
         Assert.Equal(expectedDispatchStages, assertive.DispatchStageIds);
-        Assert.Equal(
-            [
-                FileByFileSemanticScreeningStage.StageIdConstant,
-                FileByFileSelfReflectionRankingStage.StageIdConstant,
-            ],
-            assertive.PerFileStageIds);
+        Assert.Empty(assertive.PerFileStageIds);
     }
 
     [Fact]
@@ -1029,7 +1048,7 @@ public class FileByFileReviewOrchestratorTests
     }
 
     [Fact]
-    public async Task ReviewAsync_WithBalancedProfile_KeepsOnlyTopRankedPerFileComments()
+    public async Task ReviewAsync_WithBalancedProfile_KeepsEveryPerFileComment_WhateverItsWordingOrRank()
     {
         var job = CreateJob();
         job.SetReviewPipelineProfile(ReviewPipelineProfileProvider.FileByFileBalancedProfileId);
@@ -1071,17 +1090,15 @@ public class FileByFileReviewOrchestratorTests
             CreateProtocolRecorder(),
             repo,
             chatClient,
-            CreateOptions(options =>
-            {
-                options.ImportanceRankingKeepTopN = 1;
-                options.ImportanceRankingMinScore = 5;
-            }));
+            DefaultOptions());
 
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
+        // Neither a hedged wording nor a low importance removes a finding in the per-file stages; whether a finding is
+        // published is decided by verification.
         var completedResult = Assert.Single(storedResults, result => result.IsComplete);
-        var keptComment = Assert.Single(completedResult.Comments!);
-        Assert.Equal("Authorization check is missing before token-backed action.", keptComment.Message);
+        Assert.Equal(3, completedResult.Comments!.Count);
+        Assert.Contains(completedResult.Comments!, comment => comment.Message == "Maybe simplify this expression.");
     }
 
     [Fact]
@@ -1806,12 +1823,18 @@ public class FileByFileReviewOrchestratorTests
     public async Task ReviewAsync_RunsTheQualityFilterOnItsOwnModelNotTheSynthesisModel()
     {
         var (job, pr, aiCore, defaultChatClient, tierClient, resolver) = ArrangeSynthesisTier();
-        var context = CreateContext();
+
+        // The quality filter runs only when the run skipped local verification.
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            SkippedSteps = new ReviewStepSkips([FileByFileReviewStepIds.LocalVerification]),
+        };
         context.ModelId = "review-model";
 
+        var recorder = CreateProtocolRecorder();
         var sut = CreateOrchestrator(
             aiCore,
-            CreateProtocolRecorder(),
+            recorder,
             CreateJobRepoFor(job),
             defaultChatClient,
             options: SingleCommentQualityFilterOptions(),
@@ -1826,11 +1849,139 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<IList<ChatMessage>>(),
                 Arg.Is<ChatOptions?>(chatOptions => chatOptions != null && chatOptions.ModelId == "review-model"),
                 Arg.Any<CancellationToken>());
+        // An empty filter answer keeps the input. The filter rebuilds the comments it keeps, and the trace records
+        // no removal for a comment that came back unchanged.
+        await recorder.Received(1).RecordVerificationEventAsync(
+            Arg.Any<Guid>(),
+            ReviewProtocolEventNames.QualityFilterApplied,
+            Arg.Is<string?>(details => details != null && details.Contains("\"removedCount\":0") && details.Contains("\"outputCount\":1")),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
         await defaultChatClient.DidNotReceive()
             .GetResponseAsync(
                 Arg.Any<IList<ChatMessage>>(),
                 Arg.Is<ChatOptions?>(chatOptions => chatOptions != null && chatOptions.ModelId == "gpt-4o-high"),
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WhenLocalVerificationRan_DoesNotRunTheQualityFilter()
+    {
+        var (job, pr, aiCore, defaultChatClient, _, resolver) = ArrangeSynthesisTier();
+        var context = CreateContext();
+        context.ModelId = "review-model";
+
+        var recorder = CreateProtocolRecorder();
+        var sut = CreateOrchestrator(
+            aiCore,
+            recorder,
+            CreateJobRepoFor(job),
+            defaultChatClient,
+            options: SingleCommentQualityFilterOptions(),
+            aiRuntimeResolver: resolver,
+            reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
+            reviewFindingVerifier: VerifierPublishingEverything());
+
+        var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await recorder.Received(1).RecordReviewStrategyEventAsync(
+            Arg.Any<Guid>(),
+            ReviewProtocolEventNames.ReviewStepSkipped,
+            Arg.Is<string?>(details => details != null && details.Contains(FileByFileReviewStepIds.QualityFilter)),
+            Arg.Is<string?>(output => output != null && output.Contains("findings_decided_by_evidence_judge")),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        // The stubbed filter would answer with no comments. It is not called, so the comment reaches the result.
+        await defaultChatClient.DidNotReceive()
+            .GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Is<ChatOptions?>(chatOptions => chatOptions != null && chatOptions.ModelId == "review-model"),
+                Arg.Any<CancellationToken>());
+        Assert.Contains(result.Comments, comment => comment.Message == "Confirmed null dereference in ExecuteAsync.");
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithoutALocalVerifier_RunsTheQualityFilter()
+    {
+        // No claim extractor and no verifier are composed, so local verification decides nothing and the quality
+        // filter still screens the findings, although the run did not skip local verification.
+        var (job, pr, aiCore, defaultChatClient, _, resolver) = ArrangeSynthesisTier();
+        var context = CreateContext();
+        context.ModelId = "review-model";
+        var recorder = CreateProtocolRecorder();
+        var sut = CreateOrchestrator(
+            aiCore,
+            recorder,
+            CreateJobRepoFor(job),
+            defaultChatClient,
+            options: SingleCommentQualityFilterOptions(),
+            aiRuntimeResolver: resolver);
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await defaultChatClient.Received()
+            .GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Is<ChatOptions?>(chatOptions => chatOptions != null && chatOptions.ModelId == "review-model"),
+                Arg.Any<CancellationToken>());
+        await recorder.Received(1).RecordVerificationEventAsync(
+            Arg.Any<Guid>(), ReviewProtocolEventNames.QualityFilterApplied, Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_RecordsDeduplicationAndSynthesisesFromTheSurvivingComments()
+    {
+        var (job, pr, _, defaultChatClient, tierClient, resolver) = ArrangeSynthesisTier();
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult(
+                    "file summary",
+                    [
+                        new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Null reference risk when the config is missing at startup."),
+                        new ReviewComment("src/Foo.cs", 13, CommentSeverity.Warning, "Null reference risk when the config is missing at startup."),
+                        new ReviewComment("src/Foo.cs", 40, CommentSeverity.Warning, "The retry loop never waits between attempts."),
+                    ]));
+        var recorder = CreateProtocolRecorder();
+        var context = CreateContext();
+        context.ModelId = "review-model";
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            recorder,
+            CreateJobRepoFor(job),
+            defaultChatClient,
+            options: SingleCommentQualityFilterOptions(),
+            aiRuntimeResolver: resolver);
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await recorder.Received(1).RecordVerificationEventAsync(
+            Arg.Any<Guid>(),
+            ReviewProtocolEventNames.FindingDeduplication,
+            Arg.Is<string?>(details => details != null && details.Contains("\"removedCount\":1")),
+            Arg.Is<string?>(output => output != null && output.Contains("\"lineNumber\":13")),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+
+        // The synthesis input lists the two surviving findings and not the collapsed duplicate.
+        await tierClient.Received().GetResponseAsync(
+            Arg.Is<IList<ChatMessage>>(messages => CountOccurrences(messages[1].Text, "Null reference risk when the config is missing at startup.") == 1),
+            Arg.Any<ChatOptions?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        for (var index = text.IndexOf(value, StringComparison.Ordinal); index >= 0; index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     [Fact]

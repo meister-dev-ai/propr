@@ -913,59 +913,6 @@ public class ReviewPromptsTests
         Assert.Contains("DISCARD", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void BuildPrVerificationSystemPrompt_WithoutOverride_ReturnsVerificationRules()
-    {
-        var prompt = ReviewPrompts.BuildPrVerificationSystemPrompt(null);
-
-        Assert.Contains("independently retrieved repository evidence", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("SUPPORTED", prompt, StringComparison.Ordinal);
-        Assert.Contains("UNRESOLVED", prompt, StringComparison.Ordinal);
-        Assert.Contains("recommended_disposition", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildPrVerificationSystemPrompt_WithOverride_ReturnsOverrideText()
-    {
-        var overrides = new Dictionary<string, string> { ["PrVerificationSystemPrompt"] = "Custom PR verification" };
-        var context = new ReviewSystemContext(null, [], null) { PromptOverrides = overrides };
-
-        var prompt = ReviewPrompts.BuildPrVerificationSystemPrompt(context);
-
-        Assert.Equal("Custom PR verification", prompt);
-    }
-
-    [Fact]
-    public void BuildPrVerificationUserMessage_IncludesClaimAndEvidenceDetails()
-    {
-        var claim = new ClaimDescriptor(
-            "claim-1",
-            "finding-1",
-            ClaimDescriptor.PrLevelStage,
-            CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind,
-            "Cross-file DI registration is missing.",
-            CommentSeverity.Warning,
-            ClaimDescriptor.NeedsEvidenceMode,
-            ClaimDescriptor.CrossFileConsistencyFamily,
-            "ServiceRegistration",
-            requiresCrossFileEvidence: true,
-            requiresSymbolEvidence: true);
-        var evidence = new EvidenceBundle(
-            claim.ClaimId,
-            [new EvidenceItem("FileContentRange", "Fetched file", "src/Foo.cs", "services.AddFoo();")],
-            EvidenceBundle.PartialCoverage,
-            "One supporting file was retrieved.");
-
-        var message = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence);
-
-        Assert.Contains("Claim ID: claim-1", message);
-        Assert.Contains("Finding ID: finding-1", message);
-        Assert.Contains($"Claim family: {ClaimDescriptor.CrossFileConsistencyFamily}", message);
-        Assert.Contains("Coverage state: Partial", message);
-        Assert.Contains("Source: src/Foo.cs", message);
-        Assert.Contains("Payload: services.AddFoo();", message);
-    }
-
     // PromptOverrides — BuildSystemPrompt applies SystemPrompt override from context
     [Fact]
     public void BuildSystemPrompt_WithSystemPromptOverride_UsesOverride()
@@ -1054,40 +1001,5 @@ public class ReviewPromptsTests
 
         Assert.StartsWith("Variant synthesis header", prompt, StringComparison.Ordinal);
         Assert.Contains("cross_cutting_concerns", prompt);
-    }
-
-    [Fact]
-    public void BuildPrVerificationUserMessage_WithPromptExperimentReplace_UsesVariantContent()
-    {
-        var claim = new ClaimDescriptor(
-            "claim-1",
-            "finding-1",
-            ClaimDescriptor.PrLevelStage,
-            CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind,
-            "Cross-file DI registration is missing.",
-            CommentSeverity.Warning,
-            ClaimDescriptor.NeedsEvidenceMode,
-            ClaimDescriptor.CrossFileConsistencyFamily,
-            "ServiceRegistration",
-            requiresCrossFileEvidence: true,
-            requiresSymbolEvidence: true);
-        var evidence = new EvidenceBundle(
-            claim.ClaimId,
-            [new EvidenceItem("FileContentRange", "Fetched file", "src/Foo.cs", "services.AddFoo();")],
-            EvidenceBundle.PartialCoverage,
-            "One supporting file was retrieved.");
-        var context = new ReviewSystemContext(null, [], null)
-        {
-            PromptExperiment = new PromptExperimentContext(
-                "variant-a",
-                [
-                    new StagePromptVariant(
-                        PromptStageKeys.PrVerificationUser, PromptStageRole.User, PromptCompositionMode.Replace, "Variant verification request"),
-                ]),
-        };
-
-        var message = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence, context);
-
-        Assert.Equal("Variant verification request", message);
     }
 }

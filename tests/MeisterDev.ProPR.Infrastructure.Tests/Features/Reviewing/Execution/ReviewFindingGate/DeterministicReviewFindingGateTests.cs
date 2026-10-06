@@ -9,6 +9,26 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Rev
 
 public sealed class DeterministicReviewFindingGateTests
 {
+    [Theory]
+    [InlineData(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin)]
+    [InlineData(CandidateFindingProvenance.DeeperFollowUpOrigin)]
+    [InlineData(CandidateFindingProvenance.RepeatedJudgmentOrigin)]
+    public async Task AFindingThatIsNotAPerFileCommentAndHasNoVerificationOutcome_IsNotPublished(string originKind)
+    {
+        var finding = new CandidateReviewFinding(
+            "finding-unverified",
+            new CandidateFindingProvenance(originKind, "test", "src/Foo.cs"),
+            CommentSeverity.Warning,
+            "The registration is missing.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Foo.cs",
+            12);
+
+        var decision = Assert.Single(await new DeterministicReviewFindingGate().EvaluateAsync([finding], [], CancellationToken.None));
+
+        Assert.NotEqual(FinalGateDecision.PublishDisposition, decision.Disposition);
+    }
+
     private static CandidateReviewFinding CreateFinding(
         string findingId,
         string message,

@@ -157,41 +157,6 @@ internal static partial class ReviewPrompts
     }
 
     /// <summary>
-    ///     System prompt for the per-file LLM self-reflection importance-ranking pass.
-    /// </summary>
-    internal static string BuildImportanceRankingSystemPrompt(ReviewSystemContext? context)
-    {
-        if (context?.PromptOverrides.TryGetValue("ImportanceRankingSystemPrompt", out var overrideText) == true)
-        {
-            return overrideText!;
-        }
-
-        return PromptTemplateRuntime.RenderStage("importance_ranking_system", new PromptTemplateModels.ImportanceRankingSystemModel());
-    }
-
-    /// <summary>
-    ///     User message for the per-file LLM self-reflection importance-ranking pass.
-    ///     Formats each candidate comment with its severity, deterministic score, hedging flag, and message text.
-    /// </summary>
-    internal static string BuildImportanceRankingUserMessage(IReadOnlyList<ReviewComment> comments, AiReviewOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(comments);
-        ArgumentNullException.ThrowIfNull(options);
-
-        // The hedging hint was a phrase-list feature; language-robust screening replaces phrase matching with a
-        // semantic (embedding) detector, so no phrase list is consulted here. The ranker no longer receives a
-        // hedging signal (the model field stays for template compatibility and is a follow-up cleanup).
-        var candidates = comments.Select((comment, index) => new PromptTemplateModels.PromptImportanceRankingCandidateModel(
-            index,
-            comment.Severity.ToString().ToLowerInvariant(),
-            comment.Message,
-            FileByFileImportanceRankingStage.ScoreComment(comment),
-            false)).ToList();
-
-        return PromptTemplateRuntime.RenderStage("importance_ranking_user", new PromptTemplateModels.ImportanceRankingUserModel(candidates));
-    }
-
-    /// <summary>
     ///     Builds the user message for the cross-file quality-filter AI pass.
     ///     Formats <paramref name="comments" /> as a numbered markdown table.
     /// </summary>
@@ -206,59 +171,6 @@ internal static partial class ReviewPrompts
                     comment.LineNumber?.ToString() ?? "-",
                     comment.Severity.ToString().ToLowerInvariant(),
                     comment.Message.Replace("|", @"\|"))).ToList()));
-    }
-
-    /// <summary>
-    ///     System prompt for bounded PR-level verification of synthesized cross-file findings.
-    ///     The verifier must only promote findings when the provided evidence independently supports them.
-    /// </summary>
-    internal static string BuildPrVerificationSystemPrompt(ReviewSystemContext? context)
-    {
-        if (context?.PromptOverrides.TryGetValue("PrVerificationSystemPrompt", out var overrideText) == true)
-        {
-            return ComposePrompt(context, PromptStageKeys.PrVerificationSystem, PromptStageRole.System, overrideText!);
-        }
-
-        var defaultText = PromptTemplateRuntime.RenderStage(PromptStageKeys.PrVerificationSystem);
-
-        return ComposePrompt(context, PromptStageKeys.PrVerificationSystem, PromptStageRole.System, defaultText);
-    }
-
-    /// <summary>
-    ///     User message for bounded PR-level verification.
-    /// </summary>
-    internal static string BuildPrVerificationUserMessage(ClaimDescriptor claim, EvidenceBundle evidence, ReviewSystemContext? context = null)
-    {
-        ArgumentNullException.ThrowIfNull(claim);
-        ArgumentNullException.ThrowIfNull(evidence);
-
-        var defaultText = PromptTemplateRuntime.RenderStage(
-            PromptStageKeys.PrVerificationUser,
-            new PromptTemplateModels.PrVerificationUserModel(
-                claim.ClaimId,
-                claim.FindingId,
-                claim.ClaimKind,
-                claim.ClaimFamily,
-                claim.AssertionText,
-                evidence.CoverageState,
-                evidence.HasProCursorAttempt,
-                evidence.ProCursorResultStatus,
-                evidence.RetrievalNotes,
-                evidence.EvidenceItems.Count > 0,
-                evidence.EvidenceItems.Select(item => new PromptTemplateModels.PromptEvidenceItemModel(
-                    item.Kind,
-                    item.SourceId,
-                    item.Summary,
-                    item.PayloadReference)).ToList(),
-                evidence.EvidenceAttempts.Count > 0,
-                evidence.EvidenceAttempts.Select(attempt => new PromptTemplateModels.PromptEvidenceAttemptModel(
-                    attempt.SourceFamily,
-                    attempt.Status,
-                    attempt.CoverageImpact,
-                    attempt.ScopeSummary,
-                    attempt.FailureReason)).ToList()));
-
-        return ComposePrompt(context, PromptStageKeys.PrVerificationUser, PromptStageRole.User, defaultText);
     }
 
     private static string ComposePrompt(

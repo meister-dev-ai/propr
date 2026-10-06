@@ -181,8 +181,8 @@ public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
     {
         var profile = ResolveClaimProfileByFamily(finding);
 
-        // A finding from a pass without repository tools is a candidate that nobody has checked against the
-        // repository, so its claim needs evidence whatever family it belongs to.
+        // A finding marked for evidence verification is decided by the evidence-backed judge, so its claim needs
+        // evidence whatever family it belongs to. Local verification marks every file-pass finding this way.
         return finding.Provenance.RequiresEvidenceVerification
             ? profile with { VerificationMode = ClaimDescriptor.NeedsEvidenceMode }
             : profile;

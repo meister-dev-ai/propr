@@ -14,7 +14,6 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Deduplication
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Workspace;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
-using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
@@ -115,10 +114,7 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddScoped<IRunnerAiRelay, RunnerAiRelay>();
         services.AddScoped<IReviewPipeline<PerFileReviewContext>, ReviewPipelineRunner<PerFileReviewContext>>();
         services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileContextPrefetchStage>();
-        services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileSemanticScreeningStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileRiskMarkerStage>();
-        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileImportanceRankingStage>();
-        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileSelfReflectionRankingStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileConfidenceFloorStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileInfoCommentStripStage>();
         services.AddTransient<IReviewJobProcessor>(sp => sp.GetRequiredService<ReviewOrchestrationService>());
@@ -147,10 +143,9 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<IReviewInvariantFactProvider, DomainReviewInvariantFactProvider>();
         services.AddSingleton<IReviewInvariantFactProvider, PersistenceReviewInvariantFactProvider>();
         services.AddSingleton<IReviewClaimExtractor, DeterministicReviewClaimExtractor>();
-        // Local verification = deterministic rules, plus (gated per-client via the review context's
-        // EvidenceVerificationEnabled flag, default off) an evidence-gathering verifier that escalates the
-        // claims deterministic rules can only withhold for lack of bounded evidence. The composite is a no-op
-        // equal to the deterministic verifier when the per-client flag is off.
+        // Local verification runs the deterministic rules and then the evidence-backed judge on every claim the rules
+        // withhold for lack of bounded evidence. Every file-pass finding needs evidence, so every finding that no
+        // invariant fact contradicts is judged.
         services.AddSingleton<DeterministicLocalReviewVerifier>();
         services.AddSingleton<EvidenceBackedReviewVerifier>();
         services.AddSingleton<IReviewFindingVerifier>(sp => new CompositeReviewFindingVerifier(
@@ -169,7 +164,6 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // duplicates and never merges distinct bugs.
         services.AddScoped<IFindingMergeJudge, AiFindingMergeJudge>();
         services.AddScoped<IFindingDeduplicator, SemanticFindingDeduplicator>();
-        services.AddScoped<ISemanticCommentScreener, EmbeddingSemanticCommentScreener>();
         services.AddScoped<ReviewSynthesisExecutor>();
         services.AddSingleton<ISummaryReconciliationService, SummaryReconciliationService>();
 

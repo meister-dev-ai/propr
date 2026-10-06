@@ -983,6 +983,45 @@ public class ToolAwareAiReviewCoreTests
         Assert.Empty(context.ReviewSession!.WorkingMemory);
     }
 
+    // The evidence judge re-reads what the reviewer read, so the loop leaves the file ranges that returned source on
+    // the context, each cut to the last line present, and leaves out reads that returned nothing.
+    [Fact]
+    public async Task ReviewAsync_LeavesTheFileReadsThatReturnedSourceOnTheContext()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                CreateFunctionCallResponse(
+                    "call-1",
+                    "get_file_content",
+                    "{\"path\":\"src/Other.cs\",\"branch\":\"feature/x\",\"startLine\":5,\"endLine\":50}"),
+                CreateFunctionCallResponse(
+                    "call-2",
+                    "get_file_content",
+                    "{\"path\":\"src/Missing.cs\",\"branch\":\"feature/x\",\"startLine\":1,\"endLine\":20}"),
+                CreateFinalReviewResponse("Done."));
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools
+            .GetFileContentAsync("src/Other.cs", Arg.Any<string>(), 5, 50, Arg.Any<CancellationToken>())
+            .Returns("line five\nline six\nline seven");
+        mockTools
+            .GetFileContentAsync("src/Missing.cs", Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(string.Empty);
+        var context = CreateContext(mockTools);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        var read = Assert.Single(context.ReviewerFileReads);
+        Assert.Equal(new ReviewerFileRead("src/Other.cs", 5, 7), read);
+    }
+
     // A plain-string tool result (e.g. file contents) is replayed to the model as raw text, not a
     // double-encoded JSON string, so angle brackets/ampersands/newlines don't inflate the wire payload.
     [Fact]

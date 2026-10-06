@@ -61,6 +61,12 @@ internal sealed partial class FileReviewer(
     private static readonly string ProRvCatalogVersion =
         typeof(IProRVPrefilter).Assembly.GetName().Version?.ToString() ?? "0";
 
+    /// <summary>
+    ///     Whether this reviewer runs local verification with a claim extractor and a verifier, so the evidence judge
+    ///     decides every finding it persists unless the run skips local verification.
+    /// </summary>
+    internal bool VerifiesFindings => localReviewVerificationExecutor?.IsEnabled == true;
+
     private readonly ConcurrentDictionary<string, TriageVerdict> _triageCache = new(StringComparer.Ordinal);
 
     // Focused ProRV guidance is deterministic per (file path, catalog version) within a job, so a prorv lens pass
@@ -352,8 +358,6 @@ internal sealed partial class FileReviewer(
             TokenizerName = tierTokenizerName ?? baseContext.TokenizerName,
             RuntimeCapabilities = tierCapabilities ?? baseContext.RuntimeCapabilities,
             Temperature = baseContext.Temperature,
-            EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
-            EnableLanguageRobustScreening = baseContext.EnableLanguageRobustScreening,
             EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
             MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
             ReviewPasses = baseContext.ReviewPasses,
@@ -907,8 +911,8 @@ internal sealed partial class FileReviewer(
             // Local verification of a pass finding uses the evidence channel of the baseline file context. An
             // inventory pass reviews without repository tools, and without this the evidence-backed verifier
             // could never run for its findings, so every claim that needs evidence would be withheld. The judge
-            // runs on the model configured for review verification and, when none is configured, on the baseline
-            // tier client, as it does for baseline findings.
+            // runs on the low-effort model and, when that purpose resolves to nothing, on the baseline tier client,
+            // as it does for baseline findings.
             var pipelineState = new ReviewResultPipelineState(
                 inputs.Job,
                 inputs.File,
@@ -1317,7 +1321,6 @@ internal sealed partial class FileReviewer(
                 ],
                 [
                     FileByFileConfidenceFloorStage.StageIdConstant,
-                    FileByFileSelfReflectionRankingStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
                 true,
@@ -1346,7 +1349,6 @@ internal sealed partial class FileReviewer(
                    ],
                    [
                        FileByFileConfidenceFloorStage.StageIdConstant,
-                       FileByFileSelfReflectionRankingStage.StageIdConstant,
                    ],
                    [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
                    true,
@@ -1513,18 +1515,17 @@ internal sealed partial class FileReviewer(
             verificationSource.ModelId,
             state.Job.ClientId,
             aiRuntimeResolver,
-            verificationSource.EnableEvidenceBackedVerification,
             new ReviewVerificationIntent(
                 state.FilePullRequest.Title,
                 state.FilePullRequest.Description,
                 state.LinkedItems ?? [],
                 state.File.Path,
                 state.File.IsBinary ? null : state.File.UnifiedDiff),
-            state.ProtocolId);
-
-        // An inventory pass lists candidates from the diff text without reading the repository, so each of its
-        // findings must be confirmed by the evidence-backed verifier before it can enter the union.
-        var requireEvidenceForEveryFinding = string.Equals(state.FileContext.ActiveLens, ReviewPassLens.Inventory, StringComparison.Ordinal);
+            state.ProtocolId,
+            // The review context of the pass, not the verification source: an inventory pass reviews without
+            // repository tools although its findings are verified through the baseline evidence channel.
+            PassReviewedWithRepositoryTools: state.FileContext.ReviewTools is not null,
+            ReviewerReads: state.FileContext.ReviewerFileReads);
 
         return await localReviewVerificationExecutor.ApplyAsync(
             result,
@@ -1532,7 +1533,6 @@ internal sealed partial class FileReviewer(
             state.ProtocolId,
             state.InvariantFacts,
             verificationContext,
-            requireEvidenceForEveryFinding,
             ct);
     }
 

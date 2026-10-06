@@ -7,11 +7,10 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 
 /// <summary>
-///     Runs the deterministic verifier first, then escalates only the claims it conservatively withheld for
-///     lack of bounded evidence to an evidence-gathering verifier. A withheld claim is replaced solely when the
-///     evidence verifier returns a publishable outcome; every other deterministic outcome (default-publish,
-///     objective support, invariant contradiction, degraded) is preserved unchanged. This strictly adds recall
-///     without altering the deterministic precision behavior on any other path.
+///     Runs the deterministic verifier first, then sends every claim it withheld for lack of bounded evidence to the
+///     evidence-backed judge. Local verification marks every file-pass finding as needing evidence, so every claim that
+///     no invariant fact contradicts reaches the judge. The other deterministic outcomes (invariant contradiction,
+///     degraded, and objective support for a claim that needs no evidence) are kept unchanged.
 /// </summary>
 public sealed class CompositeReviewFindingVerifier(
     DeterministicLocalReviewVerifier deterministicVerifier,
@@ -29,16 +28,15 @@ public sealed class CompositeReviewFindingVerifier(
             .VerifyAsync(workItems, invariantFacts, verificationContext, ct)
             .ConfigureAwait(false);
 
-        // Per-client gated (default off): when disabled, behave exactly like the deterministic verifier.
-        if (verificationContext?.EvidenceVerificationEnabled != true)
-        {
-            return baseOutcomes;
-        }
-
-        // No evidence channel → nothing to escalate; keep deterministic behavior exactly.
+        // Without an evidence channel nothing can be escalated. The deterministic withholds stand, and each is marked as a
+        // claim the judge could not decide, so the outage is visible in the trace.
         if (verificationContext?.Tools is null || (verificationContext.ChatClient is null && verificationContext.Resolver is null))
         {
-            return baseOutcomes;
+            return baseOutcomes
+                .Select(outcome => IsConservativeWithhold(outcome)
+                    ? outcome with { JudgeDegradation = EvidenceJudgeDegradations.Unavailable }
+                    : outcome)
+                .ToList();
         }
 
         var workItemsByClaimId = new Dictionary<string, VerificationWorkItem>(StringComparer.Ordinal);

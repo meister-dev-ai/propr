@@ -117,6 +117,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             state.MarkCompleted();
             systemContext.ReviewSession = state.Session;
             systemContext.LoopMetrics = BuildLoopMetrics(state);
+            systemContext.ReviewerFileReads = ToReviewerFileReads(state.FileReads);
 
             return ParseReviewResult(lastTextResponse, state.FileReads);
         }
@@ -1660,7 +1661,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             cancellationToken);
     }
 
-    private static List<AIFunction> BuildTools(
+    internal static List<AIFunction> BuildTools(
         IReviewContextTools? reviewTools,
         bool enableStructuralReferenceTools,
         bool enableLinkedItemTools,
@@ -2279,6 +2280,17 @@ internal sealed partial class ToolAwareAiReviewCore(
         {
             return false;
         }
+    }
+
+    // The reads that returned source, each cut to the last line that was present, so the evidence judge can re-read
+    // what the reviewer saw.
+    private static List<ReviewerFileRead> ToReviewerFileReads(IReadOnlyList<FileReadRecord> fileReads)
+    {
+        return fileReads
+            .Where(read => read.HasContent && read.LastLinePresent >= read.StartLine)
+            .Select(read => new ReviewerFileRead(read.NormalizedPath, read.StartLine, Math.Min(read.EndLine, read.LastLinePresent)))
+            .Distinct()
+            .ToList();
     }
 
     private static ReviewResult ParseReviewResult(string json, IReadOnlyList<FileReadRecord> fileReads)

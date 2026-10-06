@@ -15,8 +15,8 @@ screen; extra [review passes](../concepts/reviews.md#review-passes) pick a logic
 | Review default | `reviewDefault` | Primary review generation, and answering @-mentions |
 | Embedding default | `embeddingDefault` | Embeddings for thread memory and ProCursor similarity |
 | Triage | `reviewTriage` | Cheap per-file complexity classification |
-| Verification | `reviewVerification` | Evidence-gathering verification of a candidate finding |
-| Low effort / Medium effort / High effort | `reviewLowEffort`, `reviewMediumEffort`, `reviewHighEffort` | Per-file review at the complexity tier triage assigned; High effort also runs synthesis |
+| Verification | `reviewVerification` | The AI duplicate judge and the acceptance forecast |
+| Low effort / Medium effort / High effort | `reviewLowEffort`, `reviewMediumEffort`, `reviewHighEffort` | Per-file review at the complexity tier triage assigned; High effort also runs synthesis. Low effort also runs the per-file judge that decides every finding; on a runner the judge uses the default model of the job manifest |
 | Memory reconsideration | `memoryReconsideration` | Re-judging an existing comment thread on a re-review |
 | ProRV prefilter | `proRvPrefilter` | Not used by the review path - see below |
 
@@ -44,10 +44,10 @@ When no lookup yields a model, behavior depends on the requested purpose. Most d
 | Purpose | If nothing resolves |
 |---|---|
 | Review default | The review job fails and nothing is posted. An @-mention reply fails the same way |
-| Embedding default | Thread memory is neither stored nor retrieved, comment screening keeps the comment, and ProCursor indexing and search fail |
+| Embedding default | Thread memory is neither stored nor retrieved, and ProCursor indexing and search fail |
 | Low / Medium / High effort | The file is reviewed on the Review default model instead. For High effort, synthesis runs there too |
 | Triage | The deterministic size heuristic classifies the file - no model judges complexity |
-| Verification | Verification runs on the reviewing model itself, and the AI duplicate judge keeps both findings |
+| Verification | The AI duplicate judge keeps both findings |
 | Memory reconsideration | Reconsideration is skipped and the draft findings stand |
 | ProRV prefilter | Nothing - see below |
 

@@ -124,7 +124,7 @@ public sealed class VerificationDegradationTests
     }
 
     [Fact]
-    public async Task DeterministicLocalReviewVerifier_AgenticObjectiveClaim_ReturnsSupportedPublishOutcome()
+    public async Task DeterministicLocalReviewVerifier_NeverPublishes_AnObjectiveClaimIsHandedToTheJudge()
     {
         var sut = new DeterministicLocalReviewVerifier();
         var claim = new ClaimDescriptor(
@@ -157,10 +157,11 @@ public sealed class VerificationDegradationTests
             [],
             ct: CancellationToken.None);
 
+        // The withhold carries the reason code that hands the claim to the evidence judge.
         var outcome = Assert.Single(outcomes);
-        Assert.Equal(VerificationOutcome.SupportedKind, outcome.OutcomeKind);
-        Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
-        Assert.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, outcome.ReasonCodes);
+        Assert.Equal(VerificationOutcome.NonVerifiableKind, outcome.OutcomeKind);
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, outcome.RecommendedDisposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport, outcome.ReasonCodes);
     }
 
     [Fact]

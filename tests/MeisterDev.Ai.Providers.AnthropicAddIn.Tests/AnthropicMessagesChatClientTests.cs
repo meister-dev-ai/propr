@@ -140,6 +140,38 @@ public sealed class AnthropicMessagesChatClientTests
         Assert.Equal("toolu_1", messages[2].GetProperty("content")[0].GetProperty("tool_use_id").GetString());
     }
 
+    // A turn that forbids tool calls after earlier tool use keeps the tool definitions, because Anthropic refuses
+    // tool_use and tool_result blocks without them, and states the prohibition through tool_choice.
+    [Fact]
+    public async Task AToolModeOfNoneKeepsTheToolsAndSendsAToolChoiceOfNone()
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("done"));
+        var tool = AIFunctionFactory.Create(() => "contents", "read_file");
+
+        await Client(endpoint).GetResponseAsync(
+            [
+                new ChatMessage(ChatRole.User, "read a.cs"),
+                new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("toolu_1", "read_file", null)]),
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("toolu_1", "file contents")]),
+            ],
+            new ChatOptions { Tools = [tool], ToolMode = ChatToolMode.None });
+
+        var body = JsonDocument.Parse(endpoint.Bodies[0]).RootElement;
+        Assert.Equal("read_file", body.GetProperty("tools")[0].GetProperty("name").GetString());
+        Assert.Equal("none", body.GetProperty("tool_choice").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task ToolsWithoutAToolModeSendNoToolChoice()
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("done"));
+        var tool = AIFunctionFactory.Create(() => "contents", "read_file");
+
+        await Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "read a.cs")], new ChatOptions { Tools = [tool] });
+
+        Assert.False(JsonDocument.Parse(endpoint.Bodies[0]).RootElement.TryGetProperty("tool_choice", out _));
+    }
+
     // Anthropic's input count excludes the cached portions, unlike the OpenAI family whose total contains them.
     // The client reports what Anthropic reported and the driver adds the buckets back, so this is the vendor's
     // own shape arriving at the seam where the mapping reads it.

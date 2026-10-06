@@ -63,8 +63,7 @@ public sealed record ReviewPipelineProfile
 
     /// <summary>
     ///     Controls how aggressively this profile emits and retains findings.
-    ///     Assertive uses the emit-with-confidence certainty gate and LLM self-reflection ranking.
-    ///     Calm/Balanced use the discard gate and deterministic ranking.
+    ///     Assertive uses the emit-with-confidence certainty gate; Calm and Balanced use the discard gate.
     /// </summary>
     public ReviewAggressiveness Aggressiveness { get; init; }
 

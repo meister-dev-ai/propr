@@ -125,7 +125,7 @@ public sealed class RunnerReviewSubjectTests
         var sample = RunnerManifests.Sample();
         var manifest = sample with
         {
-            Behaviour = new RunnerReviewBehaviour(true, false, false, true, 0.3f, "file_by_file_calm"),
+            Behaviour = new RunnerReviewBehaviour(true, true, 0.3f, "file_by_file_calm"),
         };
 
         var job = RunnerReviewSubject.BuildJob(manifest);
@@ -260,7 +260,7 @@ public sealed class RunnerReviewSubjectTests
         var sample = RunnerManifests.Sample(["src/a.cs"]);
         var manifest = sample with
         {
-            Behaviour = new RunnerReviewBehaviour(false, false, false, true, null, null, MaxFileSizeBytes: 262_144),
+            Behaviour = new RunnerReviewBehaviour(false, true, null, null, MaxFileSizeBytes: 262_144),
         };
         var workspace = new FakeWorkspace { Changed = [new ChangedFileSummary("src/a.cs", ChangeType.Edit)] };
         var job = RunnerReviewSubject.BuildJob(manifest);

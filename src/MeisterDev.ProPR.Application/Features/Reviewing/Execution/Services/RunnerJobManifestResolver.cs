@@ -191,8 +191,6 @@ public sealed partial class RunnerJobManifestResolver(
                 // life, so the two cannot answer differently for the same client.
                 new RunnerReviewBehaviour(
                     await clientRegistry.GetMultiPassUnionEnabledAsync(job.ClientId, ct),
-                    await clientRegistry.GetLanguageRobustScreeningEnabledAsync(job.ClientId, ct),
-                    await clientRegistry.GetEvidenceBackedVerificationEnabledAsync(job.ClientId, ct),
                     includeLinkedItems,
                     job.ReviewTemperature,
                     job.ReviewPipelineProfileId,

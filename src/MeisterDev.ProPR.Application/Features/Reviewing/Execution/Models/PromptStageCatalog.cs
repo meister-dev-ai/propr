@@ -35,12 +35,6 @@ public static class PromptStageCatalog
                 "ReviewPrompts.BuildSynthesisSystemPrompt"),
             [PromptStageKeys.SynthesisUser] = new(
                 PromptStageKeys.SynthesisUser, "Synthesis user prompt", "shared-downstream", PromptStageRole.User, "ReviewPrompts.BuildSynthesisUserMessage"),
-            [PromptStageKeys.PrVerificationSystem] = new(
-                PromptStageKeys.PrVerificationSystem, "PR verification system prompt", "shared-downstream", PromptStageRole.System,
-                "ReviewPrompts.BuildPrVerificationSystemPrompt"),
-            [PromptStageKeys.PrVerificationUser] = new(
-                PromptStageKeys.PrVerificationUser, "PR verification user prompt", "shared-downstream", PromptStageRole.User,
-                "ReviewPrompts.BuildPrVerificationUserMessage"),
             [PromptStageKeys.MemoryReconsiderationSystem] = new(
                 PromptStageKeys.MemoryReconsiderationSystem, "Memory reconsideration system prompt", "shared-downstream", PromptStageRole.System,
                 "ReviewPrompts.BuildMemoryReconsiderationSystemPrompt"),

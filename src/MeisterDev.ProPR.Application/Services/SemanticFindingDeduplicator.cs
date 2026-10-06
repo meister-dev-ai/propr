@@ -41,7 +41,7 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ReviewComment>> DeduplicateAsync(
+    public async Task<FindingDeduplicationResult> DeduplicateAsync(
         IReadOnlyList<ReviewComment> comments,
         Guid clientId,
         CancellationToken ct = default)
@@ -49,7 +49,7 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
         ArgumentNullException.ThrowIfNull(comments);
         if (comments.Count <= 1)
         {
-            return comments;
+            return new FindingDeduplicationResult(comments, []);
         }
 
         // Re-stamp provenance onto each comment so the merge operates on provenance-aware findings rather than
@@ -63,15 +63,29 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
             commentsByFindingId[finding.FindingId] = comments[index];
         }
 
-        var mergedFindings = await this.DeduplicateFindingsAsync(findings, clientId, ct).ConfigureAwait(false);
+        var groups = await this.GroupAsync(findings, clientId, ct).ConfigureAwait(false);
 
-        var survivorComments = mergedFindings
-            .Select(finding => commentsByFindingId[finding.FindingId])
+        var survivorComments = groups
+            .Select(group => commentsByFindingId[group.Representative.FindingId])
+            .ToList();
+
+        // Every group with more than one member is a merge the judge confirmed. The record names the surviving
+        // comment and the comments it replaced, so the job protocol can show where each removed comment went.
+        var merges = groups
+            .Where(group => group.MemberCount > 1)
+            .Select(group => new FindingMergeRecord(
+                [commentsByFindingId[group.Representative.FindingId]],
+                group.Members
+                    .Where(member => !string.Equals(member.FindingId, group.Representative.FindingId, StringComparison.Ordinal))
+                    .Select(member => commentsByFindingId[member.FindingId])
+                    .ToList(),
+                FindingDeduplicationResult.SemanticSameDefectReason))
             .ToList();
 
         // Cross-file root-cause consolidation is orthogonal to same-file semantic merging; keep applying it so
         // findings that recur across files still collapse into one PR-level comment.
-        return FindingDeduplicator.Deduplicate(survivorComments);
+        var consolidated = FindingDeduplicator.Deduplicate(survivorComments, merges);
+        return new FindingDeduplicationResult(consolidated, merges);
     }
 
     /// <summary>
@@ -93,6 +107,22 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
             return findings;
         }
 
+        var groups = await this.GroupAsync(findings, clientId, ct).ConfigureAwait(false);
+        var result = new List<CandidateReviewFinding>(groups.Count);
+        foreach (var group in groups)
+        {
+            result.Add(group.MemberCount > 1 ? group.BuildMergedRepresentative() : group.Representative);
+        }
+
+        return result;
+    }
+
+    // Assigns every finding to the first earlier group whose representative it may merge with, or to a new group.
+    private async Task<List<MergeGroup>> GroupAsync(
+        IReadOnlyList<CandidateReviewFinding> findings,
+        Guid clientId,
+        CancellationToken ct)
+    {
         var groups = new List<MergeGroup>();
         foreach (var finding in findings)
         {
@@ -118,13 +148,7 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
             }
         }
 
-        var result = new List<CandidateReviewFinding>(groups.Count);
-        foreach (var group in groups)
-        {
-            result.Add(group.MemberCount > 1 ? group.BuildMergedRepresentative() : group.Representative);
-        }
-
-        return result;
+        return groups;
     }
 
     /// <summary>
@@ -243,23 +267,26 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
     private sealed class MergeGroup
     {
         private readonly HashSet<ReviewPassKind> _sourcePasses = [];
+        private readonly List<CandidateReviewFinding> _members = [];
 
         public MergeGroup(CandidateReviewFinding representative)
         {
             this.Representative = representative;
             this._sourcePasses.Add(representative.Provenance.ReviewPassKind);
-            this.MemberCount = 1;
+            this._members.Add(representative);
         }
 
         public CandidateReviewFinding Representative { get; private set; }
 
-        public int MemberCount { get; private set; }
+        public int MemberCount => this._members.Count;
+
+        public IReadOnlyList<CandidateReviewFinding> Members => this._members;
 
         public void Add(CandidateReviewFinding member, CandidateReviewFinding chosenRepresentative)
         {
             this._sourcePasses.Add(member.Provenance.ReviewPassKind);
+            this._members.Add(member);
             this.Representative = chosenRepresentative;
-            this.MemberCount++;
         }
 
         public CandidateReviewFinding BuildMergedRepresentative()

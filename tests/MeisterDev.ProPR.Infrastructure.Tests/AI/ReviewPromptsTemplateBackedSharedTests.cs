@@ -21,42 +21,6 @@ public sealed class ReviewPromptsTemplateBackedSharedTests
     }
 
     [Fact]
-    public void BuildPrVerificationSystemPrompt_UsesTemplateBackedDefault()
-    {
-        var prompt = ReviewPrompts.BuildPrVerificationSystemPrompt(null);
-
-        Assert.Contains("independently retrieved repository evidence", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("recommended_disposition", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildPrVerificationUserMessage_UsesTemplateBackedDefault()
-    {
-        var claim = new ClaimDescriptor(
-            "claim-1",
-            "finding-1",
-            ClaimDescriptor.PrLevelStage,
-            CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind,
-            "Cross-file DI registration is missing.",
-            CommentSeverity.Warning,
-            ClaimDescriptor.NeedsEvidenceMode,
-            ClaimDescriptor.CrossFileConsistencyFamily,
-            "ServiceRegistration",
-            requiresCrossFileEvidence: true,
-            requiresSymbolEvidence: true);
-        var evidence = new EvidenceBundle(
-            claim.ClaimId,
-            [new EvidenceItem("FileContentRange", "Fetched file", "src/Foo.cs", "services.AddFoo();")],
-            EvidenceBundle.PartialCoverage,
-            "One supporting file was retrieved.");
-
-        var message = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence);
-
-        Assert.Contains("Claim ID: claim-1", message, StringComparison.Ordinal);
-        Assert.Contains("Payload: services.AddFoo();", message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void BuildSynthesisSystemPrompt_UsesTemplateBackedDefault()
     {
         var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(null, true);

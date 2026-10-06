@@ -28,7 +28,7 @@ public sealed class TokenJaccardFindingDeduplicatorTests
 
         var expected = FindingDeduplicator.Deduplicate(FindingDeduplicator.CollapseSameFileDuplicates(comments));
 
-        var actual = await new TokenJaccardFindingDeduplicator().DeduplicateAsync(comments, Guid.NewGuid(), CancellationToken.None);
+        var actual = (await new TokenJaccardFindingDeduplicator().DeduplicateAsync(comments, Guid.NewGuid(), CancellationToken.None)).Comments;
 
         Assert.Equal(
             expected.Select(c => (c.FilePath, c.LineNumber, c.Severity, c.Message)),

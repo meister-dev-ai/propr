@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -18,7 +19,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Ver
 public sealed class LocalReviewVerificationExecutorTests
 {
     [Fact]
-    public async Task ApplyAsync_WhenNoClaimsAreExtracted_LeavesResultUntouchedAndNormalizesLineNumbers()
+    public async Task ApplyAsync_WhenNoClaimsAreExtracted_WithholdsTheFindingAndNormalizesLineNumbers()
     {
         CandidateReviewFinding? capturedFinding = null;
         var extractor = Substitute.For<IReviewClaimExtractor>();
@@ -34,7 +35,7 @@ public sealed class LocalReviewVerificationExecutorTests
 
         var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), Guid.NewGuid(), [], null, CancellationToken.None);
 
-        Assert.Same(result, actual);
+        Assert.Empty(actual.Comments);
         Assert.NotNull(capturedFinding);
         Assert.Null(capturedFinding!.LineNumber);
         _ = verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default!);
@@ -129,7 +130,7 @@ public sealed class LocalReviewVerificationExecutorTests
     }
 
     [Fact]
-    public async Task ApplyAsync_WhenClaimExtractionThrows_RecordsDegradedEventAndLeavesResultUntouched()
+    public async Task ApplyAsync_WhenClaimExtractionThrows_RecordsDegradedEventAndWithholdsTheFinding()
     {
         var protocolId = Guid.NewGuid();
         var extractor = Substitute.For<IReviewClaimExtractor>();
@@ -142,7 +143,7 @@ public sealed class LocalReviewVerificationExecutorTests
 
         var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), protocolId, [], null, CancellationToken.None);
 
-        Assert.Same(result, actual);
+        Assert.Empty(actual.Comments);
         _ = verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default!);
         await protocolRecorder.Received().RecordVerificationEventAsync(
             Arg.Is(protocolId),
@@ -229,7 +230,6 @@ public sealed class LocalReviewVerificationExecutorTests
             [],
             [enrichedFinding],
             null,
-            false,
             CancellationToken.None);
 
         var verifiedFinding = Assert.Single(verification.VerifiedCandidateFindings);
@@ -273,7 +273,17 @@ public sealed class LocalReviewVerificationExecutorTests
                 capturedWorkItems = callInfo.Arg<IReadOnlyList<VerificationWorkItem>>();
                 return Task.FromResult<IReadOnlyList<VerificationOutcome>>(
                     capturedWorkItems
-                        .Select(item => VerificationOutcome.Supported(item.Claim, ReviewFindingGateReasonCodes.DefaultPublish, "Supported."))
+                        .Select(item => new VerificationOutcome(
+                            item.Claim.ClaimId,
+                            item.Claim.FindingId,
+                            VerificationOutcome.SupportedKind,
+                            FinalGateDecision.PublishDisposition,
+                            [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+                            [],
+                            VerificationOutcome.ModerateEvidence,
+                            "Confirmed.",
+                            VerificationOutcome.AiMicroVerifierEvaluator,
+                            false))
                         .ToList());
             });
 
@@ -300,7 +310,6 @@ public sealed class LocalReviewVerificationExecutorTests
             [],
             [baselineFinding, prorvFinding],
             null,
-            false,
             CancellationToken.None);
 
         Assert.NotNull(capturedWorkItems);
@@ -333,7 +342,7 @@ public sealed class LocalReviewVerificationExecutorTests
     [Fact]
     public async Task ApplyAsync_FindingRequiringEvidenceContradictedByInvariant_IsDroppedWithoutJudge()
     {
-        // The claim needs evidence because every finding of the pass does, but a known invariant fact already refutes
+        // The claim needs evidence because every finding does, but a known invariant fact already refutes
         // it. The deterministic contradiction decides, and the judge, which would confirm, is never asked.
         var judge = Substitute.For<IChatClient>();
         judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
@@ -364,8 +373,7 @@ public sealed class LocalReviewVerificationExecutorTests
             new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"),
             Guid.NewGuid(),
             facts,
-            new ReviewVerificationContext(tools, "feature/x", judge, "judge-model", EvidenceVerificationEnabled: true),
-            true,
+            new ReviewVerificationContext(tools, "feature/x", judge, "judge-model"),
             CancellationToken.None);
 
         Assert.Empty(actual.Comments);
@@ -378,7 +386,7 @@ public sealed class LocalReviewVerificationExecutorTests
     [InlineData(false)]
     public async Task ApplyAsync_FindingRequiringEvidence_IsWithheldWhenClaimExtractionFailsOrYieldsNothing(bool extractionThrows)
     {
-        // An inventory-pass finding must be confirmed with evidence. Without a claim nothing can confirm it, so a failed
+        // Every finding must be confirmed with evidence. Without a claim nothing can confirm it, so a failed
         // or empty extraction withholds it, and the verifier is never asked.
         var extractor = Substitute.For<IReviewClaimExtractor>();
         if (extractionThrows)
@@ -395,7 +403,7 @@ public sealed class LocalReviewVerificationExecutorTests
         var sut = new LocalReviewVerificationExecutor(extractor, verifier, recorder);
         var result = new ReviewResult("summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Lookup may dereference null.")]);
 
-        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), Guid.NewGuid(), [], null, true, CancellationToken.None);
+        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), Guid.NewGuid(), [], null, CancellationToken.None);
 
         Assert.Empty(actual.Comments);
         Assert.Contains("withheld pending stronger evidence", actual.Summary, StringComparison.Ordinal);
@@ -410,16 +418,264 @@ public sealed class LocalReviewVerificationExecutorTests
     }
 
     [Fact]
-    public async Task ApplyAsync_FindingNotRequiringEvidence_IsKeptWhenClaimExtractionFails()
+    public async Task ApplyAsync_JudgesEveryFindingByItsTruth_NotByItsWording()
     {
-        var extractor = Substitute.For<IReviewClaimExtractor>();
-        extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>()).Returns(_ => throw new InvalidOperationException("extraction failed"));
-        var sut = new LocalReviewVerificationExecutor(extractor, Substitute.For<IReviewFindingVerifier>(), CreateProtocolRecorder());
-        var result = new ReviewResult("summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Lookup may dereference null.")]);
+        // The hedged comment describes a real defect and the firm comment describes one that is not there. The judge
+        // reads the code and decides each finding, so the hedged finding is published and the firm one is withheld.
+        const string hedgedTrue = "This might throw when the key is missing from the map, perhaps worth a look.";
+        const string firmFalse = "Lookup always returns null, so every caller fails.";
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var prompt = string.Join("\n", callInfo.Arg<IEnumerable<ChatMessage>>().Select(message => message.Text));
+                return prompt.Contains(hedgedTrue, StringComparison.Ordinal)
+                    ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"line 3 indexes the map without a check\"}"))
+                    : new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"not_confirmed\",\"reason\":\"line 3 returns the mapped value\"}"));
+            });
+        var recorder = CreateProtocolRecorder();
+        var details = new List<string>();
+        await recorder.RecordVerificationEventAsync(
+            Arg.Any<Guid>(),
+            ReviewProtocolEventNames.VerificationLocalDecision,
+            Arg.Do<string?>(value => details.Add(value!)),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        var sut = CreateJudgedExecutor(recorder);
+        var result = new ReviewResult(
+            "summary",
+            [
+                new ReviewComment("src/Lookup.cs", 3, CommentSeverity.Warning, hedgedTrue),
+                new ReviewComment("src/Lookup.cs", 7, CommentSeverity.Error, firmFalse),
+            ]);
 
-        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), Guid.NewGuid(), [], null, false, CancellationToken.None);
+        var actual = await sut.ApplyAsync(
+            result, new ReviewFileResult(Guid.NewGuid(), "src/Lookup.cs"), Guid.NewGuid(), [], CreateJudgeContext(judge), CancellationToken.None);
 
-        Assert.Single(actual.Comments);
+        var published = Assert.Single(actual.Comments);
+        Assert.Equal(hedgedTrue, published.Message);
+        Assert.Contains("1 candidate finding was withheld", actual.Summary, StringComparison.Ordinal);
+        Assert.Equal(2, details.Count);
+        var decisions = details.Select(value => JsonDocument.Parse(value).RootElement).ToList();
+        var confirmed = Assert.Single(decisions, decision => decision.GetProperty("lineNumber").GetInt32() == 3);
+        Assert.Equal("src/Lookup.cs", confirmed.GetProperty("filePath").GetString());
+        Assert.Equal(EvidenceJudgeVerdicts.Confirmed, confirmed.GetProperty("judgeVerdict").GetString());
+        Assert.Equal(FinalGateDecision.PublishDisposition, confirmed.GetProperty("disposition").GetString());
+        Assert.Contains("indexes the map without a check", confirmed.GetProperty("reason").GetString(), StringComparison.Ordinal);
+        var refused = Assert.Single(decisions, decision => decision.GetProperty("lineNumber").GetInt32() == 7);
+        Assert.Equal(EvidenceJudgeVerdicts.NotConfirmed, refused.GetProperty("judgeVerdict").GetString());
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, refused.GetProperty("disposition").GetString());
+        Assert.Contains("returns the mapped value", refused.GetProperty("reason").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_WhenAFindingIsWithheld_PublishesTheOtherCommentWithItsMetadata()
+    {
+        const string kept = "Lookup indexes the map without checking the key.";
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var prompt = string.Join("\n", callInfo.Arg<IEnumerable<ChatMessage>>().Select(message => message.Text));
+                return prompt.Contains(kept, StringComparison.Ordinal)
+                    ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"line 3 indexes the map\"}"))
+                    : new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"not_confirmed\",\"reason\":\"line 7 checks the value\"}"));
+            });
+        var keptComment = new ReviewComment("src/Lookup.cs", 3, CommentSeverity.Warning, kept)
+        {
+            SourceReadGrounding = ReviewCommentReadGrounding.Covered,
+            OriginPassKind = "MultiPassUnion",
+            OriginPassIndex = 2,
+            OriginPassLens = "inventory",
+            OriginModelId = "model-a",
+            OriginLogicalModelName = "Low Budget",
+            OriginSymbolName = "Lookup",
+            OriginSymbolKind = "method",
+            ScopeRelation = ReviewCommentScopeRelation.OnChangedLine,
+        };
+        var result = new ReviewResult(
+            "summary",
+            [keptComment, new ReviewComment("src/Lookup.cs", 7, CommentSeverity.Error, "Lookup always returns null.")]);
+
+        var actual = await CreateJudgedExecutor(CreateProtocolRecorder()).ApplyAsync(
+            result, new ReviewFileResult(Guid.NewGuid(), "src/Lookup.cs"), Guid.NewGuid(), [], CreateJudgeContext(judge), CancellationToken.None);
+
+        var published = Assert.Single(actual.Comments);
+        Assert.Same(keptComment, published);
+        Assert.Equal(ReviewCommentReadGrounding.Covered, published.SourceReadGrounding);
+        Assert.Equal("inventory", published.OriginPassLens);
+        Assert.Equal("Lookup", published.OriginSymbolName);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_JudgesAndKeepsEveryConfirmedFinding_WithoutACountLimit()
+    {
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"present in the code\"}")));
+        var sut = CreateJudgedExecutor(CreateProtocolRecorder());
+        var comments = Enumerable.Range(1, 12)
+            .Select(index => new ReviewComment("src/Lookup.cs", index * 5, CommentSeverity.Info, $"Minor style remark number {index}."))
+            .ToList();
+
+        var actual = await sut.ApplyAsync(
+            new ReviewResult("summary", comments),
+            new ReviewFileResult(Guid.NewGuid(), "src/Lookup.cs"),
+            Guid.NewGuid(),
+            [],
+            CreateJudgeContext(judge),
+            CancellationToken.None);
+
+        Assert.Equal(12, actual.Comments.Count);
+        await judge.ReceivedWithAnyArgs(12).GetResponseAsync(default!, default, default);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_WhenTheJudgeFailsForEveryFinding_WithholdsThemAndRecordsTheOutage()
+    {
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns<ChatResponse>(_ => throw new HttpRequestException("429 Too Many Requests"));
+        var recorder = CreateProtocolRecorder();
+        var degradedDetails = CaptureDegradedEvents(recorder);
+        var sut = CreateJudgedExecutor(recorder);
+        var result = new ReviewResult(
+            "summary",
+            [
+                new ReviewComment("src/Lookup.cs", 3, CommentSeverity.Warning, "Lookup throws when the key is missing."),
+                new ReviewComment("src/Lookup.cs", 7, CommentSeverity.Warning, "Lookup returns a stale value."),
+            ]);
+
+        var actual = await sut.ApplyAsync(
+            result, new ReviewFileResult(Guid.NewGuid(), "src/Lookup.cs"), Guid.NewGuid(), [], CreateJudgeContext(judge), CancellationToken.None);
+
+        Assert.Empty(actual.Comments);
+        Assert.Contains("Verification could not run for this file", actual.Summary, StringComparison.Ordinal);
+        var degraded = JsonDocument.Parse(Assert.Single(degradedDetails)).RootElement;
+        Assert.Equal("src/Lookup.cs", degraded.GetProperty("filePath").GetString());
+        Assert.Equal("evidence_judge", degraded.GetProperty("degradedComponent").GetString());
+        Assert.Equal(2, degraded.GetProperty("claimCount").GetInt32());
+        Assert.Equal(2, degraded.GetProperty("degradedCount").GetInt32());
+        Assert.True(degraded.GetProperty("allClaimsDegraded").GetBoolean());
+        Assert.Equal(2, degraded.GetProperty("reasons").GetProperty(EvidenceJudgeDegradations.ProviderError).GetInt32());
+    }
+
+    [Fact]
+    public async Task ApplyAsync_WhenTheJudgeFailsForSomeFindings_RecordsTheCountsAndKeepsTheSummaryNote()
+    {
+        const string confirmedMessage = "Lookup throws when the key is missing.";
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var prompt = string.Join("\n", callInfo.Arg<IEnumerable<ChatMessage>>().Select(message => message.Text));
+                return prompt.Contains(confirmedMessage, StringComparison.Ordinal)
+                    ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"line 3\"}"))
+                    : new ChatResponse(new ChatMessage(ChatRole.Assistant, "I cannot decide this."));
+            });
+        var recorder = CreateProtocolRecorder();
+        var degradedDetails = CaptureDegradedEvents(recorder);
+        var sut = CreateJudgedExecutor(recorder);
+        var result = new ReviewResult(
+            "summary",
+            [
+                new ReviewComment("src/Lookup.cs", 3, CommentSeverity.Warning, confirmedMessage),
+                new ReviewComment("src/Lookup.cs", 7, CommentSeverity.Warning, "Lookup returns a stale value."),
+            ]);
+
+        var actual = await sut.ApplyAsync(
+            result, new ReviewFileResult(Guid.NewGuid(), "src/Lookup.cs"), Guid.NewGuid(), [], CreateJudgeContext(judge), CancellationToken.None);
+
+        Assert.Equal(confirmedMessage, Assert.Single(actual.Comments).Message);
+        Assert.DoesNotContain("Verification could not run", actual.Summary, StringComparison.Ordinal);
+        var degraded = JsonDocument.Parse(Assert.Single(degradedDetails)).RootElement;
+        Assert.Equal(2, degraded.GetProperty("claimCount").GetInt32());
+        Assert.Equal(1, degraded.GetProperty("degradedCount").GetInt32());
+        Assert.False(degraded.GetProperty("allClaimsDegraded").GetBoolean());
+        Assert.Equal(1, degraded.GetProperty("reasons").GetProperty(EvidenceJudgeDegradations.Unparseable).GetInt32());
+    }
+
+    [Fact]
+    public async Task ApplyAsync_WithoutReviewTools_WithholdsEveryFindingAndRecordsTheJudgeAsUnavailable()
+    {
+        var recorder = CreateProtocolRecorder();
+        var degradedDetails = CaptureDegradedEvents(recorder);
+        var sut = CreateJudgedExecutor(recorder);
+        var result = new ReviewResult("summary", [new ReviewComment("src/Lookup.cs", 3, CommentSeverity.Warning, "Lookup throws when the key is missing.")]);
+
+        var actual = await sut.ApplyAsync(
+            result,
+            new ReviewFileResult(Guid.NewGuid(), "src/Lookup.cs"),
+            Guid.NewGuid(),
+            [],
+            new ReviewVerificationContext(null, "feature/x", Substitute.For<IChatClient>(), "judge-model"),
+            CancellationToken.None);
+
+        Assert.Empty(actual.Comments);
+        Assert.Contains("Verification could not run for this file", actual.Summary, StringComparison.Ordinal);
+        var degraded = JsonDocument.Parse(Assert.Single(degradedDetails)).RootElement;
+        Assert.Equal(1, degraded.GetProperty("reasons").GetProperty(EvidenceJudgeDegradations.Unavailable).GetInt32());
+    }
+
+    [Fact]
+    public async Task ApplyAsync_StoresAJudgeReasonOfAtMostTwoHundredEightyCharacters()
+    {
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, $"{{\"verdict\":\"not_confirmed\",\"reason\":\"{new string('x', 900)}\"}}")));
+        var recorder = CreateProtocolRecorder();
+        var details = new List<string>();
+        await recorder.RecordVerificationEventAsync(
+            Arg.Any<Guid>(),
+            ReviewProtocolEventNames.VerificationLocalDecision,
+            Arg.Do<string?>(value => details.Add(value!)),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        var sut = CreateJudgedExecutor(recorder);
+
+        await sut.ApplyAsync(
+            new ReviewResult("summary", [new ReviewComment("src/Lookup.cs", 3, CommentSeverity.Warning, "Lookup throws when the key is missing.")]),
+            new ReviewFileResult(Guid.NewGuid(), "src/Lookup.cs"),
+            Guid.NewGuid(),
+            [],
+            CreateJudgeContext(judge),
+            CancellationToken.None);
+
+        var reason = JsonDocument.Parse(Assert.Single(details)).RootElement.GetProperty("reason").GetString();
+        Assert.NotNull(reason);
+        Assert.True(reason!.Length <= 280);
+    }
+
+    private static List<string> CaptureDegradedEvents(IProtocolRecorder recorder)
+    {
+        var details = new List<string>();
+        recorder.RecordVerificationEventAsync(
+                Arg.Any<Guid>(),
+                ReviewProtocolEventNames.VerificationDegraded,
+                Arg.Do<string?>(value => details.Add(value!)),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return details;
+    }
+
+    private static LocalReviewVerificationExecutor CreateJudgedExecutor(IProtocolRecorder recorder)
+    {
+        return new LocalReviewVerificationExecutor(
+            new DeterministicReviewClaimExtractor(),
+            new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier(recorder)),
+            recorder);
+    }
+
+    private static ReviewVerificationContext CreateJudgeContext(IChatClient judge)
+    {
+        var tools = Substitute.For<IReviewContextTools>();
+        tools.GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("public string Lookup(string key)\n{\n    return _map[key];\n}");
+        return new ReviewVerificationContext(tools, "feature/x", judge, "judge-model");
     }
 
     private static IProtocolRecorder CreateProtocolRecorder()

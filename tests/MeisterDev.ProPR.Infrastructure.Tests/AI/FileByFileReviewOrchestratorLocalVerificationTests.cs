@@ -54,9 +54,9 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
                 new PersistenceReviewInvariantFactProvider(),
             ],
             reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
-            reviewFindingVerifier: new DeterministicLocalReviewVerifier());
+            reviewFindingVerifier: new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier()));
 
-        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], null), CancellationToken.None);
+        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], CreateVerificationTools()), CancellationToken.None);
 
         Assert.Single(storedResults);
         Assert.Single(storedResults[0].Comments!);
@@ -123,9 +123,9 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
             ],
             commentRelevanceFilterRegistry: filterRegistry,
             reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
-            reviewFindingVerifier: new DeterministicLocalReviewVerifier());
+            reviewFindingVerifier: new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier()));
 
-        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], null), CancellationToken.None);
+        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], CreateVerificationTools()), CancellationToken.None);
 
         Assert.Single(storedResults);
         Assert.Single(storedResults[0].Comments!);
@@ -183,9 +183,9 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
             ],
             commentRelevanceFilterRegistry: filterRegistry,
             reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
-            reviewFindingVerifier: new DeterministicLocalReviewVerifier());
+            reviewFindingVerifier: new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier()));
 
-        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], null), CancellationToken.None);
+        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], CreateVerificationTools()), CancellationToken.None);
 
         var storedResult = Assert.Single(storedResults);
         var storedComment = Assert.Single(storedResult.Comments!);
@@ -231,7 +231,7 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
                 new PersistenceReviewInvariantFactProvider(),
             ],
             reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
-            reviewFindingVerifier: new DeterministicLocalReviewVerifier());
+            reviewFindingVerifier: new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier()));
 
         var context = new ReviewSystemContext(null, [], null)
         {
@@ -371,11 +371,34 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
         return recorder;
     }
 
+    // Answers synthesis calls with a fixed text and evidence judge calls with a verdict: the judge confirms the null
+    // dereference and refuses every other claim.
     private static IChatClient CreateSynthesisClient()
     {
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var messages = callInfo.Arg<IEnumerable<ChatMessage>>().ToList();
+                var system = messages.FirstOrDefault(message => message.Role == ChatRole.System)?.Text ?? string.Empty;
+                if (!system.Contains("code-review verifier", StringComparison.Ordinal))
+                {
+                    return new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis"));
+                }
+
+                var user = string.Join("\n", messages.Where(message => message.Role == ChatRole.User).Select(message => message.Text));
+                return user.Contains("Confirmed null dereference", StringComparison.Ordinal)
+                    ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"line 2 dereferences null\"}"))
+                    : new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"not_confirmed\",\"reason\":\"not in the code\"}"));
+            });
         return chatClient;
+    }
+
+    private static IReviewContextTools CreateVerificationTools()
+    {
+        var tools = Substitute.For<IReviewContextTools>();
+        tools.GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("public void ExecuteAsync()\n{\n    string? value = null;\n    _ = value.Length;\n}");
+        return tools;
     }
 }

@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
+using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
@@ -417,7 +418,7 @@ public sealed class AdminRunnersControllerAuthorizationTests
             TenantId: tenantId);
     }
 
-    private const int RunnerContractVersionForTests = 2;
+    private const int RunnerContractVersionForTests = RunnerContractVersion.Current;
 
     private static AdminRunnersController CreateController(
         IRunnerRegistry registry,

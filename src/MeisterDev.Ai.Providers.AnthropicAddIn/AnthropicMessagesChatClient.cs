@@ -282,6 +282,13 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
         if (options?.Tools is { Count: > 0 } tools)
         {
             payload["tools"] = ToAnthropicTools(tools);
+
+            // A caller that declares tools but forbids calling them still has to send the definitions, because
+            // Anthropic refuses a conversation with tool_use or tool_result blocks and no tool definitions.
+            if (options.ToolMode is NoneChatToolMode)
+            {
+                payload["tool_choice"] = new JsonObject { ["type"] = "none" };
+            }
         }
 
         return payload;

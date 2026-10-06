@@ -46,9 +46,11 @@ there unless you have measured a reason not to - see
 Read the client's pass list and its multi-pass union switch, and justify each entry - see
 [review passes](../concepts/reviews.md#review-passes).
 
-Remove a shadow pass once the evaluation it was added for is over. Evidence-backed verification works the
-other way: it spends extra model calls to recover correct findings, so check whether the client has it
-on - see [what you can tune](../concepts/reviews.md#what-you-can-tune).
+Remove a shadow pass once the evaluation it was added for is over. Every pass also pays for verification:
+the per-file judge makes one to five calls per finding on the low-effort model (one more call for each repository
+lookup, at most four lookups), each limited to a short answer, and judges four findings at a time per file, so map that purpose to an inexpensive model - see [verification](../concepts/reviews.md#what-happens-during-a-review) and
+[AI purposes](../ai/purposes.md#ai-purposes). On a runner, the judge uses the default model the job manifest names,
+as the verification section of the reviews page describes.
 
 ## 5. Review less
 

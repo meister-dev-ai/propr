@@ -615,6 +615,7 @@ public sealed class PrWideVerificationPipelineTests
             ActiveProtocolId = Guid.NewGuid(),
             ProtocolRecorder = protocolRecorder,
             ModelId = "test-model",
+            DefaultReviewChatClient = ConfirmingJudge(),
         };
 
         var sut = new PrWideAgenticReviewOrchestrator(
@@ -626,12 +627,90 @@ public sealed class PrWideVerificationPipelineTests
             new DeterministicReviewClaimExtractor(),
             new ReviewContextEvidenceCollector(),
             new SummaryReconciliationService(),
-            new DeterministicLocalReviewVerifier());
+            new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier()));
 
         var result = await sut.ReviewAsync(CreateJob(), CreatePr(), context, CancellationToken.None, chatClient);
 
         var comment = Assert.Single(result.Comments);
         Assert.Equal(CommentSeverity.Error, comment.Severity);
+    }
+
+    // The evidence judge confirms every claim, so a finding is published once its claim reaches the judge.
+    private static IChatClient ConfirmingJudge()
+    {
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"line 1 shows it\"}")));
+        return judge;
+    }
+
+    [Fact]
+    public async Task ReviewAsync_APrWideFindingTheJudgeDoesNotConfirm_IsNotPublished()
+    {
+        var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
+        var protocolRecorder = CreateProtocolRecorder();
+        var reviewTools = CreateReviewTools(true);
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-001",
+                                              "concerns": ["Check anchored local findings."],
+                                              "changed_areas": ["src"],
+                                              "investigation_tasks": [],
+                                              "no_investigation_reason": "Central synthesis can verify directly."
+                                            }
+                                            """)),
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "summary": "The PR can publish a null review comment message.",
+                                              "candidate_findings": [
+                                                {
+                                                  "id": "candidate-001",
+                                                  "message": "ReviewComment.Message may be null when the model omits a message.",
+                                                  "severity": " Error ",
+                                                  "category": "per_file_comment",
+                                                  "candidate_summary_text": "Potential local nullability concern noted.",
+                                                  "confidence": { "concern": "local_reasoning", "score": 88 },
+                                                  "supporting_files": ["src/Core/Aggregator.cs"],
+                                                  "file_path": "src/Core/Aggregator.cs",
+                                                  "line_number": 1
+                                                }
+                                              ]
+                                            }
+                                            """)));
+
+        var judge = Substitute.For<IChatClient>();
+        judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"not_confirmed\",\"reason\":\"line 1 assigns a message\"}")));
+        var context = new ReviewSystemContext(null, [], reviewTools)
+        {
+            ActiveProtocolId = Guid.NewGuid(),
+            ProtocolRecorder = protocolRecorder,
+            ModelId = "test-model",
+            DefaultReviewChatClient = judge,
+        };
+
+        var sut = new PrWideAgenticReviewOrchestrator(
+            fallback,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()),
+            Substitute.For<ILogger<PrWideAgenticReviewOrchestrator>>(),
+            new DeterministicReviewFindingGate(),
+            [],
+            new DeterministicReviewClaimExtractor(),
+            new ReviewContextEvidenceCollector(),
+            new SummaryReconciliationService(),
+            new CompositeReviewFindingVerifier(new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier()));
+
+        var result = await sut.ReviewAsync(CreateJob(), CreatePr(), context, CancellationToken.None, chatClient);
+
+        Assert.Empty(result.Comments);
+        await judge.ReceivedWithAnyArgs().GetResponseAsync(default!, default, default);
     }
 
     private static ReviewJob CreateJob()

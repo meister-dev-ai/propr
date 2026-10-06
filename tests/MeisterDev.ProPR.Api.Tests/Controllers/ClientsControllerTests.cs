@@ -724,21 +724,25 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.False(body.RootElement.GetProperty("scmCommentPostingEnabled").GetBoolean());
     }
 
-    [Fact]
-    public async Task PatchClient_EnableEvidenceBackedVerification_PersistedAndReturned()
+    // An administrator tool or script written against an earlier version may still send a removed setting. The request
+    // is refused with 400, the response states why the setting was removed, and nothing in the request is applied.
+    [Theory]
+    [InlineData("enableEvidenceBackedVerification", "evidence verification now runs for every finding")]
+    [InlineData("enableLanguageRobustScreening", "language-robust comment screening no longer exists")]
+    public async Task PatchClient_WithARemovedSetting_IsRefusedWithAnExplanation(string removedSetting, string explanation)
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
         var tenantId = Guid.NewGuid();
-        db.Tenants.Add(CreateTenantRecord(tenantId, "evidence-test", "Evidence Tenant"));
+        db.Tenants.Add(CreateTenantRecord(tenantId, $"removed-{removedSetting}".ToLowerInvariant(), "Removed Setting Tenant"));
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            DisplayName = "Evidence Test",
+            DisplayName = "Removed Setting Test",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
-            EnableEvidenceBackedVerification = false,
+            EnableMultiPassUnion = false,
         };
         db.Clients.Add(record);
         await db.SaveChangesAsync();
@@ -746,17 +750,19 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new { enableEvidenceBackedVerification = true });
+        request.Content = new StringContent(
+            $"{{\"{removedSetting}\":true,\"enableMultiPassUnion\":true}}",
+            System.Text.Encoding.UTF8,
+            "application/json");
 
         var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(body.RootElement.GetProperty("enableEvidenceBackedVerification").GetBoolean());
-
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains(explanation, body, StringComparison.Ordinal);
         db.ChangeTracker.Clear();
-        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
-        Assert.True(updated.EnableEvidenceBackedVerification);
+        var unchanged = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.False(unchanged.EnableMultiPassUnion);
     }
 
     [Fact]

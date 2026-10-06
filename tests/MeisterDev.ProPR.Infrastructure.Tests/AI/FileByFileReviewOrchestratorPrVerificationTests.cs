@@ -42,15 +42,8 @@ public sealed class FileByFileReviewOrchestratorPrVerificationTests
             }
             """;
 
-        const string prVerificationJson =
-            """
-            {
-              "verdict": "supported",
-              "recommended_disposition": "Publish",
-              "reason_codes": ["verified_bounded_claim_support"],
-              "summary": "The retrieved repository evidence directly supports the cross-file claim."
-            }
-            """;
+        // The evidence judge decides the per-file finding and the cross-file concern alike.
+        const string judgeJson = """{"verdict":"confirmed","reason":"src/Foo.cs and src/Bar.cs both miss the registration"}""";
 
         var aiCore = Substitute.For<IAiReviewCore>();
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -184,13 +177,13 @@ public sealed class FileByFileReviewOrchestratorPrVerificationTests
             .Returns(Task.CompletedTask);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, synthesisJson)),
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, prVerificationJson))
+        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<IEnumerable<ChatMessage>>().First().Text.Contains("strict code-review verifier", StringComparison.Ordinal)
+                ? new ChatResponse(new ChatMessage(ChatRole.Assistant, judgeJson))
                 {
                     Usage = new UsageDetails { InputTokenCount = 41, OutputTokenCount = 13 },
-                });
+                }
+                : new ChatResponse(new ChatMessage(ChatRole.Assistant, synthesisJson)));
 
         var systemContext = new ReviewSystemContext(null, [], reviewTools)
         {
@@ -210,7 +203,8 @@ public sealed class FileByFileReviewOrchestratorPrVerificationTests
             deterministicReviewFindingGate: new DeterministicReviewFindingGate(),
             reviewInvariantFactProviders: [new DomainReviewInvariantFactProvider()],
             reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
-            reviewFindingVerifier: new DeterministicLocalReviewVerifier(),
+            reviewFindingVerifier: new CompositeReviewFindingVerifier(
+                new DeterministicLocalReviewVerifier(), new EvidenceBackedReviewVerifier(protocolRecorder)),
             reviewEvidenceCollector: new ReviewContextEvidenceCollector());
 
         var result = await sut.ReviewAsync(job, pr, systemContext, CancellationToken.None);

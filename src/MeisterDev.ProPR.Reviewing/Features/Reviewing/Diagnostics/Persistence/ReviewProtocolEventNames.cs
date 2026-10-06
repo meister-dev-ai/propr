@@ -16,8 +16,6 @@ public static class ReviewProtocolEventNames
     public const string MultiPassUnionSkipped = "multi_pass_union_skipped";
     public const string MultiPassUnionPassSkipped = "multi_pass_union_pass_skipped";
     public const string PassShadowCompleted = "pass_shadow_completed";
-    public const string CommentScreeningDisposition = "comment_screening_disposition";
-    public const string CommentScreeningDegraded = "comment_screening_degraded";
     public const string CommentInfoStripped = "comment_info_stripped";
     public const string CommentSeverityDowngraded = "comment_severity_downgraded";
     public const string MemoryReconsiderationCompleted = "memory_reconsideration_completed";
@@ -71,7 +69,9 @@ public static class ReviewProtocolEventNames
     public const string RepeatedJudgmentDecision = "repeated_judgment_decision";
     public const string PromptStageEvidenceRecorded = "prompt_stage_evidence_recorded";
     public const string ReviewStepSkipped = "review_step_skipped";
-    public const string ImportanceRankingApplied = "importance_ranking_applied";
+    public const string FindingDeduplication = "finding_deduplication";
+    public const string EvidenceJudgeToolCall = "evidence_judge_tool_call";
+    public const string QualityFilterApplied = "quality_filter_applied";
     public const string LocalWorkspacePrepared = "local_workspace_prepared";
     public const string LocalWorkspaceFailed = "local_workspace_failed";
     public const string LocalWorkspaceFallbackApplied = "local_workspace_fallback_applied";

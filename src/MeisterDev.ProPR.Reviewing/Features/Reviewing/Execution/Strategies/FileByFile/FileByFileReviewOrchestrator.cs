@@ -19,7 +19,6 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Deduplication;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
-using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterDev.ProPR.ProRV.Abstractions;
 using Microsoft.Extensions.AI;
@@ -103,7 +102,13 @@ internal sealed partial class FileByFileReviewOrchestrator(
             null,
             null,
             null,
-            new PrLevelReviewVerificationExecutor(reviewClaimExtractor, reviewEvidenceCollector, protocolRecorder, options.Value),
+            new PrLevelReviewVerificationExecutor(
+                reviewClaimExtractor,
+                reviewEvidenceCollector,
+                protocolRecorder,
+                options.Value,
+                reviewFindingVerifier,
+                reviewInvariantFactProviders),
             aiRuntimeResolver,
             deterministicReviewFindingGate,
             reviewInvariantFactProviders,
@@ -248,15 +253,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             new FileByFileContextPrefetchStage(options, protocolRecorder),
             new FileByFileRiskMarkerStage(),
             new FileByFileConfidenceFloorStage(options, protocolRecorder),
-            new FileByFileSemanticScreeningStage(
-                new EmbeddingSemanticCommentScreener(
-                    Microsoft.Extensions.Options.Options.Create(options),
-                    aiRuntimeResolver,
-                    NullLogger<EmbeddingSemanticCommentScreener>.Instance),
-                protocolRecorder),
             new FileByFileInfoCommentStripStage(protocolRecorder),
-            new FileByFileImportanceRankingStage(options),
-            new FileByFileSelfReflectionRankingStage(options, NullLogger<FileByFileSelfReflectionRankingStage>.Instance),
         ]);
     }
 
@@ -269,7 +266,10 @@ internal sealed partial class FileByFileReviewOrchestrator(
         FileReviewDispatchPlanner.BudgetSoftCapSummary budgetSoftCap,
         CancellationToken ct)
     {
-        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
+        // The quality filter runs only on findings that the evidence judge did not decide.
+        var fileFindingsJudged = fileReviewer.VerifiesFindings && !baseContext.SkippedSteps.Contains(FileByFileReviewStepIds.LocalVerification);
+        return await this.GetSynthesisExecutor()
+            .SynthesizeAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct, fileFindingsJudged);
     }
 
     private async Task RecordReviewProfileSelectedEventAsync(
