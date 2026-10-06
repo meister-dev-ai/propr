@@ -22,7 +22,12 @@ RUN npm run build
 # native library closure (libtiff, freetype, libgd, nghttp2). Serving the built
 # SPA needs none of them, and dropping them clears the libtiff CVEs (no Alpine
 # fix available) that the full alpine tag carries.
-FROM docker.io/library/nginx@sha256:3b171d7224b669faa3cc2137fea0a65301791df1ec1f271ebd2a2b7461f7fade
+FROM docker.io/library/nginx@sha256:f761b94f2cb9e8e05e2943d5f773609596113ef69b54e2433a996d109a8f78b7
+# Alpine 3.24 ships openssl 3.5.9 and pcre2 10.49 with the current security
+# fixes, and the pinned nginx image still carries 3.5.8 and 10.48. This step
+# installs the fixed versions before nginx:alpine-slim is rebuilt. Remove it
+# once the pinned digest ships these versions itself.
+RUN apk add --no-cache --upgrade libssl3 libcrypto3 pcre2
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Run as the unprivileged nginx user (uid 101, already present in the base image)
