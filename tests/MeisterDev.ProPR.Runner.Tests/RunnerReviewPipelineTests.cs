@@ -77,7 +77,7 @@ public sealed class RunnerReviewPipelineTests
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(["prWideCandidateGeneratorFactory"], absent);
+        Assert.Equal(["exposureCollector", "prWideCandidateGeneratorFactory"], absent);
     }
 
     [Fact]

@@ -102,6 +102,7 @@ public sealed record CodeInsightFindingRow(
 /// <param name="CountsAsMiss">Whether it counts toward recall.</param>
 /// <param name="ClassifierConfidence">The classifier's confidence, 0–1.</param>
 /// <param name="HarvestedAt">When it was harvested.</param>
+/// <param name="JudgementFailed">True when the three judgement flags represent unavailable decisions.</param>
 public sealed record CodeInsightMissRow(
     Guid Id,
     Guid ClientId,
@@ -116,4 +117,6 @@ public sealed record CodeInsightMissRow(
     bool IsInScope,
     bool CountsAsMiss,
     double? ClassifierConfidence,
-    DateTimeOffset HarvestedAt);
+    DateTimeOffset HarvestedAt,
+    bool JudgementFailed = false,
+    bool ExcludedAsOwnFinding = false);

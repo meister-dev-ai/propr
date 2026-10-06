@@ -143,7 +143,9 @@ public sealed class AiFindingTypeClassifierTests
     {
         var sut = CreateClassifier(body);
 
-        Assert.Null((await sut.ClassifyAsync(CreateRequest())).Verdict);
+        var result = await sut.ClassifyAsync(CreateRequest());
+        Assert.Null(result.Verdict);
+        Assert.True(result.ModelWasAsked);
     }
 
     [Fact]
@@ -155,7 +157,9 @@ public sealed class AiFindingTypeClassifierTests
 
         var sut = new AiFindingTypeClassifier(resolver, Substitute.For<IModelUsageRecorder>(), NullLogger<AiFindingTypeClassifier>.Instance);
 
-        Assert.Null((await sut.ClassifyAsync(CreateRequest())).Verdict);
+        var result = await sut.ClassifyAsync(CreateRequest());
+        Assert.Null(result.Verdict);
+        Assert.False(result.ModelWasAsked);
     }
 
     // Findings are classified concurrently, and resolution reads several repositories over one scoped DbContext.
@@ -212,7 +216,9 @@ public sealed class AiFindingTypeClassifierTests
             Substitute.For<IModelUsageRecorder>(),
             NullLogger<AiFindingTypeClassifier>.Instance);
 
-        Assert.Null((await sut.ClassifyAsync(CreateRequest())).Verdict);
+        var result = await sut.ClassifyAsync(CreateRequest());
+        Assert.Null(result.Verdict);
+        Assert.True(result.ModelWasAsked);
     }
 
     [Fact]

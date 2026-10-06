@@ -30,6 +30,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeisterDev.ProPR.CodeInsights.Contracts;
+using MeisterDev.ProPR.Application.Features.Providers.Identity;
 
 namespace MeisterDev.ProPR.Application.Services;
 
@@ -660,6 +661,8 @@ public sealed partial class ReviewOrchestrationService(
         PullRequest pr,
         ReviewResult result,
         ReviewCommentPostingDiagnosticsDto diagnostics,
+        ReviewResult publishedResult,
+        bool postingEnabled,
         CancellationToken ct)
     {
         if (codeInsightFindingIngestionService is null)
@@ -680,7 +683,9 @@ public sealed partial class ReviewOrchestrationService(
                 revisionKey,
                 pr.Status.ToString(),
                 observedAt,
-                BuildProducedFindings(result.Comments, diagnostics.PostedComments),
+                ReviewFindingPublicationMapper.BuildProducedFindings(
+                    result.Comments, publishedResult.Comments, diagnostics, postingEnabled,
+                    ProviderSourceIdentity.FromReviewJob(job).Value),
                 pr.RepositoryName);
 
             await codeInsightFindingIngestionService.HandleReviewFindingsProducedAsync(evt, ct);
@@ -692,60 +697,6 @@ public sealed partial class ReviewOrchestrationService(
                 "Code-insight collection failed for PR {PullRequestId}; continuing without collecting.",
                 job.PullRequestId);
         }
-    }
-
-    // Pair each produced finding with the provider comment the posting pass created for it. The anchor
-    // (file path + line) is the only basis both sides share, which is the same basis the posted-comment
-    // provenance side-write uses. Each posted ref is consumed at most once so two findings on the same
-    // anchor cannot both claim the same provider thread.
-    private static IReadOnlyList<ReviewFindingProduced> BuildProducedFindings(
-        IReadOnlyList<ReviewComment> comments,
-        IReadOnlyList<PostedReviewCommentRef> postedComments)
-    {
-        // The summary thread shares the absent anchor of a pull-request-level finding and is posted first, so
-        // without this filter the first fileless finding claimed the summary's ids and was attributed to a
-        // thread that never carried a concern.
-        var unclaimed = postedComments
-            .Where(posted => posted.ThreadKind == PostedReviewCommentKind.Inline)
-            .ToList();
-        var produced = new List<ReviewFindingProduced>(comments.Count);
-
-        for (var ordinal = 0; ordinal < comments.Count; ordinal++)
-        {
-            var comment = comments[ordinal];
-            var matchIndex = unclaimed.FindIndex(posted =>
-                string.Equals(posted.FilePath, comment.FilePath, StringComparison.Ordinal)
-                && posted.Line == comment.LineNumber);
-
-            PostedReviewCommentRef? match = null;
-            if (matchIndex >= 0)
-            {
-                match = unclaimed[matchIndex];
-                unclaimed.RemoveAt(matchIndex);
-            }
-
-            produced.Add(
-                new ReviewFindingProduced(
-                    ordinal,
-                    comment.FilePath,
-                    comment.LineNumber,
-                    comment.Severity,
-                    comment.Message,
-                    comment.OriginPassKind,
-                    comment.OriginPassIndex,
-                    comment.OriginPassLens,
-                    comment.OriginPassShadow,
-                    comment.ScopeRelation,
-                    comment.SourceReadGrounding,
-                    match?.ProviderThreadId,
-                    match?.ProviderCommentId,
-                    comment.OriginModelId,
-                    comment.OriginLogicalModelName,
-                    comment.OriginSymbolName,
-                    comment.OriginSymbolKind));
-        }
-
-        return produced;
     }
 
     private async Task<ClientScmConnectionDto?> ResolveRetentionConnectionAsync(ReviewJob job, CancellationToken ct)
@@ -921,7 +872,7 @@ public sealed partial class ReviewOrchestrationService(
             // publication policy above can drop findings, and every one it drops shifts the alignment.
             await this.IndexPostedFindingsAsync(job, publishResult, diagnostics, autoResolvedThreadIds, ct);
 
-            await this.CollectCodeInsightFindingsAsync(job, pr, publicationResult, diagnostics, ct);
+            await this.CollectCodeInsightFindingsAsync(job, pr, publicationResult, diagnostics, publishResult, scmCommentPostingEnabled, ct);
 
             if (protocolId.HasValue)
             {
@@ -929,7 +880,7 @@ public sealed partial class ReviewOrchestrationService(
                 await this.RecordSuppressedFindingsAsync(
                     protocolId.Value,
                     diagnostics,
-                    MapPublishedOrdinalsToPersisted(publicationResult.Comments, publishResult.Comments),
+                    ReviewFindingPublicationMapper.MapPublishedOrdinalsToPersisted(publicationResult.Comments, publishResult.Comments),
                     ct);
 
                 // Only when comments were actually going out. With posting disabled nothing was published, so
@@ -1597,29 +1548,6 @@ public sealed partial class ReviewOrchestrationService(
     ///     the minimum-severity filter drops nothing the two agree, and when it drops anything they do not, so
     ///     the translation happens once here rather than being assumed away.
     /// </remarks>
-    private static IReadOnlyList<int> MapPublishedOrdinalsToPersisted(
-        IReadOnlyList<ReviewComment> persisted,
-        IReadOnlyList<ReviewComment> published)
-    {
-        var map = new int[published.Count];
-        var persistedIndex = 0;
-
-        for (var publishedIndex = 0; publishedIndex < published.Count; publishedIndex++)
-        {
-            // The filter preserves order and keeps object identity, so advancing a single cursor pairs them.
-            while (persistedIndex < persisted.Count
-                   && !ReferenceEquals(persisted[persistedIndex], published[publishedIndex]))
-            {
-                persistedIndex++;
-            }
-
-            map[publishedIndex] = persistedIndex < persisted.Count ? persistedIndex : publishedIndex;
-            persistedIndex++;
-        }
-
-        return map;
-    }
-
     private async Task RecordSuppressedFindingsAsync(
         Guid protocolId,
         ReviewCommentPostingDiagnosticsDto diagnostics,

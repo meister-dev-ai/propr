@@ -74,6 +74,7 @@ Start at one of these:
 | [Quickstart](docs/quickstart.md) | You want ProPR running on one machine, with one review posted on a real pull request |
 | [How it works](docs/concepts/how-it-works.md) | You want to know what you deployed and how a review gets triggered |
 | [Reviews](docs/concepts/reviews.md) | You need to know what happens inside a review, or why a finding was not posted |
+| [Reviewer performance](docs/concepts/reviewer-performance.md) | You want interpretation ranges, model precision comparisons, evidence coverage, or saved reports |
 | [SCM platforms](docs/platforms/index.md) | You are connecting Azure DevOps, GitHub, GitLab or Forgejo, on-prem included |
 | [AI providers](docs/ai/index.md) | You are choosing a model provider, or deciding between a native family and a gateway |
 | [Deploying](docs/operate/deploy.md) | You are past evaluation and need ingress, images, workers and persistence configured |
@@ -81,6 +82,7 @@ Start at one of these:
 | [Security](docs/reference/security.md) | You are reviewing where code goes, secrets, sessions, and tenant isolation |
 | [Editions](docs/reference/editions.md) | Something is refused and you suspect it needs a commercial license |
 | [Usage statistics](docs/reference/usage-statistics.md) | You need the field-by-field payload of the daily report, and how to switch it off |
+| [Code Insights architecture](docs/architecture/code-insights.md) | You need the analytics evidence, projection, authorization and report ownership boundaries |
 
 ## License
 

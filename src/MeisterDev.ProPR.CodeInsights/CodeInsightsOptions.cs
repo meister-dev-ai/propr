@@ -36,6 +36,9 @@ public sealed class CodeInsightsOptions
     /// <summary>How long collected data is kept, in days. Floored at one day.</summary>
     public int RetentionDays { get; set; } = 365;
 
+    /// <summary>Independent retention window for immutable saved reports, in days.</summary>
+    public int ReportRetentionDays { get; set; } = 365;
+
     /// <summary>Jobs whose roll-ups one catch-up sweep may project. Floored at one.</summary>
     public int BackfillMaxJobs { get; set; } = 50;
 

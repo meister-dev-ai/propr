@@ -14,13 +14,14 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using MeisterDev.ProPR.CodeInsights.Contracts;
+using MeisterDev.ProPR.CodeInsights.Persistence;
+using MeisterDev.ProPR.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace MeisterDev.ProPR.CodeInsights.Tests.Persistence;
 
 /// <summary>
-///     The code-insight enrichment hangs off thread memory and must stay strictly additive: a memory is far
-///     more valuable than the metadata attached to it, and the storage decision took three separate bug fixes
-///     to get right. These tests pin that the enrichment cannot change what is stored or whether it is stored.
+///     Finding links and keywords enrich stored memories without changing the memory storage decision.
 /// </summary>
 public sealed class ThreadMemoryCodeInsightEnrichmentTests
 {
@@ -31,6 +32,52 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
 
     private static readonly Guid ClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid FindingId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task KnownSourceLinksOnlyItsFindingWhenThreadIdentifiersOverlap(bool matchingFindingExists)
+    {
+        await using var db = new MeisterProPRDbContext(
+            new DbContextOptionsBuilder<MeisterProPRDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var pr = new CodeInsightPullRequest
+        {
+            Id = Guid.NewGuid(),
+            ClientId = ClientId,
+            RepositoryId = "repo-1",
+            PullRequestId = 7,
+        };
+        db.Add(pr);
+        db.Add(Finding(pr.Id, "GitHub:https://other.example"));
+        var matching = Finding(pr.Id, "GitHub:https://provider.example");
+        if (matchingFindingExists)
+        {
+            db.Add(matching);
+        }
+
+        await db.SaveChangesAsync();
+        var codec = Substitute.For<ISecretProtectionCodec>();
+        codec.Unprotect(Arg.Any<string>(), Arg.Any<string>()).Returns("The null check is missing.");
+        var harness = new Harness(findingStore: new CodeInsightFindingStore(db, codec));
+
+        await harness.Service.HandleThreadResolvedAsync(Resolved(providerScope: matching.ProviderScope));
+
+        var stored = await harness.CapturedRecordAsync();
+        Assert.Equal(matchingFindingExists ? matching.Id : (Guid?)null, stored.CodeInsightFindingId);
+        Assert.Equal(["null-check", "authentication"], stored.Keywords);
+        Assert.Equal("Resolved by adding the null check.", stored.ResolutionSummary);
+    }
+
+    [Fact]
+    public async Task UnavailableSourceRetainsTheUnqualifiedLookup()
+    {
+        var harness = new Harness();
+
+        await harness.Service.HandleThreadResolvedAsync(Resolved());
+
+        Assert.Equal(FindingId, (await harness.CapturedRecordAsync()).CodeInsightFindingId);
+        await harness.Store.Received(1).FindByProviderThreadAsync(ClientId, "repo-1", 7, "9001", Arg.Any<CancellationToken>(), null);
+    }
 
     [Fact]
     public async Task AMemoryFromAProPrFinding_CarriesTheFindingLinkAndItsKeywords()
@@ -56,10 +103,11 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
                 Arg.Any<string>(),
                 Arg.Any<long>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns((CodeInsightFindingView?)null);
 
-        await harness.Service.HandleThreadResolvedAsync(Resolved());
+        await harness.Service.HandleThreadResolvedAsync(Resolved(providerScope: "GitHub:https://provider.example"));
 
         var stored = await harness.CapturedRecordAsync();
         Assert.Null(stored.CodeInsightFindingId);
@@ -71,7 +119,7 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
         var harness = new Harness();
         harness.Gate.IsCollectionEnabledAsync(ClientId, Arg.Any<CancellationToken>()).Returns(false);
 
-        await harness.Service.HandleThreadResolvedAsync(Resolved());
+        await harness.Service.HandleThreadResolvedAsync(Resolved(providerScope: "GitHub:https://provider.example"));
 
         var stored = await harness.CapturedRecordAsync();
         // The finding link is Code Insights data and stays behind the gate. Keywords are search metadata on a
@@ -83,7 +131,8 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
             Arg.Any<string>(),
             Arg.Any<long>(),
             Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>());
         await harness.KeywordExtractor.Received(1).ExtractAsync(
             ClientId,
             Arg.Any<string>(),
@@ -94,7 +143,7 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
     [Fact]
     public async Task AFailingFindingLookupStillStoresTheMemory()
     {
-        // Losing a memory over metadata would be a bad trade in every direction.
+        // A failed finding lookup must not prevent memory storage.
         var harness = new Harness();
         harness.Store
             .FindByProviderThreadAsync(
@@ -102,10 +151,11 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
                 Arg.Any<string>(),
                 Arg.Any<long>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .ThrowsAsync(new InvalidOperationException("the insight store is unreachable"));
 
-        await harness.Service.HandleThreadResolvedAsync(Resolved());
+        await harness.Service.HandleThreadResolvedAsync(Resolved(providerScope: "GitHub:https://provider.example"));
 
         var stored = await harness.CapturedRecordAsync();
         Assert.Equal("Resolved by adding the null check.", stored.ResolutionSummary);
@@ -175,7 +225,8 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
 
     private static ThreadResolvedDomainEvent Resolved(
         ThreadResolutionIntent intent = ThreadResolutionIntent.AcceptedByHuman,
-        ThreadAnchorCodeChange codeChange = ThreadAnchorCodeChange.Unknown)
+        ThreadAnchorCodeChange codeChange = ThreadAnchorCodeChange.Unknown,
+        string? providerScope = null)
     {
         return new ThreadResolvedDomainEvent(
             ClientId,
@@ -189,12 +240,26 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
             "alice: needs a null check\nbob: by design, the caller guarantees it",
             DateTimeOffset.UtcNow,
             intent,
-            codeChange);
+            codeChange,
+            ProviderScope: providerScope);
+    }
+
+    private static CodeInsightFinding Finding(Guid pullRequestId, string scope)
+    {
+        return new CodeInsightFinding
+        {
+            Id = Guid.NewGuid(),
+            CodeInsightPullRequestId = pullRequestId,
+            JobId = Guid.NewGuid(),
+            RevisionKey = Guid.NewGuid().ToString(),
+            ProviderScope = scope,
+            ProviderThreadId = "9001",
+        };
     }
 
     private sealed class Harness
     {
-        public Harness(bool withCodeInsights = true)
+        public Harness(bool withCodeInsights = true, ICodeInsightFindingStore? findingStore = null)
         {
             this.Repository = Substitute.For<IThreadMemoryRepository>();
             this.Store = Substitute.For<ICodeInsightFindingStore>();
@@ -208,7 +273,8 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
                     Arg.Any<string>(),
                     Arg.Any<long>(),
                     Arg.Any<string>(),
-                    Arg.Any<CancellationToken>())
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<string?>())
                 .Returns(
                     new CodeInsightFindingView(
                         FindingId,
@@ -247,7 +313,7 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
                 Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()),
                 NullLogger<ThreadMemoryService>.Instance,
                 Substitute.For<IMemoryReconsiderationPromptBuilder>(),
-                codeInsightFindingStore: withCodeInsights ? this.Store : null,
+                codeInsightFindingStore: withCodeInsights ? findingStore ?? this.Store : null,
                 memoryKeywordExtractor: withCodeInsights ? this.KeywordExtractor : null,
                 codeInsightsCollectionGate: withCodeInsights ? this.Gate : null);
         }

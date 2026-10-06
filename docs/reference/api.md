@@ -817,6 +817,65 @@ Diagnostics are scoped to a single review; there is no cross-review trace query.
 Reading a protocol to answer a specific symptom starts at
 [troubleshooting](../operate/troubleshooting.md).
 
+## Reviewer performance
+
+These Code Insights endpoints require tenant administration, the licensed capability and access to the
+selected clients. `POST /api/reviewer-performance/ranges/query` reads retained joint counts for one or two
+views under a consistent database snapshot:
+
+```json
+{
+  "bucket": "day",
+  "aggregation": "cumulative",
+  "grouping": "none",
+  "views": [
+    {
+      "from": "2026-09-01",
+      "to": "2026-09-30",
+      "clientIds": null,
+      "repositories": null,
+      "models": null,
+      "types": null,
+      "qualifiers": null
+    }
+  ],
+  "breakdown": { "rows": "type", "columns": "qualifier", "date": "2026-09-30", "viewIndex": 0 }
+}
+```
+
+`bucket` accepts `day`, `week` or `month`; `aggregation` accepts `cumulative` or `period`. Grouping accepts
+`none`, `client`, `repository`, `model`, `type` or `qualifier`. Matrix axes use two distinct dimensions from
+that list, excluding `none`. Matrix date selects a bucket in its zero-based `viewIndex`; the response
+displays the clipped measurement window.
+
+Null selections include all authorized values; empty arrays include none. Use returned facet IDs for
+repository and model selections because they include retained identity scope. The query permits 1–366 days
+per view, years 1900–9998, at most 128 selections per dimension, 100,000 grouped joint cells per view, 24
+series, 2,000 timeline points and 12 values per matrix axis. Exceeded limits return 400 without truncating
+counts. Unauthorized selected clients return 403.
+
+Each response includes calculation version, capture time, database evidence revision, authorized display
+facets, counts, all premise tuples, summaries, measurement windows and evidence limits. Projection timestamps
+describe source freshness separately from capture time. Cumulative measurements retain earlier evidence
+through the selected window; per-period measurements require activity in their own bucket. Scenario
+`falseNegatives` is null when its compatible FN population is unavailable; recorded raw counts remain in
+`counts`. Model-specific recall/F1 remains unavailable until
+compatible human-miss model membership exists. [Reviewer performance](../concepts/reviewer-performance.md)
+defines these scores and their evidence requirements.
+
+`POST /api/reviewer-performance/reports` takes `{"id":"<guid>","name":"<name>","query":{...}}` and
+captures the complete server response. Reuse the same ID and identical body for an idempotent retry; a
+different request with that ID returns 409. Report names permit 1–160 characters, and capture requires at
+least one authorized client. `GET /api/reviewer-performance/reports` lists up to 100 unexpired reports.
+`GET /api/reviewer-performance/reports/{id}` opens the stored response without live recalculation;
+`DELETE` on that path removes the complete report. Every report operation requires access to all contained
+clients, including idempotent capture retries. Missing, expired or unauthorized reports return 404.
+
+The misses browse response includes `judgementFailed`. When true, its three judgement flags are
+unavailable decisions, and the thread does not supply an eligible FN verdict.
+`excludedAsOwnFinding` identifies a current match to a retained reviewer finding. Its original human
+judgements remain present, but `countsAsMiss` is false.
+
 ## Usage statistics
 
 Six platform-administrator endpoints cover the daily snapshot. [Usage statistics](usage-statistics.md) describes

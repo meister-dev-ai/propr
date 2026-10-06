@@ -14,6 +14,12 @@ internal sealed class CodeInsightMissConfiguration : IEntityTypeConfiguration<Co
     {
         builder.ToTable("code_insight_misses");
 
+        builder.Property(row => row.ProviderScope).HasMaxLength(1024);
+        builder.Property(row => row.TypeMembership).HasMaxLength(1024);
+        builder.Property(row => row.DimensionClassifierVersion).HasMaxLength(256);
+        builder.Property(row => row.Qualifier).HasConversion<short?>();
+
+        builder.Property(row => row.SourceFingerprint).HasMaxLength(64);
         builder.HasKey(miss => miss.Id);
         builder.Property(miss => miss.Id).HasColumnName("id").ValueGeneratedNever();
 
@@ -78,9 +84,8 @@ internal sealed class CodeInsightMissConfiguration : IEntityTypeConfiguration<Co
             .HasColumnName("last_judged_at")
             .IsRequired();
 
-        // One record per human thread per pull request. A crawl re-observes the same thread on every pass, and
-        // harvesting it twice would double its contribution to recall.
-        builder.HasIndex(miss => new { miss.CodeInsightPullRequestId, miss.ProviderThreadId })
+        // Provider namespaces can reuse thread ids inside the inherited pull-request aggregate.
+        builder.HasIndex(miss => new { miss.CodeInsightPullRequestId, miss.ProviderScope, miss.ProviderThreadId })
             .IsUnique()
             .HasDatabaseName("uq_code_insight_misses_thread");
 

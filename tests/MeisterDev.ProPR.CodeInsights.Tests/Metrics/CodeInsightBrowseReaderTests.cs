@@ -75,6 +75,19 @@ public sealed class CodeInsightBrowseReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task FailedHumanJudgementIsExposedAsUnavailableByTheBrowseResponse()
+    {
+        var key = await this.SeedAsync(ClientA, "repo-1", 7, ["a.cs"]);
+        await this._store.RecordMissAsync(key, Miss("failed-human", false) with { JudgementFailed = true, Confidence = null });
+        var row = Assert.Single(await this._reader.ListMissesAsync(this.Query(ClientA)));
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(
+            row, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.True(json.TryGetProperty("judgementFailed", out var failed));
+        Assert.True(failed.GetBoolean());
+        Assert.False(row.CountsAsMiss);
+    }
+
+    [Fact]
     public async Task AFindingWhoseThreadHasNotResolvedHasNoOutcomeRatherThanADefaultOne()
     {
         await this.SeedAsync(ClientA, "repo-1", 7, ["a.cs"]);

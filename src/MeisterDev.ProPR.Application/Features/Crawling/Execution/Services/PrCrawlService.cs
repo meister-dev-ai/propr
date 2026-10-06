@@ -16,6 +16,7 @@ using MeisterDev.ProPR.Domain.Events;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using MeisterDev.ProPR.CodeInsights.Contracts;
+using MeisterDev.ProPR.Application.Features.Providers.Identity;
 
 namespace MeisterDev.ProPR.Application.Services;
 
@@ -536,12 +537,14 @@ public sealed partial class PrCrawlService(
                 return;
             }
 
+            var passOwnership = await this.ResolveThreadOwnershipAsync(config, pr, ct);
+            var observedAt = DateTimeOffset.UtcNow;
             var currentThreads = await threadStatusFetcher!.GetReviewerThreadStatusesAsync(
                 config.ProviderScopePath,
                 config.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                await this.ResolveThreadOwnershipAsync(config, pr, ct),
+                passOwnership,
                 config.ClientId,
                 ct);
 
@@ -551,6 +554,8 @@ public sealed partial class PrCrawlService(
             }
 
             LogStateMachineEvaluating(logger, pr.CodeReview.Number, currentThreads.Count);
+            var providerScope = ProviderSourceIdentity.FromReviewSource(
+                pr.Host.Provider, pr.Host.Provider == ScmProvider.AzureDevOps ? config.ProviderScopePath : pr.Host.HostBaseUrl).Value;
 
             // Process each thread: detect transitions and dispatch domain events.
             foreach (var thread in currentThreads)
@@ -568,6 +573,16 @@ public sealed partial class PrCrawlService(
                 var isCurrentlyResolved = ThreadResolutionStatusInterpreter.IsResolved(currentIntent);
                 var wasPreviouslyResolved = ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(previousStatus));
 
+                if (codeInsightDispositionService is not null)
+                {
+                    await codeInsightDispositionService.HandleThreadResolvedAsync(
+                        new ThreadResolvedDomainEvent(
+                            config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, pr.Repository.ExternalRepositoryId, pr.CodeReview.Number,
+                            thread.ThreadId, thread.FilePath, null, thread.CommentHistory, observedAt,
+                            currentIntent, thread.CodeChangedSinceRaised, thread.Status,
+                            providerScope), ct);
+                }
+
                 if (isCurrentlyResolved && !wasPreviouslyResolved)
                 {
                     var resolved = new ThreadResolvedDomainEvent(
@@ -582,17 +597,11 @@ public sealed partial class PrCrawlService(
                         thread.CommentHistory,
                         DateTimeOffset.UtcNow,
                         currentIntent,
-                        thread.CodeChangedSinceRaised);
+                        thread.CodeChangedSinceRaised,
+                        thread.Status,
+                        providerScope);
 
                     await threadMemoryService!.HandleThreadResolvedAsync(resolved, ct);
-
-                    // Passive code-insight observer, a sibling of thread memory rather than a change to it:
-                    // a finding gets an outcome even in the cases memory deliberately refuses to store,
-                    // because those are exactly the cases a quality metric needs. It never throws.
-                    if (codeInsightDispositionService is not null)
-                    {
-                        await codeInsightDispositionService.HandleThreadResolvedAsync(resolved, ct);
-                    }
                 }
                 else if (!isCurrentlyResolved && wasPreviouslyResolved)
                 {

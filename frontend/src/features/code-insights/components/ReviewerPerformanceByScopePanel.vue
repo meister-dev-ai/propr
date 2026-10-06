@@ -16,15 +16,14 @@
         </p>
       </div>
 
-      <div class="grain-picker">
-        <label for="performance-grain">Group by</label>
-        <select id="performance-grain" :value="grain" @change="onGrainChange">
-          <option value="client">Client</option>
-          <option value="repository">Repository</option>
-          <option value="pullRequest">Pull request</option>
-          <option value="model">Model</option>
-        </select>
-      </div>
+      <ReviewerPerformanceSelect
+        id="performance-grain"
+        class="grain-picker"
+        label="Group by"
+        :model-value="grain"
+        :items="grainOptions"
+        @update:model-value="onGrainChange"
+      />
     </header>
 
     <!-- By model the question changes from "where is it weakest" to "would a cheaper model have done", and two of
@@ -85,6 +84,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import ReviewerPerformanceSelect from './ReviewerPerformanceSelect.vue'
 import EstimateNotice from '@/features/code-insights/components/EstimateNotice.vue'
 import { formatRatio } from '@/features/code-insights/chartData'
 import type { CodeInsightScopedMetric } from '@/services/codeInsightsAnalyticsService'
@@ -113,8 +113,15 @@ const isModelGrain = computed(() => props.grain === 'model')
 // model's hundred findings as a hundred closed pull requests.
 const sampleHeading = computed(() => (isModelGrain.value ? 'Findings' : 'Sample'))
 
-function onGrainChange(event: Event): void {
-  emit('update:grain', (event.target as HTMLSelectElement).value as ReviewerPerformanceGrain)
+const grainOptions = [
+  { value: 'client', label: 'Client' },
+  { value: 'repository', label: 'Repository' },
+  { value: 'pullRequest', label: 'Pull request' },
+  { value: 'model', label: 'Model' },
+]
+
+function onGrainChange(value: string): void {
+  emit('update:grain', value as ReviewerPerformanceGrain)
 }
 
 function isThin(row: CodeInsightScopedMetric): boolean {
@@ -167,20 +174,15 @@ function rowKey(row: CodeInsightScopedMetric): string {
 }
 
 .grain-picker {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.82rem;
-  color: var(--color-text-muted);
+  flex: 0 0 170px;
+  width: 170px;
 }
 
-.grain-picker select {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.82rem;
+@media (max-width: 600px) {
+  .grain-picker {
+    flex-basis: 100%;
+    width: 100%;
+  }
 }
 
 .scope-scroll {
@@ -241,7 +243,7 @@ function rowKey(row: CodeInsightScopedMetric): string {
 .thin-note {
   margin-left: 0.3rem;
   font-size: 0.72rem;
-  color: #f59e0b;
+  color: var(--color-warning);
 }
 
 .visually-hidden {

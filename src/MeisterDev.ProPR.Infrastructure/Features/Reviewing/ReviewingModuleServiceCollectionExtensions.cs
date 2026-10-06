@@ -17,6 +17,7 @@ using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.CodeAnalysis;
 using MeisterDev.ProPR.CodeAnalysis.Roslyn.DependencyInjection;
 using MeisterDev.ProPR.CodeAnalysis.TreeSitter.DependencyInjection;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Budgeting;
@@ -190,7 +191,8 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<IReviewComplexityClassifier>(),
             sp.GetService<ILogicalModelResolver>(),
             // The same structural analyzer the context stages use, so a finding can name the definition it sits in.
-            sp.GetService<IStructuralCodeAnalyzer>()));
+            sp.GetService<IStructuralCodeAnalyzer>(),
+            exposureCollector: sp.GetService<ICodeInsightReviewExposureCollector>()));
         services.AddScoped<IFileByFileReviewOrchestrator>(sp => new FileByFileReviewOrchestrator(
             sp.GetRequiredService<IProtocolRecorder>(),
             sp.GetRequiredService<IJobRepository>(),

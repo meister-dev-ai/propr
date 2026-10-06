@@ -150,7 +150,7 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
     }
 
     [Fact]
-    public async Task ProcessAsync_DoesNotGiveTwoFindingsOnTheSameAnchorTheSameProviderThread()
+    public async Task ProcessAsync_LeavesAmbiguousAnchorPublicationIdentityUnknown()
     {
         var harness = new Harness(
             comments:
@@ -164,8 +164,26 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
 
         await harness.IngestionService.Received(1).HandleReviewFindingsProducedAsync(
             Arg.Is<ReviewFindingsProducedEvent>(evt =>
-                evt.Findings[0].ProviderThreadId == "thread-1"
-                && evt.Findings[1].ProviderThreadId == null),
+                evt.Findings.All(finding => finding.ProviderThreadId == null
+                                            && finding.PublicationState == CodeInsightPublicationState.Unknown)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UsesAnActualReceiptOrdinalForFindingsSharingAnAnchor()
+    {
+        var harness = new Harness(
+            comments:
+            [
+                new ReviewComment("src/Service.cs", 42, CommentSeverity.Error, "First"),
+                new ReviewComment("src/Service.cs", 42, CommentSeverity.Warning, "Second")
+            ],
+            postedComments: [new PostedReviewCommentRef("comment-1", "thread-1", "src/Service.cs", 42, FindingOrdinal: 1)]);
+        await harness.RunAsync();
+        await harness.IngestionService.Received(1).HandleReviewFindingsProducedAsync(
+            Arg.Is<ReviewFindingsProducedEvent>(evt => evt.Findings[0].ProviderThreadId == null
+                                                       && evt.Findings[1].ProviderThreadId == "thread-1" &&
+                                                       evt.Findings[1].PublicationState == CodeInsightPublicationState.Published),
             Arg.Any<CancellationToken>());
     }
 
@@ -201,6 +219,63 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
             Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("https://dev.azure.com/org", "AzureDevOps:https://dev.azure.com")]
+    [InlineData("https://example.visualstudio.com/DefaultCollection", "AzureDevOps:https://example.visualstudio.com")]
+    public async Task ProcessAsync_HostedOrganizationRetainsTheProducingJobAuthorityNamespace(string sourcePath, string expectedScope)
+    {
+        var harness = new Harness(organizationUrl: sourcePath);
+        await harness.RunAsync();
+        await harness.IngestionService.Received(1).HandleReviewFindingsProducedAsync(
+            Arg.Is<ReviewFindingsProducedEvent>(evt => evt.Findings.Count > 0 && evt.Findings.All(finding => finding.ProviderScope == expectedScope)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PreservesTheSelfHostedCollectionNamespaceFromTheJob()
+    {
+        var harness = new Harness(organizationUrl: "https://ado.example.test/collection");
+        await harness.RunAsync();
+        await harness.IngestionService.Received(1).HandleReviewFindingsProducedAsync(
+            Arg.Is<ReviewFindingsProducedEvent>(evt => evt.Findings.All(finding => finding.ProviderScope == "AzureDevOps:https://ado.example.test/collection")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_LeavesSameAnchorFailureIdentityUnknownWithoutAnOrdinal()
+    {
+        var harness = new Harness(
+            comments: [new("src/Service.cs", 42, CommentSeverity.Error, "First"), new("src/Service.cs", 42, CommentSeverity.Warning, "Second")],
+            postedComments: [new("comment", "thread", "src/Service.cs", 42)],
+            postingFailures: [new("inline", "src/Service.cs", 42, "Provider rejection")]);
+        await harness.RunAsync();
+        await harness.IngestionService.Received(1).HandleReviewFindingsProducedAsync(
+            Arg.Is<ReviewFindingsProducedEvent>(evt => evt.Findings.All(finding => finding.PublicationState == CodeInsightPublicationState.Unknown)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MapsSameAnchorReceiptsAndFailuresThroughThePublicationSubset()
+    {
+        var harness = new Harness(
+            minimumSeverityToPost: CommentSeverity.Warning,
+            comments:
+            [
+                new("src/Service.cs", 42, CommentSeverity.Info, "Withheld"), new("src/Service.cs", 42, CommentSeverity.Error, "Published"),
+                new("src/Service.cs", 42, CommentSeverity.Warning, "Failed")
+            ],
+            postedComments: [new("comment", "thread", "src/Service.cs", 42, FindingOrdinal: 0)],
+            postingFailures: [new("inline", "src/Service.cs", 42, "Provider rejection", FindingOrdinal: 1)]);
+        await harness.RunAsync();
+        await harness.IngestionService.Received(1).HandleReviewFindingsProducedAsync(
+            Arg.Is<ReviewFindingsProducedEvent>(evt => evt.Findings[0].PublicationState == CodeInsightPublicationState.PolicyWithheld
+                                                       && evt.Findings[1].PublicationState == CodeInsightPublicationState.Published &&
+                                                       evt.Findings[1].ProviderThreadId == "thread"
+                                                       && evt.Findings[2].PublicationState == CodeInsightPublicationState.Failed &&
+                                                       evt.Findings[2].ProviderThreadId == null),
+            Arg.Any<CancellationToken>());
+    }
+
     private sealed class Harness
     {
         private readonly ReviewJob _job;
@@ -212,7 +287,9 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
             IReadOnlyList<PostedReviewCommentRef>? postedComments = null,
             bool collectionThrows = false,
             bool withConsumer = true,
-            IReviewJobLeaseStore? leaseStore = null)
+            IReviewJobLeaseStore? leaseStore = null,
+            string organizationUrl = OrganizationUrl,
+            IReadOnlyList<ReviewCommentPostingFailure>? postingFailures = null)
         {
             this.IngestionService = Substitute.For<ICodeInsightFindingIngestionService>();
             if (collectionThrows)
@@ -224,7 +301,7 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                     .ThrowsAsync(new InvalidOperationException("collection is broken"));
             }
 
-            this._job = new ReviewJob(Guid.NewGuid(), ClientId, OrganizationUrl, "proj", "repo", 1, 1);
+            this._job = new ReviewJob(Guid.NewGuid(), ClientId, organizationUrl, "proj", "repo", 1, 1);
             this._job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "1", null));
             this.JobId = this._job.Id;
 
@@ -270,7 +347,7 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                     Arg.Any<IChatClient?>())
                 .Returns(new ReviewResult("Summary", comments ?? CreateComments()));
 
-            var providerRegistry = CreateProviderRegistry(postedComments ?? []);
+            var providerRegistry = CreateProviderRegistry(postedComments ?? [], postingFailures ?? []);
             this.Publisher = providerRegistry.GetCodeReviewPublicationService(ScmProvider.AzureDevOps);
 
             this._sut = new ReviewOrchestrationService(
@@ -345,7 +422,8 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                 changedFiles);
         }
 
-        private static IScmProviderRegistry CreateProviderRegistry(IReadOnlyList<PostedReviewCommentRef> postedComments)
+        private static IScmProviderRegistry CreateProviderRegistry(
+            IReadOnlyList<PostedReviewCommentRef> postedComments, IReadOnlyList<ReviewCommentPostingFailure> failures)
         {
             var commentPoster = Substitute.For<ICodeReviewPublicationService>();
             commentPoster.Provider.Returns(ScmProvider.AzureDevOps);
@@ -357,7 +435,7 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                     Arg.Any<ReviewerIdentity>(),
                     Arg.Any<CancellationToken>(),
                     Arg.Any<ReviewPublicationContext?>())
-                .Returns(ReviewCommentPostingDiagnosticsDto.Empty() with { PostedComments = postedComments });
+                .Returns(ReviewCommentPostingDiagnosticsDto.Empty() with { PostedComments = postedComments, PostingFailures = failures });
 
             var registry = Substitute.For<IScmProviderRegistry>();
             registry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(commentPoster);

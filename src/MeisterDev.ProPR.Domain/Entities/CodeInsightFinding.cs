@@ -21,6 +21,9 @@ namespace MeisterDev.ProPR.Domain.Entities;
 /// </remarks>
 public sealed class CodeInsightFinding
 {
+    /// <summary>Fingerprint of the discussion used by the current outcome judgement.</summary>
+    public string? OutcomeSourceFingerprint { get; set; }
+
     /// <summary>
     ///     Surrogate identity assigned at materialisation. Stable for the record's lifetime and the join
     ///     key for every downstream consumer.
@@ -56,6 +59,57 @@ public sealed class CodeInsightFinding
     ///     it is deliberately never an identity or lookup key.
     /// </summary>
     public string EncryptedMessage { get; init; } = string.Empty;
+
+    /// <summary>Provider/host scope recorded at review execution; empty when unavailable.</summary>
+    public string ProviderScope { get; set; } = string.Empty;
+
+    /// <summary>UTC write timestamp used to recover missed projection callbacks.</summary>
+    public DateTimeOffset? PerformanceEvidenceUpdatedAt { get; set; }
+
+    /// <summary>Successful creation or the recorded reason no comment was created.</summary>
+    public CodeInsightPublicationState PublicationState { get; set; }
+
+    /// <summary>Publication decision evidence, when recorded.</summary>
+    public string? PublicationReason { get; set; }
+
+    /// <summary>Existing thread matched by a suppressed repeat.</summary>
+    public string? MatchedProviderThreadId { get; set; }
+
+    /// <summary>Confirmed, suspected, checked or unavailable duplicate evidence.</summary>
+    public CodeInsightDuplicateState DuplicateState { get; set; }
+
+    /// <summary>Original publication identified by duplicate verification.</summary>
+    public string? DuplicateOfPublicationId { get; set; }
+
+    /// <summary>Verification source; similarity alone is not confirmation.</summary>
+    public string? DuplicateVerificationSource { get; set; }
+
+    /// <summary>Verification confidence when available.</summary>
+    public double? DuplicateVerificationConfidence { get; set; }
+
+    /// <summary>UTC time of duplicate verification.</summary>
+    public DateTimeOffset? DuplicateVerifiedAt { get; set; }
+
+    /// <summary>Latest observed native outcome; null for missing source evidence.</summary>
+    public string? NativeStatus { get; set; }
+
+    /// <summary>UTC time of the latest retained outcome evidence.</summary>
+    public DateTimeOffset? OutcomeObservedAt { get; set; }
+
+    /// <summary>Current verdict used by live reports independently of first-close seals.</summary>
+    public CodeInsightDisposition? CurrentDisposition { get; set; }
+
+    /// <summary>Bounded attempts for an unavailable current outcome judgement.</summary>
+    public int OutcomeJudgementAttempts { get; set; }
+
+    /// <summary>Current classifier version, or null for a deterministic outcome.</summary>
+    public string? CurrentClassifierVersion { get; set; }
+
+    /// <summary>Current classifier confidence; null with a version identifies an unavailable judgement.</summary>
+    public double? CurrentClassifierConfidence { get; set; }
+
+    /// <summary>Code-change evidence accompanying the current outcome.</summary>
+    public ThreadAnchorCodeChange CurrentCodeChange { get; set; }
 
     /// <summary>Review pass that produced the finding, when known.</summary>
     public string? OriginPassKind { get; init; }

@@ -27,7 +27,8 @@ internal static class ThreadUpdatedEventFactory
         string repositoryId,
         long pullRequestId,
         PrCommentThread thread,
-        ThreadOwnershipResolver ownership)
+        ThreadOwnershipResolver ownership,
+        DateTimeOffset? observedAt = null, string? providerScope = null)
     {
         ArgumentNullException.ThrowIfNull(thread);
         ArgumentNullException.ThrowIfNull(ownership);
@@ -73,8 +74,12 @@ internal static class ThreadUpdatedEventFactory
             thread.LineNumber,
             thread.Status ?? "Active",
             lastActivityAt,
-            comments);
+            comments, observedAt, providerScope);
     }
+
+    public static bool IsHumanThread(ThreadUpdatedEvent evt) =>
+        !evt.Comments.Any(comment => comment.IsAiAuthored)
+        && evt.Comments.Any(comment => !comment.IsSystemGenerated && !string.IsNullOrWhiteSpace(comment.Text));
 
     public static string ResolveAuthorIdentity(PrThreadComment comment)
     {

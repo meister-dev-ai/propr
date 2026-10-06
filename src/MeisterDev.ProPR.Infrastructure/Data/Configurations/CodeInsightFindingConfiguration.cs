@@ -13,7 +13,19 @@ internal sealed class CodeInsightFindingConfiguration : IEntityTypeConfiguration
     public void Configure(EntityTypeBuilder<CodeInsightFinding> builder)
     {
         builder.ToTable("code_insight_findings");
+        builder.Property(row => row.OutcomeSourceFingerprint).HasMaxLength(64);
 
+        builder.Property(row => row.PublicationState).HasConversion<short>();
+        builder.Property(row => row.DuplicateState).HasConversion<short>();
+        builder.Property(row => row.ProviderScope).HasMaxLength(1024);
+        builder.Property(row => row.NativeStatus).HasMaxLength(64);
+        builder.Property(row => row.PublicationReason).HasMaxLength(128);
+        builder.Property(row => row.MatchedProviderThreadId).HasMaxLength(512);
+        builder.Property(row => row.DuplicateOfPublicationId).HasMaxLength(512);
+        builder.Property(row => row.DuplicateVerificationSource).HasMaxLength(256);
+        builder.Property(row => row.CurrentClassifierVersion).HasMaxLength(256);
+        builder.Property(row => row.CurrentDisposition).HasConversion<short?>();
+        builder.Property(row => row.CurrentCodeChange).HasConversion<short>();
         builder.HasKey(finding => finding.Id);
         builder.Property(finding => finding.Id).HasColumnName("id").ValueGeneratedNever();
 

@@ -226,6 +226,9 @@ internal sealed class RunnerReviewPipeline : IDisposable
             new("complexityClassifier", supplied, "model-judged triage over the relay"),
             new("logicalModelResolver", supplied, "the relay resolver over the manifest's pass bindings"),
             new("structuralAnalyzer", supplied, "tree-sitter and Roslyn over the local worktrees"),
+            new(
+                "exposureCollector", absent,
+                "per-file analytics exposure collection is available only in-process; compatible human-miss model attribution remains unavailable"),
             new("chatClient", supplied, "the relayed default model"),
             new("fileReviewer", supplied, "composed above"),
             new("fileReviewDispatchPlanner", supplied, "composed above; two of its dependencies are absent, named below"),

@@ -60,6 +60,7 @@ tokenizers. That is a stated cost, not an accident.
 | Publication services (`IScmProviderRegistry` publication half) | The control plane publishes |
 | `IPostedCommentOriginStore`, `IPostedFindingIndex` | Publication bookkeeping |
 | `IReviewArchiveIngestionService`, `ICodeInsightFindingIngestionService` | Post-publication ingestion |
+| `ICodeInsightReviewExposureCollector` | In-process per-file analytics side-write; declared absent on the runner. Model-specific human-miss recall/F1 remains unavailable |
 | `IReviewJobExecutionStore`, `IReviewJobLeaseStore` | Job state and leases |
 | `IReviewPrScanWatermarkStore` | Intake bookkeeping |
 | `IReviewJobCancellationRegistry` | Process-local by definition; the heartbeat is the remote channel |

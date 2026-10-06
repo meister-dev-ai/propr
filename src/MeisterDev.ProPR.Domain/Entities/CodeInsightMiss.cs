@@ -16,6 +16,55 @@ namespace MeisterDev.ProPR.Domain.Entities;
 /// </remarks>
 public sealed class CodeInsightMiss
 {
+    /// <summary>Canonical core-type membership captured by the classification workflow.</summary>
+    public string TypeMembership { get; set; } = string.Empty;
+
+    /// <summary>Provider/host scope recorded from the thread connection.</summary>
+    public string ProviderScope { get; set; } = string.Empty;
+
+    /// <summary>Finding qualifier captured from this human issue.</summary>
+    public MeisterDev.ProPR.Domain.Enums.CodeInsightFindingQualifier? Qualifier { get; set; }
+
+    /// <summary>Version and confidence of the miss dimension judgement.</summary>
+    public string? DimensionClassifierVersion { get; set; }
+
+    /// <summary>Confidence in the recorded dimensions.</summary>
+    public double? DimensionConfidence { get; set; }
+
+    /// <summary>Whether dimension enrichment failed independently of the human judgement.</summary>
+    public bool DimensionJudgementFailed { get; set; }
+
+    /// <summary>Bounded failed enrichment attempts for the retained source and dimension version.</summary>
+    public int FailedDimensionAttempts { get; set; }
+
+    /// <summary>Whether the latest judgement failed; such a row cannot supply a miss verdict.</summary>
+    public bool JudgementFailed { get; set; }
+
+    /// <summary>Failed judgement attempts, bounded by collection.</summary>
+    public int FailedJudgementAttempts { get; set; }
+
+    /// <summary>Hash of observed discussion, anchor and native status for bounded current-evidence refresh.</summary>
+    public string? SourceFingerprint { get; set; }
+
+    /// <summary>Newest retained source observation, independent of classifier completion time.</summary>
+    public DateTimeOffset? SourceObservedAt { get; set; }
+
+    /// <summary>Current source overlaps a retained reviewer finding or contains an AI-authored comment.</summary>
+    public bool ExcludedAsOwnFinding { get; private set; }
+
+    /// <summary>Changes overlap eligibility while preserving the human judgement and its evidence.</summary>
+    public void RecordOwnFindingExclusion(bool excluded, DateTimeOffset updatedAt)
+    {
+        if (this.ExcludedAsOwnFinding == excluded)
+        {
+            return;
+        }
+
+        this.ExcludedAsOwnFinding = excluded;
+        this.CountsAsMiss = !excluded && !this.JudgementFailed && this.IsSubstantive && this.WasActedOn && this.IsInScope;
+        this.LastJudgedAt = updatedAt;
+    }
+
     /// <summary>Unique identifier for this record.</summary>
     public Guid Id { get; init; }
 
@@ -82,8 +131,8 @@ public sealed class CodeInsightMiss
     public bool JudgedThreadResolved { get; private set; }
 
     /// <summary>
-    ///     UTC timestamp of the stored judgement. Equal to <see cref="HarvestedAt" /> until a re-judgement
-    ///     replaces it, so the two together show whether this row was ever revisited.
+    ///     UTC timestamp of the stored judgement or a current overlap eligibility change. Equal to
+    ///     <see cref="HarvestedAt" /> until current evidence changes. Ordering-only observations leave it fixed.
     /// </summary>
     public DateTimeOffset LastJudgedAt { get; private set; }
 
@@ -130,6 +179,6 @@ public sealed class CodeInsightMiss
         // Computed here and taken from nobody, so a stored verdict cannot contradict the judgements beside it.
         // A caller passing the verdict in was free to disagree with its own three answers, and the recall count
         // reads this column, so such a row would move a metric that nothing else on the row accounts for.
-        this.CountsAsMiss = isSubstantive && wasActedOn && isInScope;
+        this.CountsAsMiss = !this.ExcludedAsOwnFinding && !this.JudgementFailed && isSubstantive && wasActedOn && isInScope;
     }
 }

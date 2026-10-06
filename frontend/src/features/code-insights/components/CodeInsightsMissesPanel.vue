@@ -37,7 +37,7 @@
           </span>
           <span class="miss-pr">{{ miss.repositoryId }} #{{ miss.pullRequestId }}</span>
           <span class="miss-verdict" :class="miss.countsAsMiss ? 'verdict-counts' : 'verdict-excluded'">
-            {{ miss.countsAsMiss ? 'Counts as a miss' : 'Excluded' }}
+            {{ miss.excludedAsOwnFinding ? 'Matches reviewer finding' : miss.judgementFailed ? 'Judgement unavailable' : miss.countsAsMiss ? 'Counts as a miss' : 'Excluded' }}
           </span>
         </div>
 
@@ -46,7 +46,8 @@
         <div class="miss-discussion markdown-body" v-html="renderMarkdown(miss.discussion)"></div>
 
         <ul class="judgement-list">
-          <li :class="miss.isSubstantive ? 'judged-yes' : 'judged-no'">
+          <template v-if="miss.judgementFailed"><li class="judged-no">Substantive: unavailable</li><li class="judged-no">Acted on: unavailable</li><li class="judged-no">Scope: unavailable</li></template>
+          <template v-else><li :class="miss.isSubstantive ? 'judged-yes' : 'judged-no'">
             {{ miss.isSubstantive ? 'Substantive' : 'Not substantive' }}
           </li>
           <li :class="miss.wasActedOn ? 'judged-yes' : 'judged-no'">
@@ -54,7 +55,7 @@
           </li>
           <li :class="miss.isInScope ? 'judged-yes' : 'judged-no'">
             {{ miss.isInScope ? 'In scope' : 'Out of scope' }}
-          </li>
+          </li></template>
           <li v-if="miss.classifierConfidence != null" class="judged-confidence">
             Confidence {{ Math.round(miss.classifierConfidence * 100) }}%
           </li>
@@ -80,7 +81,7 @@ const props = defineProps<{ misses: CodeInsightMiss[] }>()
 const onlyQualifying = ref(false)
 
 const visible = computed(() =>
-  onlyQualifying.value ? props.misses.filter((miss) => miss.countsAsMiss) : props.misses,
+  onlyQualifying.value ? props.misses.filter((miss) => !miss.judgementFailed && miss.countsAsMiss) : props.misses,
 )
 </script>
 

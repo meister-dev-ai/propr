@@ -29,6 +29,9 @@ public sealed class CodeInsightFindingDisposition
     /// <summary>Navigation to the finding.</summary>
     public CodeInsightFinding? CodeInsightFinding { get; init; }
 
+    /// <summary>Native status captured with the initial outcome.</summary>
+    public string? NativeStatus { get; init; }
+
     /// <summary>What became of the finding.</summary>
     public CodeInsightDisposition Disposition { get; init; }
 

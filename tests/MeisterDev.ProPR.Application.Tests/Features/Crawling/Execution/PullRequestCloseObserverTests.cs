@@ -31,6 +31,17 @@ public sealed class PullRequestCloseObserverTests
     private const string FindingThreadId = "propr-thread-1";
 
     [Fact]
+    public async Task AnIncompleteHarvestModuleDoesNotFetchOrHarvestThreads()
+    {
+        var harness = new Harness(withCoverageRecorder: false);
+
+        await harness.ObserveAsync();
+
+        await harness.Fetcher.DidNotReceiveWithAnyArgs().FetchThreadsAsync(default!, default!, default!, default, default);
+        await harness.Harvester.DidNotReceiveWithAnyArgs().HandleThreadObservedAsync(default!);
+    }
+
+    [Fact]
     public async Task EveryThreadIsHandedToTheHarvesterWithTheStatusTheProviderReports()
     {
         // Without the status as it stands at the close, the harvester cannot tell that a thread has settled and
@@ -253,9 +264,8 @@ public sealed class PullRequestCloseObserverTests
     }
 
     [Fact]
-    public async Task AFindingWhoseThreadIsStillOpenGetsNoOutcome()
+    public async Task AFindingWhoseThreadReopenedReceivesAnOpenAnalyticsObservationAtClose()
     {
-        // An open thread has no outcome to record, and inventing one would decide a finding nobody resolved.
         var harness = new Harness(
             reviewerThreads:
             [
@@ -264,9 +274,56 @@ public sealed class PullRequestCloseObserverTests
 
         await harness.ObserveAsync();
 
-        await harness.Dispositions.DidNotReceive().HandleThreadResolvedAsync(
-            Arg.Any<ThreadResolvedDomainEvent>(),
+        await harness.Dispositions.Received(1).HandleThreadResolvedAsync(
+            Arg.Is<ThreadResolvedDomainEvent>(observation =>
+                observation.ThreadId == FindingThreadId && observation.NativeStatus == "Active" && observation.Intent == ThreadResolutionIntent.Active),
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true, "Provider activity")]
+    [InlineData(false, "")]
+    public async Task ActivityOnlyThreadsDoNotMakeCloseCoverageProvisional(bool systemGenerated, string text)
+    {
+        var harness = new Harness();
+        harness.Fetcher.FetchThreadsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new PrCommentThread(
+                    "activity", null, null,
+                    [new PrThreadComment("Provider", text, null, 1, DateTimeOffset.UtcNow, IsSystemGenerated: systemGenerated)], "Active")
+            ]);
+        harness.Harvester.HandleThreadObservedAsync(Arg.Any<ThreadUpdatedEvent>(), Arg.Any<CancellationToken>()).Returns(true);
+        await harness.ObserveAsync();
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), true, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>(), true);
+    }
+
+    [Fact]
+    public async Task UnidentifiableHumanOpportunityCannotProduceCompleteHarvestCoverage()
+    {
+        var harness = new Harness();
+        harness.Fetcher.FetchThreadsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new PrCommentThread(
+                    "", "src/Service.cs", 1, [new PrThreadComment("Human", "This race needs a fix", HumanAuthorId, 1, DateTimeOffset.UtcNow)], "Fixed")
+            ]);
+        await harness.ObserveAsync();
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), true, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>(), false);
+    }
+
+    [Fact]
+    public async Task UnretainedHumanObservationCannotProduceCompleteHarvestCoverage()
+    {
+        var harness = new Harness(threadStatus: "Fixed");
+        harness.Harvester.HandleThreadObservedAsync(Arg.Any<ThreadUpdatedEvent>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(false));
+        await harness.ObserveAsync();
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), true, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>(), false);
     }
 
     [Fact]
@@ -525,6 +582,26 @@ public sealed class PullRequestCloseObserverTests
         }
     }
 
+    [Theory]
+    [InlineData("https://ado.example.test", "https://ado.example.test/collection")]
+    [InlineData("https://ado.example.test/tfs", "https://ado.example.test/tfs/defaultcollection")]
+    public async Task NestedSelfHostedCloseUsesTheCollectionNamespaceForThreadsDispositionsAndCoverage(string connectionBase, string collection)
+    {
+        var harness = new Harness(
+            connectionRows: [Harness.CreateConnection(hostBaseUrl: connectionBase)],
+            reviewerThreads: [Harness.ReviewerThread(FindingThreadId, "Fixed")], scopePath: collection);
+        harness.Harvester.HandleThreadObservedAsync(Arg.Any<ThreadUpdatedEvent>(), Arg.Any<CancellationToken>()).Returns(true);
+        await harness.ObserveAsync(collection);
+        var expected = "AzureDevOps:" + collection;
+        await harness.Harvester.Received(1).HandleThreadObservedAsync(
+            Arg.Is<ThreadUpdatedEvent>(evt => evt.ProviderScope == expected), Arg.Any<CancellationToken>());
+        await harness.Dispositions.Received(1).HandleThreadResolvedAsync(
+            Arg.Is<ThreadResolvedDomainEvent>(evt => evt.ProviderScope == expected), Arg.Any<CancellationToken>());
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), expected, Arg.Any<bool>(), Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>(), true);
+    }
+
     private sealed class Harness
     {
         private readonly PullRequestCloseObserver _sut;
@@ -542,7 +619,7 @@ public sealed class PullRequestCloseObserverTests
             IReadOnlyList<PrThreadStatusEntry>? reviewerThreads = null,
             bool withReviewerThreadStatuses = true,
             bool withDispositionService = true,
-            ILogger<PullRequestCloseObserver>? logger = null)
+            ILogger<PullRequestCloseObserver>? logger = null, string scopePath = "https://dev.azure.com/org", bool withCoverageRecorder = true)
         {
             this.Harvester = Substitute.For<ICodeInsightMissHarvester>();
             this.Fetcher = Substitute.For<IPullRequestFetcher>();
@@ -553,7 +630,7 @@ public sealed class PullRequestCloseObserverTests
                 .Returns(connectionRows ?? (withConnection ? [CreateConnection()] : []));
 
             this.Fetcher.FetchThreadsAsync(
-                    "https://dev.azure.com/org",
+                    scopePath,
                     "project",
                     "repo-1",
                     42,
@@ -573,6 +650,7 @@ public sealed class PullRequestCloseObserverTests
             gate.IsCollectionEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(gateOpen);
 
             this.Dispositions = Substitute.For<ICodeInsightDispositionService>();
+            this.Coverage = Substitute.For<ICodeInsightHarvestCoverageRecorder>();
             this.ReviewerThreads = Substitute.For<IReviewerThreadStatusFetcher>();
             this.ReviewerThreads
                 .GetReviewerThreadStatusesAsync(
@@ -594,10 +672,11 @@ public sealed class PullRequestCloseObserverTests
                 connections,
                 this._origins,
                 withReviewerThreadStatuses ? this.ReviewerThreads : null,
-                withDispositionService ? this.Dispositions : null);
+                withDispositionService ? this.Dispositions : null, withCoverageRecorder ? this.Coverage : null);
         }
 
         public ICodeInsightMissHarvester Harvester { get; }
+        public ICodeInsightHarvestCoverageRecorder Coverage { get; }
 
         public IPullRequestFetcher Fetcher { get; }
 

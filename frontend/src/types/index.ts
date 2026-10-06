@@ -13520,6 +13520,359 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reviewer-performance/ranges/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Returns versioned interpretation ranges from retained counts for one or two consistently read views. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Bounded dates, dimensions, cumulative or period mode, and optional measurement matrix. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReviewerPerformanceQuery"];
+                    "text/json": components["schemas"]["ReviewerPerformanceQuery"];
+                    "application/*+json": components["schemas"]["ReviewerPerformanceQuery"];
+                };
+            };
+            responses: {
+                /** @description Counts, coherent scenario tuples, summaries, evidence limits and authorized facets. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewerPerformanceRangeResponse"];
+                        "application/json": components["schemas"]["ReviewerPerformanceRangeResponse"];
+                        "text/json": components["schemas"]["ReviewerPerformanceRangeResponse"];
+                    };
+                };
+                /** @description Unsupported query or exceeded bounds. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing tenant administration, license or selected-client access. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Database analytics services are unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewer-performance/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists up to 100 unexpired reports for which every contained client is authorized. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Authorized report metadata, newest first. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewerPerformanceReportSummary"][];
+                        "application/json": components["schemas"]["ReviewerPerformanceReportSummary"][];
+                        "text/json": components["schemas"]["ReviewerPerformanceReportSummary"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing tenant administration or license. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Captures and saves a complete server response under one consistent database snapshot. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Retry-safe report identifier, name and authorized query. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReviewerPerformanceSaveReportRequest"];
+                    "text/json": components["schemas"]["ReviewerPerformanceSaveReportRequest"];
+                    "application/*+json": components["schemas"]["ReviewerPerformanceSaveReportRequest"];
+                };
+            };
+            responses: {
+                /** @description Stored capture, including on an identical retry. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewerPerformanceSavedReport"];
+                        "application/json": components["schemas"]["ReviewerPerformanceSavedReport"];
+                        "text/json": components["schemas"]["ReviewerPerformanceSavedReport"];
+                    };
+                };
+                /** @description Invalid name, query or payload size. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing administration, license or access to every included client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The report identifier belongs to a different request. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Database analytics services are unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewer-performance/reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opens the stored response without evaluating current evidence or recalculating its version. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Saved report identifier. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Immutable saved counts, results, filters and evidence metadata. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewerPerformanceSavedReport"];
+                        "application/json": components["schemas"]["ReviewerPerformanceSavedReport"];
+                        "text/json": components["schemas"]["ReviewerPerformanceSavedReport"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing tenant administration or license. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Report absent, expired or containing a client outside the authorized scope. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Deletes a complete saved report when all contained clients are authorized. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Saved report identifier. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Complete report removed. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing tenant administration or license. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Report absent, expired or containing an unauthorized client. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/reviewing/jobs/{jobId}/status": {
         parameters: {
             query?: never;
@@ -21029,6 +21382,10 @@ export interface components {
              * @description When it was harvested.
              */
             harvestedAt?: string;
+            /** @description True when the three decisions are unavailable. */
+            judgementFailed?: boolean;
+            /** @description Current source matches a reviewer finding and is excluded from recall. */
+            excludedAsOwnFinding?: boolean;
         };
         /** @description Survival for one pull request, so the aggregate can be opened up. */
         CodeInsightPullRequestSurvivalResponse: {
@@ -24156,6 +24513,227 @@ export interface components {
             failureStage?: string | null;
             failureCode?: string | null;
             failureMessage?: string | null;
+        };
+        /** @description Two dimensions for a bounded supplementary matrix. */
+        ReviewerPerformanceBreakdownQuery: {
+            rows?: string | null;
+            columns?: string | null;
+            /** Format: date */
+            date?: string | null;
+            /** Format: int32 */
+            viewIndex?: number;
+        };
+        /** @description Retained inputs and evidence coverage for one scoped measurement. */
+        ReviewerPerformanceCounts: {
+            outcomes?: components["schemas"]["ReviewerPerformanceOutcomeCounts"];
+            confirmedDuplicates?: components["schemas"]["ReviewerPerformanceOutcomeCounts"];
+            /** Format: int64 */
+            actedMisses?: number;
+            /** Format: int64 */
+            unactedMisses?: number;
+            /** Format: int64 */
+            provisionalMisses?: number;
+            /** Format: int64 */
+            generated?: number;
+            /** Format: int64 */
+            suppressedRepeats?: number;
+            /** Format: int64 */
+            withheld?: number;
+            /** Format: int64 */
+            publicationUnknown?: number;
+            /** Format: int64 */
+            duplicateChecked?: number;
+            /** Format: int64 */
+            duplicateSuspected?: number;
+            /** Format: int64 */
+            duplicateUnknown?: number;
+            /** Format: int64 */
+            unclassified?: number;
+            /** Format: int64 */
+            unattributed?: number;
+            /** Format: int64 */
+            harvestedThreads?: number;
+            /** Format: int64 */
+            failedMissJudgements?: number;
+        };
+        ReviewerPerformanceEvidenceMetadata: {
+            /** Format: date-time */
+            oldestProjectionAt?: string | null;
+            /** Format: date-time */
+            newestProjectionAt?: string | null;
+            /** Format: int32 */
+            projectionVersion?: number;
+            /** Format: int32 */
+            pendingSourceAggregates?: number;
+        };
+        /** @description Stable metadata identifier and display label. */
+        ReviewerPerformanceFacet: {
+            id?: string | null;
+            label?: string | null;
+        };
+        ReviewerPerformanceFacets: {
+            clients?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+            repositories?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+            models?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+            types?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+            qualifiers?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+        };
+        ReviewerPerformanceMatrixCell: {
+            rowId?: string | null;
+            rowLabel?: string | null;
+            columnId?: string | null;
+            columnLabel?: string | null;
+            measurement?: components["schemas"]["ReviewerPerformancePoint"];
+        };
+        /** @description Disjoint published outcomes; duplicate counts use the same fields as subsets. */
+        ReviewerPerformanceOutcomeCounts: {
+            /** Format: int64 */
+            positive?: number;
+            /** Format: int64 */
+            wrong?: number;
+            /** Format: int64 */
+            dismissed?: number;
+            /** Format: int64 */
+            wontFix?: number;
+            /** Format: int64 */
+            byDesign?: number;
+            /** Format: int64 */
+            unknown?: number;
+            /** Format: int64 */
+            unresolved?: number;
+            /**
+             * Format: int64
+             * @description Total publications represented by these counts.
+             */
+            readonly total?: number;
+        };
+        ReviewerPerformancePoint: {
+            /** Format: date */
+            date?: string;
+            score?: components["schemas"]["ReviewerPerformanceScore"];
+            unavailableReasons?: string[] | null;
+            /** Format: date */
+            windowFrom?: string | null;
+            /** Format: date */
+            windowTo?: string | null;
+        };
+        /** @description A bounded query for one or two views of retained evidence. */
+        ReviewerPerformanceQuery: {
+            bucket?: string | null;
+            aggregation?: string | null;
+            grouping?: string | null;
+            views?: components["schemas"]["ReviewerPerformanceViewQuery"][] | null;
+            breakdown?: components["schemas"]["ReviewerPerformanceBreakdownQuery"];
+        };
+        /** @description Uniformly weighted enumeration summaries, without a probability or confidence interpretation. */
+        ReviewerPerformanceRange: {
+            /** Format: double */
+            minimum?: number;
+            /** Format: double */
+            firstQuartile?: number;
+            /** Format: double */
+            median?: number;
+            /** Format: double */
+            thirdQuartile?: number;
+            /** Format: double */
+            maximum?: number;
+            /** Format: int32 */
+            availableScenarios?: number;
+        };
+        /** @description Complete versioned response suitable for immutable capture. */
+        ReviewerPerformanceRangeResponse: {
+            calculationVersion?: string | null;
+            /** Format: date-time */
+            capturedAt?: string;
+            query?: components["schemas"]["ReviewerPerformanceQuery"];
+            premiseIds?: string[] | null;
+            views?: components["schemas"]["ReviewerPerformanceViewResponse"][] | null;
+            evidenceRevision?: string | null;
+        };
+        ReviewerPerformanceReportSummary: {
+            /** Format: uuid */
+            id?: string;
+            name?: string | null;
+            calculationVersion?: string | null;
+            /** Format: date-time */
+            capturedAt?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+        };
+        ReviewerPerformanceSaveReportRequest: {
+            /** Format: uuid */
+            id?: string;
+            name?: string | null;
+            query?: components["schemas"]["ReviewerPerformanceQuery"];
+        };
+        ReviewerPerformanceSavedReport: {
+            report?: components["schemas"]["ReviewerPerformanceReportSummary"];
+            response?: components["schemas"]["ReviewerPerformanceRangeResponse"];
+            compatibleVersion?: boolean;
+        };
+        /** @description One versioned interpretation applied to one count vector. */
+        ReviewerPerformanceScenario: {
+            id?: string | null;
+            dismissed?: string | null;
+            wontFix?: string | null;
+            byDesign?: string | null;
+            misses?: string | null;
+            duplicates?: string | null;
+            /** Format: int64 */
+            truePositives?: number;
+            /** Format: int64 */
+            falsePositives?: number;
+            /**
+             * Format: int64
+             * @description Eligible FN count, or null when compatible miss coverage is unavailable.
+             */
+            falseNegatives?: number | null;
+            /** Format: int64 */
+            excluded?: number;
+            /** Format: double */
+            precision?: number | null;
+            /** Format: double */
+            recall?: number | null;
+            /** Format: double */
+            f1?: number | null;
+        };
+        /** @description Immutable source inputs and their scenario results. */
+        ReviewerPerformanceScore: {
+            counts?: components["schemas"]["ReviewerPerformanceCounts"];
+            scenarios?: components["schemas"]["ReviewerPerformanceScenario"][] | null;
+            summary?: components["schemas"]["ReviewerPerformanceSummary"];
+        };
+        ReviewerPerformanceSeries: {
+            id?: string | null;
+            label?: string | null;
+            points?: components["schemas"]["ReviewerPerformancePoint"][] | null;
+        };
+        /** @description Summaries of the coherent scenario tuples. */
+        ReviewerPerformanceSummary: {
+            precision?: components["schemas"]["ReviewerPerformanceRange"];
+            recall?: components["schemas"]["ReviewerPerformanceRange"];
+            f1?: components["schemas"]["ReviewerPerformanceRange"];
+        };
+        /** @description Null selections include the authorized population; empty selections include nothing. */
+        ReviewerPerformanceViewQuery: {
+            /** Format: date */
+            from?: string;
+            /** Format: date */
+            to?: string;
+            clientIds?: string[] | null;
+            repositories?: string[] | null;
+            models?: string[] | null;
+            types?: string[] | null;
+            qualifiers?: string[] | null;
+        };
+        ReviewerPerformanceViewResponse: {
+            scope?: components["schemas"]["ReviewerPerformanceViewQuery"];
+            facets?: components["schemas"]["ReviewerPerformanceFacets"];
+            series?: components["schemas"]["ReviewerPerformanceSeries"][] | null;
+            breakdown?: components["schemas"]["ReviewerPerformanceMatrixCell"][] | null;
+            /** Format: int64 */
+            aggregateCells?: number;
+            evidence?: components["schemas"]["ReviewerPerformanceEvidenceMetadata"];
         };
         /**
          * @description The portable slice of a relayed completion's options.

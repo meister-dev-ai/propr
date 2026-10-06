@@ -66,8 +66,8 @@ public sealed record FindingTypeVerdict(
 /// </remarks>
 /// <param name="Verdict">What the classifier concluded, or <see langword="null" /> when nothing usable came back.</param>
 /// <param name="ModelWasAsked">
-///     Whether a model was actually consulted. <see langword="false" /> means the client has no model bound for
-///     this purpose, so there was nothing to ask.
+///     Whether a model request started. <see langword="false" /> includes an unavailable binding or a setup
+///     failure before the request; those failures do not consume a model attempt.
 /// </param>
 public sealed record FindingClassificationResult(FindingTypeVerdict? Verdict, bool ModelWasAsked)
 {

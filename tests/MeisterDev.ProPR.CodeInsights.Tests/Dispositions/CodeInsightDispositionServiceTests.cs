@@ -22,6 +22,21 @@ public sealed class CodeInsightDispositionServiceTests
     private static readonly Guid ClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid FindingId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
+    [Theory]
+    [InlineData("Unspecified")]
+    [InlineData("")]
+    [InlineData("NewProviderStatus")]
+    public async Task UnresolvedNativeStatusesCannotSealAnInitialDisposition(string nativeStatus)
+    {
+        var harness = new Harness();
+        harness.WithJudgement(wasWrong: false, confidence: .9);
+        await harness.Service.HandleThreadResolvedAsync(
+            Resolved(ThreadResolutionIntent.Active, ThreadAnchorCodeChange.Unknown) with { NativeStatus = nativeStatus });
+        await harness.Classifier.DidNotReceive().JudgeAsync(Arg.Any<DisregardedFindingJudgementRequest>(), Arg.Any<CancellationToken>());
+        await harness.Dispositions.DidNotReceive().RecordDispositionAsync(
+            Arg.Any<Guid>(), Arg.Any<CodeInsightDispositionRecord>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task AClaimedFixWithACorroboratingChange_IsAddressedWithNoModelCall()
     {

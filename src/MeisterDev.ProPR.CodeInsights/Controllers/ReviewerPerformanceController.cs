@@ -36,14 +36,16 @@ namespace MeisterDev.ProPR.CodeInsights.Controllers;
 /// </remarks>
 [ApiController]
 [Route("reviewer-performance")]
-public sealed class ReviewerPerformanceController(
+public sealed partial class ReviewerPerformanceController(
     IOptionsMonitor<CodeInsightsOptions> options,
     CodeInsightScopeResolver scopeResolver,
     IClientAdminService clientAdminService,
     ICodeInsightMetricReader? metricReader = null,
     ICodeInsightBrowseReader? browseReader = null,
     ICodeInsightHistoryReader? historyReader = null,
-    ICodeInsightHistoryImporter? historyImporter = null) : ControllerBase
+    ICodeInsightHistoryImporter? historyImporter = null,
+    ReviewerPerformanceRangeReader? rangeReader = null,
+    MeisterDev.ProPR.CodeInsights.Persistence.ReviewerPerformanceReportStore? reportStore = null) : ControllerBase
 {
     /// <summary>
     ///     Sealed pull requests a correctness metric needs before a caller should present it as precise.
@@ -287,7 +289,7 @@ public sealed class ReviewerPerformanceController(
                     row.IsInScope,
                     row.CountsAsMiss,
                     row.ClassifierConfidence,
-                    row.HarvestedAt))
+                    row.HarvestedAt, row.JudgementFailed, row.ExcludedAsOwnFinding))
                 .ToList());
     }
 

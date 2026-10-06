@@ -493,6 +493,36 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<double?>("CurrentClassifierConfidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("CurrentClassifierVersion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<short>("CurrentCodeChange")
+                        .HasColumnType("smallint");
+
+                    b.Property<short?>("CurrentDisposition")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("DuplicateOfPublicationId")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<short>("DuplicateState")
+                        .HasColumnType("smallint");
+
+                    b.Property<double?>("DuplicateVerificationConfidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("DuplicateVerificationSource")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset?>("DuplicateVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("EncryptedMessage")
                         .IsRequired()
                         .HasColumnType("text")
@@ -518,6 +548,14 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<int?>("LineNumber")
                         .HasColumnType("integer")
                         .HasColumnName("line_number");
+
+                    b.Property<string>("MatchedProviderThreadId")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("NativeStatus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTimeOffset>("ObservedAt")
                         .HasColumnType("timestamp with time zone")
@@ -565,15 +603,40 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("origin_symbol_name");
 
+                    b.Property<int>("OutcomeJudgementAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("OutcomeObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OutcomeSourceFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("PerformanceEvidenceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ProviderCommentId")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("provider_comment_id");
 
+                    b.Property<string>("ProviderScope")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<string>("ProviderThreadId")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("provider_thread_id");
+
+                    b.Property<string>("PublicationReason")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<short>("PublicationState")
+                        .HasColumnType("smallint");
 
                     b.Property<short?>("Qualifier")
                         .HasColumnType("smallint")
@@ -644,6 +707,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<short>("Disposition")
                         .HasColumnType("smallint")
                         .HasColumnName("disposition");
+
+                    b.Property<string>("NativeStatus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<short?>("RejectionReason")
                         .HasColumnType("smallint")
@@ -733,6 +800,36 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightHarvestCoverage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AllHumanThreadsResolved")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("CodeInsightPullRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("EnumerationComplete")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProviderScope")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeInsightPullRequestId", "ProviderScope")
+                        .IsUnique();
+
+                    b.ToTable("code_insight_harvest_coverage", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightMiss", b =>
                 {
                     b.Property<Guid>("Id")
@@ -757,10 +854,29 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("counts_as_miss");
 
+                    b.Property<string>("DimensionClassifierVersion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<double?>("DimensionConfidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("DimensionJudgementFailed")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("EncryptedDiscussion")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("encrypted_discussion");
+
+                    b.Property<bool>("ExcludedAsOwnFinding")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("FailedDimensionAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FailedJudgementAttempts")
+                        .HasColumnType("integer");
 
                     b.Property<string>("FilePath")
                         .HasMaxLength(512)
@@ -785,6 +901,9 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("judged_thread_resolved");
 
+                    b.Property<bool>("JudgementFailed")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset>("LastJudgedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_judged_at");
@@ -793,11 +912,31 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("line_number");
 
+                    b.Property<string>("ProviderScope")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<string>("ProviderThreadId")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("provider_thread_id");
+
+                    b.Property<short?>("Qualifier")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("SourceFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("SourceObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TypeMembership")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
 
                     b.Property<bool>("WasActedOn")
                         .HasColumnType("boolean")
@@ -808,11 +947,26 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasIndex("CountsAsMiss")
                         .HasDatabaseName("ix_code_insight_misses_counts_as_miss");
 
-                    b.HasIndex("CodeInsightPullRequestId", "ProviderThreadId")
+                    b.HasIndex("CodeInsightPullRequestId", "ProviderScope", "ProviderThreadId")
                         .IsUnique()
                         .HasDatabaseName("uq_code_insight_misses_thread");
 
                     b.ToTable("code_insight_misses", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightPerformanceDirty", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CodeInsightPullRequestId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeInsightPullRequestId");
+
+                    b.ToTable("code_insight_performance_dirty", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", b =>
@@ -844,6 +998,23 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasDefaultValue("")
                         .HasColumnName("latest_revision_key");
+
+                    b.Property<DateTimeOffset?>("MissHarvestObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MissHarvestProviderScope")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<bool>("MissHarvestSettled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("PerformanceProjectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PerformanceProjectionVersion")
+                        .HasColumnType("integer");
 
                     b.Property<long>("PullRequestId")
                         .HasColumnType("bigint")
@@ -985,6 +1156,106 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_code_insight_pull_request_metrics_repo_sealed");
 
                     b.ToTable("code_insight_pull_request_metrics", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightReviewExposure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CodeInsightPullRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("IdentityFingerprint")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasComputedColumnSql("code_insight_exposure_identity(\"JobId\", \"FilePath\", \"ModelId\", \"LogicalModelName\", \"Source\")", true);
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LogicalModelName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ModelId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProviderScope")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("RevisionKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeInsightPullRequestId");
+
+                    b.HasIndex("IdentityFingerprint")
+                        .IsUnique();
+
+                    b.ToTable("code_insight_review_exposures", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightThreadEligibility", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CodeInsightPullRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ExcludedFromHumanMisses")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("IdentityFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProviderScope")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("ProviderThreadId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("SourceObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeInsightPullRequestId");
+
+                    b.HasIndex("IdentityFingerprint")
+                        .IsUnique();
+
+                    b.ToTable("code_insight_thread_eligibility", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.MemoryActivityLogEntry", b =>
@@ -2743,6 +3014,146 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_review_runners_tenant_state");
 
                     b.ToTable("review_runners", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewerPerformanceDailyCount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("BucketDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("CellKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CodeInsightPullRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Count")
+                        .HasColumnType("bigint");
+
+                    b.Property<short>("DuplicateState")
+                        .HasColumnType("smallint");
+
+                    b.Property<bool>("IsClassified")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsMiss")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LogicalModelName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ModelId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ProviderScope")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<short>("PublicationState")
+                        .HasColumnType("smallint");
+
+                    b.Property<long>("PullRequestId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Qualifier")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RepositoryId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("TypeMembership")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "BucketDate");
+
+                    b.HasIndex("CodeInsightPullRequestId", "BucketDate");
+
+                    b.HasIndex("CodeInsightPullRequestId", "CellKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_reviewer_performance_daily_counts_CodeInsightPullRequestId~1");
+
+                    b.ToTable("reviewer_performance_daily_counts", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewerPerformanceReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CalculationVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CapturedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("reviewer_performance_reports", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewerPerformanceReportClient", b =>
+                {
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ReportId", "ClientId");
+
+                    b.HasIndex("ClientId");
+
+                    b.ToTable("reviewer_performance_report_clients", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.RunnerIngestReceipt", b =>
@@ -6419,6 +6830,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Navigation("CustomTag");
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightHarvestCoverage", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", null)
+                        .WithMany()
+                        .HasForeignKey("CodeInsightPullRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightMiss", b =>
                 {
                     b.HasOne("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", "CodeInsightPullRequest")
@@ -6428,6 +6848,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("CodeInsightPullRequest");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightPerformanceDirty", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", null)
+                        .WithMany()
+                        .HasForeignKey("CodeInsightPullRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", b =>
@@ -6440,6 +6869,26 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequestMetric", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", "CodeInsightPullRequest")
+                        .WithMany()
+                        .HasForeignKey("CodeInsightPullRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CodeInsightPullRequest");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightReviewExposure", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", null)
+                        .WithMany()
+                        .HasForeignKey("CodeInsightPullRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.CodeInsightThreadEligibility", b =>
                 {
                     b.HasOne("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", "CodeInsightPullRequest")
                         .WithMany()
@@ -6601,6 +7050,30 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ReviewPrScan");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewerPerformanceDailyCount", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.CodeInsightPullRequest", null)
+                        .WithMany()
+                        .HasForeignKey("CodeInsightPullRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewerPerformanceReportClient", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.ClientRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.ReviewerPerformanceReport", null)
+                        .WithMany("Clients")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadMemoryRecord", b =>
@@ -7142,6 +7615,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewPrScan", b =>
                 {
                     b.Navigation("Threads");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewerPerformanceReport", b =>
+                {
+                    b.Navigation("Clients");
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadPassJob", b =>

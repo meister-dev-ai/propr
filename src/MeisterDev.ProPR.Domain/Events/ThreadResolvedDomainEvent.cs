@@ -31,4 +31,6 @@ public sealed record ThreadResolvedDomainEvent(
     string CommentHistory,
     DateTimeOffset ObservedAt,
     ThreadResolutionIntent Intent = ThreadResolutionIntent.ClaimsFix,
-    ThreadAnchorCodeChange CodeChangedSinceRaised = ThreadAnchorCodeChange.Unknown);
+    ThreadAnchorCodeChange CodeChangedSinceRaised = ThreadAnchorCodeChange.Unknown,
+    string? NativeStatus = null,
+    string? ProviderScope = null);

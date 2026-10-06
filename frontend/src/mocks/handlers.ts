@@ -4,6 +4,7 @@
 import { http, HttpResponse, delay } from 'msw'
 import protocolMockData from '../../mock/data/protocol_response_1.json'
 import { API_BASE_URL } from '@/services/apiBase'
+import { reviewerPerformanceHandlers } from './reviewerPerformance'
 
 const base = API_BASE_URL
 
@@ -2736,6 +2737,7 @@ function mockCodeInsightFindings(coreType: string | null) {
 }
 
 export const handlers = [
+  ...reviewerPerformanceHandlers(base),
   http.get(`${base}/auth/options`, async () => {
     return HttpResponse.json({
       edition: mockEdition,

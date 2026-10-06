@@ -16,6 +16,9 @@ namespace MeisterDev.ProPR.CodeInsights.Contracts;
 /// </remarks>
 public interface ICodeInsightFindingStore
 {
+    /// <summary>Resolves a client-owned provider namespace without returning credentials.</summary>
+    Task<string?> ResolveProviderScopeAsync(Guid clientId, Guid? connectionId, CancellationToken ct = default) => Task.FromResult<string?>(null);
+
     /// <summary>
     ///     Upserts the pull-request aggregate identified by <paramref name="key" /> and sets its lifecycle
     ///     state and latest activity timestamp. Creates the aggregate when absent.
@@ -72,5 +75,6 @@ public interface ICodeInsightFindingStore
         string repositoryId,
         long pullRequestId,
         string providerThreadId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? providerScope = null);
 }

@@ -84,7 +84,16 @@ public sealed partial class CodeInsightFindingIngestionService(
                 finding.OriginModelId,
                 finding.OriginLogicalModelName,
                 finding.OriginSymbolName,
-                finding.OriginSymbolKind))
+                finding.OriginSymbolKind,
+                finding.PublicationState,
+                finding.PublicationReason,
+                finding.MatchedProviderThreadId,
+                finding.DuplicateState,
+                finding.DuplicateOfPublicationId,
+                finding.DuplicateVerificationSource,
+                finding.DuplicateVerificationConfidence,
+                finding.DuplicateVerifiedAt,
+                finding.ProviderScope))
             .ToList();
 
         await store.MaterialiseFindingsAsync(

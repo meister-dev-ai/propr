@@ -188,6 +188,7 @@ public sealed class AdoCommentPoster(
 
         for (var ordinal = 0; ordinal < result.Comments.Count; ordinal++)
         {
+            diagnostics.CurrentOrdinal = ordinal;
             await this.PostInlineCommentIfNotSuppressedAsync(
                 result.Comments[ordinal],
                 ordinal,
@@ -1418,6 +1419,8 @@ public sealed class AdoCommentPoster(
             }
         }
 
+        public int? CurrentOrdinal { get; set; }
+
         public int CandidateCount { get; }
 
         public int CarriedForwardCandidatesSkipped { get; }
@@ -1429,7 +1432,9 @@ public sealed class AdoCommentPoster(
 
         public void RecordPostedComments(IReadOnlyList<PostedReviewCommentRef> comments)
         {
-            this._postedComments.AddRange(comments);
+            this._postedComments.AddRange(
+                comments.Select(comment =>
+                    comment.ThreadKind == PostedReviewCommentKind.Inline ? comment with { FindingOrdinal = this.CurrentOrdinal } : comment));
         }
 
         public void RecordSuppression(string reasonCode, int count = 1)
@@ -1521,7 +1526,7 @@ public sealed class AdoCommentPoster(
 
         public void RecordFailure(ReviewCommentPostingFailure failure)
         {
-            this._postingFailures.Add(failure);
+            this._postingFailures.Add(failure.ThreadKind == "inline" ? failure with { FindingOrdinal = this.CurrentOrdinal } : failure);
         }
 
         public ReviewCommentPostingDiagnosticsDto Build()

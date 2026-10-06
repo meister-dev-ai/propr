@@ -70,6 +70,21 @@ public sealed class CodeInsightPullRequest
     /// <summary>UTC timestamp when this aggregate was last upserted.</summary>
     public DateTimeOffset UpdatedAt { get; set; }
 
+    /// <summary>Version of the retained joint score projection.</summary>
+    public int PerformanceProjectionVersion { get; set; }
+
+    /// <summary>UTC timestamp of the last successful count replacement.</summary>
+    public DateTimeOffset? PerformanceProjectedAt { get; set; }
+
+    /// <summary>Last successful full provider thread enumeration; absent for historical collections.</summary>
+    public DateTimeOffset? MissHarvestObservedAt { get; set; }
+
+    /// <summary>Whether every observed human thread was resolved at the last enumeration.</summary>
+    public bool MissHarvestSettled { get; set; }
+
+    /// <summary>Provider and host scope retained by the collection producer.</summary>
+    public string MissHarvestProviderScope { get; set; } = string.Empty;
+
     /// <summary>Findings collected under this pull request.</summary>
     public ICollection<CodeInsightFinding> Findings { get; init; } = new List<CodeInsightFinding>();
 }

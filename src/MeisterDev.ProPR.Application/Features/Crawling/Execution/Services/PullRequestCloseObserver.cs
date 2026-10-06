@@ -8,25 +8,14 @@ using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
+using MeisterDev.ProPR.Application.Features.Providers.Identity;
 
 namespace MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 
-/// <summary>
-///     Observes a finished pull request's threads once, immediately before its measurement is sealed.
-/// </summary>
-/// <remarks>
-///     <para>
-///         Every pass that observed this pull request before now ran while it was active, so a thread that
-///         reached its resolved state as part of the close has never been seen in that state. The harvester
-///         judges such a thread again; a thread still open, or already judged against a resolved state, returns
-///         from the harvester without a model call.
-///     </para>
-///     <para>
-///         Harvest only. The review archive observed every thread on each active pass, and retaining another
-///         copy here would store rows no retention setting asked for.
-///     </para>
-/// </remarks>
+/// <summary>Collects final thread observations and finding dispositions before pull-request measurement sealing.</summary>
+/// <remarks>Active-pass archive retention is independent of this close-only collection operation.</remarks>
 public sealed partial class PullRequestCloseObserver(
     ILogger<PullRequestCloseObserver> logger,
     IPullRequestFetcher? pullRequestFetcher = null,
@@ -36,7 +25,8 @@ public sealed partial class PullRequestCloseObserver(
     IClientScmConnectionRepository? scmConnectionRepository = null,
     IPostedCommentOriginStore? postedCommentOriginStore = null,
     IReviewerThreadStatusFetcher? reviewerThreadStatuses = null,
-    ICodeInsightDispositionService? dispositionService = null) : ICodeInsightCloseObserver
+    ICodeInsightDispositionService? dispositionService = null,
+    ICodeInsightHarvestCoverageRecorder? harvestCoverageRecorder = null) : ICodeInsightCloseObserver
 {
     public async Task ObserveAsync(
         CodeInsightPullRequestKey key,
@@ -46,15 +36,19 @@ public sealed partial class PullRequestCloseObserver(
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        // Optional dependencies represent module or host availability; licensing remains a runtime collection gate.
         if (pullRequestFetcher is null
             || missHarvester is null
             || findingStore is null
             || collectionGate is null
-            || scmConnectionRepository is null)
+            || scmConnectionRepository is null
+            || harvestCoverageRecorder is null)
         {
             return;
         }
 
+        string? harvestScope = null;
+        var observedAt = DateTimeOffset.UtcNow;
         try
         {
             if (!await collectionGate.IsCollectionEnabledAsync(key.ClientId, ct))
@@ -62,11 +56,7 @@ public sealed partial class PullRequestCloseObserver(
                 return;
             }
 
-            // Only a pull request ProPR reviewed and raised something on. Harvesting a miss creates the
-            // code-insight aggregate when none exists, so observing any closed pull request would let one
-            // human thread manufacture an aggregate with no findings, which the seal a statement later records
-            // as a measurement with no true positives. The seal sweep excludes the same rows through its
-            // candidate query; this is that precondition on the path that has no candidate query.
+            // Sealing candidates require collected findings. A human miss alone can create an aggregate.
             var findings = await findingStore.GetFindingsForPullRequestAsync(key, ct);
             if (findings.Count == 0)
             {
@@ -74,15 +64,11 @@ public sealed partial class PullRequestCloseObserver(
                 return;
             }
 
-            // The connection carries the provider family, and the family decides whether a comment id alone
-            // identifies a comment or only the thread-and-comment pair does. Reading ProPR's own comments under
-            // the wrong regime would leave its own threads looking like human ones, so an unresolved connection
-            // stops the observation instead of guessing. This is the same precondition the active pass has.
+            // Resolve the provider family before interpreting provider comment identities.
             var connection = await this.ResolveConnectionAsync(key.ClientId, providerScopePath, ct);
             if (connection is null)
             {
-                // The reduced authority, never the scope path it came from: a path written as
-                // https://user:token@host/org carries the credential, and a log line keeps it.
+                // Log only the authority because source paths may contain credentials.
                 LogNoConnection(
                     logger,
                     key.PullRequestId,
@@ -92,11 +78,11 @@ public sealed partial class PullRequestCloseObserver(
             }
 
             var ownership = await this.ResolveOwnershipAsync(key, connection.ProviderFamily, ct);
+            harvestScope = ProviderSourceIdentity.FromReviewSource(
+                connection.ProviderFamily, connection.ProviderFamily == ScmProvider.AzureDevOps ? providerScopePath : connection.HostBaseUrl).Value;
 
-            // Read ProPR's own threads first. The provider adapter contributes the account it authenticates as
-            // into the resolver while answering, which is the second half of the ownership answer and the half
-            // provenance cannot supply. Reading it before the harvest is what lets a comment ProPR posted
-            // without a provenance row still be recognised as its own.
+            // The adapter contributes its account identity before human-thread authorship is resolved.
+            var reviewerObservedAt = DateTimeOffset.UtcNow;
             var reviewerThreads = await this.ReadReviewerThreadsAsync(
                 key,
                 providerScopePath,
@@ -104,6 +90,7 @@ public sealed partial class PullRequestCloseObserver(
                 ownership,
                 ct);
 
+            observedAt = DateTimeOffset.UtcNow;
             var threads = await pullRequestFetcher.FetchThreadsAsync(
                 providerScopePath,
                 providerProjectKey,
@@ -112,22 +99,23 @@ public sealed partial class PullRequestCloseObserver(
                 key.ClientId,
                 ct);
 
+            var coverage = new HarvestCoverageState();
             foreach (var thread in threads)
             {
+                var evt = ThreadUpdatedEventFactory.Build(
+                    key.ClientId, connection.Id, key.RepositoryId, key.PullRequestId, thread, ownership, observedAt, harvestScope);
+                coverage.Observe(evt);
                 if (string.IsNullOrWhiteSpace(thread.ThreadId))
                 {
+                    if (ThreadUpdatedEventFactory.IsHumanThread(evt))
+                    {
+                        coverage.RecordRetention(false);
+                    }
+
                     continue;
                 }
 
-                var evt = ThreadUpdatedEventFactory.Build(
-                    key.ClientId,
-                    connection.Id,
-                    key.RepositoryId,
-                    key.PullRequestId,
-                    thread,
-                    ownership);
-
-                await missHarvester.HandleThreadObservedAsync(evt, ct);
+                coverage.RecordRetention(await missHarvester.HandleThreadObservedAsync(evt, ct));
             }
 
             await this.RecordDispositionsAsync(
@@ -136,7 +124,10 @@ public sealed partial class PullRequestCloseObserver(
                 providerProjectKey,
                 reviewerThreads,
                 findings,
+                harvestScope, reviewerObservedAt,
                 ct);
+            await harvestCoverageRecorder.RecordAsync(
+                key, harvestScope, coverage.AllHumanThreadsResolved, observedAt, ct, coverage.AllHumanObservationsRetained);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -144,18 +135,17 @@ public sealed partial class PullRequestCloseObserver(
         }
         catch (Exception ex)
         {
+            if (harvestScope is not null)
+            {
+                await harvestCoverageRecorder.RecordAsync(key, harvestScope, false, observedAt, ct, enumerationComplete: false);
+            }
+
             LogObservationFailed(logger, key.PullRequestId, key.ClientId, ex);
         }
     }
 
-    /// <summary>
-    ///     Reads the statuses of the threads ProPR raised, and lets the provider adapter contribute the account
-    ///     it posts under into <paramref name="ownership" />.
-    /// </summary>
-    /// <remarks>
-    ///     Returns nothing when no status fetcher is registered, which leaves ownership resting on provenance
-    ///     alone and the disposition side unrecorded, exactly as it was before the close observed anything.
-    /// </remarks>
+    /// <summary>Reads own-thread statuses and allows the adapter to contribute its authenticated account identity.</summary>
+    /// <remarks>Without a status fetcher, ownership uses retained provenance and dispositions are unavailable.</remarks>
     private async Task<IReadOnlyList<PrThreadStatusEntry>> ReadReviewerThreadsAsync(
         CodeInsightPullRequestKey key,
         string providerScopePath,
@@ -186,30 +176,16 @@ public sealed partial class PullRequestCloseObserver(
         }
     }
 
-    /// <summary>
-    ///     Records what became of each finding whose thread has resolved, so the close settles both sides of
-    ///     the measurement it is about to seal.
-    /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         Every earlier pass that could record a disposition ran while the pull request was active, so a
-    ///         finding whose thread resolved as part of the close has none. Counting the misses that settled at
-    ///         the same moment without counting these would leave the false negatives complete and the true
-    ///         positives short, which reads as a recall lower than the reviewer earned.
-    ///     </para>
-    ///     <para>
-    ///         Every resolved thread is offered, with no comparison against a previous status. The disposition
-    ///         service keeps the first decision it recorded for a finding, so a thread that already has one
-    ///         costs a lookup and nothing else, and the close needs no memory of what the thread looked like on
-    ///         the last pass.
-    ///     </para>
-    /// </remarks>
+    /// <summary>Records final outcomes for collected findings before the measurement is sealed.</summary>
+    /// <remarks>Every known thread is offered; the disposition service handles replay and unresolved outcomes.</remarks>
     private async Task RecordDispositionsAsync(
         CodeInsightPullRequestKey key,
         string providerScopePath,
         string providerProjectKey,
         IReadOnlyList<PrThreadStatusEntry> reviewerThreads,
         IReadOnlyList<CodeInsightFindingView> findings,
+        string providerScope,
+        DateTimeOffset observedAt,
         CancellationToken ct)
     {
         if (dispositionService is null || reviewerThreads.Count == 0)
@@ -217,9 +193,7 @@ public sealed partial class PullRequestCloseObserver(
             return;
         }
 
-        // Only the threads a collected finding was raised as. The disposition service looks the finding up and
-        // declines a thread it does not know, so this changes no outcome; it keeps the close from spending a
-        // lookup per unrelated thread and makes the correlation something a test can assert.
+        // Restrict disposition lookups to threads represented by collected findings.
         var findingThreads = findings
             .Select(finding => finding.ProviderThreadId)
             .Where(threadId => !string.IsNullOrWhiteSpace(threadId))
@@ -233,11 +207,6 @@ public sealed partial class PullRequestCloseObserver(
             }
 
             var intent = ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status);
-            if (!ThreadResolutionStatusInterpreter.IsResolved(intent))
-            {
-                continue;
-            }
-
             await dispositionService.HandleThreadResolvedAsync(
                 new ThreadResolvedDomainEvent(
                     key.ClientId,
@@ -249,9 +218,10 @@ public sealed partial class PullRequestCloseObserver(
                     thread.FilePath,
                     null,
                     thread.CommentHistory,
-                    DateTimeOffset.UtcNow,
+                    observedAt,
                     intent,
-                    thread.CodeChangedSinceRaised),
+                    thread.CodeChangedSinceRaised,
+                    thread.Status, providerScope),
                 ct);
         }
     }
@@ -276,10 +246,7 @@ public sealed partial class PullRequestCloseObserver(
                                  && ScmConnectionHostMatch.MatchesAuthority(connection.HostBaseUrl, authority))
             .ToList();
 
-        // The provider family decides whether a comment id alone identifies a comment or only the
-        // thread-and-comment pair does, and reading ProPR's own comments under the wrong regime leaves its own
-        // threads looking like human ones. Two active connections on one authority disagreeing about the family
-        // is not something a host match can settle, so the observation stops instead of picking one.
+        // Conflicting provider families on one authority prevent unambiguous comment interpretation.
         if (matches.Select(connection => connection.ProviderFamily).Distinct().Count() > 1)
         {
             LogAmbiguousConnection(logger, clientId, authority);
@@ -292,15 +259,8 @@ public sealed partial class PullRequestCloseObserver(
             .FirstOrDefault();
     }
 
-    /// <summary>
-    ///     Resolves which comments on this pull request ProPR posted, from the provenance recorded when it
-    ///     posted them.
-    /// </summary>
-    /// <remarks>
-    ///     No provider adapter runs on this path, so no account identity is contributed and provenance is the
-    ///     whole answer. A failed lookup falls back to owning nothing, which is the same fallback the crawl
-    ///     takes; the harvester's own check against recorded finding threads still keeps ProPR's findings out.
-    /// </remarks>
+    /// <summary>Resolves own-comment provenance without invoking a provider adapter.</summary>
+    /// <remarks>The harvester checks retained finding identities when provenance is unavailable.</remarks>
     private async Task<ThreadOwnershipResolver> ResolveOwnershipAsync(
         CodeInsightPullRequestKey key,
         ScmProvider provider,

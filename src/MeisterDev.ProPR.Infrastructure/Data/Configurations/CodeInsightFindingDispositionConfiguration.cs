@@ -15,6 +15,8 @@ internal sealed class CodeInsightFindingDispositionConfiguration
     {
         builder.ToTable("code_insight_finding_dispositions");
 
+        builder.Property(row => row.NativeStatus).HasMaxLength(64);
+
         builder.HasKey(disposition => disposition.Id);
         builder.Property(disposition => disposition.Id).HasColumnName("id").ValueGeneratedNever();
 

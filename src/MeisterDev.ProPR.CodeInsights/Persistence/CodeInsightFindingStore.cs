@@ -4,33 +4,23 @@
 
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.CodeInsights.Ports;
 using MeisterDev.ProPR.CodeInsights.Survival;
 using MeisterDev.ProPR.CodeInsights.Taxonomy;
+using static MeisterDev.ProPR.CodeInsights.Persistence.CodeInsightProviderScopeLookup;
+using static MeisterDev.ProPR.CodeInsights.Persistence.CodeInsightPullRequestPersistence;
 
 namespace MeisterDev.ProPR.CodeInsights.Persistence;
 
-/// <summary>
-///     Database-backed store for durable code-insight finding records. Finding text is encrypted at rest
-///     via <see cref="ISecretProtectionCodec" />; all structured metadata is persisted as plaintext so it
-///     remains queryable.
-/// </summary>
+/// <summary>Persists encrypted finding text and queryable classification, disposition and publication metadata.</summary>
 /// <remarks>
-///     Every operation runs on a fresh context created from the injected
-///     <see cref="IDbContextFactory{TContext}" /> when one is available, falling back to the injected
-///     request-scoped context when it is null (so tests can pass a single context). Collection is a
-///     best-effort side-write; isolating it means a failure here can never leave tracked entities behind
-///     that poison the shared request-scoped context and break the subsequent review/crawl saves.
-///     <para>
-///         One class serves five narrow boundaries: findings, classification, outcomes, harvested threads and
-///         retention. Consumers depend on the one they use, so a test double stubs two or three methods rather than
-///         sixteen and a new kind of collected record gets its own port. The implementations stay together because
-///         they share the same context handling, the same codec purposes and the same aggregate lookup, and
-///         splitting them would either duplicate that or hide it behind inheritance.
-///     </para>
+///     Factory contexts isolate collection failures from the surrounding review or crawl session.
+///     Without a factory, operations borrow the injected context. Miss and thread-eligibility methods
+///     forward to their dedicated persistence owner for compatibility with direct store callers.
 /// </remarks>
 public sealed class CodeInsightFindingStore(
     MeisterProPRDbContext dbContext,
@@ -43,7 +33,6 @@ public sealed class CodeInsightFindingStore(
         ICodeInsightRetentionStore
 {
     private const string FindingMessagePurpose = "code-insight-finding-message";
-    private const string MissDiscussionPurpose = "code-insight-miss-discussion";
 
     public Task TouchPullRequestAsync(
         CodeInsightPullRequestKey key,
@@ -109,12 +98,7 @@ public sealed class CodeInsightFindingStore(
 
                     if (existing.TryGetValue(finding.Ordinal, out var current))
                     {
-                        // The provider identifiers are the only fields a re-post can legitimately fill in; // NOSONAR
-                        // the rest of the record is fixed by the increment that produced it. Never overwrite a
-                        // known id with null: a later pass that posted nothing must not erase the join key a
-                        // disposition consumer depends on.
-                        current.ProviderThreadId = finding.ProviderThreadId ?? current.ProviderThreadId;
-                        current.ProviderCommentId = finding.ProviderCommentId ?? current.ProviderCommentId;
+                        CodeInsightFindingPublicationUpdater.Apply(db, current, finding, now);
                         continue;
                     }
 
@@ -154,6 +138,16 @@ public sealed class CodeInsightFindingStore(
                             SourceReadGrounding = finding.SourceReadGrounding,
                             ProviderThreadId = finding.ProviderThreadId,
                             ProviderCommentId = finding.ProviderCommentId,
+                            ProviderScope = finding.ProviderScope,
+                            PerformanceEvidenceUpdatedAt = now,
+                            PublicationState = finding.PublicationState,
+                            PublicationReason = finding.PublicationReason,
+                            MatchedProviderThreadId = finding.MatchedProviderThreadId,
+                            DuplicateState = finding.DuplicateState,
+                            DuplicateOfPublicationId = finding.DuplicateOfPublicationId,
+                            DuplicateVerificationSource = finding.DuplicateVerificationSource,
+                            DuplicateVerificationConfidence = finding.DuplicateVerificationConfidence,
+                            DuplicateVerifiedAt = finding.DuplicateVerifiedAt,
                             ObservedAt = observedAt,
                             CreatedAt = now,
                         });
@@ -365,7 +359,8 @@ public sealed class CodeInsightFindingStore(
         string repositoryId,
         long pullRequestId,
         string providerThreadId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? providerScope = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryId);
         ArgumentException.ThrowIfNullOrWhiteSpace(providerThreadId);
@@ -380,13 +375,20 @@ public sealed class CodeInsightFindingStore(
                     return null;
                 }
 
-                var record = await db.CodeInsightFindings
-                    .Where(finding => finding.CodeInsightPullRequestId == aggregateId.Value
-                                      && finding.ProviderThreadId == providerThreadId)
-                    // A thread can only belong to one finding, but ordering keeps the result deterministic
-                    // if historical data ever violates that.
-                    .OrderBy(finding => finding.CreatedAt)
-                    .FirstOrDefaultAsync(ct);
+                var candidates = db.CodeInsightFindings.Where(finding =>
+                    finding.CodeInsightPullRequestId == aggregateId.Value && finding.ProviderThreadId == providerThreadId);
+                var scopes = await candidates.Select(row => row.ProviderScope).Distinct().ToListAsync(ct);
+                if (string.IsNullOrWhiteSpace(providerScope) && scopes.Count > 1)
+                {
+                    return null;
+                }
+
+                if (!string.IsNullOrWhiteSpace(providerScope))
+                {
+                    candidates = candidates.Where(row => row.ProviderScope == providerScope);
+                }
+
+                var record = await candidates.OrderBy(finding => finding.CreatedAt).ThenBy(finding => finding.Id).FirstOrDefaultAsync(ct);
 
                 return record is null ? null : this.ToView(record);
             },
@@ -432,7 +434,11 @@ public sealed class CodeInsightFindingStore(
                 var aggregateIds = records.Select(record => record.CodeInsightPullRequestId).Distinct().ToList();
                 var clientByAggregate = await db.CodeInsightPullRequests
                     .Where(pullRequest => aggregateIds.Contains(pullRequest.Id))
-                    .Select(pullRequest => new { pullRequest.Id, pullRequest.ClientId })
+                    .Select(pullRequest => new
+                    {
+                        pullRequest.Id,
+                        pullRequest.ClientId
+                    })
                     .ToDictionaryAsync(pullRequest => pullRequest.Id, pullRequest => pullRequest.ClientId, ct);
 
                 return records
@@ -585,6 +591,7 @@ public sealed class CodeInsightFindingStore(
                         ClassifierVersion = disposition.ClassifierVersion,
                         ClassifierConfidence = disposition.ClassifierConfidence,
                         RejectionReason = disposition.RejectionReason,
+                        NativeStatus = disposition.NativeStatus,
                         DecidedAt = DateTimeOffset.UtcNow,
                     });
 
@@ -612,182 +619,48 @@ public sealed class CodeInsightFindingStore(
                         record.SourceCodeChange,
                         record.ClassifierVersion,
                         record.ClassifierConfidence,
-                        record.RejectionReason);
+                        record.RejectionReason,
+                        record.NativeStatus);
             },
             ct);
     }
 
-    public Task<bool> RecordMissAsync(
-        CodeInsightPullRequestKey key,
-        CodeInsightMissRecord miss,
-        CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(key);
-        ArgumentNullException.ThrowIfNull(miss);
+    private readonly CodeInsightMissStore _missStore = new(dbContext, secretProtectionCodec, contextFactory);
 
-        return this.WithDbAsync(
-            async db =>
-            {
-                // The aggregate is created if the pull request has no findings yet: a review that found
-                // nothing while a human found something is exactly the case recall exists to capture.
-                var pullRequest = await GetOrCreatePullRequestAsync(db, key, null, DateTimeOffset.UtcNow, ct);
+    public Task<CodeInsightThreadEligibilityObservation> ObserveThreadEligibilityAsync(
+        CodeInsightPullRequestKey key, string threadId, string providerScope, bool excludedFromHumanMisses, DateTimeOffset observedAt,
+        CancellationToken ct = default) =>
+        this._missStore.ObserveThreadEligibilityAsync(key, threadId, providerScope, excludedFromHumanMisses, observedAt, ct);
 
-                var alreadyHarvested = await db.CodeInsightMisses
-                    .AnyAsync(
-                        candidate => candidate.CodeInsightPullRequestId == pullRequest.Id
-                                     && candidate.ProviderThreadId == miss.ProviderThreadId,
-                        ct);
-                if (alreadyHarvested)
-                {
-                    return false;
-                }
+    public Task<CodeInsightThreadEligibilityObservation?> GetThreadEligibilityAsync(
+        CodeInsightPullRequestKey key, string threadId, string providerScope, CancellationToken ct = default) =>
+        this._missStore.GetThreadEligibilityAsync(key, threadId, providerScope, ct);
 
-                var harvestedAt = DateTimeOffset.UtcNow;
+    public Task<bool> RecordMissAsync(CodeInsightPullRequestKey key, CodeInsightMissRecord miss, CancellationToken ct = default) =>
+        this._missStore.RecordMissAsync(key, miss, ct);
 
-                var harvested = new CodeInsightMiss
-                {
-                    Id = Guid.CreateVersion7(),
-                    CodeInsightPullRequestId = pullRequest.Id,
-                    ProviderThreadId = miss.ProviderThreadId,
-                    FilePath = miss.FilePath,
-                    LineNumber = miss.LineNumber,
-                    HarvestedAt = harvestedAt,
-                };
+    public Task<CodeInsightMissAcknowledgment> ObserveUnchangedMissAsync(
+        CodeInsightPullRequestKey key, string threadId, string fingerprint, DateTimeOffset observedAt, CancellationToken ct = default,
+        Guid? connectionId = null, string? dimensionClassifierVersion = null, bool excludedAsOwnFinding = false, string? providerScope = null) =>
+        this._missStore.ObserveUnchangedMissAsync(
+            key, threadId, fingerprint, observedAt, ct, connectionId, dimensionClassifierVersion, excludedAsOwnFinding, providerScope);
 
-                harvested.RecordJudgement(
-                    miss.IsSubstantive,
-                    miss.WasActedOn,
-                    miss.IsInScope,
-                    miss.Confidence,
-                    miss.ClassifierVersion,
-                    miss.JudgedThreadResolved,
-                    secretProtectionCodec.Protect(miss.Discussion, MissDiscussionPurpose),
-                    harvestedAt);
-
-                db.CodeInsightMisses.Add(harvested);
-
-                await db.SaveChangesAsync(ct);
-                return true;
-            },
-            ct);
-    }
+    public Task<CodeInsightMissObservation?> GetObservationAsync(
+        CodeInsightPullRequestKey key, string threadId, CancellationToken ct = default, Guid? connectionId = null, string? providerScope = null) =>
+        this._missStore.GetObservationAsync(key, threadId, ct, connectionId, providerScope);
 
     public Task<bool?> GetJudgedThreadResolvedAsync(
-        CodeInsightPullRequestKey key,
-        string providerThreadId,
-        CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(key);
-        ArgumentException.ThrowIfNullOrWhiteSpace(providerThreadId);
+        CodeInsightPullRequestKey key, string providerThreadId, CancellationToken ct = default, Guid? connectionId = null, string? providerScope = null) =>
+        this._missStore.GetJudgedThreadResolvedAsync(key, providerThreadId, ct, connectionId, providerScope);
 
-        return this.WithDbAsync(
-            async db =>
-            {
-                var aggregateId = await FindPullRequestIdAsync(db, key, ct);
-                if (aggregateId is null)
-                {
-                    return (bool?)null;
-                }
+    public Task<bool> RejudgeMissAsync(CodeInsightPullRequestKey key, CodeInsightMissRecord miss, CancellationToken ct = default) =>
+        this._missStore.RejudgeMissAsync(key, miss, ct);
 
-                // Projected to a nullable so "no row" and "row judged against an open thread" stay distinct: both
-                // would otherwise arrive as false, and the second one is the case that needs re-judging.
-                var judged = await db.CodeInsightMisses
-                    .Where(miss => miss.CodeInsightPullRequestId == aggregateId.Value
-                                   && miss.ProviderThreadId == providerThreadId)
-                    .Select(miss => (bool?)miss.JudgedThreadResolved)
-                    .FirstOrDefaultAsync(ct);
+    public Task<IReadOnlyList<CodeInsightMissView>> GetMissesForPullRequestAsync(CodeInsightPullRequestKey key, CancellationToken ct = default) =>
+        this._missStore.GetMissesForPullRequestAsync(key, ct);
 
-                return judged;
-            },
-            ct);
-    }
-
-    public Task<bool> RejudgeMissAsync(
-        CodeInsightPullRequestKey key,
-        CodeInsightMissRecord miss,
-        CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(key);
-        ArgumentNullException.ThrowIfNull(miss);
-
-        return this.WithDbAsync(
-            async db =>
-            {
-                var aggregateId = await FindPullRequestIdAsync(db, key, ct);
-                if (aggregateId is null)
-                {
-                    return false;
-                }
-
-                var existing = await db.CodeInsightMisses
-                    .FirstOrDefaultAsync(
-                        candidate => candidate.CodeInsightPullRequestId == aggregateId.Value
-                                     && candidate.ProviderThreadId == miss.ProviderThreadId,
-                        ct);
-                if (existing is null)
-                {
-                    return false;
-                }
-
-                // The same operation the first harvest used, so the verdict, its three components and the
-                // discussion they were read from move together. The row keeps its identity, its anchor and its
-                // harvest time.
-                existing.RecordJudgement(
-                    miss.IsSubstantive,
-                    miss.WasActedOn,
-                    miss.IsInScope,
-                    miss.Confidence,
-                    miss.ClassifierVersion,
-                    miss.JudgedThreadResolved,
-                    secretProtectionCodec.Protect(miss.Discussion, MissDiscussionPurpose),
-                    DateTimeOffset.UtcNow);
-
-                await db.SaveChangesAsync(ct);
-                return true;
-            },
-            ct);
-    }
-
-    public Task<IReadOnlyList<CodeInsightMissView>> GetMissesForPullRequestAsync(
-        CodeInsightPullRequestKey key,
-        CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(key);
-
-        return this.WithDbAsync<IReadOnlyList<CodeInsightMissView>>(
-            async db =>
-            {
-                var aggregateId = await FindPullRequestIdAsync(db, key, ct);
-                if (aggregateId is null)
-                {
-                    return [];
-                }
-
-                var records = await db.CodeInsightMisses
-                    .Where(miss => miss.CodeInsightPullRequestId == aggregateId.Value)
-                    .OrderBy(miss => miss.HarvestedAt)
-                    .ToListAsync(ct);
-
-                return records
-                    .Select(miss => new CodeInsightMissView(
-                        miss.Id,
-                        miss.ProviderThreadId,
-                        miss.FilePath,
-                        miss.LineNumber,
-                        secretProtectionCodec.Unprotect(miss.EncryptedDiscussion, MissDiscussionPurpose),
-                        miss.IsSubstantive,
-                        miss.WasActedOn,
-                        miss.IsInScope,
-                        miss.CountsAsMiss,
-                        miss.ClassifierConfidence,
-                        miss.ClassifierVersion,
-                        miss.HarvestedAt,
-                        miss.JudgedThreadResolved,
-                        miss.LastJudgedAt))
-                    .ToList();
-            },
-            ct);
-    }
+    public Task<string?> ResolveProviderScopeAsync(Guid clientId, Guid? connectionId, CancellationToken ct = default) =>
+        this.WithDbAsync<string?>(async db => await ResolveMissProviderScopeAsync(db, clientId, connectionId, ct), ct);
 
     public Task<int> PurgeExpiredAsync(DateTimeOffset cutoff, CancellationToken ct = default)
     {
@@ -808,6 +681,11 @@ public sealed class CodeInsightFindingStore(
         return this.WithDbAsync(
             async db =>
             {
+                var reportIds = await db.ReviewerPerformanceReportClients.Where(member => member.ClientId == clientId).Select(member => member.ReportId)
+                    .Distinct().ToListAsync(ct);
+                await ReviewerPerformanceReportStore.RemoveIdsAsync(db, reportIds, ct);
+                db.ReviewerPerformanceDailyCounts.RemoveRange(await db.ReviewerPerformanceDailyCounts.Where(row => row.ClientId == clientId).ToListAsync(ct));
+                await db.SaveChangesAsync(ct);
                 var owned = await db.CodeInsightPullRequests
                     .Where(pullRequest => pullRequest.ClientId == clientId)
                     .ToListAsync(ct);
@@ -860,9 +738,19 @@ public sealed class CodeInsightFindingStore(
                 .Where(metric => metric.CodeInsightPullRequestId == pullRequest.Id)
                 .ToListAsync(ct);
 
+            db.ReviewerPerformanceDailyCounts.RemoveRange(
+                await db.ReviewerPerformanceDailyCounts.Where(row => row.CodeInsightPullRequestId == pullRequest.Id).ToListAsync(ct));
+            db.CodeInsightReviewExposures.RemoveRange(
+                await db.CodeInsightReviewExposures.Where(row => row.CodeInsightPullRequestId == pullRequest.Id).ToListAsync(ct));
+            db.CodeInsightHarvestCoverage.RemoveRange(
+                await db.CodeInsightHarvestCoverage.Where(row => row.CodeInsightPullRequestId == pullRequest.Id).ToListAsync(ct));
+            db.CodeInsightPerformanceDirty.RemoveRange(
+                await db.CodeInsightPerformanceDirty.Where(row => row.CodeInsightPullRequestId == pullRequest.Id).ToListAsync(ct));
             db.CodeInsightFindingTags.RemoveRange(tags);
             db.CodeInsightFindingDispositions.RemoveRange(dispositions);
             db.CodeInsightMisses.RemoveRange(misses);
+            db.CodeInsightThreadEligibility.RemoveRange(
+                await db.CodeInsightThreadEligibility.Where(row => row.CodeInsightPullRequestId == pullRequest.Id).ToListAsync(ct));
             db.CodeInsightPullRequestMetrics.RemoveRange(metrics);
             db.CodeInsightFindings.RemoveRange(findings);
             db.CodeInsightPullRequests.Remove(pullRequest);
@@ -872,84 +760,6 @@ public sealed class CodeInsightFindingStore(
         }
 
         return removed;
-    }
-
-    private static async Task<Guid?> FindPullRequestIdAsync(
-        MeisterProPRDbContext db,
-        CodeInsightPullRequestKey key,
-        CancellationToken ct)
-    {
-        var match = await db.CodeInsightPullRequests
-            .Where(candidate => candidate.ClientId == key.ClientId
-                                && candidate.RepositoryId == key.RepositoryId
-                                && candidate.PullRequestId == key.PullRequestId)
-            .Select(candidate => (Guid?)candidate.Id)
-            .FirstOrDefaultAsync(ct);
-
-        return match;
-    }
-
-    private static async Task<CodeInsightPullRequest> GetOrCreatePullRequestAsync(
-        MeisterProPRDbContext db,
-        CodeInsightPullRequestKey key,
-        string? pullRequestState,
-        DateTimeOffset? lastActivityAt,
-        CancellationToken ct,
-        string? repositoryName = null)
-    {
-        var pullRequest = await db.CodeInsightPullRequests
-            .FirstOrDefaultAsync(
-                candidate => candidate.ClientId == key.ClientId
-                             && candidate.RepositoryId == key.RepositoryId
-                             && candidate.PullRequestId == key.PullRequestId,
-                ct);
-
-        var now = DateTimeOffset.UtcNow;
-
-        if (pullRequest is null)
-        {
-            pullRequest = new CodeInsightPullRequest
-            {
-                Id = Guid.CreateVersion7(),
-                ClientId = key.ClientId,
-                RepositoryId = key.RepositoryId,
-                PullRequestId = key.PullRequestId,
-                PullRequestState = pullRequestState ?? string.Empty,
-                RepositoryName = Trimmed(repositoryName),
-                LastActivityAt = lastActivityAt ?? now,
-                CreatedAt = now,
-                UpdatedAt = now,
-            };
-            db.CodeInsightPullRequests.Add(pullRequest);
-            return pullRequest;
-        }
-
-        if (pullRequestState is not null)
-        {
-            pullRequest.PullRequestState = pullRequestState;
-        }
-
-        // Only ever overwritten with a name somebody actually reported: a caller that does not know one (the
-        // human-thread harvest, for instance) must not erase the name a review recorded.
-        if (Trimmed(repositoryName) is { } name)
-        {
-            pullRequest.RepositoryName = name;
-        }
-
-        // The retention anchor only ever moves forward, so a late-arriving older observation cannot
-        // shorten the window an aggregate has left.
-        if (lastActivityAt is not null && lastActivityAt > pullRequest.LastActivityAt)
-        {
-            pullRequest.LastActivityAt = lastActivityAt.Value;
-        }
-
-        pullRequest.UpdatedAt = now;
-        return pullRequest;
-    }
-
-    private static string? Trimmed(string? value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private CodeInsightFindingView ToView(CodeInsightFinding record)
@@ -964,33 +774,24 @@ public sealed class CodeInsightFindingStore(
             record.Severity,
             secretProtectionCodec.Unprotect(record.EncryptedMessage, FindingMessagePurpose),
             record.ProviderThreadId,
-            record.ObservedAt);
+            record.ObservedAt,
+            record.NativeStatus, record.CurrentCodeChange, record.CurrentClassifierVersion, record.CurrentClassifierConfidence, record.OutcomeJudgementAttempts,
+            record.ProviderScope, record.OutcomeSourceFingerprint, record.ProviderCommentId);
     }
 
     private async Task WithDbAsync(Func<MeisterProPRDbContext, Task> operation, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(operation);
 
-        if (contextFactory is null)
-        {
-            await operation(dbContext);
-            return;
-        }
-
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        await operation(db);
+        await using var lease = await CodeInsightDbContextLease.CreateAsync(dbContext, contextFactory, ct);
+        await operation(lease.Context);
     }
 
     private async Task<T> WithDbAsync<T>(Func<MeisterProPRDbContext, Task<T>> operation, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(operation);
 
-        if (contextFactory is null)
-        {
-            return await operation(dbContext);
-        }
-
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        return await operation(db);
+        await using var lease = await CodeInsightDbContextLease.CreateAsync(dbContext, contextFactory, ct);
+        return await operation(lease.Context);
     }
 }

@@ -60,7 +60,16 @@ public sealed record CodeInsightFindingSnapshot(
     string? OriginModelId = null,
     string? OriginLogicalModelName = null,
     string? OriginSymbolName = null,
-    string? OriginSymbolKind = null);
+    string? OriginSymbolKind = null,
+    CodeInsightPublicationState PublicationState = CodeInsightPublicationState.Unknown,
+    string? PublicationReason = null,
+    string? MatchedProviderThreadId = null,
+    CodeInsightDuplicateState DuplicateState = CodeInsightDuplicateState.Unknown,
+    string? DuplicateOfPublicationId = null,
+    string? DuplicateVerificationSource = null,
+    double? DuplicateVerificationConfidence = null,
+    DateTimeOffset? DuplicateVerifiedAt = null,
+    string ProviderScope = "");
 
 /// <summary>
 ///     A collected finding still awaiting type classification, with everything the classifier needs and
@@ -130,7 +139,8 @@ public sealed record CodeInsightDispositionRecord(
     ThreadAnchorCodeChange SourceCodeChange,
     string? ClassifierVersion,
     double? ClassifierConfidence,
-    CodeInsightRejectionReason? RejectionReason = null);
+    CodeInsightRejectionReason? RejectionReason = null,
+    string? NativeStatus = null);
 
 /// <summary>
 ///     A human thread to record as something ProPR missed. The three judgements are carried separately from
@@ -151,6 +161,8 @@ public sealed record CodeInsightDispositionRecord(
 ///     made while the thread was open is answered again once it resolves. The verdict still stands and still
 ///     counts until then; the flag marks it as open to revision, not as withheld.
 /// </param>
+/// <param name="JudgementModelWasAsked">Whether the judgement consumed an attempt, based on model-request provenance when available.</param>
+/// <param name="ProviderScope">The canonical provider namespace captured with the source observation.</param>
 public sealed record CodeInsightMissRecord(
     string ProviderThreadId,
     string? FilePath,
@@ -161,14 +173,25 @@ public sealed record CodeInsightMissRecord(
     bool IsInScope,
     double? Confidence,
     string ClassifierVersion,
-    bool JudgedThreadResolved = false)
+    bool JudgedThreadResolved = false,
+    string TypeMembership = "",
+    CodeInsightFindingQualifier? Qualifier = null,
+    string? DimensionClassifierVersion = null,
+    double? DimensionConfidence = null,
+    bool JudgementFailed = false,
+    Guid? ConnectionId = null,
+    string? SourceFingerprint = null,
+    bool DimensionJudgementFailed = false,
+    bool DimensionModelWasAsked = true,
+    DateTimeOffset? SourceObservedAt = null,
+    bool JudgementModelWasAsked = true,
+    string? ProviderScope = null)
 {
     /// <summary>
-    ///     Whether all three judgements held, and so whether this counts toward recall. Computed, so no caller
-    ///     can hand the store a verdict that disagrees with the three answers it travels with. A thread that
-    ///     restated one of ProPR's own findings is dropped before it is judged and never becomes a record.
+    ///     Whether the raw judgement qualifies as a miss. The store separately excludes threads that overlap
+    ///     the reviewer's findings or later contain an AI-authored comment while retaining these answers.
     /// </summary>
-    public bool CountsAsMiss => this.IsSubstantive && this.WasActedOn && this.IsInScope;
+    public bool CountsAsMiss => !this.JudgementFailed && this.IsSubstantive && this.WasActedOn && this.IsInScope;
 }
 
 /// <summary>A harvested miss as the store returns it, with the discussion decrypted.</summary>
@@ -203,7 +226,9 @@ public sealed record CodeInsightMissView(
     string ClassifierVersion,
     DateTimeOffset HarvestedAt,
     bool JudgedThreadResolved = false,
-    DateTimeOffset? LastJudgedAt = null);
+    DateTimeOffset? LastJudgedAt = null,
+    bool JudgementFailed = false,
+    bool ExcludedAsOwnFinding = false);
 
 /// <summary>
 ///     Where one finding stands in the classification pipeline. The three states are distinguished because a
@@ -273,4 +298,12 @@ public sealed record CodeInsightFindingView(
     CommentSeverity Severity,
     string Message,
     string? ProviderThreadId,
-    DateTimeOffset ObservedAt);
+    DateTimeOffset ObservedAt,
+    string? NativeStatus = null,
+    ThreadAnchorCodeChange CurrentCodeChange = ThreadAnchorCodeChange.Unknown,
+    string? CurrentClassifierVersion = null,
+    double? CurrentClassifierConfidence = null,
+    int OutcomeJudgementAttempts = 0,
+    string ProviderScope = "",
+    string? OutcomeSourceFingerprint = null,
+    string? ProviderCommentId = null);

@@ -34,7 +34,7 @@ import {
 import type { ReviewerPerformanceGrain } from '@/features/code-insights/components/ReviewerPerformanceByScopePanel.vue'
 
 /** Which question is on screen. */
-export type ReviewerPerformanceSection = 'correctness' | 'byScope' | 'acceptance' | 'misses' | 'coverage'
+export type ReviewerPerformanceSection = 'ranges' | 'correctness' | 'byScope' | 'acceptance' | 'misses' | 'coverage'
 
 const DEFAULT_WINDOW_DAYS = 90
 
@@ -61,7 +61,7 @@ function isoDate(date: Date): string {
 }
 
 export function useReviewerPerformanceViewModel() {
-  const section = ref<ReviewerPerformanceSection>('correctness')
+  const section = ref<ReviewerPerformanceSection>('ranges')
 
   const to = ref(isoDate(new Date()))
   // A wider default window than the code-quality views use: correctness only moves when pull requests close, and

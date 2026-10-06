@@ -6,6 +6,20 @@ import { mount, flushPromises } from '@vue/test-utils'
 import ReviewerPerformanceView from '@/features/code-insights/views/ReviewerPerformanceView.vue'
 import type { CodeInsightMiss, CodeInsightQuality, CodeInsightScope } from '@/services/codeInsightsAnalyticsService'
 
+vi.mock('../components/ReviewerPerformanceSelect.vue', async () => {
+  const { performanceSelectStub } = await import('./performanceControlStubs')
+  return { default: performanceSelectStub }
+})
+
+vi.mock('@/features/code-insights/components/ReviewerPerformanceWorkspace.vue', () => ({
+  default: {
+    name: 'ReviewerPerformanceWorkspace',
+    props: ['clients', 'clientsError', 'clientsLoading'],
+    emits: ['retry-clients'],
+    template: '<section>Score ranges workspace</section>',
+  },
+}))
+
 vi.mock('vue-chartjs', () => ({
   Bar: { name: 'BarChartStub', template: '<div class="bar-chart-stub" />' },
   Line: { name: 'LineChartStub', template: '<div class="line-chart-stub" />' },
@@ -30,6 +44,11 @@ const reviewerFindingsMock = vi.fn()
 const coverageMock = vi.fn()
 const rejectionReasonsMock = vi.fn()
 const importMock = vi.fn()
+const clientsMock = vi.fn()
+
+vi.mock('@/services/reviewerPerformanceService', () => ({
+  listPerformanceClients: () => clientsMock(),
+}))
 
 /**
  * Half of what the reviews produced is collected, and only one of the two pull requests still has its threads.
@@ -255,12 +274,15 @@ async function mountView() {
     global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
   })
   await flushPromises()
+  await wrapper.findAll('.section-tab').find(button => button.text() === 'Correctness')!.trigger('click')
+  await flushPromises()
   return wrapper
 }
 
 describe('ReviewerPerformanceView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clientsMock.mockResolvedValue([{ id: 'client-a', label: 'Client A' }])
     qualityMock.mockResolvedValue(quality())
     missesMock.mockResolvedValue(MISSES)
     reviewerFindingsMock.mockResolvedValue([])
@@ -282,6 +304,64 @@ describe('ReviewerPerformanceView', () => {
     })
   })
 
+  it('applies a selected client to quality, coverage and grouped statistics', async () => {
+    const wrapper = await mountView()
+    const client = wrapper.getComponent({ name: 'VAutocomplete' })
+    client.vm.$emit('update:modelValue', 'client-a')
+    await wrapper.get('.performance-filters').trigger('submit')
+    await flushPromises()
+
+    expect(qualityMock.mock.calls.at(-1)![0].clientId).toBe('client-a')
+    expect(coverageMock.mock.calls.at(-1)![0].clientId).toBe('client-a')
+    expect(byGrainMock.mock.calls.at(-1)![0].clientId).toBe('client-a')
+  })
+
+  it('retries the client catalogue in legacy tabs without recalculating the statistics', async () => {
+    clientsMock.mockRejectedValueOnce(new Error('Client catalogue unavailable'))
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('Client catalogue unavailable')
+
+    await wrapper.get('[data-test="retry-clients"]').trigger('click')
+    await flushPromises()
+
+    expect(clientsMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).not.toContain('Client catalogue unavailable')
+    expect(wrapper.getComponent({ name: 'VAutocomplete' }).props('items')).toContainEqual({
+      id: 'client-a', label: 'Client A',
+    })
+    expect(qualityMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries the shared catalogue when the range workspace requests it', async () => {
+    clientsMock.mockRejectedValueOnce(new Error('Client catalogue unavailable'))
+    const wrapper = await mountView()
+    await wrapper.findAll('.section-tab').find((button) => button.text() === 'Score ranges')!.trigger('click')
+    const workspace = wrapper.getComponent({ name: 'ReviewerPerformanceWorkspace' })
+    expect(workspace.props('clientsError')).toBe('Client catalogue unavailable')
+
+    workspace.vm.$emit('retry-clients')
+    await flushPromises()
+
+    expect(clientsMock).toHaveBeenCalledTimes(2)
+    expect(workspace.props('clientsError')).toBe('')
+    expect(workspace.props('clients')).toEqual([{ id: 'client-a', label: 'Client A' }])
+    expect(qualityMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes the shared catalogue loading state from the parent into the range workspace', async () => {
+    let finishClients!: (value: { id: string; label: string }[]) => void
+    clientsMock.mockReturnValueOnce(new Promise((resolve) => { finishClients = resolve }))
+    const wrapper = await mountView()
+    expect(wrapper.getComponent({ name: 'VAutocomplete' }).props('loading')).toBe(true)
+    await wrapper.findAll('.section-tab').find((button) => button.text() === 'Score ranges')!.trigger('click')
+    const workspace = wrapper.getComponent({ name: 'ReviewerPerformanceWorkspace' })
+    expect(workspace.props('clientsLoading')).toBe(true)
+
+    finishClients([{ id: 'client-a', label: 'Client A' }])
+    await flushPromises()
+    expect(workspace.props('clientsLoading')).toBe(false)
+  })
+
   it('says up front that these numbers measure the reviewer and are AI-estimated', async () => {
     // The framing is load-bearing on this surface: the evidence underneath is uncalibrated model judgement.
     const wrapper = await mountView()
@@ -296,13 +376,13 @@ describe('ReviewerPerformanceView', () => {
     expect(wrapper.text()).toContain('Quality trend')
     expect(wrapper.text()).toContain('68.6%')
 
-    await wrapper.findAll('.section-tab')[1].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'By scope')!.trigger('click')
     expect(wrapper.text()).toContain('Correctness by scope')
 
-    await wrapper.findAll('.section-tab')[2].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Acceptance')!.trigger('click')
     expect(wrapper.text()).toContain('Acceptance rate')
 
-    await wrapper.findAll('.section-tab')[3].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Missed findings')!.trigger('click')
     expect(wrapper.text()).toContain('Counts as a miss')
     expect(wrapper.text()).toContain('Excluded')
   })
@@ -310,7 +390,7 @@ describe('ReviewerPerformanceView', () => {
   it('groups correctness by scope, and suppresses a scope below the sample floor', async () => {
     // A ranked table is the easiest place to read a thin number as a verdict, so the floor applies here too.
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[1].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'By scope')!.trigger('click')
 
     const rows = wrapper.findAll('tbody tr')
     expect(rows[0].text()).toContain('quiet-service')
@@ -328,7 +408,7 @@ describe('ReviewerPerformanceView', () => {
     byGrainMock.mockResolvedValue(BY_MODEL)
 
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[1].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'By scope')!.trigger('click')
 
     await wrapper.find('#performance-grain').setValue('model')
     await flushPromises()
@@ -356,7 +436,7 @@ describe('ReviewerPerformanceView', () => {
     byGrainMock.mockResolvedValue(BY_MODEL)
 
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[1].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'By scope')!.trigger('click')
     await wrapper.find('#performance-grain').setValue('model')
     await flushPromises()
 
@@ -367,7 +447,7 @@ describe('ReviewerPerformanceView', () => {
 
   it('re-groups without a full reload when only the grain changes', async () => {
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[1].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'By scope')!.trigger('click')
 
     await wrapper.find('#performance-grain').setValue('pullRequest')
     await flushPromises()
@@ -510,7 +590,7 @@ describe('ReviewerPerformanceView', () => {
     // Without this, an empty correctness reading and a reviewer that found nothing look identical.
     const wrapper = await mountView()
 
-    await wrapper.findAll('.section-tab')[4].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Coverage')!.trigger('click')
 
     expect(wrapper.text()).toContain('What the collection knows about')
     expect(wrapper.text()).toContain('50%')
@@ -539,7 +619,7 @@ describe('ReviewerPerformanceView', () => {
     )
     const wrapper = await mountView()
 
-    await wrapper.findAll('.section-tab')[2].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Acceptance')!.trigger('click')
 
     expect(wrapper.text()).toContain('Left unresolved')
     expect(wrapper.text()).toContain('75.0%')
@@ -551,7 +631,7 @@ describe('ReviewerPerformanceView', () => {
       quality({ acceptanceTotal: metric({ sampleSize: 40, discussed: 7 }) }),
     )
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[2].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Acceptance')!.trigger('click')
 
     const chips = wrapper.findAll('.outcome-chip')
     await chips[chips.length - 1].trigger('click')
@@ -570,7 +650,7 @@ describe('ReviewerPerformanceView', () => {
       quality({ acceptanceTotal: metric({ sampleSize: 40, discussed: 0 }) }),
     )
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[2].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Acceptance')!.trigger('click')
 
     const chips = wrapper.findAll('.outcome-chip')
     const empty = chips[chips.length - 1]
@@ -587,7 +667,7 @@ describe('ReviewerPerformanceView', () => {
   it('shows why findings were turned down, with the unexplained rejections kept apart', async () => {
     const wrapper = await mountView()
 
-    await wrapper.findAll('.section-tab')[2].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Acceptance')!.trigger('click')
 
     expect(wrapper.text()).toContain('Why findings were turned down')
     expect(wrapper.text()).toContain('Reviewer was wrong')
@@ -602,7 +682,7 @@ describe('ReviewerPerformanceView', () => {
     // The published finding this follows: functional and evolvability findings are rejected at similar rates for
     // entirely different reasons, so a combined distribution averages the difference away.
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[2].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Acceptance')!.trigger('click')
 
     const tabs = wrapper.findAll('.class-tab')
     expect(tabs.map((tab) => tab.text())).toEqual(['All rejections 20', 'Functional 12', 'Evolvability 8'])
@@ -617,7 +697,7 @@ describe('ReviewerPerformanceView', () => {
 
   it('drills from a rejection reason into the findings behind it', async () => {
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[2].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Acceptance')!.trigger('click')
 
     await wrapper.findAll('.reason-row')[0].trigger('click')
     await flushPromises()
@@ -639,13 +719,13 @@ describe('ReviewerPerformanceView', () => {
     expect(wrapper.text()).toContain('Quality trend')
     expect(wrapper.find('.page-error').exists()).toBe(false)
 
-    await wrapper.findAll('.section-tab')[2].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Acceptance')!.trigger('click')
     expect(wrapper.find('.panel-error').text()).toContain('Failed to load the rejection reasons.')
   })
 
   it('imports the window for one client, without outcomes unless asked', async () => {
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[4].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Coverage')!.trigger('click')
 
     await wrapper.find('.import-form').trigger('submit')
     await flushPromises()
@@ -665,7 +745,7 @@ describe('ReviewerPerformanceView', () => {
 
   it('asks for outcomes only when the box is ticked', async () => {
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[4].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Coverage')!.trigger('click')
 
     await wrapper.find('.import-check input').setValue(true)
     await wrapper.find('.import-form').trigger('submit')
@@ -677,7 +757,7 @@ describe('ReviewerPerformanceView', () => {
   it('drops a previous run\'s import summary when the window changes', async () => {
     // A summary of what May imported, sitting under March's coverage, reads as though it described March.
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[4].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Coverage')!.trigger('click')
     await wrapper.find('.import-form').trigger('submit')
     await flushPromises()
     expect(wrapper.find('.import-result').exists()).toBe(true)
@@ -693,7 +773,7 @@ describe('ReviewerPerformanceView', () => {
     // The coverage comparison is what a reader came for. A refused import must not take it off the screen.
     importMock.mockRejectedValue(new Error('Failed to import review history.'))
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[4].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Coverage')!.trigger('click')
 
     await wrapper.find('.import-form').trigger('submit')
     await flushPromises()
@@ -706,7 +786,7 @@ describe('ReviewerPerformanceView', () => {
     coverageMock.mockRejectedValue(new Error('Failed to load the collection coverage.'))
     const wrapper = await mountView()
 
-    await wrapper.findAll('.section-tab')[4].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Coverage')!.trigger('click')
 
     expect(wrapper.find('.panel-error').text()).toContain('Failed to load the collection coverage.')
     coverageMock.mockResolvedValue(COVERAGE)
@@ -723,7 +803,7 @@ describe('ReviewerPerformanceView', () => {
     qualityMock.mockRejectedValue(new Error('the projection is unavailable'))
 
     const wrapper = await mountView()
-    await wrapper.findAll('.section-tab')[4].trigger('click')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Coverage')!.trigger('click')
 
     expect(wrapper.text()).toContain('What the collection knows about')
   })

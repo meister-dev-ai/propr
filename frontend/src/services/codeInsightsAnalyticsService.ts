@@ -290,6 +290,10 @@ export interface CodeInsightFinding {
 }
 
 export interface CodeInsightMiss {
+  /** The substantive, acted-on and scope decisions are unavailable when judgement failed. */
+  judgementFailed?: boolean
+  /** Current source matches a reviewer finding and is excluded from recall. */
+  excludedAsOwnFinding?: boolean
   id: string
   clientId: string
   repositoryId: string

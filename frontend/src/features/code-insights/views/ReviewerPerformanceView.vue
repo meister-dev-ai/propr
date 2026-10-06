@@ -15,44 +15,92 @@
       </div>
     </header>
 
-    <form class="performance-filters" @submit.prevent="vm.load">
-      <div class="filter-group">
+    <form v-if="vm.section.value !== 'ranges'" class="performance-filters" @submit.prevent="vm.load">
+      <div class="performance-field">
         <label for="performance-from">From</label>
-        <input id="performance-from" type="date" :value="vm.from.value" :max="vm.to.value" @change="vm.from.value = value($event)" />
-      </div>
-
-      <div class="filter-group">
-        <label for="performance-to">To</label>
-        <input id="performance-to" type="date" :value="vm.to.value" :min="vm.from.value" @change="vm.to.value = value($event)" />
-      </div>
-
-      <div class="filter-group">
-        <label for="performance-bucket">Bucket</label>
-        <select id="performance-bucket" :value="vm.bucket.value" @change="vm.bucket.value = value($event) as CodeInsightBucket">
-          <option value="day">Day</option>
-          <option value="week">Week</option>
-          <option value="month">Month</option>
-        </select>
-      </div>
-
-      <div class="filter-group filter-group--grow">
-        <label for="performance-repository">Repository</label>
-        <input
-          id="performance-repository"
-          type="text"
-          placeholder="all repositories"
-          :value="vm.repositoryId.value ?? ''"
-          @change="vm.repositoryId.value = value($event) || null"
+        <v-text-field
+          id="performance-from"
+          v-model="vm.from.value"
+          class="performance-control"
+          type="date"
+          :max="vm.to.value"
+          variant="outlined"
+          density="compact"
+          hide-details
         />
       </div>
-
-      <button type="submit" class="apply-button" :disabled="vm.loading.value">
-        <i class="fi fi-rr-refresh" aria-hidden="true"></i>
+      <div class="performance-field">
+        <label for="performance-to">To</label>
+        <v-text-field
+          id="performance-to"
+          v-model="vm.to.value"
+          class="performance-control"
+          type="date"
+          :min="vm.from.value"
+          variant="outlined"
+          density="compact"
+          hide-details
+        />
+      </div>
+      <ReviewerPerformanceSelect
+        label="Bucket"
+        :model-value="vm.bucket.value"
+        :items="bucketOptions"
+        @update:model-value="vm.bucket.value = $event as CodeInsightBucket"
+      />
+      <div class="performance-field">
+        <label for="performance-client">Client</label>
+        <v-autocomplete
+          id="performance-client"
+          data-test="performance-client"
+          class="performance-control"
+          :model-value="vm.clientId.value ?? ''"
+          :items="clientOptions"
+          :loading="catalogue.loading.value"
+          :menu-props="{ maxHeight: 300 }"
+          item-title="label"
+          item-value="id"
+          variant="outlined"
+          density="compact"
+          :no-data-text="catalogue.loading.value ? 'Loading clients…' : 'No matching clients'"
+          aria-label="Client"
+          hide-details
+          @update:model-value="vm.clientId.value = $event || null"
+        />
+      </div>
+      <div class="performance-field">
+        <label for="performance-repository">Repository</label>
+        <v-text-field
+          id="performance-repository"
+          class="performance-control"
+          :model-value="vm.repositoryId.value ?? ''"
+          placeholder="All repositories"
+          variant="outlined"
+          density="compact"
+          hide-details
+          @update:model-value="vm.repositoryId.value = $event || null"
+        />
+      </div>
+      <button type="submit" class="performance-action performance-action--primary" :disabled="vm.loading.value">
+        <i class="mdi mdi-refresh" aria-hidden="true"></i>
         <span>{{ vm.loading.value ? 'Loading…' : 'Apply' }}</span>
       </button>
     </form>
 
-    <p v-if="vm.error.value" class="page-error" role="alert">{{ vm.error.value }}</p>
+    <div v-if="vm.section.value !== 'ranges' && catalogue.error.value" class="page-error performance-catalogue-error" role="alert">
+      <span>{{ catalogue.error.value }}</span>
+      <button
+        type="button"
+        class="performance-action"
+        data-test="retry-clients"
+        :disabled="catalogue.loading.value"
+        @click="catalogue.load"
+      >
+        Retry clients
+      </button>
+    </div>
+
+    <p v-if="vm.section.value !== 'ranges' && vm.error.value" class="page-error" role="alert">{{ vm.error.value }}</p>
 
     <nav class="section-tabs" aria-label="Reviewer Performance sections">
       <button
@@ -71,8 +119,15 @@
 
     <!-- Outside the loaded-metrics gate on purpose: "why is everything empty" is the question this section
          answers, so it has to be readable exactly when the other reads came back with nothing. -->
+    <ReviewerPerformanceWorkspace
+      v-if="vm.section.value === 'ranges'"
+      :clients="catalogue.clients.value"
+      :clients-error="catalogue.error.value"
+      :clients-loading="catalogue.loading.value"
+      @retry-clients="catalogue.load"
+    />
     <CodeInsightsCoveragePanel
-      v-if="vm.section.value === 'coverage'"
+      v-else-if="vm.section.value === 'coverage'"
       :coverage="vm.coverage.value"
       :error="vm.coverageError.value"
       :importing="vm.importing.value"
@@ -126,7 +181,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import ReviewerPerformanceSelect from '../components/ReviewerPerformanceSelect.vue'
+import { useReviewerPerformanceClients } from '../composables/useReviewerPerformanceClients'
+import '../performance-controls.css'
+import ReviewerPerformanceWorkspace from '@/features/code-insights/components/ReviewerPerformanceWorkspace.vue'
 import CodeInsightsAcceptancePanel from '@/features/code-insights/components/CodeInsightsAcceptancePanel.vue'
 import CodeInsightsCoveragePanel from '@/features/code-insights/components/CodeInsightsCoveragePanel.vue'
 import CodeInsightsDrillPanel from '@/features/code-insights/components/CodeInsightsDrillPanel.vue'
@@ -147,6 +206,7 @@ import type {
 } from '@/services/codeInsightsAnalyticsService'
 
 const TABS: { key: ReviewerPerformanceSection; label: string; icon: string }[] = [
+  { key: 'ranges', label: 'Score ranges', icon: 'fi-rr-chart-line-up' },
   { key: 'correctness', label: 'Correctness', icon: 'fi-rr-chart-line-up' },
   { key: 'byScope', label: 'By scope', icon: 'fi-rr-target' },
   { key: 'acceptance', label: 'Acceptance', icon: 'fi-rr-check-double' },
@@ -163,10 +223,16 @@ const DISPOSITION_TITLES: Record<CodeInsightDisposition, string> = {
 }
 
 const vm = useReviewerPerformanceViewModel()
-
-function value(event: Event): string {
-  return (event.target as HTMLInputElement | HTMLSelectElement).value
-}
+const catalogue = useReviewerPerformanceClients()
+const bucketOptions = [
+  { value: 'day', label: 'Day' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+]
+const clientOptions = computed(() => [
+  { id: '', label: 'All clients' },
+  ...catalogue.clients.value,
+])
 
 function onDispositionDrill(disposition: CodeInsightDisposition): void {
   vm.openDrill(DISPOSITION_TITLES[disposition], disposition).catch(console.error)
@@ -181,8 +247,8 @@ function onScopeGrainChange(grain: ReviewerPerformanceGrain): void {
   vm.loadByScope().catch(console.error)
 }
 
-onMounted(() => {
-  vm.load().catch(console.error)
+onMounted(async () => {
+  await Promise.allSettled([vm.load(), catalogue.load()])
 })
 </script>
 
@@ -194,6 +260,10 @@ onMounted(() => {
   padding: 1.5rem;
   max-width: 1400px;
   margin: 0 auto;
+}
+
+.reviewer-performance:has(.performance-layout--compared) {
+  max-width: none;
 }
 
 .page-header h1 {
@@ -228,67 +298,30 @@ onMounted(() => {
 }
 
 .performance-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 150px)) minmax(200px, 1.2fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 0.875rem;
   padding: 1rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.9rem;
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
 
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+@media (max-width: 1100px) {
+  .performance-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
-.filter-group--grow {
-  flex: 1 1 220px;
-  min-width: 180px;
-}
+@media (max-width: 600px) {
+  .reviewer-performance {
+    padding: 1rem;
+  }
 
-.filter-group label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.filter-group input,
-.filter-group select {
-  padding: 0.4rem 0.55rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.85rem;
-  font-family: inherit;
-}
-
-.apply-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.5rem 0.9rem;
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  border-radius: 0.6rem;
-  background: rgba(34, 211, 238, 0.08);
-  color: var(--color-text);
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.apply-button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.apply-button i {
-  color: var(--color-accent);
+  .performance-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .section-tabs {
@@ -303,7 +336,7 @@ onMounted(() => {
   gap: 0.45rem;
   padding: 0.45rem 0.85rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   background: var(--color-surface);
   color: var(--color-text-muted);
   font-size: 0.85rem;

@@ -639,6 +639,7 @@ public class AdoCommentPosterTests
         Assert.Equal("inline", failure.ThreadKind);
         Assert.Equal("/src/B.cs", failure.FilePath);
         Assert.Equal(2, failure.Line);
+        Assert.Equal(1, failure.FindingOrdinal);
         Assert.Contains("TF401027", failure.Error, StringComparison.Ordinal);
     }
 

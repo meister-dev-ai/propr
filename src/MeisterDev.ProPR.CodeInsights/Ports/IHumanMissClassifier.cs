@@ -54,3 +54,18 @@ public interface IHumanMissClassifier
     /// </summary>
     Task<HumanMissJudgement?> JudgeAsync(HumanMissJudgementRequest request, CancellationToken ct = default);
 }
+
+/// <summary>A human-thread judgement and whether it consumed a model-request attempt.</summary>
+/// <param name="Judgement">The retained judgement, or <see langword="null" /> when none was usable.</param>
+/// <param name="ModelWasAsked">Whether a model request was attempted, including failed calls and unusable responses.</param>
+public sealed record HumanMissJudgementResult(HumanMissJudgement? Judgement, bool ModelWasAsked);
+
+/// <summary>Optional request provenance for classifiers that can distinguish setup failures from model attempts.</summary>
+public interface IHumanMissClassifierAttemptReporter : IHumanMissClassifier
+{
+    /// <summary>
+    ///     Judges one human thread and reports whether a model request was attempted. Setup failures consume
+    ///     no model attempt. Never throws except for cancellation.
+    /// </summary>
+    Task<HumanMissJudgementResult> JudgeWithAttemptAsync(HumanMissJudgementRequest request, CancellationToken ct = default);
+}

@@ -289,8 +289,26 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Human-authored threads harvested as things ProPR missed (discussion encrypted at rest).</summary>
     public DbSet<CodeInsightMiss> CodeInsightMisses => this.Set<CodeInsightMiss>();
 
+    /// <summary>Source eligibility observations retained before human classification completes.</summary>
+    public DbSet<CodeInsightThreadEligibility> CodeInsightThreadEligibility => this.Set<CodeInsightThreadEligibility>();
+
     /// <summary>Daily projected counts of findings, core types, and outcomes at the finest finding scope.</summary>
     public DbSet<CodeInsightDailyCount> CodeInsightDailyCounts => this.Set<CodeInsightDailyCount>();
+
+    /// <summary>Retained joint daily count cells for current reviewer performance.</summary>
+    public DbSet<CodeInsightReviewExposure> CodeInsightReviewExposures => this.Set<CodeInsightReviewExposure>();
+
+    public DbSet<CodeInsightHarvestCoverage> CodeInsightHarvestCoverage => this.Set<CodeInsightHarvestCoverage>();
+    public DbSet<CodeInsightPerformanceDirty> CodeInsightPerformanceDirty => this.Set<CodeInsightPerformanceDirty>();
+
+    /// <summary>Joint score inputs.</summary>
+    public DbSet<ReviewerPerformanceDailyCount> ReviewerPerformanceDailyCounts => this.Set<ReviewerPerformanceDailyCount>();
+
+    /// <summary>Immutable server-captured report payloads.</summary>
+    public DbSet<ReviewerPerformanceReport> ReviewerPerformanceReports => this.Set<ReviewerPerformanceReport>();
+
+    /// <summary>Complete client membership of saved reports.</summary>
+    public DbSet<ReviewerPerformanceReportClient> ReviewerPerformanceReportClients => this.Set<ReviewerPerformanceReportClient>();
 
     /// <summary>What became of each finding once its review thread resolved; at most one row per finding.</summary>
     public DbSet<CodeInsightFindingDisposition> CodeInsightFindingDispositions =>

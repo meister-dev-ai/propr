@@ -15,6 +15,7 @@ internal sealed class CodeInsightPullRequestConfiguration : IEntityTypeConfigura
     {
         builder.ToTable("code_insight_pull_requests");
 
+        builder.Property(row => row.MissHarvestProviderScope).HasMaxLength(1024);
         builder.HasKey(pr => pr.Id);
         builder.Property(pr => pr.Id).HasColumnName("id").ValueGeneratedNever();
 

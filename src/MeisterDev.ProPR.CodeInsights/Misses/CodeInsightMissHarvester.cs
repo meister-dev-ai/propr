@@ -3,158 +3,39 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Text;
+using System.Security.Cryptography;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Events;
 using Microsoft.Extensions.Logging;
 using MeisterDev.ProPR.CodeInsights.Contracts;
-using MeisterDev.ProPR.CodeInsights.Misses;
 using MeisterDev.ProPR.CodeInsights.Ports;
 
 namespace MeisterDev.ProPR.CodeInsights.Misses;
 
-/// <summary>
-///     Harvests human-authored review threads that ProPR did not raise, so recall becomes measurable.
-/// </summary>
-/// <remarks>
-///     Order matters for cost and for correctness. The cheap structural filters run first (the gate, whether
-///     the thread is human at all, whether it has already been harvested) and only what survives is judged
-///     by a model. The duplicate check against ProPR's own findings runs before the judgement too: a thread
-///     that restates a finding is not a miss no matter how substantive it is, and paying to judge it would be
-///     paying to learn nothing.
-///     Best-effort: it never throws into the crawl.
-/// </remarks>
+/// <summary>Retains human review threads and evaluates missed findings after structural and ownership checks.</summary>
+/// <remarks>Collection failures are retained when source ownership is known; cancellation propagates to the caller.</remarks>
 public sealed partial class CodeInsightMissHarvester(
     ICodeInsightFindingStore findingStore,
     ICodeInsightMissStore missStore,
     IHumanMissClassifier classifier,
     ICodeInsightsCollectionGate gate,
     IPostedCommentComposer postedCommentComposer,
-    ILogger<CodeInsightMissHarvester> logger) : ICodeInsightMissHarvester
+    ILogger<CodeInsightMissHarvester> logger,
+    IFindingTypeClassifier? typeClassifier = null,
+    MeisterDev.ProPR.CodeInsights.Taxonomy.ICodeInsightTaxonomyService? taxonomy = null,
+    MeisterDev.ProPR.CodeInsights.Rollups.ReviewerPerformanceCountProjector? performanceProjector = null) : ICodeInsightMissHarvester
 {
-    public async Task HandleThreadObservedAsync(ThreadUpdatedEvent evt, CancellationToken ct = default)
+    public async Task<bool> HandleThreadObservedAsync(ThreadUpdatedEvent evt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(evt);
+        var observedAt = evt.ObservedAt ?? DateTimeOffset.UtcNow;
+        observedAt = new DateTimeOffset(observedAt.UtcTicks / 10 * 10, TimeSpan.Zero);
 
+        var attempt = new HarvestAttempt(evt);
         try
         {
-            if (!await gate.IsCollectionEnabledAsync(evt.ClientId, ct))
-            {
-                return;
-            }
-
-            // Authorship was decided once by the producer and is carried on the event; a thread the AI took
-            // part in is a ProPR thread, whose outcome the disposition path records instead.
-            if (evt.Comments.Count == 0 || evt.Comments.Any(comment => comment.IsAiAuthored))
-            {
-                return;
-            }
-
-            var key = new CodeInsightPullRequestKey(evt.ClientId, evt.RepositoryId, evt.PullRequestId);
-            var threadResolved = IsResolved(evt.Status);
-            var judgedThreadResolved = await missStore.GetJudgedThreadResolvedAsync(key, evt.ThreadId, ct);
-            var alreadyHarvested = judgedThreadResolved is not null;
-
-            if (alreadyHarvested)
-            {
-                // A judgement made against a resolved thread is settled, and a thread that is still open cannot
-                // answer the acted-on question any better than it did the first time. In both cases the crawl is
-                // re-observing the thread, and judging it again would spend a model call to reach the same
-                // answer. A thread that has resolved since a judgement made while it was open is the one case
-                // where the answer can have changed.
-                if (judgedThreadResolved!.Value || !threadResolved)
-                {
-                    return;
-                }
-
-                // The stored judgement was asked whether a concern had been accepted or acted on before either
-                // could have happened. The thread has since resolved, which is the first point at which that
-                // question has an answer.
-                LogRejudgingResolvedThread(logger, evt.ThreadId, evt.ClientId);
-            }
-
-            var discussion = BuildDiscussion(evt);
-            if (discussion.Length == 0 || !HarvestedThreadEligibility.IsHumanThread(discussion, postedCommentComposer.Text))
-            {
-                // Either nothing was said, or nothing on the thread was said by a person: the provider recording
-                // its own activity, or ProPR's own summary on an installation that has no provenance for it. An
-                // activity entry is not a review comment, and ProPR's summary is not a thread it failed to raise.
-                LogNothingHumanSaid(logger, evt.ThreadId, evt.ClientId);
-                return;
-            }
-
-            var findings = await findingStore.GetFindingsForPullRequestAsync(key, ct);
-
-            // The thread ProPR posted a finding as is ProPR's thread, whatever account it went out under. Checked
-            // by identity rather than by text, because a mis-attributed author would otherwise let the reviewer's
-            // own words come back as something it failed to raise, and text overlap is a weaker instrument than a
-            // provider id we recorded ourselves.
-            if (findings.Any(finding => string.Equals(finding.ProviderThreadId, evt.ThreadId, StringComparison.Ordinal)))
-            {
-                LogOwnThread(logger, evt.ThreadId, evt.ClientId);
-                return;
-            }
-
-            var duplicatesAFinding = HumanFindingOverlap.DuplicatesAnyFinding(
-                evt.FilePath,
-                evt.Line,
-                discussion,
-                findings
-                    .Select(finding => new FindingOverlapCandidate(
-                        finding.FilePath,
-                        finding.LineNumber,
-                        finding.Message))
-                    .ToList());
-
-            if (duplicatesAFinding)
-            {
-                // ProPR raised this too. Counting it as a miss would penalise the reviewer for a finding it
-                // actually produced, and the same issue must never be both a true positive and a false negative.
-                LogDuplicateOfFinding(logger, evt.ThreadId, evt.ClientId);
-                return;
-            }
-
-            var judgement = await classifier.JudgeAsync(
-                new HumanMissJudgementRequest(
-                    evt.ClientId,
-                    evt.ThreadId,
-                    evt.FilePath,
-                    discussion,
-                    threadResolved),
-                ct);
-
-            if (judgement is null)
-            {
-                // Nothing is recorded. A harvested miss with invented judgements would be worse than an
-                // unharvested one: it would show up in recall as evidence.
-                LogUnjudged(logger, evt.ThreadId, evt.ClientId);
-                return;
-            }
-
-            // Recorded either way, with the three judgements kept separately: the ones that did not qualify are
-            // what makes the cut-off inspectable, and re-applying a changed threshold must not need the model.
-            // Whether it qualifies is the record's own answer over those three, so this path has no verdict of
-            // its own to disagree with the store's.
-            var record = new CodeInsightMissRecord(
-                evt.ThreadId,
-                evt.FilePath,
-                evt.Line,
-                discussion,
-                judgement.IsSubstantive,
-                judgement.WasActedOn,
-                judgement.IsInScope,
-                judgement.Confidence,
-                classifier.ClassifierVersion,
-                threadResolved);
-
-            var recorded = alreadyHarvested
-                ? await missStore.RejudgeMissAsync(key, record, ct)
-                : await missStore.RecordMissAsync(key, record, ct);
-
-            if (recorded && record.CountsAsMiss)
-            {
-                LogMissHarvested(logger, evt.ThreadId, evt.ClientId);
-            }
+            return await this.ObserveCoreAsync(attempt, observedAt, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -163,28 +44,379 @@ public sealed partial class CodeInsightMissHarvester(
         catch (Exception ex)
         {
             LogHandlingFailed(logger, evt.ThreadId, evt.ClientId, ex);
+            try
+            {
+                return await this.RetainFailedObservationAsync(attempt, observedAt, ct);
+            }
+            catch (Exception recordingException) when (!ct.IsCancellationRequested)
+            {
+                LogHandlingFailed(logger, evt.ThreadId, evt.ClientId, recordingException);
+            }
+
+            return false;
         }
     }
 
-    /// <summary>
-    ///     The human side of the thread, in order. Entries the provider wrote itself are left out: "added a
-    ///     reviewer", a vote, a policy result. They arrive through the same comments API as replies, and read as
-    ///     review remarks nobody made, so a thread of nothing but activity produces an empty discussion and is
-    ///     dropped by the caller.
-    /// </summary>
-    /// <summary>
-    ///     Joins the thread into one <c>author: text</c> line per comment, uncapped.
-    /// </summary>
+    private async Task<bool> ObserveCoreAsync(HarvestAttempt attempt, DateTimeOffset observedAt, CancellationToken ct)
+    {
+        var evt = attempt.Event;
+        // The producer captures authorship; own-thread outcomes belong to disposition collection.
+        if (evt.Comments.Count == 0)
+        {
+            return true;
+        }
+
+        var key = new CodeInsightPullRequestKey(evt.ClientId, evt.RepositoryId, evt.PullRequestId);
+        var threadResolved = IsResolved(evt.Status);
+        var discussion = BuildDiscussion(evt);
+        if (!evt.Comments.Any(comment => comment.IsAiAuthored) &&
+            (discussion.Length == 0 || !HarvestedThreadEligibility.IsHumanThread(discussion, postedCommentComposer.Text)))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(evt.ThreadId))
+        {
+            return false;
+        }
+
+        if (!await gate.IsCollectionEnabledAsync(evt.ClientId, ct))
+        {
+            return evt.Comments.Any(comment => comment.IsAiAuthored);
+        }
+
+        evt = evt with
+        {
+            ProviderScope = evt.ProviderScope ?? await findingStore.ResolveProviderScopeAsync(evt.ClientId, evt.ConnectionId, ct) ?? string.Empty
+        };
+        attempt.Event = evt;
+        var eligibility = await missStore.ObserveThreadEligibilityAsync(
+            key, evt.ThreadId, evt.ProviderScope ?? string.Empty, evt.Comments.Any(comment => comment.IsAiAuthored), observedAt, ct);
+        if (evt.Comments.Any(comment => comment.IsAiAuthored))
+        {
+            if (eligibility.SourceObservedAt > observedAt)
+            {
+                return await AcknowledgedAsync(key, evt, observedAt, false, ct);
+            }
+
+            var retainedSource = await missStore.GetObservationAsync(key, evt.ThreadId, ct, evt.ConnectionId, evt.ProviderScope);
+            return await ExcludeOwnFindingAsync(key, evt, "", observedAt, retainedSource, ct);
+        }
+
+        var judgedThreadResolved = await missStore.GetJudgedThreadResolvedAsync(key, evt.ThreadId, ct, evt.ConnectionId, evt.ProviderScope);
+        var alreadyHarvested = judgedThreadResolved is not null;
+        var fingerprint = SourceFingerprint(evt, discussion, classifier.ClassifierVersion);
+        var source = await missStore.GetObservationAsync(key, evt.ThreadId, ct, evt.ConnectionId, evt.ProviderScope);
+        var sameSource = source?.SourceFingerprint == fingerprint;
+
+        var findings = await findingStore.GetFindingsForPullRequestAsync(key, ct);
+        attempt.OwnFindingsObserved = true;
+        if (!string.IsNullOrEmpty(evt.ProviderScope))
+        {
+            findings = findings.Where(finding => finding.ProviderScope == evt.ProviderScope).ToList();
+        }
+
+        if (MatchesOwnFinding(evt, discussion, findings))
+        {
+            return await ExcludeOwnFindingAsync(key, evt, fingerprint, observedAt, source, ct);
+        }
+
+        if (eligibility.SourceObservedAt > observedAt || eligibility.ExcludedFromHumanMisses)
+        {
+            return await AcknowledgedAsync(key, evt, observedAt, false, ct);
+        }
+
+        if (source is not null)
+        {
+            var acknowledgment = await missStore.ObserveUnchangedMissAsync(
+                key, evt.ThreadId, fingerprint, observedAt, ct, evt.ConnectionId,
+                typeClassifier is not null && taxonomy is not null ? typeClassifier.ClassifierVersion : null, providerScope: evt.ProviderScope);
+            if (acknowledgment.Retained)
+            {
+                await this.ProjectIfChangedAsync(key, acknowledgment.Changed, ct);
+                return true;
+            }
+
+            source = await missStore.GetObservationAsync(key, evt.ThreadId, ct, evt.ConnectionId, evt.ProviderScope);
+            sameSource = source?.SourceFingerprint == fingerprint;
+        }
+        else if (alreadyHarvested && (judgedThreadResolved!.Value || !threadResolved))
+        {
+            return true;
+        }
+
+        var judgement = await ResolveHumanJudgementAsync(evt, discussion, threadResolved, sameSource, source, attempt, ct);
+        if (judgement is null)
+        {
+            // Retain the failed observation without inventing substantive, scope or acted-on judgements.
+            LogUnjudged(logger, evt.ThreadId, evt.ClientId);
+            var failedRecord = FailedRecord(evt, discussion, classifier.ClassifierVersion, threadResolved, fingerprint, observedAt, attempt);
+            return await this.RetainAndAcknowledgeAsync(key, evt, failedRecord, alreadyHarvested, observedAt, ct);
+        }
+
+        var classification = await ClassifyDimensionsAsync(evt, discussion, judgement, ct);
+        var record = JudgedRecord(evt, discussion, judgement, classification, threadResolved, fingerprint, observedAt, attempt);
+        return await this.RetainAndAcknowledgeAsync(key, evt, record, alreadyHarvested, observedAt, ct);
+    }
+
+    private bool MatchesOwnFinding(ThreadUpdatedEvent evt, string discussion, IReadOnlyList<CodeInsightFindingView> findings)
+    {
+        // Provider identity also excludes findings posted under an incorrectly attributed author account.
+        if (findings.Any(finding => string.Equals(finding.ProviderThreadId, evt.ThreadId, StringComparison.Ordinal)))
+        {
+            LogOwnThread(logger, evt.ThreadId, evt.ClientId);
+            return true;
+        }
+
+        var overlaps = HumanFindingOverlap.DuplicatesAnyFinding(
+            evt.FilePath, evt.Line, discussion,
+            findings.Select(finding => new FindingOverlapCandidate(finding.FilePath, finding.LineNumber, finding.Message)).ToList());
+        if (overlaps)
+        {
+            LogDuplicateOfFinding(logger, evt.ThreadId, evt.ClientId);
+        }
+
+        return overlaps;
+    }
+
+    private CodeInsightMissRecord JudgedRecord(
+        ThreadUpdatedEvent evt, string discussion, HumanMissJudgement judgement, MissDimensionClassification classification,
+        bool threadResolved, string fingerprint, DateTimeOffset observedAt, HarvestAttempt attempt)
+    {
+        var dimensions = classification.Verdict;
+        return new(
+            evt.ThreadId,
+            evt.FilePath,
+            evt.Line,
+            discussion,
+            judgement.IsSubstantive,
+            judgement.WasActedOn,
+            judgement.IsInScope,
+            judgement.Confidence,
+            classifier.ClassifierVersion,
+            threadResolved,
+            dimensions is null ? "" : string.Join('|', dimensions.CoreSlugs.Distinct().Order(StringComparer.Ordinal)),
+            dimensions?.Qualifier,
+            classification.Attempted ? typeClassifier!.ClassifierVersion : null,
+            dimensions?.Confidence,
+            ConnectionId: evt.ConnectionId,
+            SourceFingerprint: fingerprint,
+            DimensionJudgementFailed: classification.Attempted && dimensions is null,
+            DimensionModelWasAsked: classification.ModelWasAsked,
+            SourceObservedAt: observedAt,
+            JudgementModelWasAsked: attempt.HumanModelWasAsked,
+            ProviderScope: evt.ProviderScope);
+    }
+
+    private static CodeInsightMissRecord FailedRecord(
+        ThreadUpdatedEvent evt, string discussion, string version, bool threadResolved,
+        string fingerprint, DateTimeOffset observedAt, HarvestAttempt attempt)
+    {
+        return new(
+            evt.ThreadId, evt.FilePath, evt.Line, discussion, false, false, false, null, version, threadResolved,
+            JudgementFailed: true,
+            ConnectionId: evt.ConnectionId,
+            SourceFingerprint: fingerprint,
+            SourceObservedAt: observedAt,
+            JudgementModelWasAsked: attempt.HumanModelWasAsked,
+            ProviderScope: evt.ProviderScope);
+    }
+
+    private async Task<bool> RetainAndAcknowledgeAsync(
+        CodeInsightPullRequestKey key, ThreadUpdatedEvent evt, CodeInsightMissRecord record, bool alreadyHarvested,
+        DateTimeOffset observedAt, CancellationToken ct)
+    {
+        var retained = await this.RetainAsync(key, record, alreadyHarvested, ct);
+        await this.ProjectIfChangedAsync(key, retained, ct);
+        if (retained && record.CountsAsMiss)
+        {
+            LogMissHarvested(logger, evt.ThreadId, evt.ClientId);
+        }
+
+        return await AcknowledgedAsync(key, evt, observedAt, retained, ct);
+    }
+
+    private static string SourceFingerprint(ThreadUpdatedEvent evt, string discussion, string version)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{evt.Status}\n{evt.FilePath}\n{evt.Line}\n{discussion}\n{version}")));
+    }
+
+    private async Task<HumanMissJudgement?> ResolveHumanJudgementAsync(
+        ThreadUpdatedEvent evt, string discussion, bool threadResolved, bool sameSource,
+        CodeInsightMissObservation? source, HarvestAttempt attempt, CancellationToken ct)
+    {
+        HumanMissJudgement? judgement;
+        if (sameSource && source is { JudgementFailed: false })
+        {
+            judgement = new HumanMissJudgement(source.IsSubstantive, source.WasActedOn, source.IsInScope, source.Confidence ?? 0, "Retained human judgement");
+        }
+        else
+        {
+            var request = new HumanMissJudgementRequest(evt.ClientId, evt.ThreadId, evt.FilePath, discussion, threadResolved);
+            if (classifier is IHumanMissClassifierAttemptReporter attemptReporter)
+            {
+                var result = await attemptReporter.JudgeWithAttemptAsync(request, ct);
+                judgement = result.Judgement;
+                attempt.HumanModelWasAsked = result.ModelWasAsked;
+            }
+            else
+            {
+                attempt.HumanModelWasAsked = true;
+                judgement = await classifier.JudgeAsync(request, ct);
+            }
+        }
+
+        return judgement;
+    }
+
+    private async Task<MissDimensionClassification> ClassifyDimensionsAsync(
+        ThreadUpdatedEvent evt, string discussion, HumanMissJudgement judgement, CancellationToken ct)
+    {
+        FindingTypeVerdict? dimensions = null;
+        var dimensionAttempted = false;
+        var dimensionModelWasAsked = false;
+        if (judgement.IsSubstantive && typeClassifier is not null && taxonomy is not null)
+        {
+            try
+            {
+                dimensionAttempted = true;
+                var vocabulary = await taxonomy.GetAssignableTaxonomyAsync(evt.ClientId, ct);
+                var result = await typeClassifier.ClassifyAsync(
+                    new FindingClassificationRequest(
+                        evt.ClientId,
+                        Guid.NewGuid(), discussion, evt.FilePath, evt.Line, MeisterDev.ProPR.Domain.Enums.CommentSeverity.Warning,
+                        null, vocabulary), ct);
+                dimensions = result.Verdict;
+                dimensionModelWasAsked = result.ModelWasAsked;
+            }
+            catch (Exception exception) when (!ct.IsCancellationRequested)
+            {
+                LogHandlingFailed(logger, evt.ThreadId, evt.ClientId, exception);
+            }
+        }
+
+        return new(dimensions, dimensionAttempted, dimensionModelWasAsked);
+    }
+
+    private sealed record MissDimensionClassification(FindingTypeVerdict? Verdict, bool Attempted, bool ModelWasAsked);
+
+    private async Task<bool> RetainFailedObservationAsync(HarvestAttempt attempt, DateTimeOffset observedAt, CancellationToken ct)
+    {
+        var evt = attempt.Event;
+        if (evt.Comments.Count == 0)
+        {
+            return true;
+        }
+
+        if (evt.Comments.Any(comment => comment.IsAiAuthored))
+        {
+            return false;
+        }
+
+        if (!await gate.IsCollectionEnabledAsync(evt.ClientId, ct))
+        {
+            return evt.Comments.Any(comment => comment.IsAiAuthored);
+        }
+
+        var discussion = BuildDiscussion(evt);
+        if (discussion.Length == 0)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(evt.ThreadId))
+        {
+            return false;
+        }
+
+        var key = new CodeInsightPullRequestKey(evt.ClientId, evt.RepositoryId, evt.PullRequestId);
+        if (!attempt.OwnFindingsObserved)
+        {
+            var eligibility = await missStore.GetThreadEligibilityAsync(key, evt.ThreadId, evt.ProviderScope ?? string.Empty, ct);
+            // A completed judgement cannot establish that the reviewer still has no overlapping finding.
+            if (eligibility is not { ExcludedFromHumanMisses: true } || eligibility.SourceObservedAt < observedAt)
+            {
+                return false;
+            }
+        }
+
+        var version = string.IsNullOrWhiteSpace(classifier.ClassifierVersion) ? "collection-failed" : classifier.ClassifierVersion;
+        var fingerprint = SourceFingerprint(evt, discussion, version);
+        var source = await missStore.GetObservationAsync(key, evt.ThreadId, ct, evt.ConnectionId, evt.ProviderScope);
+        if (source is not null)
+        {
+            var acknowledgment = await missStore.ObserveUnchangedMissAsync(
+                key, evt.ThreadId, fingerprint, observedAt, ct, evt.ConnectionId,
+                typeClassifier is not null && taxonomy is not null ? typeClassifier.ClassifierVersion : null, providerScope: evt.ProviderScope);
+            if (acknowledgment.Retained)
+            {
+                await this.ProjectIfChangedAsync(key, acknowledgment.Changed, ct);
+                return true;
+            }
+        }
+
+        var record = FailedRecord(evt, discussion, version, IsResolved(evt.Status), fingerprint, observedAt, attempt);
+        return await this.RetainAndAcknowledgeAsync(key, evt, record, source is not null, observedAt, ct);
+    }
+
+    private async Task<bool> RetainAsync(CodeInsightPullRequestKey key, CodeInsightMissRecord record, bool alreadyHarvested, CancellationToken ct)
+    {
+        return alreadyHarvested ? await missStore.RejudgeMissAsync(key, record, ct) : await missStore.RecordMissAsync(key, record, ct);
+    }
+
+    private async Task ProjectIfChangedAsync(CodeInsightPullRequestKey key, bool changed, CancellationToken ct)
+    {
+        if (changed && performanceProjector is not null)
+        {
+            await performanceProjector.ProjectAsync(key, ct);
+        }
+    }
+
+    private sealed class HarvestAttempt(ThreadUpdatedEvent evt)
+    {
+        internal ThreadUpdatedEvent Event { get; set; } = evt;
+        internal bool HumanModelWasAsked { get; set; }
+        internal bool OwnFindingsObserved { get; set; }
+    }
+
+    private async Task<bool> AcknowledgedAsync(
+        CodeInsightPullRequestKey key, ThreadUpdatedEvent evt, DateTimeOffset observedAt, bool changed, CancellationToken ct)
+    {
+        if (changed)
+        {
+            return true;
+        }
+
+        var current = await missStore.GetObservationAsync(key, evt.ThreadId, ct, evt.ConnectionId, evt.ProviderScope);
+        var eligibility = await missStore.GetThreadEligibilityAsync(key, evt.ThreadId, evt.ProviderScope ?? string.Empty, ct);
+        if (eligibility is { ExcludedFromHumanMisses: true } && eligibility.SourceObservedAt >= observedAt)
+        {
+            return current is null || current.ExcludedAsOwnFinding && current.SourceObservedAt >= eligibility.SourceObservedAt;
+        }
+
+        return current?.SourceObservedAt >= observedAt;
+    }
+
+    private async Task<bool> ExcludeOwnFindingAsync(
+        CodeInsightPullRequestKey key, ThreadUpdatedEvent evt, string fingerprint,
+        DateTimeOffset observedAt, CodeInsightMissObservation? source, CancellationToken ct)
+    {
+        if (source is null)
+        {
+            return true;
+        }
+
+        var acknowledgment = await missStore.ObserveUnchangedMissAsync(
+            key, evt.ThreadId, fingerprint, observedAt, ct, evt.ConnectionId,
+            excludedAsOwnFinding: true, providerScope: evt.ProviderScope);
+        await this.ProjectIfChangedAsync(key, acknowledgment.Changed, ct);
+        return acknowledgment.Retained;
+    }
+
+    /// <summary>Joins non-system comments into uncapped author-and-text lines in provider order.</summary>
     /// <remarks>
-    ///     Deliberately uncapped, which is a decision rather than an oversight. The classifier truncates its own
-    ///     copy, so the model never sees more than its prompt cap however long this is, and the stored text has two
-    ///     other readers: the misses drill-through returns it, and the misses list re-checks eligibility against it
-    ///     on every read. That second reader is why a storage cap is not free. Truncation keeps the head, and
-    ///     <c>IsHumanThread</c> needs at least one line that is neither ProPR's own summary nor provider activity;
-    ///     a thread that opens with activity entries and has its human comment past the cap would be read back as
-    ///     non-human and dropped from the misses list, which overstates recall. If this ever has to be bounded,
-    ///     bound it well above the classifier's cap, or keep head and tail, and test that a thread whose only human
-    ///     line sits past the cap still counts as a miss.
+    ///     Retained text is used to reassess human-thread eligibility. Truncation could omit the only human
+    ///     comment after provider activity and exclude the thread from recall. The classifier caps its own input.
     /// </remarks>
     private static string BuildDiscussion(ThreadUpdatedEvent evt)
     {
@@ -202,17 +434,7 @@ public sealed partial class CodeInsightMissHarvester(
         return builder.ToString().TrimEnd('\n');
     }
 
-    /// <summary>
-    ///     Whether the provider reports the thread as having reached any terminal state.
-    /// </summary>
-    /// <remarks>
-    ///     Answered through the same interpreter the crawl uses to read a thread's close, so the set of terminal
-    ///     statuses is declared once for every provider. Matching one status string here would leave a thread
-    ///     closed as <c>Closed</c>, <c>WontFix</c> or <c>ByDesign</c> looking permanently open, and those are the
-    ///     cases the acted-on judgement most needs: the last two are a human accepting the concern outright.
-    ///     Which terminal state it reached is not consulted; a thread argued down and closed has still stopped
-    ///     changing, and what the discussion amounted to is the model's judgement to make.
-    /// </remarks>
+    /// <summary>Uses the shared provider-status interpreter to identify terminal thread states.</summary>
     private static bool IsResolved(string? status)
     {
         return ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(status));

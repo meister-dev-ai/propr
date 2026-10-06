@@ -54,7 +54,8 @@ internal sealed class GitLabCodeReviewPublicationService(
         var client = httpClientFactory.CreateClient("GitLabProvider");
 
         var summaryBody = BuildSummaryBody(result, reviewer, composer);
-        var inlineComments = result.Comments.Where(IsInlineComment).ToList();
+        var inlineComments = result.Comments.Select((comment, ordinal) => (Comment: comment, Ordinal: ordinal))
+            .Where(item => IsInlineComment(item.Comment)).ToList();
         var nonInlineCommentCount = result.Comments.Count - inlineComments.Count;
         var totalDiscussions = inlineComments.Count + (string.IsNullOrWhiteSpace(summaryBody) ? 0 : 1);
 
@@ -134,7 +135,7 @@ internal sealed class GitLabCodeReviewPublicationService(
                 ct);
             if (captured is not null)
             {
-                state.PostedComments.Add(captured);
+                state.PostedComments.Add(captured with { ThreadKind = PostedReviewCommentKind.Summary });
             }
 
             state.PostedDiscussionCount++;
@@ -152,19 +153,20 @@ internal sealed class GitLabCodeReviewPublicationService(
         string token,
         CodeReviewRef review,
         Uri discussionUri,
-        IReadOnlyList<ReviewComment> inlineComments,
+        IReadOnlyList<(ReviewComment Comment, int Ordinal)> inlineComments,
         int totalDiscussions,
         PublicationState state,
         CancellationToken ct)
     {
         var (inlineRevision, revisionFailure) = await this.ResolveInlineRevisionAsync(client, token, review, ct);
 
-        foreach (var comment in inlineComments)
+        foreach (var item in inlineComments)
         {
+            var comment = item.Comment;
             var normalizedPath = NormalizePath(comment.FilePath!);
             if (inlineRevision is null)
             {
-                state.Failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, revisionFailure!.Message));
+                state.Failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, revisionFailure!.Message, item.Ordinal));
                 continue;
             }
 
@@ -196,7 +198,7 @@ internal sealed class GitLabCodeReviewPublicationService(
                     ct);
                 if (captured is not null)
                 {
-                    state.PostedComments.Add(captured);
+                    state.PostedComments.Add(captured with { FindingOrdinal = item.Ordinal });
                 }
 
                 state.PostedDiscussionCount++;
@@ -204,7 +206,7 @@ internal sealed class GitLabCodeReviewPublicationService(
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                state.Failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, ex.Message));
+                state.Failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, ex.Message, item.Ordinal));
                 state.FailureExceptions.Add(ex);
             }
         }

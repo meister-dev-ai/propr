@@ -87,18 +87,21 @@ internal sealed partial class AiFindingTypeClassifier(
         catch (Exception ex)
         {
             LogResolutionFailed(logger, request.FindingId, ex);
-            return FindingClassificationResult.Unusable();
+            return new FindingClassificationResult(null, ModelWasAsked: false);
         }
 
+        var modelWasAsked = false;
         try
         {
-            var response = await runtime.ChatClient.GetResponseAsync(
-                [
-                    new ChatMessage(ChatRole.System, BuildSystemPrompt(request.Vocabulary)),
-                    new ChatMessage(ChatRole.User, BuildUserMessage(request)),
-                ],
-                new ChatOptions(),
-                ct).ConfigureAwait(false);
+            var chatClient = runtime.ChatClient ?? throw new InvalidOperationException("The resolved runtime has no chat client.");
+            ChatMessage[] messages =
+            [
+                new(ChatRole.System, BuildSystemPrompt(request.Vocabulary)),
+                new(ChatRole.User, BuildUserMessage(request)),
+            ];
+            var options = new ChatOptions();
+            modelWasAsked = true;
+            var response = await chatClient.GetResponseAsync(messages, options, ct).ConfigureAwait(false);
 
             // Before the response is judged usable or not: the tokens were spent either way, and a classifier
             // that only counted the calls it could parse would understate what the client was billed.
@@ -120,7 +123,7 @@ internal sealed partial class AiFindingTypeClassifier(
         catch (Exception ex)
         {
             LogCallFailed(logger, request.FindingId, ex);
-            return FindingClassificationResult.Unusable();
+            return new FindingClassificationResult(null, modelWasAsked);
         }
     }
 

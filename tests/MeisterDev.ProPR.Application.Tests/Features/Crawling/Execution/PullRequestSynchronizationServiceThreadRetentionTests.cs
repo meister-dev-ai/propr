@@ -16,6 +16,8 @@ using MeisterDev.ProPR.Domain.Events;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 
 namespace MeisterDev.ProPR.Application.Tests.Features.Crawling.Execution;
 
@@ -25,6 +27,55 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
     private static readonly Guid ConnectionId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid ReviewerId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid HumanAuthorId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+
+    [Fact]
+    public async Task IncompleteHarvestModuleKeepsArchiveOnlyObservationAvailable()
+    {
+        var harness = new Harness(true, withHarvest: true, withCoverageRecorder: false);
+
+        await harness.RunAsync();
+
+        await harness.Harvester.DidNotReceiveWithAnyArgs().HandleThreadObservedAsync(default!);
+        await harness.IngestionService.ReceivedWithAnyArgs().HandleThreadUpdatedAsync(default!);
+    }
+
+    [Fact]
+    public async Task FailedHumanEnumerationRecordsANewerIncompleteCoverageObservation()
+    {
+        var harness = new Harness(false, withHarvest: true);
+        harness.PullRequestFetcher
+            .FetchThreadsAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Provider enumeration failed"));
+        await harness.RunAsync();
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), "AzureDevOps:https://dev.azure.com", false, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>(),
+            false);
+    }
+
+    [Fact]
+    public async Task HumanEnumerationRetainsItsReadCutoffThroughSlowJudgementAndCoverage()
+    {
+        var harness = new Harness(false, withHarvest: true);
+        var readAt = DateTimeOffset.MinValue;
+        DateTimeOffset? sourceAt = null;
+        harness.PullRequestFetcher.FetchThreadsAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            readAt = DateTimeOffset.UtcNow;
+            return Task.FromResult<IReadOnlyList<PrCommentThread>>(Harness.CreateThreads());
+        });
+        harness.Harvester.HandleThreadObservedAsync(Arg.Any<ThreadUpdatedEvent>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            sourceAt = ((ThreadUpdatedEvent)call[0]).ObservedAt;
+            await Task.Delay(20);
+            return true;
+        });
+        await harness.RunAsync();
+        Assert.NotNull(sourceAt);
+        Assert.True(sourceAt <= readAt);
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), Arg.Any<bool>(), sourceAt!.Value, Arg.Any<CancellationToken>(), true);
+    }
 
     [Fact]
     public async Task SynchronizeAsync_StoreThreadsOn_IngestsTheObservedThreadAndStampsNoCommentAsProPRs()
@@ -294,21 +345,43 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
             .HandleThreadUpdatedAsync(Arg.Any<ThreadUpdatedEvent>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("https://ado.example.test", "https://ado.example.test/collection")]
+    [InlineData("https://ado.example.test/tfs", "https://ado.example.test/tfs/defaultcollection")]
+    public async Task NestedSelfHostedCollectionUsesItsReadNamespaceForThreadsAndCoverage(string connectionBase, string collection)
+    {
+        var harness = new Harness(false, withHarvest: true, scopePath: collection, connectionBase: connectionBase);
+        await harness.RunAsync();
+        var expected = "AzureDevOps:" + collection;
+        await harness.Harvester.Received(1).HandleThreadObservedAsync(
+            Arg.Is<ThreadUpdatedEvent>(evt => evt.ProviderScope == expected), Arg.Any<CancellationToken>());
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), expected, Arg.Any<bool>(), Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>(), true);
+    }
+
     private sealed class Harness
     {
         private readonly PullRequestSynchronizationService _sut;
         private readonly ScmProvider _provider;
+        private readonly string _scopePath;
 
         public Harness(
             bool storeThreads,
             IPostedCommentOriginStore? originStore = null,
             ScmProvider provider = ScmProvider.AzureDevOps,
             IReadOnlyList<PrCommentThread>? threads = null,
-            ThreadOwnerIdentity? adapterIdentity = null)
+            ThreadOwnerIdentity? adapterIdentity = null,
+            bool withHarvest = false,
+            string scopePath = "https://dev.azure.com/org", string? connectionBase = null, bool withCoverageRecorder = true)
         {
             this._provider = provider;
+            this._scopePath = scopePath;
             this.IngestionService = Substitute.For<IReviewArchiveIngestionService>();
             this.PullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+            this.Harvester = Substitute.For<ICodeInsightMissHarvester>();
+            this.Harvester.HandleThreadObservedAsync(Arg.Any<ThreadUpdatedEvent>(), Arg.Any<CancellationToken>()).Returns(true);
+            this.Coverage = Substitute.For<ICodeInsightHarvestCoverageRecorder>();
             var scmConnectionRepository = Substitute.For<IClientScmConnectionRepository>();
             var jobs = Substitute.For<IJobRepository>();
             var iterationResolver = Substitute.For<IPullRequestIterationResolver>();
@@ -327,10 +400,10 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
                 .Returns(new TryAddReviewJobResult(true, null, 0));
 
             scmConnectionRepository.GetByClientIdAsync(ClientId, Arg.Any<CancellationToken>())
-                .Returns([CreateConnection(storeThreads, provider)]);
+                .Returns([CreateConnection(storeThreads, provider) with { HostBaseUrl = connectionBase ?? "https://dev.azure.com/org" }]);
 
             this.PullRequestFetcher.FetchThreadsAsync(
-                    "https://dev.azure.com/org",
+                    scopePath,
                     "project",
                     "repo-1",
                     42,
@@ -371,24 +444,27 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
                 scmConnectionRepository,
                 this.PullRequestFetcher,
                 this.IngestionService,
-                originStore);
+                originStore, codeInsightMissHarvester: withHarvest ? this.Harvester : null,
+                harvestCoverageRecorder: withHarvest && withCoverageRecorder ? this.Coverage : null);
         }
 
         public IReviewArchiveIngestionService IngestionService { get; }
 
         public IPullRequestFetcher PullRequestFetcher { get; }
+        public ICodeInsightMissHarvester Harvester { get; }
+        public ICodeInsightHarvestCoverageRecorder Coverage { get; }
 
         public async Task RunAsync(bool withReviewerIdentity = true)
         {
             // The host is the same authority whichever provider the pass runs against; what the provider
             // changes is how the comment ids the crawl reports relate to the recorded ones.
-            var host = new ProviderHostRef(this._provider, "https://dev.azure.com/org");
+            var host = new ProviderHostRef(this._provider, this._scopePath);
             var request = new PullRequestSynchronizationRequest
             {
                 ActivationSource = PullRequestActivationSource.Crawl,
                 SummaryLabel = "crawl discovery",
                 ClientId = ClientId,
-                ProviderScopePath = "https://dev.azure.com/org",
+                ProviderScopePath = this._scopePath,
                 ProviderProjectKey = "project",
                 RepositoryId = "repo-1",
                 PullRequestId = 42,
@@ -428,7 +504,7 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
             };
         }
 
-        private static IReadOnlyList<PrCommentThread> CreateThreads()
+        public static IReadOnlyList<PrCommentThread> CreateThreads()
         {
             var publishedAt = new DateTimeOffset(2026, 6, 1, 10, 0, 0, TimeSpan.Zero);
             return

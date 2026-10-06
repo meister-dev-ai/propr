@@ -122,7 +122,8 @@ public sealed record PostedReviewCommentRef(
     string? ProviderThreadId,
     string? FilePath,
     int? Line,
-    PostedReviewCommentKind ThreadKind = PostedReviewCommentKind.Inline);
+    PostedReviewCommentKind ThreadKind = PostedReviewCommentKind.Inline,
+    int? FindingOrdinal = null);
 
 /// <summary>What a created provider comment represents.</summary>
 public enum PostedReviewCommentKind
@@ -167,11 +168,13 @@ public sealed record ReviewCommentSuppressionRecord(
 /// <param name="FilePath">File the failed thread was anchored to, when applicable.</param>
 /// <param name="Line">Line the failed thread was anchored to, when applicable.</param>
 /// <param name="Error">Provider error message reported for the rejected creation.</param>
+/// <param name="FindingOrdinal">Original finding position when the provider adapter retains it.</param>
 public sealed record ReviewCommentPostingFailure(
     string ThreadKind,
     string? FilePath,
     int? Line,
-    string Error);
+    string Error,
+    int? FindingOrdinal = null);
 
 /// <summary>
 ///     Result returned by the historical thread-memory duplicate-suppression lookup.

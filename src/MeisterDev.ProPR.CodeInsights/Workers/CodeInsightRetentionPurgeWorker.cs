@@ -88,6 +88,11 @@ public sealed partial class CodeInsightRetentionPurgeWorker(
             var cutoff = ResolveCutoff(retentionDays, DateTimeOffset.UtcNow);
 
             var removed = await store.PurgeExpiredAsync(cutoff, stoppingToken);
+            var reports = scope.ServiceProvider.GetService<MeisterDev.ProPR.CodeInsights.Persistence.ReviewerPerformanceReportStore>();
+            if (reports is not null)
+            {
+                await reports.PurgeExpiredAsync(stoppingToken);
+            }
 
             LogSweepCompleted(logger, removed);
         }

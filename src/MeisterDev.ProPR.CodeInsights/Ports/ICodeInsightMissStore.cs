@@ -1,8 +1,8 @@
-using MeisterDev.ProPR.CodeInsights.Contracts;
-
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
+
+using MeisterDev.ProPR.CodeInsights.Contracts;
 
 namespace MeisterDev.ProPR.CodeInsights.Ports;
 
@@ -14,12 +14,57 @@ namespace MeisterDev.ProPR.CodeInsights.Ports;
 ///     These records are evidence about the reviewer rather than output from it, so they are kept apart from the
 ///     findings it produced. A harvester needs both boundaries and says so by depending on both.
 /// </remarks>
+public sealed record CodeInsightMissObservation(
+    string? SourceFingerprint,
+    bool JudgementFailed,
+    int FailedAttempts,
+    bool IsSubstantive = false,
+    bool WasActedOn = false,
+    bool IsInScope = false,
+    double? Confidence = null,
+    bool JudgedThreadResolved = false,
+    string TypeMembership = "",
+    MeisterDev.ProPR.Domain.Enums.CodeInsightFindingQualifier? Qualifier = null,
+    string? DimensionClassifierVersion = null,
+    double? DimensionConfidence = null,
+    bool DimensionJudgementFailed = false,
+    int FailedDimensionAttempts = 0,
+    DateTimeOffset? SourceObservedAt = null,
+    bool ExcludedAsOwnFinding = false);
+
+/// <summary>Whether an observation is already retained and whether score inputs changed.</summary>
+public sealed record CodeInsightMissAcknowledgment(bool Retained, bool Changed);
+
+/// <summary>Latest structural eligibility; an eligible observation does not establish a completed judgement.</summary>
+public sealed record CodeInsightThreadEligibilityObservation(DateTimeOffset SourceObservedAt, bool ExcludedFromHumanMisses);
+
 public interface ICodeInsightMissStore
 {
+    /// <summary>Retains the ordered source eligibility without creating a harvested human thread.</summary>
+    Task<CodeInsightThreadEligibilityObservation> ObserveThreadEligibilityAsync(
+        CodeInsightPullRequestKey key, string threadId, string providerScope, bool excludedFromHumanMisses,
+        DateTimeOffset observedAt, CancellationToken ct = default);
+
+    /// <summary>Returns structural eligibility separately from retained classifier judgements.</summary>
+    Task<CodeInsightThreadEligibilityObservation?> GetThreadEligibilityAsync(
+        CodeInsightPullRequestKey key, string threadId, string providerScope, CancellationToken ct = default);
+
+    /// <summary>Atomically acknowledges completed or superseded source evidence and advances its ordering watermark.</summary>
+    Task<CodeInsightMissAcknowledgment> ObserveUnchangedMissAsync(
+        CodeInsightPullRequestKey key, string threadId, string fingerprint,
+        DateTimeOffset observedAt, CancellationToken ct = default, Guid? connectionId = null,
+        string? dimensionClassifierVersion = null, bool excludedAsOwnFinding = false, string? providerScope = null) =>
+        Task.FromResult(new CodeInsightMissAcknowledgment(false, false));
+
+    /// <summary>Current source identity for idempotent observations and bounded classifier retries.</summary>
+    Task<CodeInsightMissObservation?> GetObservationAsync(
+        CodeInsightPullRequestKey key, string threadId, CancellationToken ct = default, Guid? connectionId = null, string? providerScope = null) =>
+        Task.FromResult<CodeInsightMissObservation?>(null);
+
     /// <summary>
-    ///     Records a harvested human thread, and returns whether this call was the one that recorded it. A
-    ///     thread already harvested for this pull request is left alone: a crawl re-observes it on every pass,
-    ///     and harvesting it twice would double its contribution to recall.
+    ///     Records a source-qualified human thread and returns whether score inputs changed. Timestamped
+    ///     observations update an existing row only when current. Legacy calls without a source timestamp
+    ///     retain first-insert semantics. Replays keep one row and one contribution to recall.
     /// </summary>
     Task<bool> RecordMissAsync(
         CodeInsightPullRequestKey key,
@@ -38,12 +83,13 @@ public interface ICodeInsightMissStore
     Task<bool?> GetJudgedThreadResolvedAsync(
         CodeInsightPullRequestKey key,
         string providerThreadId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        Guid? connectionId = null, string? providerScope = null);
 
     /// <summary>
-    ///     Replaces the stored judgement and discussion for an already-harvested thread, and returns whether a row
-    ///     was found to replace. The row keeps its identity, its anchor, and the time it was first harvested, so
-    ///     harvest time and judgement time together show that it was revisited.
+    ///     Replaces current judgement and discussion when source ordering permits, returning whether score
+    ///     inputs changed. A failed same-source replay preserves successful evidence. Identity, anchor and
+    ///     first harvest time remain fixed.
     /// </summary>
     Task<bool> RejudgeMissAsync(
         CodeInsightPullRequestKey key,

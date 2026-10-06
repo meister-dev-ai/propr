@@ -34,6 +34,7 @@ Questions, not symptoms. If something is broken, start at
 | Which model does the actual reviewing, and how do I change it? | [ai/purposes.md](ai/purposes.md) |
 | Why does the review configuration never name a provider? | [concepts/models.md](concepts/models.md) |
 | Why was a finding not posted on the pull request? | [concepts/reviews.md](concepts/reviews.md#why-a-finding-did-not-get-posted) |
+| How do outcome assumptions affect reviewer quality scores? | [concepts/reviewer-performance.md](concepts/reviewer-performance.md) |
 | What can I change about how strict a review is? | [concepts/reviews.md](concepts/reviews.md) |
 | How do I keep ProPR out of generated files, or tell it our conventions? | [concepts/repository-configuration.md](concepts/repository-configuration.md) |
 | How do I make reviews cheaper? | [guides/control-cost.md](guides/control-cost.md) |
@@ -64,6 +65,7 @@ Questions, not symptoms. If something is broken, start at
 | [concepts/reviews.md](concepts/reviews.md) | You want what happens inside one review, and the settings that change what it publishes |
 | [concepts/repository-configuration.md](concepts/repository-configuration.md) | You want to exclude files from review, or hand the reviewer conventions that live with the code |
 | [concepts/models.md](concepts/models.md) | You want the one idea behind AI purposes and logical models before you configure them |
+| [concepts/reviewer-performance.md](concepts/reviewer-performance.md) | You want score ranges, evidence limits, comparisons and immutable saved reports |
 
 ### Platforms
 
@@ -120,6 +122,10 @@ about which one to reach for first.
 | [glossary.md](glossary.md) | A page used a term this product invented |
 
 ## Outside these docs
+
+Runtime module boundaries are indexed in [architecture.md](architecture.md). The
+[Code Insights architecture](architecture/code-insights.md) describes analytics evidence, count projection,
+consistent queries and report deletion.
 
 - [LICENSE](../LICENSE), [LICENSING.md](../LICENSING.md) and [COMMERCIAL.md](../COMMERCIAL.md) - the
   legal terms; [reference/editions.md](reference/editions.md) describes runtime behaviour only.

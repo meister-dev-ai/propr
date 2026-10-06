@@ -25,10 +25,16 @@ public sealed partial class CodeInsightRollupProjector(
     MeisterProPRDbContext dbContext,
     ICodeInsightsCollectionGate gate,
     ILogger<CodeInsightRollupProjector> logger,
-    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : ICodeInsightRollupProjector
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
+    ReviewerPerformanceCountProjector? performanceProjector = null) : ICodeInsightRollupProjector
 {
     public async Task ProjectJobAsync(Guid jobId, CancellationToken ct = default)
     {
+        if (performanceProjector is not null)
+        {
+            await performanceProjector.ProjectJobAsync(jobId, ct);
+        }
+
         try
         {
             await this.WithDbAsync(
@@ -79,7 +85,11 @@ public sealed partial class CodeInsightRollupProjector(
                         .Where(tag => findingIds.Contains(tag.CodeInsightFindingId)
                                       && tag.IsCore
                                       && tag.CoreSlug != null)
-                        .Select(tag => new { tag.CodeInsightFindingId, Slug = tag.CoreSlug! })
+                        .Select(tag => new
+                        {
+                            tag.CodeInsightFindingId,
+                            Slug = tag.CoreSlug!
+                        })
                         .ToListAsync(ct);
 
                     var dispositions = await db.CodeInsightFindingDispositions
@@ -148,6 +158,10 @@ public sealed partial class CodeInsightRollupProjector(
     public async Task<int> BackfillAsync(int maxJobs, CancellationToken ct = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJobs);
+        if (performanceProjector is not null)
+        {
+            await performanceProjector.BackfillAsync(maxJobs, ct);
+        }
 
         List<Guid> candidates;
 

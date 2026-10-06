@@ -76,6 +76,29 @@ public sealed class CodeInsightMissHarvesterTests
     }
 
     [Fact]
+    public async Task KnownProviderHumanThreadCannotBeSuppressedByAnUnknownHistoricalFindingThread()
+    {
+        var harness = new Harness();
+        harness.Store.ResolveProviderScopeAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns("AzureDevOps:https://dev.azure.com/other-org");
+        harness.WithFindings(
+            new CodeInsightFindingView(
+                Guid.NewGuid(), Guid.NewGuid(), "old", 0, "different.cs", 2, CommentSeverity.Error, "Different concern", "thread-9", DateTimeOffset.UtcNow));
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread());
+        await harness.Misses.Received(1).RecordMissAsync(Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<CodeInsightMissRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DroppedEligibleMissObservationReportsIncompleteRetention()
+    {
+        var harness = new Harness();
+        harness.Misses.RecordMissAsync(Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<CodeInsightMissRecord>(), Arg.Any<CancellationToken>()).Returns(false);
+        var completion = harness.Harvester.HandleThreadObservedAsync(HumanThread());
+        await completion;
+        Assert.False(await Assert.IsAssignableFrom<Task<bool>>(completion));
+    }
+
+    [Fact]
     public async Task AThreadThatRestatesAProPrFinding_IsNotAMissAndCostsNoModelCall()
     {
         // The same issue must never be counted as both a true positive and a false negative. The check runs
@@ -148,6 +171,33 @@ public sealed class CodeInsightMissHarvesterTests
             Arg.Any<CodeInsightPullRequestKey>(),
             Arg.Is<CodeInsightMissRecord>(record => record.CountsAsMiss),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AThreadIdFromAnotherProviderScopeDoesNotSuppressAHumanMiss()
+    {
+        var harness = new Harness();
+        harness.Store.ResolveProviderScopeAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns("GitHub:https://host-a.example");
+        harness.WithFindings(
+            new CodeInsightFindingView(
+                Guid.NewGuid(), Guid.NewGuid(), "rev-1", 0, "src/Service.cs", 42, CommentSeverity.Error, "Different concern", "thread-9", DateTimeOffset.UtcNow,
+                ProviderScope: "GitHub:https://host-b.example"));
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread());
+        await harness.Misses.Received(1).RecordMissAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Is<CodeInsightMissRecord>(record => record.CountsAsMiss), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AResolvedThreadWithChangedSourceIsRejudgedWhenItReopens()
+    {
+        var harness = new Harness();
+        harness.WithStoredJudgement(true);
+        harness.Misses.GetObservationAsync(
+                Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<string?>())
+            .Returns(new CodeInsightMissObservation("earlier source", false, 0));
+        await harness.Harvester.HandleThreadObservedAsync(HumanThread(status: "Active"));
+        await harness.Misses.Received(1).RejudgeMissAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Is<CodeInsightMissRecord>(record => !record.JudgedThreadResolved), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -273,10 +323,9 @@ public sealed class CodeInsightMissHarvesterTests
     }
 
     [Fact]
-    public async Task AnUnjudgeableThread_RecordsNothing()
+    public async Task AnUnjudgeableThread_RetainsFailureCoverageWithoutInventingAMiss()
     {
-        // A harvested miss carrying invented judgements would be worse than none: it would appear in recall
-        // as evidence.
+        // A failed judgement must remain visible so an incomplete harvest cannot appear to have zero misses.
         var harness = new Harness();
         harness.Classifier
             .JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>())
@@ -284,9 +333,11 @@ public sealed class CodeInsightMissHarvesterTests
 
         await harness.Harvester.HandleThreadObservedAsync(HumanThread());
 
-        await harness.Misses.DidNotReceive().RecordMissAsync(
+        await harness.Misses.Received(1).RecordMissAsync(
             Arg.Any<CodeInsightPullRequestKey>(),
-            Arg.Any<CodeInsightMissRecord>(),
+            Arg.Is<CodeInsightMissRecord>(record => record.JudgementFailed && !record.CountsAsMiss
+                                                                           && !record.IsSubstantive && !record.IsInScope && !record.WasActedOn &&
+                                                                           record.Confidence == null),
             Arg.Any<CancellationToken>());
     }
 
@@ -497,6 +548,14 @@ public sealed class CodeInsightMissHarvesterTests
         {
             this.Store = Substitute.For<ICodeInsightFindingStore>();
             this.Misses = Substitute.For<ICodeInsightMissStore>();
+            this.Misses.ObserveThreadEligibilityAsync(
+                    Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<DateTimeOffset>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(call => new CodeInsightThreadEligibilityObservation((DateTimeOffset)call[4], (bool)call[3]));
+            this.Misses.ObserveUnchangedMissAsync(
+                    Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), Arg.Any<string>(),
+                    Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<string?>())
+                .Returns(new CodeInsightMissAcknowledgment(false, false));
             this.Classifier = Substitute.For<IHumanMissClassifier>();
             this.Gate = Substitute.For<ICodeInsightsCollectionGate>();
 
@@ -510,7 +569,8 @@ public sealed class CodeInsightMissHarvesterTests
                 .GetJudgedThreadResolvedAsync(
                     Arg.Any<CodeInsightPullRequestKey>(),
                     Arg.Any<string>(),
-                    Arg.Any<CancellationToken>())
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<Guid?>(), Arg.Any<string?>())
                 .Returns((bool?)null);
             this.Misses
                 .RecordMissAsync(
@@ -558,7 +618,8 @@ public sealed class CodeInsightMissHarvesterTests
                 .GetJudgedThreadResolvedAsync(
                     Arg.Any<CodeInsightPullRequestKey>(),
                     Arg.Any<string>(),
-                    Arg.Any<CancellationToken>())
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<Guid?>(), Arg.Any<string?>())
                 .Returns(threadResolved);
         }
 

@@ -3,11 +3,15 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Domain.Events;
 using Microsoft.Extensions.Logging;
 using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.CodeInsights.Dispositions;
 using MeisterDev.ProPR.CodeInsights.Ports;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 namespace MeisterDev.ProPR.CodeInsights.Dispositions;
 
@@ -27,7 +31,8 @@ public sealed partial class CodeInsightDispositionService(
     IDisregardedFindingClassifier classifier,
     ICodeInsightsCollectionGate gate,
     ILogger<CodeInsightDispositionService> logger,
-    ICodeInsightRollupProjector? rollupProjector = null) : ICodeInsightDispositionService
+    ICodeInsightRollupProjector? rollupProjector = null,
+    ICodeInsightPerformanceEvidenceStore? performanceEvidence = null) : ICodeInsightDispositionService
 {
     public async Task HandleThreadResolvedAsync(ThreadResolvedDomainEvent evt, CancellationToken ct = default)
     {
@@ -47,7 +52,8 @@ public sealed partial class CodeInsightDispositionService(
                 evt.RepositoryId,
                 evt.PullRequestId,
                 evt.ThreadId,
-                ct);
+                ct,
+                evt.ProviderScope);
 
             if (finding is null)
             {
@@ -58,22 +64,59 @@ public sealed partial class CodeInsightDispositionService(
                 return;
             }
 
-            if (await dispositionStore.GetDispositionAsync(finding.Id, ct) is not null)
+            var existing = await dispositionStore.GetDispositionAsync(finding.Id, ct);
+            var receipt = new CodeInsightPublicationReceipt(finding.ProviderScope, finding.ProviderThreadId, finding.ProviderCommentId);
+            var fingerprint = Convert.ToHexString(
+                SHA256.HashData(
+                    Encoding.UTF8.GetBytes(
+                        JsonSerializer.Serialize(
+                            new
+                            {
+                                evt.NativeStatus,
+                                evt.CodeChangedSinceRaised,
+                                evt.CommentHistory,
+                                evt.ChangeExcerpt,
+                                classifier.ClassifierVersion,
+                            }))));
+            if (existing is not null && evt.NativeStatus is null)
             {
-                // The crawl sees the same resolved thread on every pass. Deciding again could change a number
-                // a report has already shown.
                 return;
             }
 
-            var record = await this.ResolveDispositionAsync(evt, finding, ct);
-            var decided = await dispositionStore.RecordDispositionAsync(finding.Id, record, ct);
+            if (existing is not null && evt.NativeStatus is not null && performanceEvidence is not null
+                && await performanceEvidence.ObserveUnchangedOutcomeAsync(finding.Id, evt.NativeStatus, fingerprint, evt.ObservedAt, ct, receipt))
+            {
+                return;
+            }
+
+            if (existing is not null && performanceEvidence is null && (evt.NativeStatus is null || string.Equals(
+                        evt.NativeStatus, finding.NativeStatus, StringComparison.OrdinalIgnoreCase)
+                    && finding.OutcomeSourceFingerprint == fingerprint &&
+                    (finding.CurrentClassifierVersion is null || finding.CurrentClassifierVersion == classifier.ClassifierVersion)
+                    && finding.CurrentCodeChange == evt.CodeChangedSinceRaised
+                    && (finding.CurrentClassifierVersion is null || finding.CurrentClassifierConfidence is not null || finding.OutcomeJudgementAttempts >= 3)))
+            {
+                // Unchanged source evidence with a completed or exhausted judgement costs no further model call.
+                return;
+            }
+
+            var isOpenObservation = evt.NativeStatus is not null && !ThreadResolutionStatusInterpreter.IsResolved(
+                ThreadResolutionStatusInterpreter.InterpretIntent(evt.NativeStatus));
+            var record = isOpenObservation ? null : (await this.ResolveDispositionAsync(evt, finding, ct)) with { NativeStatus = evt.NativeStatus };
+            var currentChanged = performanceEvidence is not null && evt.NativeStatus is not null
+                                                                 && await performanceEvidence.RecordCurrentOutcomeAsync(
+                                                                     finding.Id, evt.NativeStatus, record, evt.ObservedAt, ct, fingerprint, receipt);
+            var decided = record is not null && await dispositionStore.RecordDispositionAsync(finding.Id, record, ct);
+            if (currentChanged && !decided && rollupProjector is not null)
+            {
+                await rollupProjector.ProjectJobAsync(finding.JobId, ct);
+            }
 
             if (decided)
             {
-                LogDispositionRecorded(logger, finding.Id, record.Disposition);
+                LogDispositionRecorded(logger, finding.Id, record!.Disposition);
 
-                // The outcome changes this job's per-outcome counts. Recomputation, so calling it again here is
-                // safe, and the count lands in the review's bucket rather than today's.
+                // Projection replaces the job's cohort counts, making repeated callbacks idempotent.
                 if (rollupProjector is not null)
                 {
                     await rollupProjector.ProjectJobAsync(finding.JobId, ct);

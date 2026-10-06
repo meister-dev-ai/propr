@@ -33,7 +33,7 @@ namespace MeisterDev.ProPR.CodeInsights.Classification;
 internal sealed partial class AiHumanMissClassifier(
     IAiRuntimeResolver aiRuntimeResolver,
     IModelUsageRecorder usageRecorder,
-    ILogger<AiHumanMissClassifier> logger) : IHumanMissClassifier
+    ILogger<AiHumanMissClassifier> logger) : IHumanMissClassifierAttemptReporter
 {
     private const int MaxDiscussionChars = 6000;
     private const int MaxRationaleChars = 300;
@@ -42,6 +42,11 @@ internal sealed partial class AiHumanMissClassifier(
     public string ClassifierVersion => "human-miss-v1";
 
     public async Task<HumanMissJudgement?> JudgeAsync(
+        HumanMissJudgementRequest request,
+        CancellationToken ct = default) =>
+        (await this.JudgeWithAttemptAsync(request, ct).ConfigureAwait(false)).Judgement;
+
+    public async Task<HumanMissJudgementResult> JudgeWithAttemptAsync(
         HumanMissJudgementRequest request,
         CancellationToken ct = default)
     {
@@ -61,23 +66,26 @@ internal sealed partial class AiHumanMissClassifier(
         catch (AiPurposeBindingNotConfiguredException ex)
         {
             LogBindingUnavailable(logger, request.ProviderThreadId, ex);
-            return null;
+            return new HumanMissJudgementResult(null, ModelWasAsked: false);
         }
         catch (Exception ex)
         {
             LogResolutionFailed(logger, request.ProviderThreadId, ex);
-            return null;
+            return new HumanMissJudgementResult(null, ModelWasAsked: false);
         }
 
+        var modelWasAsked = false;
         try
         {
-            var response = await runtime.ChatClient.GetResponseAsync(
-                [
-                    new ChatMessage(ChatRole.System, BuildSystemPrompt()),
-                    new ChatMessage(ChatRole.User, BuildUserMessage(request)),
-                ],
-                new ChatOptions(),
-                ct).ConfigureAwait(false);
+            var chatClient = runtime.ChatClient ?? throw new InvalidOperationException("The resolved runtime has no chat client.");
+            ChatMessage[] messages =
+            [
+                new(ChatRole.System, BuildSystemPrompt()),
+                new(ChatRole.User, BuildUserMessage(request)),
+            ];
+            var options = new ChatOptions();
+            modelWasAsked = true;
+            var response = await chatClient.GetResponseAsync(messages, options, ct).ConfigureAwait(false);
 
             // Recorded before the response is judged usable: the tokens are spent either way.
             await usageRecorder.RecordAsync(request.ClientId, runtime, response, ct).ConfigureAwait(false);
@@ -88,7 +96,7 @@ internal sealed partial class AiHumanMissClassifier(
                 LogUnusableResponse(logger, request.ProviderThreadId);
             }
 
-            return judgement;
+            return new HumanMissJudgementResult(judgement, ModelWasAsked: true);
         }
         catch (OperationCanceledException)
         {
@@ -97,7 +105,7 @@ internal sealed partial class AiHumanMissClassifier(
         catch (Exception ex)
         {
             LogCallFailed(logger, request.ProviderThreadId, ex);
-            return null;
+            return new HumanMissJudgementResult(null, modelWasAsked);
         }
     }
 

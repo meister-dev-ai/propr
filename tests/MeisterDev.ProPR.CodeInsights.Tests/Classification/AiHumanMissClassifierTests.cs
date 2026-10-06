@@ -98,6 +98,104 @@ public sealed class AiHumanMissClassifierTests
         Assert.Null(await sut.JudgeAsync(CreateRequest()));
     }
 
+    [Theory]
+    [InlineData("binding")]
+    [InlineData("runtime")]
+    [InlineData("client")]
+    [InlineData("prompt")]
+    public async Task JudgeWithAttemptAsync_SetupFailuresDoNotReportAModelRequest(string failure)
+    {
+        var chat = Substitute.For<IChatClient>();
+        var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        runtime.ChatClient.Returns(failure == "client" ? null! : chat);
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        if (failure is "binding" or "runtime")
+        {
+            resolver.ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, Arg.Any<CancellationToken>())
+                .ThrowsAsync(
+                    failure == "binding"
+                        ? new AiPurposeBindingNotConfiguredException(AiPurpose.InsightsClassification)
+                        : new InvalidOperationException("Runtime unavailable"));
+        }
+        else
+        {
+            resolver.ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, Arg.Any<CancellationToken>()).Returns(runtime);
+        }
+
+        var sut = new AiHumanMissClassifier(resolver, Substitute.For<IModelUsageRecorder>(), NullLogger<AiHumanMissClassifier>.Instance);
+        var request = failure == "prompt" ? CreateRequest() with { Discussion = null! } : CreateRequest();
+
+        var result = await sut.JudgeWithAttemptAsync(request);
+
+        Assert.Null(result.Judgement);
+        Assert.False(result.ModelWasAsked);
+        await chat.DidNotReceive().GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task JudgeWithAttemptAsync_FailedOrUnusableCallsReportAModelAttempt(bool providerFails)
+    {
+        var chat = Substitute.For<IChatClient>();
+        if (providerFails)
+        {
+            chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+                .ThrowsAsync(new HttpRequestException("Provider unavailable"));
+        }
+        else
+        {
+            chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+                .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Unusable judgement")));
+        }
+
+        var sut = new AiHumanMissClassifier(CreateResolver(chat), Substitute.For<IModelUsageRecorder>(), NullLogger<AiHumanMissClassifier>.Instance);
+
+        var result = await sut.JudgeWithAttemptAsync(CreateRequest());
+
+        Assert.Null(result.Judgement);
+        Assert.True(result.ModelWasAsked);
+        await chat.Received(1).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task JudgeWithAttemptAsync_SuccessfulJudgementReportsAModelAttempt()
+    {
+        IHumanMissClassifier classifier = CreateClassifier("""{"isSubstantive":true,"wasActedOn":true,"isInScope":true,"confidence":0.9}""");
+        var reporter = Assert.IsAssignableFrom<IHumanMissClassifierAttemptReporter>(classifier);
+
+        var result = await reporter.JudgeWithAttemptAsync(CreateRequest());
+
+        Assert.True(result.ModelWasAsked);
+        Assert.NotNull(result.Judgement);
+        Assert.True(result.Judgement.IsSubstantive);
+        Assert.True(result.Judgement.WasActedOn);
+        Assert.True(result.Judgement.IsInScope);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task BothJudgementEntryPointsPropagateCancellation(bool duringResolution)
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var chat = Substitute.For<IChatClient>();
+        chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException(cancellation.Token));
+        var resolver = CreateResolver(chat);
+        if (duringResolution)
+        {
+            resolver.ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, Arg.Any<CancellationToken>())
+                .ThrowsAsync(new OperationCanceledException(cancellation.Token));
+        }
+
+        var sut = new AiHumanMissClassifier(resolver, Substitute.For<IModelUsageRecorder>(), NullLogger<AiHumanMissClassifier>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.JudgeAsync(CreateRequest(), cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.JudgeWithAttemptAsync(CreateRequest(), cancellation.Token));
+    }
+
     [Fact]
     public async Task JudgeAsync_AsksTheThreeQuestionsIndependentlyAndSaysWhatOutOfScopeMeans()
     {

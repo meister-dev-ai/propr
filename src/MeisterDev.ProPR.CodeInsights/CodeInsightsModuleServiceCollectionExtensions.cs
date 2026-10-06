@@ -69,16 +69,18 @@ public static class CodeInsightsModuleServiceCollectionExtensions
         // so registering the module does not by itself start any collection.
         services.AddScoped<ICodeInsightsCollectionGate, CodeInsightsCollectionGate>();
 
-        // One store serves the five collection boundaries, so it is registered once and each port resolves to
-        // that instance. Registering the class per interface would give a request as many stores as it happens to
-        // touch, and each would carry its own change tracker.
+        // Finding ingestion, classification, dispositions and retention share one scoped owner.
+        // Human-thread eligibility and miss judgements use a separate persistence owner.
+        // Each operation leases one context; shared aggregate helpers use that current context.
         services.AddScoped<CodeInsightFindingStore>();
         services.AddScoped<ICodeInsightFindingStore>(sp => sp.GetRequiredService<CodeInsightFindingStore>());
         services.AddScoped<ICodeInsightClassificationStore>(sp => sp.GetRequiredService<CodeInsightFindingStore>());
         services.AddScoped<ICodeInsightDispositionStore>(sp => sp.GetRequiredService<CodeInsightFindingStore>());
-        services.AddScoped<ICodeInsightMissStore>(sp => sp.GetRequiredService<CodeInsightFindingStore>());
+        services.AddScoped<ICodeInsightMissStore, CodeInsightMissStore>();
         services.AddScoped<ICodeInsightRetentionStore>(sp => sp.GetRequiredService<CodeInsightFindingStore>());
         services.AddScoped<ICodeInsightFindingIngestionService, CodeInsightFindingIngestionService>();
+        services.AddScoped<ICodeInsightPerformanceEvidenceStore, CodeInsightPerformanceEvidenceStore>();
+        services.AddScoped<ICodeInsightReviewExposureCollector, CodeInsightReviewExposureCollector>();
 
         // The taxonomy service serves an admin surface rather than a best-effort side-write, so it uses the
         // shared request-scoped context like every other configuration repository.
@@ -99,6 +101,10 @@ public static class CodeInsightsModuleServiceCollectionExtensions
 
         // Roll-ups: one stored grain, day-bucketed, with the five reporting grains and the wider buckets
         // derived on read. The projector recomputes rather than increments, so it is safe to call repeatedly.
+        services.AddScoped<ReviewerPerformanceCountProjector>();
+        services.AddScoped<ICodeInsightHarvestCoverageRecorder, CodeInsightHarvestCoverageRecorder>();
+        services.AddScoped<ReviewerPerformanceRangeReader>();
+        services.AddScoped<ReviewerPerformanceReportStore>();
         services.AddScoped<ICodeInsightRollupProjector, CodeInsightRollupProjector>();
         services.AddScoped<ICodeInsightRollupReader, CodeInsightRollupReader>();
 
@@ -155,6 +161,7 @@ public static class CodeInsightsModuleServiceCollectionExtensions
             "CODE_INSIGHTS_PURGE_INTERVAL_SECONDS",
             options.PurgeIntervalSeconds);
         options.RetentionDays = configuration.GetValue("CODE_INSIGHTS_RETENTION_DAYS", options.RetentionDays);
+        options.ReportRetentionDays = configuration.GetValue("CODE_INSIGHTS_REPORT_RETENTION_DAYS", options.ReportRetentionDays);
         options.BackfillMaxJobs = configuration.GetValue(
             "CODE_INSIGHTS_BACKFILL_MAX_JOBS",
             options.BackfillMaxJobs);

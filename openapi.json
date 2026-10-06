@@ -19478,6 +19478,514 @@
         }
       }
     },
+    "/reviewer-performance/ranges/query": {
+      "post": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Returns versioned interpretation ranges from retained counts for one or two consistently read views.",
+        "requestBody": {
+          "description": "Bounded dates, dimensions, cumulative or period mode, and optional measurement matrix.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewerPerformanceQuery"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewerPerformanceQuery"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewerPerformanceQuery"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Counts, coherent scenario tuples, summaries, evidence limits and authorized facets.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceRangeResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceRangeResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceRangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unsupported query or exceeded bounds.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing tenant administration, license or selected-client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database analytics services are unavailable."
+          }
+        }
+      }
+    },
+    "/reviewer-performance/reports": {
+      "post": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Captures and saves a complete server response under one consistent database snapshot.",
+        "requestBody": {
+          "description": "Retry-safe report identifier, name and authorized query.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewerPerformanceSaveReportRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewerPerformanceSaveReportRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewerPerformanceSaveReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored capture, including on an identical retry.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceSavedReport"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceSavedReport"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceSavedReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid name, query or payload size.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing administration, license or access to every included client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The report identifier belongs to a different request.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database analytics services are unavailable."
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Lists up to 100 unexpired reports for which every contained client is authorized.",
+        "responses": {
+          "200": {
+            "description": "Authorized report metadata, newest first.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewerPerformanceReportSummary"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewerPerformanceReportSummary"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewerPerformanceReportSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing tenant administration or license.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewer-performance/reports/{id}": {
+      "get": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Opens the stored response without evaluating current evidence or recalculating its version.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Saved report identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable saved counts, results, filters and evidence metadata.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceSavedReport"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceSavedReport"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPerformanceSavedReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing tenant administration or license.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Report absent, expired or containing a client outside the authorized scope.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Deletes a complete saved report when all contained clients are authorized.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Saved report identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Complete report removed."
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing tenant administration or license.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Report absent, expired or containing an unauthorized client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/reviewing/jobs/{jobId}/status": {
       "get": {
         "tags": [
@@ -30797,6 +31305,14 @@
             "type": "string",
             "description": "When it was harvested.",
             "format": "date-time"
+          },
+          "judgementFailed": {
+            "type": "boolean",
+            "description": "True when the three decisions are unavailable."
+          },
+          "excludedAsOwnFinding": {
+            "type": "boolean",
+            "description": "Current source matches a reviewer finding and is excluded from recall."
           }
         },
         "additionalProperties": false,
@@ -37449,6 +37965,634 @@
         },
         "additionalProperties": false,
         "description": "DTO representing local review workspace adoption and fallback visibility."
+      },
+      "ReviewerPerformanceBreakdownQuery": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "string",
+            "nullable": true
+          },
+          "columns": {
+            "type": "string",
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "viewIndex": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Two dimensions for a bounded supplementary matrix."
+      },
+      "ReviewerPerformanceCounts": {
+        "type": "object",
+        "properties": {
+          "outcomes": {
+            "$ref": "#/components/schemas/ReviewerPerformanceOutcomeCounts"
+          },
+          "confirmedDuplicates": {
+            "$ref": "#/components/schemas/ReviewerPerformanceOutcomeCounts"
+          },
+          "actedMisses": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unactedMisses": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "provisionalMisses": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "generated": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "suppressedRepeats": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "withheld": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "publicationUnknown": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duplicateChecked": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duplicateSuspected": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duplicateUnknown": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unclassified": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unattributed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "harvestedThreads": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failedMissJudgements": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Retained inputs and evidence coverage for one scoped measurement."
+      },
+      "ReviewerPerformanceEvidenceMetadata": {
+        "type": "object",
+        "properties": {
+          "oldestProjectionAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "newestProjectionAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "projectionVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pendingSourceAggregates": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerPerformanceFacet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Stable metadata identifier and display label."
+      },
+      "ReviewerPerformanceFacets": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          },
+          "repositories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          },
+          "qualifiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerPerformanceMatrixCell": {
+        "type": "object",
+        "properties": {
+          "rowId": {
+            "type": "string",
+            "nullable": true
+          },
+          "rowLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "columnId": {
+            "type": "string",
+            "nullable": true
+          },
+          "columnLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "measurement": {
+            "$ref": "#/components/schemas/ReviewerPerformancePoint"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerPerformanceOutcomeCounts": {
+        "type": "object",
+        "properties": {
+          "positive": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "wrong": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "dismissed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "wontFix": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "byDesign": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unknown": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unresolved": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total publications represented by these counts.",
+            "format": "int64",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Disjoint published outcomes; duplicate counts use the same fields as subsets."
+      },
+      "ReviewerPerformancePoint": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "score": {
+            "$ref": "#/components/schemas/ReviewerPerformanceScore"
+          },
+          "unavailableReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "windowFrom": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "windowTo": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerPerformanceQuery": {
+        "type": "object",
+        "properties": {
+          "bucket": {
+            "type": "string",
+            "nullable": true
+          },
+          "aggregation": {
+            "type": "string",
+            "nullable": true
+          },
+          "grouping": {
+            "type": "string",
+            "nullable": true
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceViewQuery"
+            },
+            "nullable": true
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/ReviewerPerformanceBreakdownQuery"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A bounded query for one or two views of retained evidence."
+      },
+      "ReviewerPerformanceRange": {
+        "type": "object",
+        "properties": {
+          "minimum": {
+            "type": "number",
+            "format": "double"
+          },
+          "firstQuartile": {
+            "type": "number",
+            "format": "double"
+          },
+          "median": {
+            "type": "number",
+            "format": "double"
+          },
+          "thirdQuartile": {
+            "type": "number",
+            "format": "double"
+          },
+          "maximum": {
+            "type": "number",
+            "format": "double"
+          },
+          "availableScenarios": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Uniformly weighted enumeration summaries, without a probability or confidence interpretation."
+      },
+      "ReviewerPerformanceRangeResponse": {
+        "type": "object",
+        "properties": {
+          "calculationVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "query": {
+            "$ref": "#/components/schemas/ReviewerPerformanceQuery"
+          },
+          "premiseIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceViewResponse"
+            },
+            "nullable": true
+          },
+          "evidenceRevision": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Complete versioned response suitable for immutable capture."
+      },
+      "ReviewerPerformanceReportSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "calculationVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerPerformanceSaveReportRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "query": {
+            "$ref": "#/components/schemas/ReviewerPerformanceQuery"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerPerformanceSavedReport": {
+        "type": "object",
+        "properties": {
+          "report": {
+            "$ref": "#/components/schemas/ReviewerPerformanceReportSummary"
+          },
+          "response": {
+            "$ref": "#/components/schemas/ReviewerPerformanceRangeResponse"
+          },
+          "compatibleVersion": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerPerformanceScenario": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "dismissed": {
+            "type": "string",
+            "nullable": true
+          },
+          "wontFix": {
+            "type": "string",
+            "nullable": true
+          },
+          "byDesign": {
+            "type": "string",
+            "nullable": true
+          },
+          "misses": {
+            "type": "string",
+            "nullable": true
+          },
+          "duplicates": {
+            "type": "string",
+            "nullable": true
+          },
+          "truePositives": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "falsePositives": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "falseNegatives": {
+            "type": "integer",
+            "description": "Eligible FN count, or null when compatible miss coverage is unavailable.",
+            "format": "int64",
+            "nullable": true
+          },
+          "excluded": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "precision": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "recall": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "f1": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One versioned interpretation applied to one count vector."
+      },
+      "ReviewerPerformanceScore": {
+        "type": "object",
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/ReviewerPerformanceCounts"
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceScenario"
+            },
+            "nullable": true
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReviewerPerformanceSummary"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Immutable source inputs and their scenario results."
+      },
+      "ReviewerPerformanceSeries": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformancePoint"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerPerformanceSummary": {
+        "type": "object",
+        "properties": {
+          "precision": {
+            "$ref": "#/components/schemas/ReviewerPerformanceRange"
+          },
+          "recall": {
+            "$ref": "#/components/schemas/ReviewerPerformanceRange"
+          },
+          "f1": {
+            "$ref": "#/components/schemas/ReviewerPerformanceRange"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Summaries of the coherent scenario tuples."
+      },
+      "ReviewerPerformanceViewQuery": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "clientIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "repositories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "qualifiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Null selections include the authorized population; empty selections include nothing."
+      },
+      "ReviewerPerformanceViewResponse": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ReviewerPerformanceViewQuery"
+          },
+          "facets": {
+            "$ref": "#/components/schemas/ReviewerPerformanceFacets"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceSeries"
+            },
+            "nullable": true
+          },
+          "breakdown": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceMatrixCell"
+            },
+            "nullable": true
+          },
+          "aggregateCells": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/ReviewerPerformanceEvidenceMetadata"
+          }
+        },
+        "additionalProperties": false
       },
       "RunnerChatOptions": {
         "type": "object",

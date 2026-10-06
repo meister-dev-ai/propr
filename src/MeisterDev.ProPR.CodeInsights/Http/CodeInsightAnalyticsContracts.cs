@@ -474,6 +474,8 @@ public sealed record CodeInsightRejectionReasonCountResponse(string Reason, int 
 /// <param name="CountsAsMiss">Whether it counts toward recall.</param>
 /// <param name="ClassifierConfidence">The classifier's confidence, 0–1.</param>
 /// <param name="HarvestedAt">When it was harvested.</param>
+/// <param name="JudgementFailed">True when the three decisions are unavailable.</param>
+/// <param name="ExcludedAsOwnFinding">Current source matches a reviewer finding and is excluded from recall.</param>
 public sealed record CodeInsightMissResponse(
     Guid Id,
     Guid ClientId,
@@ -488,7 +490,9 @@ public sealed record CodeInsightMissResponse(
     bool IsInScope,
     bool CountsAsMiss,
     double? ClassifierConfidence,
-    DateTimeOffset HarvestedAt);
+    DateTimeOffset HarvestedAt,
+    bool JudgementFailed = false,
+    bool ExcludedAsOwnFinding = false);
 
 /// <summary>
 ///     One repository's answer to how much of the review history that already exists the collection knows about.

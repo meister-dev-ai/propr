@@ -9,6 +9,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using MeisterDev.ProPR.CodeInsights.Rollups;
 using MeisterDev.ProPR.CodeInsights.Http;
+using MeisterDev.ProPR.CodeInsights.Metrics;
 
 namespace MeisterDev.ProPR.CodeInsights.Tests.Controllers;
 
@@ -438,6 +439,23 @@ public sealed class ReviewerPerformanceControllerTests
         var rows = (IReadOnlyList<CodeInsightMissResponse>)result.Value!;
         Assert.Contains(rows, row => row.CountsAsMiss);
         Assert.Contains(rows, row => !row.CountsAsMiss && !row.IsInScope);
+    }
+
+    [Fact]
+    public async Task FailedMissJudgementsRemainUnavailableInTheHttpResponse()
+    {
+        var harness = new CodeInsightAudienceHarness(tenantAdmin: true);
+        harness.Browse.ListMissesAsync(Arg.Any<CodeInsightBrowseQuery>(), Arg.Any<CancellationToken>()).Returns(
+        [
+            new(
+                Guid.NewGuid(), CodeInsightAudienceHarness.MineA, "repo", 1, "thread", null, null, "Human discussion", false, false, false, false, null,
+                DateTimeOffset.UtcNow, JudgementFailed: true)
+        ]);
+        var result = Assert.IsType<OkObjectResult>(await harness.ReviewerPerformance.GetMisses());
+        using var json = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(result.Value, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+        Assert.True(json.RootElement[0].TryGetProperty("judgementFailed", out var failure));
+        Assert.True(failure.GetBoolean());
     }
 
     [Fact]

@@ -640,6 +640,25 @@ an Azure CLI login, or whatever else the host offers. The two ids keep the meani
 `AZURE_TENANT_ID` and `AZURE_CLIENT_ID` with no secret are the workload identity pair, which the ambient
 credential reads together with the federated token file its own variable points at.
 
+## Code Insights
+
+Client collection policy and the commercial Code Insights capability gate analytics. These variables
+control background work and retention; the example stack does not forward them by default.
+
+| Variable | What it does | Default | Accepted |
+|---|---|---|---|
+| `CODE_INSIGHTS_CLASSIFICATION_INTERVAL_SECONDS` | Interval between classification backlog sweeps | `60` | Integer, floored at 10 seconds |
+| `CODE_INSIGHTS_CATCHUP_INTERVAL_SECONDS` | Interval between projection and seal catch-up sweeps | `21600` | Integer, floored at 600 seconds |
+| `CODE_INSIGHTS_BACKFILL_MAX_JOBS` | Maximum jobs processed in one catch-up sweep | `50` | Integer, floored at 1 |
+| `CODE_INSIGHTS_PURGE_INTERVAL_SECONDS` | Interval between source and saved-report expiration sweeps | `3600` | Integer, floored at 60 seconds |
+| `CODE_INSIGHTS_RETENTION_DAYS` | Ordinary collected source-data retention | `365` | Integer, floored at 1 day |
+| `CODE_INSIGHTS_REPORT_RETENTION_DAYS` | Independent immutable saved-report retention | `365` | Integer, floored at 1 day |
+
+Source expiration preserves reports until their independent expiry. Collection opt-out stops new
+collection and retains authorized reports until expiry or deletion. Client collection-data deletion and
+client deletion remove complete reports containing that client's data, including mixed-client reports.
+[Reviewer performance](../concepts/reviewer-performance.md) describes live score ranges and saved reports.
+
 ## Observability
 
 | Variable | What it does | Default | Accepted | Example stack |

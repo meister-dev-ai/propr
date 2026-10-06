@@ -24,7 +24,7 @@ namespace MeisterDev.ProPR.CodeInsights.Tests;
 public sealed class CodeInsightsModuleRegistrationTests
 {
     [Fact]
-    public void EveryCollectionBoundaryResolvesToOneStorePerScope()
+    public async Task FindingBoundariesShareTheirOwnerAndMissPersistenceIsScoped()
     {
         using var provider = BuildProvider();
         using var scope = provider.CreateScope();
@@ -35,13 +35,22 @@ public sealed class CodeInsightsModuleRegistrationTests
         var misses = scope.ServiceProvider.GetRequiredService<ICodeInsightMissStore>();
         var retention = scope.ServiceProvider.GetRequiredService<ICodeInsightRetentionStore>();
 
-        // One instance behind all five: a request that collects findings and harvests a thread must not end up
-        // with two stores, each holding its own change tracker over the same rows.
+        // Finding metadata boundaries share their owner; miss persistence has its own scoped owner.
         Assert.IsType<CodeInsightFindingStore>(findings);
         Assert.Same(findings, classification);
         Assert.Same(findings, dispositions);
-        Assert.Same(findings, misses);
+        Assert.IsType<CodeInsightMissStore>(misses);
+        Assert.Same(misses, scope.ServiceProvider.GetRequiredService<ICodeInsightMissStore>());
         Assert.Same(findings, retention);
+        using var otherScope = provider.CreateScope();
+        Assert.NotSame(misses, otherScope.ServiceProvider.GetRequiredService<ICodeInsightMissStore>());
+
+        var key = new CodeInsightPullRequestKey(Guid.NewGuid(), "repository", 1);
+        var observation = await misses.ObserveThreadEligibilityAsync(key, "thread", "provider-source", true, DateTimeOffset.UtcNow);
+        var compatibleStore = Assert.IsAssignableFrom<ICodeInsightMissStore>(findings);
+        var retained = await compatibleStore.GetThreadEligibilityAsync(key, "thread", "provider-source");
+        Assert.True(observation.ExcludedFromHumanMisses);
+        Assert.Equal(observation, retained);
     }
 
     [Fact]
@@ -65,6 +74,7 @@ public sealed class CodeInsightsModuleRegistrationTests
         // Everything that reads or writes is composed on a database, so a host without one gets none of it
         // rather than stores that cannot read.
         Assert.Null(provider.GetService<ICodeInsightFindingStore>());
+        Assert.Null(provider.GetService<ICodeInsightMissStore>());
         Assert.Null(provider.GetService<ICodeInsightsCollectionGate>());
         Assert.Null(provider.GetService<ICodeInsightFindingIngestionService>());
 

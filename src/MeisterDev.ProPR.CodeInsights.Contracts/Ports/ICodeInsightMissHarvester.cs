@@ -7,8 +7,7 @@ using MeisterDev.ProPR.Domain.Events;
 namespace MeisterDev.ProPR.CodeInsights.Contracts;
 
 /// <summary>
-///     Harvests human-authored review threads that ProPR did not raise, so recall (and therefore an honest
-///     F1 rather than precision dressed up as quality) becomes computable.
+///     Retains human-authored review concerns and collection failures for observed recall evidence.
 /// </summary>
 /// <remarks>
 ///     A passive observer on the same thread snapshots the review archive consumes. Best-effort: it never
@@ -17,8 +16,9 @@ namespace MeisterDev.ProPR.CodeInsights.Contracts;
 public interface ICodeInsightMissHarvester
 {
     /// <summary>
-    ///     Considers one observed thread. Threads the AI reviewer took part in are not candidates at all;
-    ///     a human thread already harvested is left alone.
+    ///     Considers one observed thread, excludes reviewer-owned threads, and refreshes changed human
+    ///     evidence with bounded judgement and dimension-enrichment retries.
     /// </summary>
-    Task HandleThreadObservedAsync(ThreadUpdatedEvent evt, CancellationToken ct = default);
+    /// <returns>True for a retained observation or an intentional exclusion; false for an unretained opportunity.</returns>
+    Task<bool> HandleThreadObservedAsync(ThreadUpdatedEvent evt, CancellationToken ct = default);
 }

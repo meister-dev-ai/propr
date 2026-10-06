@@ -301,9 +301,9 @@ public sealed class CodeInsightBrowseReader(
                                 miss.IsSubstantive,
                                 miss.WasActedOn,
                                 miss.IsInScope,
-                                miss.CountsAsMiss,
+                                !miss.JudgementFailed && miss.CountsAsMiss,
                                 miss.ClassifierConfidence,
-                                miss.HarvestedAt));
+                                miss.HarvestedAt, miss.JudgementFailed, miss.ExcludedAsOwnFinding));
 
                         if (eligible.Count == limit)
                         {

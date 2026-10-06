@@ -19,6 +19,8 @@ namespace MeisterDev.ProPR.Domain.Events;
 /// <param name="Status">The last-known thread status.</param>
 /// <param name="LastActivityAt">The UTC timestamp of the latest observed activity on the thread.</param>
 /// <param name="Comments">The full set of comments belonging to the thread, in publication order.</param>
+/// <param name="ProviderScope">Canonical provider namespace captured before reading the source.</param>
+/// <param name="ObservedAt">Source snapshot cutoff captured before reading the provider, or retained snapshot time during replay.</param>
 public sealed record ThreadUpdatedEvent(
     Guid ClientId,
     Guid ConnectionId,
@@ -29,7 +31,9 @@ public sealed record ThreadUpdatedEvent(
     int? Line,
     string Status,
     DateTimeOffset LastActivityAt,
-    IReadOnlyList<ThreadUpdatedComment> Comments);
+    IReadOnlyList<ThreadUpdatedComment> Comments,
+    DateTimeOffset? ObservedAt = null,
+    string? ProviderScope = null);
 
 /// <summary>
 ///     A single comment within a <see cref="ThreadUpdatedEvent" />. Authorship is decided once by the

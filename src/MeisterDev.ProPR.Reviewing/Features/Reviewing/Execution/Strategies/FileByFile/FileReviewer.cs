@@ -3,11 +3,13 @@
 
 using System.Collections.Concurrent;
 using System.Text.Json;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.CodeAnalysis;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
@@ -21,6 +23,7 @@ using MeisterDev.ProPR.ProRV.Abstractions;
 using MeisterDev.ProPR.ProRV.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using MeisterDev.ProPR.Application.Features.Providers.Identity;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
@@ -40,7 +43,8 @@ internal sealed partial class FileReviewer(
     IProRVPrefilter? proRvPrefilter = null,
     IReviewComplexityClassifier? complexityClassifier = null,
     ILogicalModelResolver? logicalModelResolver = null,
-    IStructuralCodeAnalyzer? structuralAnalyzer = null)
+    IStructuralCodeAnalyzer? structuralAnalyzer = null,
+    ICodeInsightReviewExposureCollector? exposureCollector = null)
 {
     // Stage id recorded on the ProRV-lens applicability screen's protocol events.
     private const string ProRvLensStageId = "file-by-file.prorv-lens";
@@ -255,7 +259,7 @@ internal sealed partial class FileReviewer(
                     baselinePreFilterCount,
                     ct));
 
-            await this.CompleteReviewAsync(fileResult, fileContext, protocolId, result, ct);
+            await this.CompleteReviewAsync(job, fileResult, fileContext, protocolId, result, ct);
 
             LogFileReviewCompleted(logger, file.Path, job.Id);
         }
@@ -809,7 +813,11 @@ internal sealed partial class FileReviewer(
         {
             stamped.Add(
                 comment.OriginModelId is null && comment.OriginLogicalModelName is null
-                    ? comment with { OriginModelId = modelId, OriginLogicalModelName = logicalModelName }
+                    ? comment with
+                    {
+                        OriginModelId = modelId,
+                        OriginLogicalModelName = logicalModelName
+                    }
                     : comment);
         }
 
@@ -1250,7 +1258,13 @@ internal sealed partial class FileReviewer(
             await protocolRecorder.RecordReviewStrategyEventAsync(
                 state.ProtocolId.Value,
                 ReviewProtocolEventNames.ReviewStepSkipped,
-                JsonSerializer.Serialize(new { stepId, scope = "file", filePath = state.File.Path }),
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        stepId,
+                        scope = "file",
+                        filePath = state.File.Path
+                    }),
                 JsonSerializer.Serialize(new { skipped = true }),
                 null,
                 ct);
@@ -1542,6 +1556,7 @@ internal sealed partial class FileReviewer(
     }
 
     private async Task CompleteReviewAsync(
+        ReviewJob job,
         ReviewFileResult fileResult,
         ReviewSystemContext fileContext,
         Guid? protocolId,
@@ -1558,6 +1573,14 @@ internal sealed partial class FileReviewer(
         }
 
         await jobRepository.UpdateFileResultAsync(fileResult, ct);
+        if (exposureCollector is not null && fileContext.ModelId is not null)
+        {
+            await exposureCollector.RecordAsync(
+                new CodeInsightPullRequestKey(job.ClientId, job.RepositoryId, job.PullRequestId), job.Id,
+                fileResult.FilePath, ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId),
+                fileContext.ModelId, fileContext.LogicalModelName, ProviderSourceIdentity.FromReviewJob(job).Value,
+                "completed-file-baseline", DateTimeOffset.UtcNow, ct);
+        }
 
         if (protocolId.HasValue && fileContext.LoopMetrics is not null)
         {

@@ -410,7 +410,8 @@ public sealed partial class CodeInsightHistoryImporter(
                         ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status),
                         // Whether the code moved after the finding was raised is not something a replay can see,
                         // and Unknown is what the outcome mapper is built to receive when nobody observed it.
-                        ThreadAnchorCodeChange.Unknown),
+                        ThreadAnchorCodeChange.Unknown,
+                        thread.Status),
                     ct);
 
                 outcomes++;
@@ -440,7 +441,7 @@ public sealed partial class CodeInsightHistoryImporter(
                             comment.IsAiAuthored,
                             comment.PublishedAt,
                             comment.Text))
-                        .ToList()),
+                        .ToList(), ObservedAt: thread.UpdatedAt),
                 ct);
 
             humans++;

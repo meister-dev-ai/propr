@@ -89,4 +89,13 @@ public sealed record ReviewFindingProduced(
     string? OriginModelId = null,
     string? OriginLogicalModelName = null,
     string? OriginSymbolName = null,
-    string? OriginSymbolKind = null);
+    string? OriginSymbolKind = null,
+    CodeInsightPublicationState PublicationState = CodeInsightPublicationState.Unknown,
+    string? PublicationReason = null,
+    string? MatchedProviderThreadId = null,
+    CodeInsightDuplicateState DuplicateState = CodeInsightDuplicateState.Unknown,
+    string? DuplicateOfPublicationId = null,
+    string? DuplicateVerificationSource = null,
+    double? DuplicateVerificationConfidence = null,
+    DateTimeOffset? DuplicateVerifiedAt = null,
+    string ProviderScope = "");

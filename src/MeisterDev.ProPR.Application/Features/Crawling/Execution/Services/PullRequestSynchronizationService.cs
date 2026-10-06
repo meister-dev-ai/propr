@@ -23,6 +23,7 @@ using MeisterDev.ProPR.Domain.Events;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using MeisterDev.ProPR.CodeInsights.Contracts;
+using MeisterDev.ProPR.Application.Features.Providers.Identity;
 
 namespace MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 
@@ -44,6 +45,7 @@ public sealed class PullRequestSynchronizationService(
     ICodeInsightMissHarvester? codeInsightMissHarvester = null,
     ICodeInsightMetricSealer? codeInsightMetricSealer = null,
     ICodeInsightCloseObserver? codeInsightCloseObserver = null,
+    ICodeInsightHarvestCoverageRecorder? harvestCoverageRecorder = null,
     IThreadPassJobRepository? threadPassJobs = null,
     IScmProviderRegistry? providerRegistry = null,
     IReviewPrScanPendingReviewWriter? prScanPendingReviewWriter = null) : IPullRequestSynchronizationService
@@ -1083,6 +1085,12 @@ public sealed class PullRequestSynchronizationService(
                 return;
             }
 
+            var providerScope = request.Host is null
+                ? null
+                : ProviderSourceIdentity.FromReviewSource(
+                    request.Provider,
+                    request.Provider == ScmProvider.AzureDevOps ? request.ProviderScopePath : request.Host.HostBaseUrl).Value;
+
             foreach (var thread in currentThreads)
             {
                 // A provider that groups its threads client-side hands back no identifier, and a transition
@@ -1099,6 +1107,16 @@ public sealed class PullRequestSynchronizationService(
                 var isCurrentlyResolved = ThreadResolutionStatusInterpreter.IsResolved(currentIntent);
                 var wasPreviouslyResolved = ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(previousStatus));
 
+                if (codeInsightDispositionService is not null)
+                {
+                    await codeInsightDispositionService.HandleThreadResolvedAsync(
+                        new ThreadResolvedDomainEvent(
+                            request.ClientId, request.ProviderScopePath, request.ProviderProjectKey, request.RepositoryId, request.PullRequestId,
+                            thread.ThreadId, thread.FilePath, null, thread.CommentHistory, threadStatuses.ObservedAt,
+                            currentIntent, thread.CodeChangedSinceRaised, thread.Status,
+                            providerScope), ct);
+                }
+
                 if (isCurrentlyResolved && !wasPreviouslyResolved)
                 {
                     var resolved = new ThreadResolvedDomainEvent(
@@ -1113,17 +1131,11 @@ public sealed class PullRequestSynchronizationService(
                         thread.CommentHistory,
                         DateTimeOffset.UtcNow,
                         currentIntent,
-                        thread.CodeChangedSinceRaised);
+                        thread.CodeChangedSinceRaised,
+                        thread.Status,
+                        providerScope);
 
                     await threadMemoryService.HandleThreadResolvedAsync(resolved, ct);
-
-                    // Passive code-insight observer, a sibling of thread memory rather than a change to it:
-                    // a finding gets an outcome even in the cases memory deliberately refuses to store,
-                    // because those are exactly the cases a quality metric needs. It never throws.
-                    if (codeInsightDispositionService is not null)
-                    {
-                        await codeInsightDispositionService.HandleThreadResolvedAsync(resolved, ct);
-                    }
                 }
                 else if (!isCurrentlyResolved && wasPreviouslyResolved)
                 {
@@ -1156,21 +1168,20 @@ public sealed class PullRequestSynchronizationService(
         ThreadOwnershipSnapshot ownership,
         CancellationToken ct)
     {
-        // Two independent passive observers read the same thread snapshots: the review archive (when the
-        // producing connection opted in to thread retention) and code-insight miss harvesting (when the
-        // client's collection gate is open). Each has its own precondition, so neither depends on the other
-        // being switched on, but the provider fetch is shared, because this runs on every crawl cycle and a
-        // second fetch would double the request load for the same data.
+        // Archive retention and miss collection share a provider snapshot and keep independent availability checks.
         if (pullRequestFetcher is null || scmConnectionRepository is null)
         {
             return;
         }
 
-        if (reviewArchiveIngestionService is null && codeInsightMissHarvester is null)
+        var harvest = CodeInsightHarvestServices.Bind(codeInsightMissHarvester, harvestCoverageRecorder);
+        if (reviewArchiveIngestionService is null && harvest is null)
         {
             return;
         }
 
+        string? harvestScope = null;
+        var observedAt = DateTimeOffset.UtcNow;
         try
         {
             var connection = await this.ResolveRetentionConnectionAsync(request, ct);
@@ -1180,15 +1191,20 @@ public sealed class PullRequestSynchronizationService(
             }
 
             var archiveWanted = reviewArchiveIngestionService is not null && connection.StoreThreads;
-            var harvestWanted = codeInsightMissHarvester is not null;
+            var harvestWanted = harvest is not null;
             if (!archiveWanted && !harvestWanted)
             {
                 return;
             }
 
-            // Fetch only the comment threads; never download changed-file content here. This runs on every
-            // crawl cycle, so a full pull-request fetch would multiply the provider request load and risk
-            // rate limits. Diff retention captures diffs from the review's own fetched changes, not here.
+            if (harvestWanted)
+            {
+                harvestScope = ProviderSourceIdentity.FromReviewSource(
+                    request.Provider, request.Provider == ScmProvider.AzureDevOps ? request.ProviderScopePath : connection.HostBaseUrl).Value;
+            }
+
+            // Read only threads; diff retention uses changes fetched by the review itself.
+            observedAt = DateTimeOffset.UtcNow;
             var threads = await pullRequestFetcher.FetchThreadsAsync(
                 request.ProviderScopePath,
                 request.ProviderProjectKey,
@@ -1197,41 +1213,65 @@ public sealed class PullRequestSynchronizationService(
                 request.ClientId,
                 ct);
 
-            // The pass's one ownership answer, over provenance resolved for the whole pull request in a
-            // single read. This is a passive side-read: when the store is absent or the read fails, nothing
-            // is stamped and ingestion proceeds without originating jobs, never disrupting the crawl.
+            // Resolve provenance once for all consumers in this synchronization pass.
             var passOwnership = await ownership.GetAsync(ct);
 
+            var coverage = new HarvestCoverageState();
             foreach (var thread in threads)
             {
-                // Both consumers key on the provider's thread identity, so a thread the provider cannot name
-                // has nothing to be stored or harvested under.
-                if (string.IsNullOrWhiteSpace(thread.ThreadId))
+                var evt = BuildThreadUpdatedEvent(request, connection.Id, thread, passOwnership, observedAt) with
                 {
-                    continue;
-                }
+                    ProviderScope = harvestScope
+                };
+                await this.RetainObservedThreadAsync(evt, archiveWanted, harvest, coverage, ct);
+            }
 
-                var evt = BuildThreadUpdatedEvent(request, connection.Id, thread, passOwnership);
-
-                if (archiveWanted)
-                {
-                    await reviewArchiveIngestionService!.HandleThreadUpdatedAsync(evt, ct);
-                }
-
-                if (harvestWanted)
-                {
-                    // Human threads ProPR did not raise are what makes recall measurable; the harvester
-                    // decides which of these qualify and never throws back into the crawl.
-                    await codeInsightMissHarvester!.HandleThreadObservedAsync(evt, ct);
-                }
+            if (harvest is { } completedHarvest)
+            {
+                await completedHarvest.Coverage.RecordAsync(
+                    new CodeInsightPullRequestKey(request.ClientId, request.RepositoryId, request.PullRequestId),
+                    harvestScope!, coverage.AllHumanThreadsResolved, observedAt, ct, coverage.AllHumanObservationsRetained);
             }
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
+            if (harvestScope is not null && harvest is { } failedHarvest)
+            {
+                await failedHarvest.Coverage.RecordAsync(
+                    new(request.ClientId, request.RepositoryId, request.PullRequestId), harvestScope,
+                    false, observedAt, ct, enumerationComplete: false);
+            }
+
             logger.LogWarning(
                 ex,
                 "Thread observation failed for PR {PullRequestId}; continuing without archiving or harvesting.",
                 request.PullRequestId);
+        }
+    }
+
+    private async Task RetainObservedThreadAsync(
+        ThreadUpdatedEvent observation, bool archiveWanted, CodeInsightHarvestServices? harvest,
+        HarvestCoverageState coverage, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(observation.ThreadId))
+        {
+            if (ThreadUpdatedEventFactory.IsHumanThread(observation))
+            {
+                coverage.RecordRetention(false);
+            }
+
+            return;
+        }
+
+        if (archiveWanted)
+        {
+            await reviewArchiveIngestionService!.HandleThreadUpdatedAsync(observation, ct);
+        }
+
+        if (harvest is not null)
+        {
+            coverage.Observe(observation);
+            coverage.RecordRetention(await harvest.Harvester.HandleThreadObservedAsync(observation, ct));
         }
     }
 
@@ -1305,7 +1345,8 @@ public sealed class PullRequestSynchronizationService(
         PullRequestSynchronizationRequest request,
         Guid connectionId,
         PrCommentThread thread,
-        ThreadOwnershipResolver ownership)
+        ThreadOwnershipResolver ownership,
+        DateTimeOffset observedAt)
     {
         return ThreadUpdatedEventFactory.Build(
             request.ClientId,
@@ -1313,7 +1354,7 @@ public sealed class PullRequestSynchronizationService(
             request.RepositoryId,
             request.PullRequestId,
             thread,
-            ownership);
+            ownership, observedAt);
     }
 
     /// <summary>
@@ -1522,6 +1563,7 @@ public sealed class PullRequestSynchronizationService(
         ThreadOwnershipSnapshot ownership)
     {
         private IReadOnlyList<PrThreadStatusEntry>? threads;
+        public DateTimeOffset ObservedAt { get; private set; }
 
         /// <param name="fetcher">
         ///     Supplied per call because it is optional on the service and each consumer null-checks it
@@ -1533,12 +1575,19 @@ public sealed class PullRequestSynchronizationService(
             IReviewerThreadStatusFetcher fetcher,
             CancellationToken ct)
         {
-            this.threads ??= await fetcher.GetReviewerThreadStatusesAsync(
+            if (this.threads is not null)
+            {
+                return this.threads;
+            }
+
+            var passOwnership = await ownership.GetAsync(ct);
+            this.ObservedAt = DateTimeOffset.UtcNow;
+            this.threads = await fetcher.GetReviewerThreadStatusesAsync(
                 request.ProviderScopePath,
                 request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
-                await ownership.GetAsync(ct),
+                passOwnership,
                 request.ClientId,
                 ct);
 

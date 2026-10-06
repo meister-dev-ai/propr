@@ -323,6 +323,23 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             });
     }
 
+    [Theory]
+    [InlineData("https://dev.azure.com/org", "https://dev.azure.com")]
+    [InlineData("https://example.visualstudio.com/DefaultCollection", "https://example.visualstudio.com")]
+    public async Task AddAsync_HostedAzureDevOpsOrganizationUsesTheHostAuthority(string sourcePath, string expectedAuthority)
+    {
+        var client = await this.SeedClientAsync();
+        var created = await this._repository.AddAsync(
+            client.Id, ScmProvider.AzureDevOps, sourcePath,
+            ScmAuthenticationKind.PersonalAccessToken, null, null, "Hosted ADO", "test-secret", true, ct: CancellationToken.None);
+        Assert.NotNull(created);
+        Assert.Equal(expectedAuthority, created.HostBaseUrl);
+        Assert.Equal(expectedAuthority, (await this._dbContext.ClientScmConnections.SingleAsync(row => row.Id == created.Id)).HostBaseUrl);
+        var operational = await this._repository.GetOperationalConnectionAsync(client.Id, new ProviderHostRef(ScmProvider.AzureDevOps, sourcePath));
+        Assert.NotNull(operational);
+        Assert.Equal(expectedAuthority, operational.HostBaseUrl);
+    }
+
     [Fact]
     public async Task AddAsync_AzureDevOpsServerWindowsAccount_PersistsUserNameAndProtectedSecret()
     {

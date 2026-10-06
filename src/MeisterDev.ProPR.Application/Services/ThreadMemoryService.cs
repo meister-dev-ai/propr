@@ -188,14 +188,11 @@ public sealed partial class ThreadMemoryService(
     }
 
     /// <summary>
-    ///     Attaches code-insight enrichment to a memory record that has already been decided: the finding it
-    ///     originated from, and human-searchable keywords.
+    ///     Adds a source-qualified finding link and search keywords after the memory storage gates pass.
     /// </summary>
     /// <remarks>
-    ///     Strictly additive and entirely best-effort. It runs after every storage and clarity gate has passed,
-    ///     sets fields on the record and nothing else, and swallows its own failures: a memory is far more
-    ///     valuable than the metadata hanging off it, so enrichment must never be the reason one is lost.
-    ///     Both dependencies are optional: absent, or the client's collection gate closed, means no enrichment.
+    ///     Enrichment failures do not prevent memory storage. Finding links require collection to be enabled;
+    ///     keyword extraction is independent of collection. Both enrichment dependencies are optional.
     /// </remarks>
     private async Task EnrichForCodeInsightsAsync(
         ThreadMemoryRecord record,
@@ -209,26 +206,23 @@ public sealed partial class ThreadMemoryService(
 
         try
         {
-            // Two enrichments with different owners. The finding link is Code Insights data and stays behind its
-            // licence and per-client opt-in. Keywords are search metadata on a memory, which is part of the base
-            // product, so they are not gated: gating them meant a commercial licence silently improved memory
-            // search and its absence silently degraded it, with nothing in the product saying so.
+            // Finding links require the client's collection opt-in and licence. Memory search keywords
+            // remain available independently of Code Insights collection.
             var collecting = codeInsightsCollectionGate is not null
                              && await codeInsightsCollectionGate.IsCollectionEnabledAsync(evt.ClientId, ct);
 
             if (collecting && codeInsightFindingStore is not null)
             {
-                // Same invariant conversion the disposition path uses: the crawl carries a number, the insight
-                // store holds the provider's own string form.
+                // Use the provider thread identifier and captured source from the resolved event.
                 var finding = await codeInsightFindingStore.FindByProviderThreadAsync(
                     evt.ClientId,
                     evt.RepositoryId,
                     evt.PullRequestId,
                     evt.ThreadId.ToString(CultureInfo.InvariantCulture),
-                    ct);
+                    ct,
+                    evt.ProviderScope);
 
-                // Null is the ordinary case for a human thread, an admin dismissal, or a thread raised before
-                // collection was enabled. The link simply stays absent.
+                // Threads without a collected finding retain no finding link.
                 record.CodeInsightFindingId = finding?.Id;
             }
 

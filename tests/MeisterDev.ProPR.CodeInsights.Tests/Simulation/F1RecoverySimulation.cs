@@ -26,6 +26,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit.Abstractions;
+using MeisterDev.ProPR.Application.Features.Providers.Identity;
 
 namespace MeisterDev.ProPR.CodeInsights.Tests.Simulation;
 
@@ -46,6 +47,9 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
 {
     private static readonly Guid ClientId = Guid.Parse("42424242-4242-4242-4242-424242424242");
     private const string Repository = "repo-sim";
+    private const string ProviderSourcePath = "https://dev.azure.com/org";
+    private static readonly string ProviderAuthority = new ProviderHostRef(ScmProvider.AzureDevOps, ProviderSourcePath).HostBaseUrl;
+    private static readonly string ProviderNamespace = ProviderSourceIdentity.FromConfiguredHost(ScmProvider.AzureDevOps, ProviderAuthority).Value;
     private static readonly Guid HumanAuthorId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
     private readonly MeisterProPRDbContext _db = NewContext();
@@ -663,7 +667,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
             return new ReviewJob(
                 jobId,
                 ClientId,
-                "https://dev.azure.com/org",
+                ProviderSourcePath,
                 "project",
                 Repository,
                 (int)(owner?.Id ?? 1),
@@ -675,7 +679,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
         this._jobs.GetActiveJobsForConfigAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ => this._prs.Values
                 .Where(pr => pr.ReviewJobStillActiveAtClose && !this._cancelledJobs.Contains(pr.ActiveJobId))
-                .Select(pr => new ReviewJob(pr.ActiveJobId, ClientId, "https://dev.azure.com/org", "project", Repository, (int)pr.Id, 1))
+                .Select(pr => new ReviewJob(pr.ActiveJobId, ClientId, ProviderSourcePath, "project", Repository, (int)pr.Id, 1))
                 .ToList());
 
         // A cancelled job stops being active. Without this a later cycle sees it as still running and the
@@ -715,6 +719,8 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
                 Arg.Any<CancellationToken>())
             .Returns(call => this.ReviewerThreadsOf((int)call[3]));
 
+        var projector = new ReviewerPerformanceCountProjector(this._db, gate, NullLogger<ReviewerPerformanceCountProjector>.Instance);
+        var coverage = new CodeInsightHarvestCoverageRecorder(this._db, gate, projector, NullLogger<CodeInsightHarvestCoverageRecorder>.Instance);
         this._closeObserver = new PullRequestCloseObserver(
             NullLogger<PullRequestCloseObserver>.Instance,
             this._provider,
@@ -724,7 +730,8 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
             connections,
             origins,
             reviewerThreads,
-            this._dispositions);
+            this._dispositions,
+            harvestCoverageRecorder: coverage);
 
         this._synchronization = new PullRequestSynchronizationService(
             jobs,
@@ -798,7 +805,8 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
                     ReviewCommentScopeRelation.OnChangedLine,
                     null,
                     $"propr-thread-{pullRequestId}-{ordinal}",
-                    $"propr-comment-{pullRequestId}-{ordinal}"))
+                    $"propr-comment-{pullRequestId}-{ordinal}",
+                    ProviderScope: ProviderNamespace))
                 .ToList();
 
             await this._store.MaterialiseFindingsAsync(key, jobId, $"rev-{pullRequestId}", DateTimeOffset.UtcNow, snapshots);
@@ -869,7 +877,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
                     false,
                     DateTimeOffset.UtcNow.AddMinutes(-5),
                     "Good catch, fixed."),
-            ]);
+            ], ProviderScope: ProviderNamespace);
     }
 
     /// <summary>
@@ -932,7 +940,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
             ActivationSource = PullRequestActivationSource.Crawl,
             SummaryLabel = "crawl disappearance",
             ClientId = ClientId,
-            ProviderScopePath = "https://dev.azure.com/org",
+            ProviderScopePath = ProviderSourcePath,
             ProviderProjectKey = "project",
             RepositoryId = Repository,
             PullRequestId = (int)pr.Id,
@@ -949,7 +957,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             ClientId,
             ScmProvider.AzureDevOps,
-            "https://dev.azure.com/org",
+            ProviderAuthority,
             ScmAuthenticationKind.PersonalAccessToken,
             "AzureDevOps",
             true,
