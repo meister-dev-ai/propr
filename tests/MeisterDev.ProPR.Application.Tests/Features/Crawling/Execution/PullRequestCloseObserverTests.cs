@@ -31,6 +31,62 @@ public sealed class PullRequestCloseObserverTests
     private const string FindingThreadId = "propr-thread-1";
 
     [Fact]
+    public async Task CloseObservationUsesNativeResolutionIntentWithoutChangingCapturedStatus()
+    {
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+        var policy = Substitute.For<ICodeReviewPreparationPolicy>();
+        registry.GetCodeReviewPreparationPolicy(ScmProvider.AzureDevOps).Returns(policy);
+        policy.InterpretThreadResolution("Active").Returns(ThreadResolutionIntent.AcceptedByHuman);
+        var harness = new Harness(
+            providerRegistry: registry,
+            reviewerThreads: [Harness.ReviewerThread(FindingThreadId, "Active", ThreadAnchorCodeChange.Unchanged)]);
+        harness.Harvester.HandleThreadObservedAsync(Arg.Any<ThreadUpdatedEvent>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        await harness.ObserveAsync();
+
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), true,
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>(), true);
+        await harness.Dispositions.Received(1).HandleThreadResolvedAsync(
+            Arg.Is<ThreadResolvedDomainEvent>(evt => evt.Intent == ThreadResolutionIntent.AcceptedByHuman
+                                                     && evt.NativeStatus == "Active"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CloseObservationUsesTheInjectedNativeConnectionPredicate()
+    {
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+        var policy = Substitute.For<IScmConnectionConfigurationPolicy>();
+        registry.GetConnectionConfigurationPolicy(ScmProvider.AzureDevOps).Returns(policy);
+        policy.MatchesObservedConnectionHost(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
+        var harness = new Harness(providerRegistry: registry);
+
+        await harness.ObserveAsync();
+
+        policy.Received(1).MatchesObservedConnectionHost("https://dev.azure.com/org", "https://dev.azure.com");
+        await harness.Harvester.DidNotReceiveWithAnyArgs().HandleThreadObservedAsync(default!);
+    }
+
+    [Fact]
+    public async Task CloseObservationPreservesLongestSameAuthoritySelectionAcrossSiblingPaths()
+    {
+        var selectedId = Guid.NewGuid();
+        var harness = new Harness(
+            connectionRows:
+            [
+                Harness.CreateConnection(hostBaseUrl: "https://server.test/tfs/team"),
+                Harness.CreateConnection(id: selectedId, hostBaseUrl: "https://server.test/tfs/sibling-longer")
+            ],
+            scopePath: "https://server.test/tfs/team");
+
+        await harness.ObserveAsync("https://server.test/tfs/team");
+
+        await harness.Harvester.Received(1).HandleThreadObservedAsync(
+            Arg.Is<ThreadUpdatedEvent>(evt => evt.ConnectionId == selectedId), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AnIncompleteHarvestModuleDoesNotFetchOrHarvestThreads()
     {
         var harness = new Harness(withCoverageRecorder: false);
@@ -619,7 +675,8 @@ public sealed class PullRequestCloseObserverTests
             IReadOnlyList<PrThreadStatusEntry>? reviewerThreads = null,
             bool withReviewerThreadStatuses = true,
             bool withDispositionService = true,
-            ILogger<PullRequestCloseObserver>? logger = null, string scopePath = "https://dev.azure.com/org", bool withCoverageRecorder = true)
+            ILogger<PullRequestCloseObserver>? logger = null, string scopePath = "https://dev.azure.com/org", bool withCoverageRecorder = true,
+            IScmProviderRegistry? providerRegistry = null)
         {
             this.Harvester = Substitute.For<ICodeInsightMissHarvester>();
             this.Fetcher = Substitute.For<IPullRequestFetcher>();
@@ -664,6 +721,7 @@ public sealed class PullRequestCloseObserverTests
                 .Returns(reviewerThreads ?? []);
 
             this._sut = new PullRequestCloseObserver(
+                providerRegistry ?? MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
                 logger ?? NullLogger<PullRequestCloseObserver>.Instance,
                 this.Fetcher,
                 withHarvester ? this.Harvester : null,

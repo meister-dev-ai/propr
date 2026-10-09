@@ -4,19 +4,10 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
-using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
-using MeisterDev.ProPR.Application.Features.ReviewArchive;
-using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
-using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
-using MeisterDev.ProPR.Application.Support;
-using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
-using MeisterDev.ProPR.Domain.Events;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
-using MeisterDev.ProPR.CodeInsights.Contracts;
-using MeisterDev.ProPR.Application.Features.Providers.Identity;
 
 namespace MeisterDev.ProPR.Application.Services;
 
@@ -27,14 +18,10 @@ public sealed partial class PrCrawlService(
     IJobRepository jobs,
     IPrStatusFetcher prStatusFetcher,
     ILogger<PrCrawlService> logger,
-    IReviewerThreadStatusFetcher? threadStatusFetcher = null,
-    IThreadMemoryService? threadMemoryService = null,
-    IReviewPrScanThreadStatusStore? prScanRepository = null,
-    IPullRequestSynchronizationService? pullRequestSynchronizationService = null,
+    IPullRequestSynchronizationService pullRequestSynchronizationService,
     IProviderActivationService? providerActivationService = null,
     IClientRegistry? clientRegistry = null,
-    ICodeInsightDispositionService? codeInsightDispositionService = null,
-    IPostedCommentOriginStore? postedCommentOriginStore = null) : IPrCrawlService
+    IScmProviderRegistry? providerRegistry = null) : IPrCrawlService
 {
     /// <summary>
     ///     Runs one crawl cycle across all active configurations, creating review jobs for newly discovered pull requests.
@@ -61,15 +48,23 @@ public sealed partial class PrCrawlService(
                 reviewerContext = await this.ResolveReviewerContextAsync(config, cancellationToken);
                 LogPrsDiscovered(logger, assignedPrs.Count, config.ProviderScopePath, config.ProviderProjectKey);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 LogConfigFetchError(logger, config.ProviderScopePath, config.ProviderProjectKey, ex);
                 continue;
             }
 
-            await this.ProcessDiscoveredPullRequestsAsync(config, assignedPrs, reviewerContext, cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await this.ProcessDiscoveredPullRequestsAsync(config, assignedPrs, reviewerContext, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogTargetAdmissionError(logger, config.Id, ex);
+            }
+
             await this.DetectAbandonedJobsAsync(config, assignedPrs, cancellationToken);
-            await this.RunThreadMemoryStateMachineForConfigAsync(config, assignedPrs, reviewerContext, cancellationToken);
         }
     }
 
@@ -81,107 +76,160 @@ public sealed partial class PrCrawlService(
     {
         foreach (var pr in assignedPrs)
         {
-            if (pullRequestSynchronizationService is not null)
+            try
             {
-                await this.TrySynchronizeAsync(
-                    new PullRequestSynchronizationRequest
+                var canonical = config.RepoFilters.Count == 1 && config.RepoFilters[0].CanonicalSourceRef is not null;
+                var request = new PullRequestSynchronizationRequest
+                {
+                    ActivationSource = PullRequestActivationSource.Crawl,
+                    SummaryLabel = "crawl discovery",
+                    ClientId = config.ClientId,
+                    ProviderScopePath = config.ProviderScopePath,
+                    ProviderProjectKey = config.ProviderProjectKey,
+                    RepositoryId = pr.Repository.ExternalRepositoryId,
+                    PullRequestId = pr.CodeReview.Number,
+                    PullRequestStatus = PrStatus.Active,
+                    Provider = pr.Host.Provider,
+                    Host = pr.Host,
+                    Repository = pr.Repository,
+                    CodeReview = pr.CodeReview,
+                    ReviewRevision = pr.ReviewRevision,
+                    RequestedReviewerIdentity = reviewerContext.ConfiguredTriggerReviewer,
+                    CandidateIterationId = pr.RevisionId,
+                    PrTitle = pr.ReviewTitle,
+                    RepositoryName = pr.RepositoryDisplayName,
+                    SourceBranch = pr.SourceBranch,
+                    TargetBranch = pr.TargetBranch,
+                    ProCursorSourceScopeMode = config.ProCursorSourceScopeMode,
+                    ProCursorSourceIds = config.ProCursorSourceIds ?? [],
+                    InvalidProCursorSourceIds = config.InvalidProCursorSourceIds ?? [],
+                    ReviewTemperature = config.ReviewTemperature,
+                };
+                if (!canonical)
+                {
+                    if (await this.GetCurrentAdmissionConfigurationAsync(config, pr, cancellationToken).ConfigureAwait(false) is not null)
                     {
-                        ActivationSource = PullRequestActivationSource.Crawl,
-                        SummaryLabel = "crawl discovery",
-                        ClientId = config.ClientId,
-                        ProviderScopePath = config.ProviderScopePath,
-                        ProviderProjectKey = config.ProviderProjectKey,
-                        RepositoryId = pr.Repository.ExternalRepositoryId,
-                        PullRequestId = pr.CodeReview.Number,
-                        PullRequestStatus = PrStatus.Active,
-                        Provider = pr.Host.Provider,
-                        Host = pr.Host,
-                        Repository = pr.Repository,
-                        CodeReview = pr.CodeReview,
-                        ReviewRevision = pr.ReviewRevision,
-                        RequestedReviewerIdentity = reviewerContext.ConfiguredTriggerReviewer,
-                        CandidateIterationId = pr.RevisionId,
-                        PrTitle = pr.ReviewTitle,
-                        RepositoryName = pr.RepositoryDisplayName,
-                        SourceBranch = pr.SourceBranch,
-                        TargetBranch = pr.TargetBranch,
-                        ProCursorSourceScopeMode = config.ProCursorSourceScopeMode,
-                        ProCursorSourceIds = config.ProCursorSourceIds ?? [],
-                        InvalidProCursorSourceIds = config.InvalidProCursorSourceIds ?? [],
-                        ReviewTemperature = config.ReviewTemperature,
-                    },
-                    cancellationToken);
-                continue;
-            }
+                        await this.TrySynchronizeAsync(request, cancellationToken).ConfigureAwait(false);
+                    }
 
-            if (!await this.ShouldEnqueueReviewAsync(config, pr, cancellationToken))
+                    continue;
+                }
+
+                var prepared = await pullRequestSynchronizationService.PrepareAsync(request, cancellationToken).ConfigureAwait(false);
+                await using var admission = await crawlConfigs.AcquireReviewTargetAdmissionAsync(config.ClientId, cancellationToken).ConfigureAwait(false);
+                var current = await this.GetCurrentAdmissionConfigurationAsync(config, pr, cancellationToken).ConfigureAwait(false);
+                if (current is not null)
+                {
+                    await prepared.CompleteAsync(
+                        new PullRequestReviewSettings(
+                            current.ProCursorSourceScopeMode,
+                            current.ProCursorSourceIds ?? [], current.InvalidProCursorSourceIds ?? [], current.ReviewTemperature), cancellationToken);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                continue;
+                LogTargetAdmissionError(logger, config.Id, ex);
             }
-
-            var job = new ReviewJob(
-                Guid.NewGuid(),
-                config.ClientId,
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                pr.Repository.ExternalRepositoryId,
-                pr.CodeReview.Number,
-                pr.RevisionId);
-
-            job.SetReviewPipelineProfile(await this.ResolveReviewPipelineProfileIdAsync(config.ClientId, cancellationToken));
-
-            if (config.ReviewTemperature.HasValue)
-            {
-                job.SetAiConfig(job.AiConnectionId, job.AiModel, config.ReviewTemperature);
-            }
-
-            if (pr.ReviewRevision is not null)
-            {
-                job.SetReviewRevision(pr.ReviewRevision);
-            }
-
-            if (!this.TryApplyProCursorSourceScope(config, job))
-            {
-                continue;
-            }
-
-            await jobs.AddAsync(job, cancellationToken);
-
-            // Populate PR context snapshot from data already fetched by the crawler (no second ADO call needed).
-            if (pr.ReviewTitle is not null || pr.RepositoryDisplayName is not null)
-            {
-                job.SetPrContext(pr.ReviewTitle, pr.RepositoryDisplayName, pr.SourceBranch, pr.TargetBranch);
-                await jobs.UpdatePrContextAsync(
-                    job.Id,
-                    pr.ReviewTitle,
-                    pr.RepositoryDisplayName,
-                    pr.SourceBranch,
-                    pr.TargetBranch,
-                    cancellationToken);
-            }
-
-            LogJobCreated(logger, job.Id, pr.CodeReview.Number, pr.RevisionId);
         }
     }
 
-    // --- Abandonment detection second pass ---
-    // For any Pending/Processing job associated with this config that is no longer
-    // present in the discovered-PR list, check the live ADO status. If the PR is
-    // Abandoned, transition the job to Cancelled to stop further AI processing.
+    private async Task<CrawlConfigurationDto?> GetCurrentAdmissionConfigurationAsync(
+        CrawlConfigurationDto discovered,
+        AssignedCodeReviewRef pr,
+        CancellationToken ct)
+    {
+        var canonical = discovered.RepoFilters.Count == 1 && discovered.RepoFilters[0].CanonicalSourceRef is not null;
+        var current = canonical
+            ? await crawlConfigs.GetReviewTargetPolicySnapshotAsync(discovered.Id, discovered.ClientId, ct).ConfigureAwait(false)
+            : discovered;
+        if (current is null || current.ClientId != discovered.ClientId || current.Id != discovered.Id)
+        {
+            return null;
+        }
+
+        if (!current.IsActive || current.ReviewTargetLifecycle != ReviewTargetLifecycle.Enabled)
+        {
+            return null;
+        }
+
+        if (current.ReviewTargetRevision != discovered.ReviewTargetRevision)
+        {
+            return null;
+        }
+
+        if (!canonical)
+        {
+            return current;
+        }
+
+        if (current.Provider != discovered.Provider || current.Provider != pr.Host.Provider)
+        {
+            return null;
+        }
+
+        var currentHost = new ProviderHostRef(current.Provider, current.ProviderScopePath);
+        if (!Equals(currentHost, pr.Host) || !Equals(pr.Host, pr.Repository.Host))
+        {
+            return null;
+        }
+
+        var scopeUnchanged = string.Equals(current.ProviderScopePath, discovered.ProviderScopePath, StringComparison.OrdinalIgnoreCase) &&
+                             string.Equals(current.ProviderProjectKey, discovered.ProviderProjectKey, StringComparison.OrdinalIgnoreCase);
+        if (!scopeUnchanged)
+        {
+            return null;
+        }
+
+        if (current.RepoFilters.Count != 1 || current.RepoFilters[0].CanonicalSourceRef is null)
+        {
+            return null;
+        }
+
+        if (!Equals(current.RepoFilters[0].CanonicalSourceRef, discovered.RepoFilters[0].CanonicalSourceRef))
+        {
+            return null;
+        }
+
+        var filter = current.RepoFilters[0];
+        if (providerRegistry is null)
+        {
+            return null;
+        }
+
+        var repositoryMatches = providerRegistry.GetReviewSourcePolicy(current.Provider).MatchesRepository(current, pr.Repository);
+
+        if (!repositoryMatches || !DestinationBranchPolicy.TryCreate(filter.TargetBranchPatterns, out var policy))
+        {
+            return null;
+        }
+
+        return policy!.Matches(pr.TargetBranch) ? current : null;
+    }
+
+    // Check live lifecycle state for active jobs absent from discovery and forward it
+    // to shared synchronization without admitting another review.
     private async Task DetectAbandonedJobsAsync(
         CrawlConfigurationDto config,
         IReadOnlyList<AssignedCodeReviewRef> assignedPrs,
         CancellationToken cancellationToken)
     {
         var activeJobs = await jobs.GetActiveJobsForConfigAsync(
+            config.ClientId,
             config.ProviderScopePath,
             config.ProviderProjectKey,
             cancellationToken);
-        var discoveredPrIds = new HashSet<int>(assignedPrs.Select(p => p.CodeReview.Number));
+        var repositoryIds = config.RepoFilters.Count > 0 && config.RepoFilters.All(filter => filter.CanonicalSourceRef is not null)
+            ? config.RepoFilters.Select(filter => filter.CanonicalSourceRef!.Value).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : null;
+        var discoveredPrIds = assignedPrs
+            .Select(pr => (pr.Repository.ExternalRepositoryId.ToUpperInvariant(), pr.CodeReview.Number))
+            .ToHashSet();
 
         foreach (var activeJob in activeJobs)
         {
-            if (discoveredPrIds.Contains(activeJob.PullRequestId))
+            if (activeJob.ClientId != config.ClientId ||
+                (repositoryIds is not null && !repositoryIds.Contains(activeJob.RepositoryId)) ||
+                discoveredPrIds.Contains((activeJob.RepositoryId.ToUpperInvariant(), activeJob.PullRequestId)))
             {
                 continue;
             }
@@ -196,186 +244,28 @@ public sealed partial class PrCrawlService(
                 config.ClientId,
                 cancellationToken);
 
-            if (pullRequestSynchronizationService is not null)
-            {
-                await this.TrySynchronizeAsync(
-                    new PullRequestSynchronizationRequest
-                    {
-                        ActivationSource = PullRequestActivationSource.Crawl,
-                        SummaryLabel = "crawl disappearance",
-                        ClientId = config.ClientId,
-                        ProviderScopePath = config.ProviderScopePath,
-                        ProviderProjectKey = config.ProviderProjectKey,
-                        RepositoryId = activeJob.RepositoryId,
-                        PullRequestId = activeJob.PullRequestId,
-                        PullRequestStatus = status,
-
-                        // Carried because synchronization resolves the client's SCM connection by provider
-                        // family. The request's own default is Azure DevOps, so a configuration on any other
-                        // host would resolve against a connection family the client does not have.
-                        Provider = config.Provider,
-                        AllowReviewSubmission = false,
-                    },
-                    cancellationToken);
-                continue;
-            }
-
-            if (status == PrStatus.Abandoned)
-            {
-                LogJobCancelledForAbandonedPr(logger, activeJob.PullRequestId, activeJob.Id);
-                await jobs.SetCancelledAsync(activeJob.Id, cancellationToken);
-            }
-        }
-    }
-
-    // --- Thread memory state machine ---
-    // Detects per-thread status transitions and dispatches domain events so that
-    // ThreadMemoryService can store/remove embeddings independently of review jobs.
-    private async Task RunThreadMemoryStateMachineForConfigAsync(
-        CrawlConfigurationDto config,
-        IReadOnlyList<AssignedCodeReviewRef> assignedPrs,
-        ResolvedReviewer reviewerContext,
-        CancellationToken cancellationToken)
-    {
-        if (pullRequestSynchronizationService is not null)
-        {
-            return;
-        }
-
-        if (threadStatusFetcher is null || threadMemoryService is null || prScanRepository is null)
-        {
-            LogStateMachineServicesUnavailable(
-                logger,
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                threadStatusFetcher is null,
-                threadMemoryService is null,
-                prScanRepository is null);
-            return;
-        }
-
-        foreach (var pr in assignedPrs)
-        {
-            await this.RunThreadMemoryStateMachineAsync(config, pr, cancellationToken);
-        }
-    }
-
-    private async Task<bool> ShouldEnqueueReviewAsync(
-        CrawlConfigurationDto config,
-        AssignedCodeReviewRef pr,
-        CancellationToken ct)
-    {
-        var existingJob = jobs.FindActiveJob(
-            config.ProviderScopePath,
-            config.ProviderProjectKey,
-            pr.Repository.ExternalRepositoryId,
-            pr.CodeReview.Number,
-            pr.RevisionId);
-
-        if (existingJob is not null)
-        {
-            LogJobAlreadyExists(logger, pr.CodeReview.Number, pr.RevisionId, existingJob.Id);
-            return false;
-        }
-
-        var completedJob = jobs.FindCompletedJob(
-            config.ProviderScopePath,
-            config.ProviderProjectKey,
-            pr.Repository.ExternalRepositoryId,
-            pr.CodeReview.Number,
-            pr.RevisionId);
-        var completedSameIterationAlreadyReviewed = completedJob is not null;
-
-        // A prior review for this exact revision already failed and was never completed. Suppress ALL automatic
-        // re-review (including same-revision thread replies) so a deterministic failure cannot loop and burn cost.
-        // Only genuinely new commits (a new iteration) or a manual restart will queue another review.
-        if (!completedSameIterationAlreadyReviewed
-            && jobs.FindFailedJob(
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                pr.Repository.ExternalRepositoryId,
-                pr.CodeReview.Number,
-                pr.RevisionId) is not null)
-        {
-            LogSkippedFailedAwaitingRestart(logger, pr.CodeReview.Number, pr.RevisionId);
-            return false;
-        }
-
-        if (prScanRepository is null || threadStatusFetcher is null)
-        {
-            if (completedSameIterationAlreadyReviewed)
-            {
-                LogSkippedNoReviewChanges(logger, pr.CodeReview.Number, pr.RevisionId);
-                return false;
-            }
-
-            return true;
-        }
-
-        try
-        {
-            var scan = await prScanRepository.GetAsync(
-                config.ClientId,
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                pr.Repository.ExternalRepositoryId,
-                pr.CodeReview.Number,
-                ct);
-            if (scan is null)
-            {
-                if (completedSameIterationAlreadyReviewed)
+            await this.TrySynchronizeAsync(
+                new PullRequestSynchronizationRequest
                 {
-                    LogSkippedNoReviewChanges(logger, pr.CodeReview.Number, pr.RevisionId);
-                    return false;
-                }
+                    ActivationSource = PullRequestActivationSource.Crawl,
+                    SummaryLabel = "crawl disappearance",
+                    ClientId = config.ClientId,
+                    ProviderScopePath = config.ProviderScopePath,
+                    ProviderProjectKey = config.ProviderProjectKey,
+                    RepositoryId = activeJob.RepositoryId,
+                    PullRequestId = activeJob.PullRequestId,
+                    PullRequestStatus = status,
 
-                return true;
-            }
-
-            var iterationKey = ReviewRevisionKeys.GetStoredKey(pr.ReviewRevision, pr.RevisionId);
-            if (!string.Equals(scan.LastProcessedCommitId, iterationKey, StringComparison.Ordinal))
-            {
-                if (completedSameIterationAlreadyReviewed)
-                {
-                    LogSkippedNoReviewChanges(logger, pr.CodeReview.Number, pr.RevisionId);
-                    return false;
-                }
-
-                return true;
-            }
-
-            var currentThreads = await threadStatusFetcher.GetReviewerThreadStatusesAsync(
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                pr.Repository.ExternalRepositoryId,
-                pr.CodeReview.Number,
-                await this.ResolveThreadOwnershipAsync(config, pr, ct),
-                config.ClientId,
-                ct);
-
-            if (HasNewReviewerThreadReplies(currentThreads, scan))
-            {
-                LogSameIterationThreadChangeDetected(logger, pr.CodeReview.Number, pr.RevisionId);
-                return true;
-            }
-
-            LogSkippedNoReviewChanges(logger, pr.CodeReview.Number, pr.RevisionId);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            LogEnqueueDecisionFailed(logger, pr.CodeReview.Number, pr.RevisionId, ex);
-            return true;
+                    // Synchronization uses the captured family to select the client's provider connection.
+                    Provider = config.Provider,
+                    AllowReviewSubmission = false,
+                },
+                cancellationToken);
         }
     }
 
     private async Task TrySynchronizeAsync(PullRequestSynchronizationRequest request, CancellationToken ct)
     {
-        if (pullRequestSynchronizationService is null)
-        {
-            return;
-        }
-
         try
         {
             await pullRequestSynchronizationService.SynchronizeAsync(request, ct);
@@ -392,62 +282,6 @@ public sealed partial class PrCrawlService(
         }
     }
 
-    private static bool HasNewReviewerThreadReplies(
-        IReadOnlyList<PrThreadStatusEntry> currentThreads,
-        ReviewPrScan scan)
-    {
-        foreach (var thread in currentThreads)
-        {
-            var stored = scan.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
-            if (stored is null)
-            {
-                return true;
-            }
-
-            if (thread.NonReviewerReplyCount > stored.LastSeenReplyCount)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private bool TryApplyProCursorSourceScope(CrawlConfigurationDto config, ReviewJob job)
-    {
-        if (config.ProCursorSourceScopeMode != ProCursorSourceScopeMode.SelectedSources)
-        {
-            job.SetProCursorSourceScope(ProCursorSourceScopeMode.AllClientSources, []);
-            return true;
-        }
-
-        var invalidSourceIds = (config.InvalidProCursorSourceIds ?? [])
-            .Where(sourceId => sourceId != Guid.Empty)
-            .Distinct()
-            .ToList();
-
-        if (invalidSourceIds.Count > 0)
-        {
-            LogSkippedInvalidSourceScope(logger, config.Id, invalidSourceIds.Count);
-            return false;
-        }
-
-        var selectedSourceIds = (config.ProCursorSourceIds ?? [])
-            .Where(sourceId => sourceId != Guid.Empty)
-            .Distinct()
-            .ToList();
-
-        if (selectedSourceIds.Count == 0)
-        {
-            LogSkippedEmptySourceScope(logger, config.Id);
-            return false;
-        }
-
-        job.SetProCursorSourceScope(ProCursorSourceScopeMode.SelectedSources, selectedSourceIds);
-        LogSelectedSourceScopeSnapshotted(logger, config.Id, job.Id, selectedSourceIds.Count);
-        return true;
-    }
-
     private async Task<ResolvedReviewer> ResolveReviewerContextAsync(
         CrawlConfigurationDto config,
         CancellationToken ct)
@@ -459,207 +293,6 @@ public sealed partial class PrCrawlService(
 
         var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
         return new ResolvedReviewer(await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct));
-    }
-
-    private async Task<string> ResolveReviewPipelineProfileIdAsync(Guid clientId, CancellationToken ct)
-    {
-        string? configuredProfileId = null;
-        if (clientRegistry is not null)
-        {
-            configuredProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(clientId, ct);
-        }
-
-        return string.IsNullOrWhiteSpace(configuredProfileId)
-            ? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId
-            : configuredProfileId;
-    }
-
-    /// <summary>
-    ///     Builds the ownership answer for one pull request from a single provenance read.
-    /// </summary>
-    /// <remarks>
-    ///     No identity is known here: nothing on this path holds a live provider connection, so the
-    ///     thread-status adapter contributes the identity its own handshake resolves into this same instance.
-    ///     Keyed on the same repository identity a review job for this pull request carries, which its
-    ///     provenance rows were recorded under.
-    /// </remarks>
-    private async Task<ThreadOwnershipResolver> ResolveThreadOwnershipAsync(
-        CrawlConfigurationDto config,
-        AssignedCodeReviewRef pr,
-        CancellationToken ct)
-    {
-        if (postedCommentOriginStore is null)
-        {
-            return ThreadOwnershipResolver.None;
-        }
-
-        try
-        {
-            var provenance = await postedCommentOriginStore.GetJobIdsForPullRequestAsync(
-                config.ClientId,
-                pr.Repository.ExternalRepositoryId,
-                pr.CodeReview.Number,
-                ct);
-            return ThreadOwnershipResolver.Create(
-                provenance,
-                ThreadOwnerIdentity.None,
-                ProviderCommentIdScopes.For(config.Provider));
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            // Provenance is enrichment, never a reason to stop crawling. Without it the adapter's own
-            // authenticated identity still decides.
-            LogThreadOwnershipProvenanceLookupFailed(logger, pr.CodeReview.Number, config.ClientId, ex);
-            return ThreadOwnershipResolver.None;
-        }
-    }
-
-    private async Task RunThreadMemoryStateMachineAsync(
-        CrawlConfigurationDto config,
-        AssignedCodeReviewRef pr,
-        CancellationToken ct)
-    {
-        try
-        {
-            var scan = await prScanRepository!.GetAsync(
-                config.ClientId,
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                pr.Repository.ExternalRepositoryId,
-                pr.CodeReview.Number,
-                ct);
-
-            if (scan is null)
-            {
-                // No review baseline yet — skip until the first review job has run and
-                // written the initial scan record. Avoids spurious "first-crawl" resolved events.
-                LogStateMachineSkippedNoScan(logger, pr.CodeReview.Number, config.ClientId);
-                return;
-            }
-
-            var passOwnership = await this.ResolveThreadOwnershipAsync(config, pr, ct);
-            var observedAt = DateTimeOffset.UtcNow;
-            var currentThreads = await threadStatusFetcher!.GetReviewerThreadStatusesAsync(
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                pr.Repository.ExternalRepositoryId,
-                pr.CodeReview.Number,
-                passOwnership,
-                config.ClientId,
-                ct);
-
-            if (currentThreads.Count == 0)
-            {
-                return;
-            }
-
-            LogStateMachineEvaluating(logger, pr.CodeReview.Number, currentThreads.Count);
-            var providerScope = ProviderSourceIdentity.FromReviewSource(
-                pr.Host.Provider, pr.Host.Provider == ScmProvider.AzureDevOps ? config.ProviderScopePath : pr.Host.HostBaseUrl).Value;
-
-            // Process each thread: detect transitions and dispatch domain events.
-            foreach (var thread in currentThreads)
-            {
-                // A provider that groups its threads client-side hands back no identifier, and a transition
-                // cannot be attributed to a stored row without one.
-                if (string.IsNullOrWhiteSpace(thread.ThreadId))
-                {
-                    continue;
-                }
-
-                var stored = scan.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
-                var previousStatus = stored?.LastSeenStatus;
-                var currentIntent = ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status);
-                var isCurrentlyResolved = ThreadResolutionStatusInterpreter.IsResolved(currentIntent);
-                var wasPreviouslyResolved = ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(previousStatus));
-
-                if (codeInsightDispositionService is not null)
-                {
-                    await codeInsightDispositionService.HandleThreadResolvedAsync(
-                        new ThreadResolvedDomainEvent(
-                            config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, pr.Repository.ExternalRepositoryId, pr.CodeReview.Number,
-                            thread.ThreadId, thread.FilePath, null, thread.CommentHistory, observedAt,
-                            currentIntent, thread.CodeChangedSinceRaised, thread.Status,
-                            providerScope), ct);
-                }
-
-                if (isCurrentlyResolved && !wasPreviouslyResolved)
-                {
-                    var resolved = new ThreadResolvedDomainEvent(
-                        config.ClientId,
-                        config.ProviderScopePath,
-                        config.ProviderProjectKey,
-                        pr.Repository.ExternalRepositoryId,
-                        pr.CodeReview.Number,
-                        thread.ThreadId,
-                        thread.FilePath,
-                        null,
-                        thread.CommentHistory,
-                        DateTimeOffset.UtcNow,
-                        currentIntent,
-                        thread.CodeChangedSinceRaised,
-                        thread.Status,
-                        providerScope);
-
-                    await threadMemoryService!.HandleThreadResolvedAsync(resolved, ct);
-                }
-                else if (!isCurrentlyResolved && wasPreviouslyResolved)
-                {
-                    await threadMemoryService!.HandleThreadReopenedAsync(
-                        new ThreadReopenedDomainEvent(
-                            config.ClientId,
-                            config.ProviderScopePath,
-                            config.ProviderProjectKey,
-                            pr.Repository.ExternalRepositoryId,
-                            pr.CodeReview.Number,
-                            thread.ThreadId,
-                            DateTimeOffset.UtcNow),
-                        ct);
-                }
-                else
-                {
-                    LogStateMachineNoOp(logger, pr.CodeReview.Number, thread.ThreadId, previousStatus, thread.Status);
-                }
-            }
-
-            // Persist updated LastSeenStatus values for all current threads.
-            await this.UpdateLastSeenStatusesAsync(scan, currentThreads, ct);
-        }
-        catch (Exception ex)
-        {
-            LogStateMachineFailed(logger, pr.CodeReview.Number, config.ClientId, ex);
-        }
-    }
-
-    private async Task UpdateLastSeenStatusesAsync(
-        ReviewPrScan existingScan,
-        IReadOnlyList<PrThreadStatusEntry> currentThreads,
-        CancellationToken ct)
-    {
-        var statusByThreadId = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (var thread in currentThreads)
-        {
-            if (string.IsNullOrWhiteSpace(thread.ThreadId))
-            {
-                continue;
-            }
-
-            statusByThreadId[thread.ThreadId] = thread.Status;
-        }
-
-        if (statusByThreadId.Count == 0)
-        {
-            return;
-        }
-
-        await prScanRepository!.SetLastSeenStatusesAsync(
-            existingScan.ClientId,
-            existingScan.OrganizationUrl,
-            existingScan.ProjectId,
-            existingScan.RepositoryId,
-            existingScan.PullRequestId,
-            statusByThreadId,
-            ct);
     }
 
     private sealed record ResolvedReviewer(ReviewerIdentity? ConfiguredTriggerReviewer);

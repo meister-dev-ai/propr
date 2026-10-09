@@ -53,7 +53,11 @@ public sealed class AiConfigurationPostgresTests(PostgresContainerFixture fixtur
 
     public async Task DisposeAsync()
     {
-        if (!fixture.IsAvailable) return;
+        if (!fixture.IsAvailable)
+        {
+            return;
+        }
+
         await using var db = this.Context();
         await db.Clients.Where(c => c.Id == this._clientId).ExecuteDeleteAsync();
         await db.Tenants.Where(t => t.Id == this._tenantId).ExecuteDeleteAsync();
@@ -153,7 +157,9 @@ public sealed class AiConfigurationPostgresTests(PostgresContainerFixture fixtur
                      AiPurpose.ReviewLowEffort, AiPurpose.ReviewMediumEffort, AiPurpose.ReviewHighEffort,
                      AiPurpose.MemoryReconsideration, AiPurpose.EmbeddingDefault
                  })
+        {
             Assert.Equal(expectedId, (await saved.GetActiveBindingForPurposeAsync(this._clientId, purpose))!.Connection.Id);
+        }
     }
 
     private sealed class InjectedSaveException : Exception
@@ -176,7 +182,11 @@ public sealed class AiConfigurationPostgresTests(PostgresContainerFixture fixtur
             DbContextEventData eventData,
             InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            if (Interlocked.Increment(ref this._arrived) == 2) this._ready.TrySetResult();
+            if (Interlocked.Increment(ref this._arrived) == 2)
+            {
+                this._ready.TrySetResult();
+            }
+
             await this._ready.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
             return result;
         }

@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.ProCursor.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Application.Tests.Services.ProCursor;
 
@@ -15,6 +16,42 @@ namespace MeisterDev.ProPR.Application.Tests.Services.ProCursor;
 /// </summary>
 public sealed class ProCursorGatewayTests
 {
+    [Fact]
+    public void SavedCanonicalSourceFallbackHasAnExplicitCompatibilityOwner()
+    {
+        Assert.Equal(
+            new MeisterDev.ProPR.ProCursor.Contracts.Sources.CanonicalSourceReferenceDto("azureDevOps", "repository"),
+            HistoricalProCursorSourceProjection.GetCanonicalReference("github", null, "repository"));
+        Assert.Equal(
+            new MeisterDev.ProPR.ProCursor.Contracts.Sources.CanonicalSourceReferenceDto("azureDevOps", "repository"),
+            HistoricalProCursorSourceProjection.GetCanonicalReference(" ", "value", "repository"));
+        Assert.Equal(
+            new MeisterDev.ProPR.ProCursor.Contracts.Sources.CanonicalSourceReferenceDto(" github ", " value "),
+            HistoricalProCursorSourceProjection.GetCanonicalReference(" github ", " value ", "repository"));
+        Assert.False(
+            typeof(ProCursorGateway).Assembly.GetReferencedAssemblies()
+                .Any(assembly => assembly.Name!.EndsWith(".Infrastructure", StringComparison.Ordinal)));
+    }
+
+    [Theory]
+    [InlineData(null, null, "azureDevOps", "repository")]
+    [InlineData("github", "repo", "github", "repo")]
+    public async Task SavedSourceProjectionRetainsItsCanonicalReference(string? provider, string? value, string expectedProvider, string expectedValue)
+    {
+        var clientId = Guid.NewGuid();
+        var source = new ProCursorKnowledgeSource(
+            Guid.NewGuid(), clientId, "Source", ProCursorSourceKind.Repository,
+            "https://host.test", "project", "repository", "main", null, true, "auto",
+            canonicalSourceProvider: provider, canonicalSourceValue: value);
+        var repository = Substitute.For<IProCursorKnowledgeSourceRepository>();
+        repository.ListByClientAsync(clientId, Arg.Any<CancellationToken>()).Returns(new[] { source });
+
+        var projected = Assert.Single(await CreateGateway(repository).ListSourcesAsync(clientId));
+
+        Assert.Equal(expectedProvider, projected.CanonicalSourceRef!.Provider);
+        Assert.Equal(expectedValue, projected.CanonicalSourceRef.Value);
+    }
+
     [Fact]
     public async Task ListSourcesAsync_WithMultipleSources_AvoidsConcurrentSnapshotRepositoryAccess()
     {

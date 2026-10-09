@@ -146,12 +146,14 @@ public sealed class PullRequestSynchronizationServiceCloseObservationTests
             this.Jobs = Substitute.For<IJobRepository>();
 
             this.Jobs.GetActiveJobsForConfigAsync(
+                    ClientId,
                     "https://dev.azure.com/org",
                     "project",
                     Arg.Any<CancellationToken>())
                 .Returns([]);
 
             this._sut = new PullRequestSynchronizationService(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
                 this.Jobs,
                 NullLogger<PullRequestSynchronizationService>.Instance,
                 codeInsightMetricSealer: this.Sealer,
@@ -178,6 +180,7 @@ public sealed class PullRequestSynchronizationServiceCloseObservationTests
                 7);
 
             this.Jobs.GetActiveJobsForConfigAsync(
+                    ClientId,
                     "https://dev.azure.com/org",
                     "project",
                     Arg.Any<CancellationToken>())

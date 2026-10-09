@@ -4,6 +4,8 @@
 
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.Features.Licensing.Services;
 
@@ -18,8 +20,12 @@ namespace MeisterDev.ProPR.Application.Features.Licensing.Services;
 /// </remarks>
 public sealed class AuthorActivityRecorder(
     IAuthorActivityRollupStore rollupStore,
-    IConfiguredReviewerIdentitySource configuredReviewerIdentities) : IAuthorActivityRecorder
+    IConfiguredReviewerIdentitySource configuredReviewerIdentities,
+    IEnumerable<IScmIdentityPolicy> identityPolicies) : IAuthorActivityRecorder
 {
+    private readonly IReadOnlyDictionary<ScmProvider, IScmIdentityPolicy> _identityPolicies =
+        identityPolicies.ToDictionary(policy => policy.Provider);
+
     /// <inheritdoc />
     public async Task RecordAsync(
         AuthorActivityObservation observation,
@@ -27,7 +33,10 @@ public sealed class AuthorActivityRecorder(
     {
         ArgumentNullException.ThrowIfNull(observation);
 
-        var excluded = AutomationAuthorPolicy.IsAutomation(observation)
+        var nativeFacts = this._identityPolicies.TryGetValue(observation.Host.Provider, out var policy)
+            ? policy.GetAccountFacts(observation.ExternalUserId, observation.Login, observation.DisplayName)
+            : new ScmNativeAccountFacts();
+        var excluded = AutomationAuthorPolicy.IsAutomation(observation, nativeFacts)
                        || await this.IsOwnIdentityAsync(observation, cancellationToken).ConfigureAwait(false);
 
         await rollupStore

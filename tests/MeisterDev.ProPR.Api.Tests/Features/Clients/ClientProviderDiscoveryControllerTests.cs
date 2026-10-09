@@ -3,234 +3,187 @@
 
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Api.Features.Licensing;
-using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Enums;
-using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MeisterDev.ProPR.Api.Tests.Features.Clients;
 
-/// <summary>
-///     What a client's provider connection is allowed to list, and what naming the wrong connection gets.
-/// </summary>
 public sealed class ClientProviderDiscoveryControllerTests
 {
-    private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-1111-4111-8111-111111111111");
-    private static readonly Guid ConnectionId = Guid.Parse("bbbbbbbb-2222-4222-8222-222222222222");
+    private static readonly Guid ClientId = Guid.NewGuid();
+    private static readonly Guid ConnectionId = Guid.NewGuid();
 
     [Fact]
-    public async Task GetScopes_ListsWhatTheConnectionCanReach()
+    public async Task GetScopes_WhenOperationalActivationRefusesConnection_DoesNotDiscover()
     {
-        var discovery = Substitute.For<IRepositoryDiscoveryProvider>();
-        discovery.ListScopesAsync(ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
-            .Returns<IReadOnlyList<string>>(["acme", "contoso"]);
-
-        var controller = CreateController(discovery);
-
-        var result = await controller.GetScopes(ClientId, ScmProvider.GitHub, ConnectionId);
-
-        var scopes = Assert.IsAssignableFrom<IReadOnlyList<ProviderScopeOptionResponse>>(Assert.IsType<OkObjectResult>(result).Value);
-        Assert.Equal(["acme", "contoso"], scopes.Select(scope => scope.ScopePath));
-    }
-
-    [Fact]
-    public async Task GetRepositories_ReportsTheProviderNativeIdentifierAndItsPath()
-    {
-        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
-        var discovery = Substitute.For<IRepositoryDiscoveryProvider>();
-        discovery.ListRepositoriesAsync(ClientId, Arg.Any<ProviderHostRef>(), "acme", Arg.Any<CancellationToken>())
-            .Returns<IReadOnlyList<RepositoryRef>>([new RepositoryRef(host, "101", "acme", "acme/platform")]);
-
-        var controller = CreateController(discovery);
-
-        var result = await controller.GetRepositories(ClientId, ScmProvider.GitHub, ConnectionId, "acme");
-
-        var repositories = Assert.IsAssignableFrom<IReadOnlyList<ProviderRepositoryOptionResponse>>(Assert.IsType<OkObjectResult>(result).Value);
-        var repository = Assert.Single(repositories);
-        Assert.Equal("101", repository.RepositoryId);
-        Assert.Equal("acme/platform", repository.DisplayName);
-    }
-
-    /// <summary>
-    ///     Two providers can sit at one host, so the provider in the route has to agree with the connection's
-    ///     own. Otherwise a client could list one provider's repositories through the other's adapter.
-    /// </summary>
-    [Fact]
-    public async Task GetScopes_NamingAConnectionForAnotherProvider_IsRefused()
-    {
-        var controller = CreateController(Substitute.For<IRepositoryDiscoveryProvider>());
-
-        var result = await controller.GetScopes(ClientId, ScmProvider.GitLab, ConnectionId);
-
-        Assert.IsType<BadRequestObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task GetScopes_NamingADeactivatedConnection_IsRefused()
-    {
-        var controller = CreateController(Substitute.For<IRepositoryDiscoveryProvider>(), isActive: false);
-
-        var result = await controller.GetScopes(ClientId, ScmProvider.GitHub, ConnectionId);
-
-        Assert.IsType<BadRequestObjectResult>(result);
-    }
-
-    /// <summary>
-    ///     A token that cannot list is reported as a refusal. An empty list would read as an owner with no
-    ///     repositories, which is a different thing and sends an operator looking in the wrong place.
-    /// </summary>
-    [Fact]
-    public async Task GetRepositories_WhenTheProviderRefuses_SaysSoRatherThanAnsweringEmpty()
-    {
-        var discovery = Substitute.For<IRepositoryDiscoveryProvider>();
-        discovery.ListRepositoriesAsync(ClientId, Arg.Any<ProviderHostRef>(), "acme", Arg.Any<CancellationToken>())
-            .Returns<IReadOnlyList<RepositoryRef>>(_ => throw new InvalidOperationException("GitHub repository discovery failed with status 403."));
-
-        var controller = CreateController(discovery);
-
-        var result = await controller.GetRepositories(ClientId, ScmProvider.GitHub, ConnectionId, "acme");
-
-        Assert.IsType<BadRequestObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task GetRepositories_WithoutAScope_IsRefusedAsInvalid()
-    {
-        var controller = CreateController(Substitute.For<IRepositoryDiscoveryProvider>());
-
-        var result = await controller.GetRepositories(ClientId, ScmProvider.GitHub, ConnectionId, "  ");
-
-        Assert.IsType<ValidationProblemDetails>(Assert.IsType<ObjectResult>(result).Value);
-    }
-
-    [Fact]
-    public async Task GetScopes_ForAProviderWithNoDiscovery_IsNotFound()
-    {
+        var connections = Substitute.For<IClientScmConnectionRepository>();
         var registry = Substitute.For<IScmProviderRegistry>();
-        registry.GetRepositoryDiscoveryProvider(Arg.Any<ScmProvider>())
-            .Returns(_ => throw new InvalidOperationException("No IRepositoryDiscoveryProvider is registered."));
+        var service = new ReviewConfigurationSelectionService(registry, connections);
+        var controller = CreateController(service);
 
-        var controller = CreateController(Substitute.For<IRepositoryDiscoveryProvider>(), registry: registry);
-
-        var result = await controller.GetScopes(ClientId, ScmProvider.GitHub, ConnectionId);
-
-        Assert.IsType<NotFoundResult>(result);
+        Assert.IsType<BadRequestObjectResult>(await controller.GetScopes(ClientId, ConnectionId, "mention"));
+        registry.DidNotReceiveWithAnyArgs().GetRepositoryDiscoveryProvider(default);
     }
 
-    /// <summary>
-    ///     Discovery exists to build a mention configuration, so an installation not entitled to answer
-    ///     mentions is not asked to enumerate what a client's token can reach. Unconditional here, where the
-    ///     Azure DevOps discovery endpoints take a purpose and hold the capability only for one of them: those
-    ///     are shared between callers, and a gate only some callers ask for is no gate.
-    /// </summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Discovery_WhenTheInstallationCannotAnswerMentions_AsksTheProviderNothing(bool scopes)
+    [Fact]
+    public async Task GetScopes_RefusesAnotherClientsOperationalConnectionBeforeNativeDiscovery()
     {
-        var discovery = Substitute.For<IRepositoryDiscoveryProvider>();
-        var controller = CreateController(discovery, licensing: UnavailableMentionAnswering());
-
-        var result = scopes
-            ? await controller.GetScopes(ClientId, ScmProvider.GitHub, ConnectionId)
-            : await controller.GetRepositories(ClientId, ScmProvider.GitHub, ConnectionId, "acme");
-
-        Assert.IsType<PremiumFeatureUnavailableResult>(result);
-        await discovery.DidNotReceiveWithAnyArgs().ListScopesAsync(default, null!, default);
-        await discovery.DidNotReceiveWithAnyArgs().ListRepositoriesAsync(default, null!, null!, default);
-    }
-
-    private static ILicensingCapabilityService UnavailableMentionAnswering()
-    {
-        var licensing = Substitute.For<ILicensingCapabilityService>();
-        licensing.GetCapabilityAsync(PremiumCapabilityKey.MentionAnswering, Arg.Any<CancellationToken>())
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetOperationalConnectionByIdAsync(ClientId, ConnectionId, Arg.Any<CancellationToken>())
             .Returns(
-                Task.FromResult(
-                    new CapabilitySnapshot(
-                        PremiumCapabilityKey.MentionAnswering,
-                        "Mention answering",
-                        true,
-                        PremiumCapabilityOverrideState.Disabled,
-                        false,
-                        "Mention answering is currently disabled for this installation.")));
+                new ClientScmConnectionCredentialDto(
+                    ConnectionId, Guid.NewGuid(), ScmProvider.GitHub,
+                    "https://github.com", ScmAuthenticationKind.PersonalAccessToken, "Fixture", "fixture-token", true));
+        var registry = Substitute.For<IScmProviderRegistry>();
+        var controller = CreateController(new ReviewConfigurationSelectionService(registry, connections));
 
-        return licensing;
+        Assert.IsType<BadRequestObjectResult>(await controller.GetScopes(ClientId, ConnectionId, "webhook"));
+        registry.DidNotReceiveWithAnyArgs().GetRepositoryDiscoveryProvider(default);
     }
 
-    /// <summary>
-    ///     Only a client administrator may list what a connection can reach. Discovery exists to build a
-    ///     mention configuration, which is an administrator action, and the tab that calls it is behind the
-    ///     same role.
-    /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Discovery_AsAClientUser_IsRefusedWithoutAskingTheProvider(bool scopes)
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("other")]
+    public async Task Discovery_RequiresAnExplicitSupportedPurpose(string? purpose)
     {
-        var discovery = Substitute.For<IRepositoryDiscoveryProvider>();
-        var controller = CreateController(discovery, role: ClientRole.ClientUser);
+        var service = Substitute.For<IReviewConfigurationSelectionService>();
+        var controller = CreateController(service);
 
-        var result = scopes
-            ? await controller.GetScopes(ClientId, ScmProvider.GitHub, ConnectionId)
-            : await controller.GetRepositories(ClientId, ScmProvider.GitHub, ConnectionId, "acme");
+        Assert.IsType<BadRequestObjectResult>(await controller.GetScopes(ClientId, ConnectionId, purpose));
+        await service.DidNotReceiveWithAnyArgs().GetConnectionContextAsync(default, default, default);
+    }
 
-        Assert.IsNotType<OkObjectResult>(result);
-        await discovery.DidNotReceiveWithAnyArgs().ListScopesAsync(default, null!, default);
-        await discovery.DidNotReceiveWithAnyArgs().ListRepositoriesAsync(default, null!, null!, default);
+    [Theory]
+    [InlineData("crawl", true)]
+    [InlineData("webhook", true)]
+    [InlineData("procursor", true)]
+    [InlineData("mention", false)]
+    public async Task Discovery_EnforcesPurposeRoleBeforeResolvingConnection(string purpose, bool allowed)
+    {
+        var service = ReadyService();
+        var controller = CreateController(service, ClientRole.ClientUser);
+        var result = await controller.GetScopes(ClientId, ConnectionId, purpose);
+
+        if (allowed)
+        {
+            Assert.IsType<OkObjectResult>(result);
+        }
+        else
+        {
+            Assert.IsNotType<OkObjectResult>(result);
+            await service.DidNotReceiveWithAnyArgs().GetConnectionContextAsync(default, default, default);
+        }
+    }
+
+    [Theory]
+    [InlineData("crawl", PremiumCapabilityKey.CrawlConfigs)]
+    [InlineData("mention", PremiumCapabilityKey.MentionAnswering)]
+    public async Task Discovery_EnforcesPurposeLicenseBeforeResolvingConnection(string purpose, string capabilityKey)
+    {
+        var service = ReadyService();
+        var licensing = Substitute.For<ILicensingCapabilityService>();
+        licensing.GetCapabilityAsync(capabilityKey, Arg.Any<CancellationToken>())
+            .Returns(new CapabilitySnapshot(capabilityKey, "Capability", true, PremiumCapabilityOverrideState.Disabled, false, "Disabled."));
+        var controller = CreateController(service, licensing: licensing);
+
+        Assert.IsType<PremiumFeatureUnavailableResult>(await controller.GetScopes(ClientId, ConnectionId, purpose));
+        await service.DidNotReceiveWithAnyArgs().GetConnectionContextAsync(default, default, default);
+    }
+
+    [Fact]
+    public async Task GetScopes_PassesTheSelectedConnectionContextAndReturnsNativeScopeIdentities()
+    {
+        var service = ReadyService();
+        var context = await service.GetConnectionContextAsync(ClientId, ConnectionId);
+        var savedScopeId = Guid.NewGuid();
+        service.GetScopesAsync(context, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ConnectionDiscoveryScope>>([new("native-scope", "Native label", savedScopeId)]);
+        var controller = CreateController(service);
+
+        var scopes = Assert.IsAssignableFrom<IReadOnlyList<ConnectionDiscoveryScope>>(
+            Assert.IsType<OkObjectResult>(await controller.GetScopes(ClientId, ConnectionId, "webhook")).Value);
+        Assert.Equal(savedScopeId, Assert.Single(scopes).SavedScopeId);
+        await service.Received().GetScopesAsync(Arg.Is<ConnectionDiscoveryContext>(value => value.ConnectionId == ConnectionId), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetProjects_DistinguishesUnsupportedFromAnEmptyListing()
+    {
+        var service = ReadyService();
+        service.GetProjectsAsync(Arg.Any<ConnectionDiscoveryContext>(), "scope", Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ScmDiscoveryProjectOption>>(_ => throw new NotSupportedException());
+        var controller = CreateController(service);
+        Assert.Equal(501, Assert.IsType<ObjectResult>(await controller.GetProjects(ClientId, ConnectionId, "webhook", "scope")).StatusCode);
+    }
+
+    [Fact]
+    public async Task GetScopes_DistinguishesFailureFromAnEmptyListing()
+    {
+        var service = ReadyService();
+        service.GetScopesAsync(Arg.Any<ConnectionDiscoveryContext>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ConnectionDiscoveryScope>>(_ => throw new HttpRequestException());
+        Assert.IsType<BadRequestObjectResult>(await CreateController(service).GetScopes(ClientId, ConnectionId, "webhook"));
+    }
+
+    [Fact]
+    public async Task GetProjects_RefusesAnotherConnectionsScopeBeforeNativeProjectDiscovery()
+    {
+        var scopeId = Guid.NewGuid();
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetOperationalConnectionByIdAsync(ClientId, ConnectionId, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    ConnectionId, ClientId, ScmProvider.AzureDevOps,
+                    "https://dev.azure.com", ScmAuthenticationKind.PersonalAccessToken, "Fixture", "fixture-token", true));
+        var native = Substitute.For<IRepositoryDiscoveryProvider>();
+        native.Descriptor.Returns(new ConnectionDiscoveryDescriptor(ScmProvider.AzureDevOps, "Organization", "Project", [], true, true));
+        native.ListScopesAsync(Arg.Any<ConnectionDiscoveryContext>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ConnectionDiscoveryScope>>([new("scope", "Organization", scopeId)]);
+        var scopes = Substitute.For<IClientScmScopeRepository>();
+        scopes.GetByIdAsync(ClientId, ConnectionId, scopeId, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmScopeDto(
+                    scopeId, ClientId, Guid.NewGuid(), "organization", "org", "https://dev.azure.com/org",
+                    "Organization", "verified", true, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+        var admin = Substitute.For<IProviderAdminDiscoveryService>();
+        var registry = Substitute.For<IScmProviderRegistry>();
+        registry.GetRepositoryDiscoveryProvider(ScmProvider.AzureDevOps).Returns(native);
+        registry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps).Returns(admin);
+        var controller = CreateController(new ReviewConfigurationSelectionService(registry, connections, scopes));
+
+        Assert.IsType<BadRequestObjectResult>(await controller.GetProjects(ClientId, ConnectionId, "webhook", "scope"));
+        await admin.DidNotReceiveWithAnyArgs().ListProjectOptionsAsync(default, default, default, default);
+    }
+
+    private static IReviewConfigurationSelectionService ReadyService()
+    {
+        var service = Substitute.For<IReviewConfigurationSelectionService>();
+        service.GetConnectionContextAsync(ClientId, ConnectionId, Arg.Any<CancellationToken>())
+            .Returns(new ConnectionDiscoveryContext(ClientId, ConnectionId, new(ScmProvider.GitHub, "https://github.com")));
+        service.GetScopesAsync(Arg.Any<ConnectionDiscoveryContext>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ConnectionDiscoveryScope>>([]);
+        service.SupportsMentionConfiguration(Arg.Any<ConnectionDiscoveryContext>()).Returns(true);
+        return service;
     }
 
     private static ClientProviderDiscoveryController CreateController(
-        IRepositoryDiscoveryProvider discovery,
-        bool isActive = true,
-        IScmProviderRegistry? registry = null,
-        ILicensingCapabilityService? licensing = null,
-        ClientRole role = ClientRole.ClientAdministrator)
+        IReviewConfigurationSelectionService service, ClientRole role = ClientRole.ClientAdministrator,
+        ILicensingCapabilityService? licensing = null)
     {
-        var connections = Substitute.For<IClientScmConnectionRepository>();
-        connections.GetByIdAsync(ClientId, ConnectionId, Arg.Any<CancellationToken>())
-            .Returns(
-                new ClientScmConnectionDto(
-                    ConnectionId,
-                    ClientId,
-                    ScmProvider.GitHub,
-                    "https://github.com",
-                    ScmAuthenticationKind.PersonalAccessToken,
-                    "GitHub",
-                    isActive,
-                    "verified",
-                    DateTimeOffset.UtcNow,
-                    null,
-                    null,
-                    DateTimeOffset.UtcNow,
-                    DateTimeOffset.UtcNow));
-
-        var providerRegistry = registry ?? Substitute.For<IScmProviderRegistry>();
-        if (registry is null)
-        {
-            providerRegistry.GetRepositoryDiscoveryProvider(Arg.Any<ScmProvider>()).Returns(discovery);
-        }
-
-        var controller = new ClientProviderDiscoveryController(
-            connections,
-            providerRegistry,
-            NullLogger<ClientProviderDiscoveryController>.Instance,
-            licensing)
+        var controller = new ClientProviderDiscoveryController(service, licensing)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
-
         controller.HttpContext.Items["UserId"] = Guid.NewGuid().ToString();
-        controller.HttpContext.Items["ClientRoles"] = new Dictionary<Guid, ClientRole>
-        {
-            [ClientId] = role,
-        };
-
+        controller.HttpContext.Items["ClientRoles"] = new Dictionary<Guid, ClientRole> { [ClientId] = role };
         return controller;
     }
 }

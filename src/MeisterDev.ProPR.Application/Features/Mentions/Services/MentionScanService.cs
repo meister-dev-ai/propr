@@ -19,6 +19,7 @@ namespace MeisterDev.ProPR.Application.Services;
 ///     items for processing.
 /// </summary>
 public sealed partial class MentionScanService(
+    IScmProviderRegistry providerRegistry,
     IMentionConfigurationRepository mentionConfigs,
     IActivePrFetcher activePrFetcher,
     IPullRequestFetcher pullRequestFetcher,
@@ -27,8 +28,7 @@ public sealed partial class MentionScanService(
     IMentionReplyJobRepository jobRepository,
     ChannelWriter<MentionReplyJob> channelWriter,
     ILogger<MentionScanService> logger,
-    IProviderActivationService? providerActivationService = null,
-    IScmProviderRegistry? providerRegistry = null) : IMentionScanService
+    IProviderActivationService? providerActivationService = null) : IMentionScanService
 {
     // Default look-back window for the first scan when no watermark exists.
     private static readonly TimeSpan InitialLookBack = TimeSpan.FromHours(1);
@@ -231,10 +231,8 @@ public sealed partial class MentionScanService(
             return false;
         }
 
-        // Questions are asked in the pull request's conversation as well as on lines of code. Azure DevOps
-        // returns both from the thread listing above. The other providers keep them apart, and they are read
-        // separately here so they stay out of PullRequest.ExistingThreads, which the review prompt, the file
-        // reviewer and the thread pass read expecting threads with a file position.
+        // Conversation questions are read through their own capability so they stay out of
+        // PullRequest.ExistingThreads, whose consumers expect file-positioned threads.
         var conversation = await this.FetchConversationThreadsAsync(config, repositoryId, pullRequestId, ct);
         var threads = conversation.Threads.Count == 0
             ? pullRequest.ExistingThreads ?? []
@@ -383,7 +381,7 @@ public sealed partial class MentionScanService(
         MentionPrScan? prScan,
         DateTimeOffset claimedAt)
     {
-        // Skip comments without a valid ID (shouldn't happen with real ADO data).
+        // Skip comments without a valid identifier.
         if (comment.CommentId <= 0)
         {
             return false;
@@ -425,7 +423,7 @@ public sealed partial class MentionScanService(
             // A question that names the reviewer and is turned away for its age is the one skip an operator
             // comes looking for, and it used to leave no trace at all: claiming a repository takes effect
             // from that moment, so a question asked before it is never answered and nothing said so.
-            if (MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer))
+            if (MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer, providerRegistry.GetIdentityPolicy(inputs.Reviewer.Host.Provider)))
             {
                 LogMentionOlderThanFloor(
                     logger,
@@ -455,7 +453,7 @@ public sealed partial class MentionScanService(
         {
             // Logged only when the comment mentions the reviewer. A provider that names no thread names
             // none for any comment, so logging every one would produce noise without information.
-            if (MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer))
+            if (MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer, providerRegistry.GetIdentityPolicy(inputs.Reviewer.Host.Provider)))
             {
                 LogMentionWithoutAnswerableThread(
                     logger,
@@ -471,7 +469,7 @@ public sealed partial class MentionScanService(
         // format changes without leaking full (attacker-controlled) comment text or allowing log injection.
         LogCommentContent(logger, threadKey, inputs.Comment.CommentId, SanitizeCommentForLog(inputs.Comment.Content));
 
-        if (!MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer))
+        if (!MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer, providerRegistry.GetIdentityPolicy(inputs.Reviewer.Host.Provider)))
         {
             return false;
         }
@@ -494,6 +492,10 @@ public sealed partial class MentionScanService(
         }
 
         var job = new MentionReplyJob(
+            new CodeReviewSourceContext(
+                inputs.Config.Provider, inputs.Config.ProviderScopePath,
+                inputs.Config.ProviderProjectKey, inputs.Config.ProviderProjectKey,
+                CodeReviewPlatformKind.PullRequest, inputs.PullRequestId.ToString()),
             Guid.NewGuid(),
             inputs.Config.ClientId,
             inputs.Config.ProviderScopePath,
@@ -571,15 +573,8 @@ public sealed partial class MentionScanService(
     ///     <see langword="null" /> when this comment cannot be answered at all.
     /// </summary>
     /// <remarks>
-    ///     A thread's own identifier when it has one. Forgejo has none for a comment on a line of code: it
-    ///     exposes no thread object there, and its adapter reports the absence rather than handing back
-    ///     something that resolves to a comment. Its reply publisher does not need one — it answers on the pull
-    ///     request and says which comment it answers with a quote — so the comment's own identifier serves as
-    ///     the key, and a question asked on a line of code is answered like any other.
-    ///     A provider whose publisher does address a thread gets no such substitute: a job built on an
-    ///     identifier it cannot post into would spend an answer and then fail to publish it. Absent registry,
-    ///     absent publisher, and a publisher that needs a thread all read the same way, so this never widens
-    ///     what is accepted because something is missing.
+    ///     Uses the thread identifier when available. When the reply publisher does not require a thread,
+    ///     the comment identifier supplies the duplicate key for a pull-request conversation reply.
     /// </remarks>
     private string? ResolveThreadKey(ScmProvider provider, PrCommentThread thread, PrThreadComment comment)
     {
@@ -614,40 +609,16 @@ public sealed partial class MentionScanService(
     ///     beside the id when it was claimed is what carries the real pair, and it is preferred over anything
     ///     assembled here.
     /// </remarks>
-    private static string ResolveRepositoryProjectPath(
+    private string ResolveRepositoryProjectPath(
         MentionConfigurationDto config,
         string repositoryId,
         PullRequest pullRequest)
     {
-        if (config.Provider == ScmProvider.AzureDevOps)
-        {
-            return config.ProviderProjectKey;
-        }
-
         var claimedName = config.RepoFilters
-            .FirstOrDefault(filter =>
-                string.Equals(filter.RepositoryId, repositoryId, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(filter => string.Equals(filter.RepositoryId, repositoryId, StringComparison.OrdinalIgnoreCase))
             ?.DisplayName;
-
-        if (LooksLikeOwnerAndName(claimedName))
-        {
-            return claimedName!.Trim();
-        }
-
-        if (LooksLikeOwnerAndName(pullRequest.RepositoryName))
-        {
-            return pullRequest.RepositoryName;
-        }
-
-        // Nothing here names the pair, so the identifier stands alone rather than being dressed up as a path.
-        // What addresses the provider resolves it from this identifier anyway.
-        return repositoryId;
-    }
-
-    private static bool LooksLikeOwnerAndName(string? value)
-    {
-        return !string.IsNullOrWhiteSpace(value)
-               && value.Split('/', StringSplitOptions.RemoveEmptyEntries).Length == 2;
+        return providerRegistry.GetSourceIdentityPolicy(config.Provider).ResolveMentionRepositoryPath(
+            config.ProviderProjectKey, repositoryId, claimedName, pullRequest.RepositoryName);
     }
 
     /// <summary>What a conversation read returned, and whether it returned it because there was nothing.</summary>

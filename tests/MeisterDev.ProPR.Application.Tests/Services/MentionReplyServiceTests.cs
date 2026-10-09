@@ -45,7 +45,7 @@ public sealed class MentionReplyServiceTests
     private readonly IProviderActivationService _providerActivationService =
         Substitute.For<IProviderActivationService>();
 
-    private readonly IScmProviderRegistry _providerRegistry = Substitute.For<IScmProviderRegistry>();
+    private readonly IScmProviderRegistry _providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
     private readonly BudgetScopeAccessor _scopeAccessor = new();
 

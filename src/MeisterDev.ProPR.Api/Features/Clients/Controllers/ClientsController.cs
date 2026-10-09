@@ -8,7 +8,6 @@ using FluentValidation.Results;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
@@ -18,6 +17,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.AspNetCore.Mvc;
 using MeisterDev.ProPR.Web;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 

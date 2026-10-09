@@ -117,6 +117,7 @@ public sealed class RunnerJobDispatchPreparerTests
 
         var executionStore = Substitute.For<IReviewJobExecutionStore>();
         executionStore.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                job.ClientId,
                 job.OrganizationUrl, "project", "repo", 42, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(priorAttempt);
         var scans = Substitute.For<IReviewPrScanWatermarkStore>();
@@ -124,7 +125,7 @@ public sealed class RunnerJobDispatchPreparerTests
         priorRows.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
 
         var preparation = await this.CreatePreparer(
-                reuse: new ReviewJobReuse(executionStore, scans, NullLogger.Instance),
+                reuse: new ReviewJobReuse(executionStore, scans, NullLogger.Instance, MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry),
                 priorRows: priorRows)
             .PrepareAsync(job, MakeLease());
 
@@ -154,7 +155,7 @@ public sealed class RunnerJobDispatchPreparerTests
         priorRows.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(alreadyAdopted);
 
         await this.CreatePreparer(
-                reuse: new ReviewJobReuse(executionStore, scans, NullLogger.Instance),
+                reuse: new ReviewJobReuse(executionStore, scans, NullLogger.Instance, MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry),
                 priorRows: priorRows)
             .PrepareAsync(job, MakeLease());
 

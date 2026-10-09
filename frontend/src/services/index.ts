@@ -3,9 +3,8 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 // Central service-adapter seam.
-// View models import services from this barrel so the mock/live split (US3, T034–T037)
-// can swap adapters in one place without churning view-model imports.
-export * as adoDiscoveryService from './adoDiscoveryService'
+// View models import services from this barrel so adapters can be selected in one place.
+export * as providerDiscoveryService from './providerDiscoveryService'
 export * as aiConnectionsService from './aiConnectionsService'
 export * as authOptionsService from './authOptionsService'
 export * as clientTokenUsageService from './clientTokenUsageService'

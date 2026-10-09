@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.Interfaces;
 using Microsoft.VisualStudio.Services.Identity;
 using Microsoft.VisualStudio.Services.Identity.Client;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 

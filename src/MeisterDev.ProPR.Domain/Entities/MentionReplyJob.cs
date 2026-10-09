@@ -22,6 +22,7 @@ public sealed class MentionReplyJob
 {
     private MentionReplyJob()
     {
+        this.Provider = ScmProvider.AzureDevOps;
         this.OrganizationUrl = string.Empty;
         this.ProjectId = string.Empty;
         this.RepositoryId = string.Empty;
@@ -33,6 +34,56 @@ public sealed class MentionReplyJob
     ///     Creates a new <see cref="MentionReplyJob" />.
     /// </summary>
     public MentionReplyJob(
+        Guid id,
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string threadId,
+        long commentId,
+        string mentionText,
+        string? threadFilePath = null,
+        int? threadLineNumber = null,
+        Guid? commentAuthorId = null,
+        string? commentAuthorName = null,
+        DateTimeOffset? commentPublishedAt = null,
+        string? commentAuthorNativeId = null)
+        : this(
+            new CodeReviewSourceContext(
+                ScmProvider.AzureDevOps, organizationUrl, projectId, projectId,
+                CodeReviewPlatformKind.PullRequest, pullRequestId.ToString()), id, clientId, organizationUrl, projectId, repositoryId, pullRequestId, threadId,
+            commentId, mentionText, threadFilePath, threadLineNumber, commentAuthorId, commentAuthorName, commentPublishedAt, commentAuthorNativeId)
+    {
+    }
+
+    /// <summary>Creates work using explicitly captured source coordinates.</summary>
+    public MentionReplyJob(
+        CodeReviewRef codeReview,
+        Guid id,
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string threadId,
+        long commentId,
+        string mentionText,
+        string? threadFilePath = null,
+        int? threadLineNumber = null,
+        Guid? commentAuthorId = null,
+        string? commentAuthorName = null,
+        DateTimeOffset? commentPublishedAt = null,
+        string? commentAuthorNativeId = null)
+        : this(
+            CodeReviewSourceContext.FromReview(codeReview), id, clientId, organizationUrl, projectId, repositoryId, pullRequestId, threadId, commentId,
+            mentionText, threadFilePath, threadLineNumber, commentAuthorId, commentAuthorName, commentPublishedAt, commentAuthorNativeId)
+    {
+    }
+
+    /// <summary>Creates work using explicitly prepared source coordinates.</summary>
+    public MentionReplyJob(
+        CodeReviewSourceContext sourceContext,
         Guid id,
         Guid clientId,
         string organizationUrl,
@@ -76,12 +127,13 @@ public sealed class MentionReplyJob
         this.ThreadId = threadId;
         this.CommentId = commentId;
         this.MentionText = mentionText;
-        this.Provider = ScmProvider.AzureDevOps;
-        this.HostBaseUrl = NormalizeHostBaseUrl(organizationUrl);
-        this.RepositoryOwnerOrNamespace = projectId;
-        this.RepositoryProjectPath = projectId;
-        this.CodeReviewPlatformKind = CodeReviewPlatformKind.PullRequest;
-        this.ExternalCodeReviewId = pullRequestId.ToString();
+        this.Provider = sourceContext.Provider;
+        _ = new ProviderHostRef(sourceContext.Provider, organizationUrl);
+        this.HostBaseUrl = new ProviderHostRef(sourceContext.Provider, sourceContext.HostBaseUrl).HostBaseUrl;
+        this.RepositoryOwnerOrNamespace = sourceContext.OwnerOrNamespace;
+        this.RepositoryProjectPath = sourceContext.ProjectPath;
+        this.CodeReviewPlatformKind = sourceContext.Platform;
+        this.ExternalCodeReviewId = sourceContext.ExternalReviewId;
         this.ThreadFilePath = NormalizeOptional(threadFilePath);
         this.ThreadLineNumber = threadLineNumber;
         this.CommentAuthorExternalUserId = commentAuthorId?.ToString("D");
@@ -100,7 +152,7 @@ public sealed class MentionReplyJob
     public Guid ClientId { get; init; }
 
     /// <summary>Normalized source-control provider family for this mention reply job.</summary>
-    public ScmProvider Provider { get; private set; } = ScmProvider.AzureDevOps;
+    public ScmProvider Provider { get; private set; }
 
     /// <summary>Normalized provider host base URL for this mention reply job.</summary>
     public string? HostBaseUrl { get; private set; }

@@ -9,6 +9,8 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <summary>
 ///     Provider-neutral request used by the AI connection repository to persist one profile.
 /// </summary>
+/// <remarks>The repository preserves creation correlation and rejects duplicate client/identifier pairs, including concurrent creation. Physical profile deletion permits reuse.</remarks>
+/// <param name="CreationRequestId">Optional immutable client-scoped identifier used to recover creation through profile readback. An existing identifier rejects a duplicate creation.</param>
 public sealed record AiConnectionWriteRequestDto(
     string DisplayName,
     string ProviderKind,
@@ -21,7 +23,8 @@ public sealed record AiConnectionWriteRequestDto(
     IReadOnlyDictionary<string, string>? DefaultQueryParams = null,
     string? Secret = null,
     IReadOnlyDictionary<string, string>? ProviderSettings = null,
-    IReadOnlyDictionary<string, string>? DeclaredSecrets = null)
+    IReadOnlyDictionary<string, string>? DeclaredSecrets = null,
+    Guid? CreationRequestId = null)
 {
     /// <summary>
     ///     Renders the request without its credential; see <see cref="SecretSafeRendering" />. The declared

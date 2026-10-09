@@ -4,6 +4,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Common;
 
@@ -33,7 +34,7 @@ public sealed class ProviderThrottleSignalTests
         using var response = new HttpResponseMessage(HttpStatusCode.Forbidden);
         response.Headers.Add("x-ratelimit-remaining", "0");
 
-        Assert.True(ProviderThrottleSignal.IsThrottled(response));
+        Assert.True(GitHubReadFailures.IsThrottled(response));
     }
 
     [Fact]

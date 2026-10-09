@@ -196,6 +196,12 @@ describe('ProviderConnectionForm', () => {
 
     expect(form.oAuthTenantId).toBe('contoso.onmicrosoft.com')
     expect(form.oAuthClientId).toBe('11111111-1111-1111-1111-111111111111')
+    const authenticationSelect = wrapper.findAll('select')[1]!
+    expect(authenticationSelect.findAll('option').map(option => option.element.value)).toEqual(['oauthClientCredentials', 'personalAccessToken'])
+    expect(form.authenticationKind).toBe('oauthClientCredentials')
+    await authenticationSelect.setValue('personalAccessToken')
+    expect(form.authenticationKind).toBe('personalAccessToken')
+    expect(wrapper.find('input[placeholder="Azure app registration client ID"]').exists()).toBe(false)
   })
 
   it('shows GitHub App fields and private-key copy for GitHub App authentication', async () => {

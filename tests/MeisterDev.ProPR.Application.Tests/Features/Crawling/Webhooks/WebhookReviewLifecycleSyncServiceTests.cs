@@ -3,7 +3,7 @@
 
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Models;
-using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Services;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Webhooks;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -14,6 +14,25 @@ namespace MeisterDev.ProPR.Application.Tests.Features.Crawling.Webhooks;
 
 public sealed class WebhookReviewLifecycleSyncServiceTests
 {
+    [Fact]
+    public async Task NativeLifecyclePropagatesLookupCancellationBeforeCancellingJobs()
+    {
+        var configuration = CreateConfiguration();
+        var delivery = CreateClosedDelivery();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var jobs = Substitute.For<IJobRepository>();
+        var failure = new OperationCanceledException(cancellation.Token);
+        jobs.GetActiveJobsForConfigAsync(configuration.ClientId, configuration.OrganizationUrl, configuration.ProjectId, cancellation.Token)
+            .Returns(Task.FromException<IReadOnlyList<ReviewJob>>(failure));
+        var service = new WebhookReviewLifecycleSyncService(jobs, NullLogger<WebhookReviewLifecycleSyncService>.Instance);
+
+        Assert.Same(
+            failure, await Assert.ThrowsAsync<OperationCanceledException>(() =>
+                service.SynchronizeAsync(configuration, delivery, new WebhookEventClassification(WebhookEventKind.PullRequestClosed), cancellation.Token)));
+        await jobs.DidNotReceiveWithAnyArgs().SetCancelledAsync(default);
+    }
+
     [Fact]
     public async Task SynchronizeAsync_ClosedPullRequest_CancelsMatchingActiveJobs()
     {
@@ -55,6 +74,7 @@ public sealed class WebhookReviewLifecycleSyncServiceTests
         };
 
         jobRepository.GetActiveJobsForConfigAsync(
+                configuration.ClientId,
                 configuration.OrganizationUrl,
                 configuration.ProjectId,
                 Arg.Any<CancellationToken>())
@@ -67,7 +87,7 @@ public sealed class WebhookReviewLifecycleSyncServiceTests
         var actionSummaries = await sut.SynchronizeAsync(
             configuration,
             delivery,
-            new AdoWebhookEventClassification(AdoWebhookEventKind.PullRequestClosed),
+            new WebhookEventClassification(WebhookEventKind.PullRequestClosed),
             CancellationToken.None);
 
         await jobRepository.Received(1).SetCancelledAsync(matchingPending.Id, Arg.Any<CancellationToken>());
@@ -97,6 +117,7 @@ public sealed class WebhookReviewLifecycleSyncServiceTests
         };
 
         jobRepository.GetActiveJobsForConfigAsync(
+                configuration.ClientId,
                 configuration.OrganizationUrl,
                 configuration.ProjectId,
                 Arg.Any<CancellationToken>())
@@ -109,7 +130,7 @@ public sealed class WebhookReviewLifecycleSyncServiceTests
         var actionSummaries = await sut.SynchronizeAsync(
             configuration,
             delivery,
-            new AdoWebhookEventClassification(AdoWebhookEventKind.PullRequestClosed),
+            new WebhookEventClassification(WebhookEventKind.PullRequestClosed),
             CancellationToken.None);
 
         await jobRepository.DidNotReceive().SetCancelledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
@@ -136,9 +157,9 @@ public sealed class WebhookReviewLifecycleSyncServiceTests
             SecretCiphertext: "ciphertext");
     }
 
-    private static IncomingAdoWebhookDelivery CreateClosedDelivery()
+    private static IncomingWebhookDelivery CreateClosedDelivery()
     {
-        return new IncomingAdoWebhookDelivery(
+        return new IncomingWebhookDelivery(
             "path-key",
             "git.pullrequest.updated",
             WebhookEventType.PullRequestUpdated,

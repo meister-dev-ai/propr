@@ -39,7 +39,11 @@ public sealed partial class ReviewJobsController(
     public async Task<IActionResult> GetClientReview(Guid clientId, Guid jobId, CancellationToken ct)
     {
         var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
-        if (roleCheck is not null) return roleCheck;
+        if (roleCheck is not null)
+        {
+            return roleCheck;
+        }
+
         var status = await getReviewJobStatusHandler.HandleAsync(new GetReviewJobStatusQuery(jobId, clientId), ct);
         return status is null ? this.NotFound() : this.Ok(MapStatusResponse(status));
     }
@@ -164,7 +168,7 @@ public sealed partial class ReviewJobsController(
     /// <response code="403">Caller lacks <c>ClientUser</c> for the client, or no configuration covers the coordinates.</response>
     /// <response code="404">The provider reports no such pull request.</response>
     /// <response code="409">A review is already running at this revision, or the pull request cannot be reviewed.</response>
-    /// <response code="500">The pull request resolved, but queueing the review failed.</response>
+    /// <response code="500">The review could not be admitted or submitted.</response>
     /// <response code="502">The provider could not be asked for the pull request's current revision.</response>
     [HttpPost("/clients/{clientId:guid}/reviewing/jobs/by-coordinates")]
     [ProducesResponseType(typeof(ReviewByCoordinatesResponse), StatusCodes.Status202Accepted)]
@@ -215,7 +219,8 @@ public sealed partial class ReviewJobsController(
                 request.ProviderScopePath,
                 request.ProviderProjectKey,
                 request.RepositoryId,
-                request.PullRequestId.Value),
+                request.PullRequestId.Value,
+                IsCustomerRequest: this.HttpContext.Items.ContainsKey("TenantMachineAuthorized")),
             ct);
 
         var response = new ReviewByCoordinatesResponse(result.Outcome, result.JobId, result.Reason);

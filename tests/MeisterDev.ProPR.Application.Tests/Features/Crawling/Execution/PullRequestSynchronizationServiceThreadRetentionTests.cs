@@ -29,6 +29,38 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
     private static readonly Guid HumanAuthorId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     [Fact]
+    public async Task SynchronizationCoverageConsumesNativeResolutionIntent()
+    {
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+        var policy = Substitute.For<ICodeReviewPreparationPolicy>();
+        registry.GetCodeReviewPreparationPolicy(ScmProvider.AzureDevOps).Returns(policy);
+        policy.InterpretThreadResolution(Arg.Any<string?>()).Returns(ThreadResolutionIntent.AcceptedByHuman);
+        var harness = new Harness(false, withHarvest: true, providerRegistry: registry);
+
+        await harness.RunAsync();
+
+        await harness.Coverage.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<string>(), true,
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>(), true);
+        policy.Received().InterpretThreadResolution(Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task SynchronizationUsesTheInjectedNativeConnectionPredicate()
+    {
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+        var policy = Substitute.For<IScmConnectionConfigurationPolicy>();
+        registry.GetConnectionConfigurationPolicy(ScmProvider.AzureDevOps).Returns(policy);
+        policy.MatchesObservedConnectionHost(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
+        var harness = new Harness(false, withHarvest: true, providerRegistry: registry);
+
+        await harness.RunAsync();
+
+        policy.Received(1).MatchesObservedConnectionHost("https://dev.azure.com/org", "https://dev.azure.com");
+        await harness.Harvester.DidNotReceiveWithAnyArgs().HandleThreadObservedAsync(default!);
+    }
+
+    [Fact]
     public async Task IncompleteHarvestModuleKeepsArchiveOnlyObservationAvailable()
     {
         var harness = new Harness(true, withHarvest: true, withCoverageRecorder: false);
@@ -373,7 +405,8 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
             IReadOnlyList<PrCommentThread>? threads = null,
             ThreadOwnerIdentity? adapterIdentity = null,
             bool withHarvest = false,
-            string scopePath = "https://dev.azure.com/org", string? connectionBase = null, bool withCoverageRecorder = true)
+            string scopePath = "https://dev.azure.com/org", string? connectionBase = null, bool withCoverageRecorder = true,
+            IScmProviderRegistry? providerRegistry = null)
         {
             this._provider = provider;
             this._scopePath = scopePath;
@@ -392,9 +425,9 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
             clientRegistry.GetDefaultReviewPipelineProfileIdAsync(ClientId, Arg.Any<CancellationToken>())
                 .Returns(ReviewPipelineProfileCatalog.FileByFileBalancedProfileId);
 
-            jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            jobs.FindActiveJob(ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
                 .Returns((ReviewJob?)null);
-            jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            jobs.FindCompletedJob(ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
                 .Returns((ReviewJob?)null);
             jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
                 .Returns(new TryAddReviewJobResult(true, null, 0));
@@ -434,6 +467,7 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
             }
 
             this._sut = new PullRequestSynchronizationService(
+                providerRegistry ?? MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
                 jobs,
                 NullLogger<PullRequestSynchronizationService>.Instance,
                 iterationResolver,

@@ -2,6 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Globalization;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.TestSupport;
+using NSubstitute;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
@@ -21,16 +24,23 @@ public sealed class ClientsValidatorTests
     private static readonly EgressUrlPolicy PrivateEgressPermitted = new(AllowPrivateEgress: true, AllowInsecureScheme: false);
 
     private static readonly CreateClientProviderConnectionRequestValidator CreateProviderConnectionValidator =
-        new(PrivateEgressPermitted);
+        new(PrivateEgressPermitted, NativePolicies());
 
     private static readonly PatchClientProviderConnectionRequestValidator PatchProviderConnectionValidator =
-        new(PrivateEgressPermitted);
+        new(PrivateEgressPermitted, LocalScmPolicies.ConfigurationPolicies);
 
     private static readonly CreateClientProviderConnectionRequestValidator StrictCreateProviderConnectionValidator =
-        new(EgressUrlPolicy.Locked);
+        new(EgressUrlPolicy.Locked, NativePolicies());
 
     private static readonly PatchClientProviderConnectionRequestValidator StrictPatchProviderConnectionValidator =
-        new(EgressUrlPolicy.Locked);
+        new(EgressUrlPolicy.Locked, LocalScmPolicies.ConfigurationPolicies);
+
+    private static IScmProviderRegistry NativePolicies()
+    {
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+        registry.GetConnectionConfigurationPolicy(Arg.Any<ScmProvider>()).Returns(call => ScmConnectionConfigurationPolicies.Get(call.Arg<ScmProvider>()));
+        return registry;
+    }
 
     [Fact]
     public void CreateClient_ValidRequest_Passes()
@@ -170,6 +180,33 @@ public sealed class ClientsValidatorTests
                 "server-pat"));
 
         Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData("https://dev.azure.com")]
+    [InlineData("https://dev.azure.com/organization")]
+    [InlineData("https://organization.visualstudio.com")]
+    public void CreateProviderConnection_AzureDevOpsServicesPatRequest_Passes(string hostBaseUrl)
+    {
+        var result = StrictCreateProviderConnectionValidator.Validate(
+            new CreateClientProviderConnectionRequest(
+                ScmProvider.AzureDevOps, hostBaseUrl, ScmAuthenticationKind.PersonalAccessToken,
+                null, null, null, "Azure DevOps Services", "synthetic-pat"));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData(ScmAuthenticationKind.WindowsUserAccount)]
+    [InlineData(ScmAuthenticationKind.AppInstallation)]
+    public void CreateProviderConnection_AzureDevOpsServicesUnsupportedAuthentication_Fails(ScmAuthenticationKind authenticationKind)
+    {
+        var result = StrictCreateProviderConnectionValidator.Validate(
+            new CreateClientProviderConnectionRequest(
+                ScmProvider.AzureDevOps, "https://dev.azure.com", authenticationKind,
+                null, null, null, "Azure DevOps Services", "synthetic-secret"));
+
+        Assert.Contains(result.Errors, error => error.PropertyName == nameof(CreateClientProviderConnectionRequest.AuthenticationKind));
     }
 
     [Fact]

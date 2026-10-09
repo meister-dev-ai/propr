@@ -327,7 +327,7 @@ public sealed class RunnerJobManifestResolverTests
     {
         var job = JobWithRevision();
         this._clients.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, Arg.Any<CancellationToken>()).Returns(false);
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
         var resolution = await this.CreateResolver(providerRegistry: registry, reviewOptions: new AiReviewOptions())
             .ResolveAsync(this.RequestWithConversation(job));
@@ -344,7 +344,7 @@ public sealed class RunnerJobManifestResolverTests
     {
         var job = JobWithRevision();
         this._clients.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, Arg.Any<CancellationToken>()).Returns(true);
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.GetLinkedItemProvider(Arg.Any<ScmProvider>()).Throws(new InvalidOperationException("provider down"));
 
         var resolution = await this.CreateResolver(providerRegistry: registry, reviewOptions: new AiReviewOptions())
@@ -377,7 +377,7 @@ public sealed class RunnerJobManifestResolverTests
         var provider = Substitute.For<ILinkedItemProvider>();
         provider.DiscoverLinkedItemsAsync(Arg.Any<Guid>(), Arg.Any<PullRequest>(), Arg.Any<CancellationToken>())
             .Returns(items);
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.GetLinkedItemProvider(Arg.Any<ScmProvider>()).Returns(provider);
         return registry;
     }

@@ -17,4 +17,5 @@ public sealed record ReviewDiscoveryItemDto(
     string Title,
     string? WebUrl,
     string? SourceBranch,
-    string? TargetBranch);
+    string? TargetBranch,
+    string? AuthorName = null);

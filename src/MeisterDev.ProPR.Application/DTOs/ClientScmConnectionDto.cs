@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Application.Features.Clients.Models;
 
 namespace MeisterDev.ProPR.Application.DTOs;
 
@@ -26,8 +27,8 @@ public sealed record ClientScmConnectionDto(
     string? ReadinessReason = null,
     string HostVariant = "unknown",
     IReadOnlyList<string>? MissingReadinessCriteria = null,
-    long? GitHubAppId = null,
-    long? GitHubAppInstallationId = null,
+    ScmApplicationId? AppId = null,
+    ScmInstallationId? InstallationId = null,
     string? UserName = null,
     bool StoreThreads = false,
     bool StoreDiffs = false,
@@ -64,8 +65,8 @@ public sealed record ClientScmConnectionDto(
             lastVerificationFailureCategory,
             createdAt,
             updatedAt,
-            GitHubAppId: null,
-            GitHubAppInstallationId: null)
+            AppId: null,
+            InstallationId: null)
     {
     }
 }

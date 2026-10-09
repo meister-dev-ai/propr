@@ -77,7 +77,7 @@ public sealed class PullRequestSynchronizationServiceAdmissionRefusalTests
     private static IJobRepository CreateJobs(string refusedRevisionKey, string? refusedFingerprint)
     {
         var jobs = Substitute.For<IJobRepository>();
-        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+        jobs.GetActiveJobsForConfigAsync(ClientId, "https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
             .Returns([]);
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
@@ -99,6 +99,7 @@ public sealed class PullRequestSynchronizationServiceAdmissionRefusalTests
         clientRegistry.GetReviewAdmissionPolicyAsync(ClientId, Arg.Any<CancellationToken>()).Returns(policy);
 
         return new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             jobs,
             NullLogger<PullRequestSynchronizationService>.Instance,
             clientRegistry: clientRegistry);
@@ -121,6 +122,7 @@ public sealed class PullRequestSynchronizationServiceAdmissionRefusalTests
             PullRequestStatus = PrStatus.Active,
             CandidateIterationId = 7,
             ReviewRevision = new ReviewRevision("head-sha", "base-sha", "start-sha", providerRevisionId, "patch-identity"),
+            Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps,
         };
     }
 }

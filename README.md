@@ -55,10 +55,10 @@ provider and AI model, and getting a first review posted. The [deployment guide]
 covers what to change once you keep the installation. The compose stack is for evaluation;
 `example/azure/.azure/` deploys the same stack to Azure Container Apps.
 
-Automation callers can use tenant machine credentials for permitted client configuration and review
-operations. ProPR checks current tenant ownership of clients and review jobs. See
-[automation credentials](docs/reference/security.md#automation-credentials) and the
-[API reference](docs/reference/api.md#tenant-machine-credentials).
+Guided crawl, webhook, mention and ProCursor configuration starts with a saved client connection.
+The connection supplies its accessible scopes, native hierarchy and source capabilities. ProCursor
+knowledge-source creation is available for connections with a registered knowledge-source capability.
+
 
 ## Documentation
 
@@ -83,6 +83,8 @@ Start at one of these:
 | [Editions](docs/reference/editions.md) | Something is refused and you suspect it needs a commercial license |
 | [Usage statistics](docs/reference/usage-statistics.md) | You need the field-by-field payload of the daily report, and how to switch it off |
 | [Code Insights architecture](docs/architecture/code-insights.md) | You need the analytics evidence, projection, authorization and report ownership boundaries |
+
+SCM contract and adapter ownership is documented in [SCM provider boundaries](docs/architecture/scm-provider-boundaries.md).
 
 ## License
 

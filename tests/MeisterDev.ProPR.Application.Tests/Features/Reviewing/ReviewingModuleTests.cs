@@ -51,7 +51,7 @@ public sealed class ReviewingModuleTests
                     null,
                     null,
                     null,
-                    []),
+                    []) { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps },
             ]);
 
         var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
@@ -107,7 +107,7 @@ public sealed class ReviewingModuleTests
                             "{\"discarded\":[{\"reasonCodes\":[\"summary_level_only\"]}],\"degradedComponents\":[]}",
                             "comment-relevance",
                             null),
-                    ]),
+                    ]) { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps },
             ]);
 
         var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();

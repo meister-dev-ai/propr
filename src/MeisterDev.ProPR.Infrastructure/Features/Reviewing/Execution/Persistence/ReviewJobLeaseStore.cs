@@ -133,9 +133,7 @@ public sealed class ReviewJobLeaseStore(
             // before either of them wrote, and both pass a cap they jointly exceed. Row locking does not
             // help: it arbitrates claims of the same row, and these are different rows. The lock is held for
             // the transaction, so it is released when the transaction ends, by commit or by rollback.
-            await dbContext.Database.ExecuteSqlRawAsync(
-                "SELECT pg_advisory_xact_lock(hashtextextended('propr:quota:concurrent-reviews', 0))",
-                ct).ConfigureAwait(false);
+            await PostgresAdvisoryLocks.AcquireTransactionAsync(dbContext, "propr:quota:concurrent-reviews", ct).ConfigureAwait(false);
 
             // The claim itself is the unbounded one, with the capacity condition added. Everything it stamps
             // is stamped identically, so a job claimed under a cap is indistinguishable afterwards from one

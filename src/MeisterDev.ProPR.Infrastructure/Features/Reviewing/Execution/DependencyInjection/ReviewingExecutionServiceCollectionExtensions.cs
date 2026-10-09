@@ -66,7 +66,8 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddScoped(sp => new ReviewJobReuse(
             sp.GetRequiredService<IReviewJobExecutionStore>(),
             sp.GetRequiredService<IReviewPrScanWatermarkStore>(),
-            sp.GetRequiredService<ILogger<ReviewJobReuse>>()));
+            sp.GetRequiredService<ILogger<ReviewJobReuse>>(),
+            sp.GetRequiredService<IScmProviderRegistry>()));
         // Every proxied call an executor makes is authorized against the lease it presents, before anything
         // else looks at the request.
         services.AddScoped<IRunnerCallAuthorizer, RunnerCallAuthorizer>();

@@ -336,8 +336,8 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.Property<string>("DimensionKey")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("dimension_key");
 
                     b.Property<string>("FilePath")
@@ -2443,6 +2443,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error_message");
 
+                    b.Property<long?>("ExecutionDurationMilliseconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("execution_duration_ms");
+
                     b.Property<string>("ExternalCodeReviewId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -2680,6 +2684,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("total_reclaim_count");
+
+                    b.Property<DateTimeOffset?>("UsageFinalizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("usage_finalized_at");
 
                     b.HasKey("Id");
 
@@ -3815,6 +3823,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CreationRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creation_request_id");
+
                     b.Property<DateTimeOffset?>("CredentialAuthorizedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("credential_authorized_at");
@@ -3898,6 +3910,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasIndex("ClientId")
                         .HasDatabaseName("ix_ai_connection_profiles_client_id_active")
                         .HasFilter("is_active = true");
+
+                    b.HasIndex("ClientId", "CreationRequestId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ai_connection_profiles_client_creation_request")
+                        .HasFilter("creation_request_id IS NOT NULL");
 
                     b.HasIndex("ClientId", "DisplayName")
                         .IsUnique()
@@ -4267,6 +4284,82 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_app_users_username");
 
                     b.ToTable("app_users", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ClientPullRequestOverviewCacheRecord", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("key");
+
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<int>("ContentBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("content_bytes");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("Failure")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("failure");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("fingerprint");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until");
+
+                    b.Property<DateTimeOffset>("NextRefreshAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_refresh_at");
+
+                    b.Property<DateTimeOffset?>("ObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_at");
+
+                    b.Property<Guid?>("Owner")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner");
+
+                    b.Property<string>("SourceKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_key");
+
+                    b.HasKey("ClientId", "Key");
+
+                    b.HasIndex("ClientId", "Kind", "ExpiresAt");
+
+                    b.HasIndex("ClientId", "ConnectionId", "Failure", "NextRefreshAt");
+
+                    b.HasIndex("ClientId", "SourceKey", "Kind", "Failure", "NextRefreshAt");
+
+                    b.ToTable("client_pull_request_overview_cache", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ClientPurposeLogicalModelRecord", b =>
@@ -4777,6 +4870,58 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("client_scm_scopes", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.CompletedReviewUsageSnapshot", b =>
+                {
+                    b.Property<long>("Sequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("sequence");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Sequence"));
+
+                    b.Property<Guid?>("AiConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ai_connection_id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<bool>("CostIsApproximate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("cost_is_approximate");
+
+                    b.Property<decimal?>("EstimatedCostUsd")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("estimated_cost_usd");
+
+                    b.Property<long>("ExecutionDurationMilliseconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("execution_duration_ms");
+
+                    b.Property<DateTimeOffset>("FinalizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finalized_at");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.HasKey("Sequence");
+
+                    b.HasIndex("JobId")
+                        .IsUnique();
+
+                    b.HasIndex("ClientId", "Sequence");
+
+                    b.ToTable("completed_review_usage_snapshots", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.CrawlConfigurationProCursorSourceRecord", b =>
                 {
                     b.Property<Guid>("CrawlConfigurationId")
@@ -4860,6 +5005,18 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
                         .HasColumnName("repository_id");
+
+                    b.Property<int>("ReviewTargetLifecycle")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("review_target_lifecycle");
+
+                    b.Property<long>("ReviewTargetRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L)
+                        .HasColumnName("review_target_revision");
 
                     b.Property<float?>("ReviewTemperature")
                         .HasColumnType("real")

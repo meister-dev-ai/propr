@@ -419,7 +419,7 @@ export function useProviderConnectionsViewModel(
   })
 
   watch(() => createForm.hostBaseUrl, (hostBaseUrl) => {
-    createForm.authenticationKind = normalizeAuthenticationKind(createForm.providerFamily, hostBaseUrl, createForm.authenticationKind)
+    // Host edits preserve the selected mode; completed-host validation rejects unsupported combinations.
     if (!requiresUserName(createForm.providerFamily, hostBaseUrl, createForm.authenticationKind)) {
       clearUserNameField(createForm)
     }
@@ -444,7 +444,6 @@ export function useProviderConnectionsViewModel(
       return
     }
 
-    editForm.authenticationKind = normalizeAuthenticationKind(editForm.providerFamily, hostBaseUrl, editForm.authenticationKind)
     if (!requiresUserName(editForm.providerFamily, hostBaseUrl, editForm.authenticationKind)) {
       clearUserNameField(editForm)
     }

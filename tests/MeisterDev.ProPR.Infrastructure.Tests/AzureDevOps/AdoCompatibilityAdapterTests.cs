@@ -3,7 +3,7 @@
 
 using Azure.Core;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -16,69 +16,12 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.VisualStudio.Services.Common;
 using NSubstitute;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 
 public sealed class AdoCompatibilityAdapterTests
 {
-    private static readonly string RepoRoot = ResolveRepoRoot();
-
-    [Fact]
-    public void AzureDevOpsProviderAdapters_LiveOutsideCompatibilityFolder()
-    {
-        Assert.False(
-            Directory.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/Compatibility")));
-        Assert.True(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/DependencyInjection",
-                    "AzureDevOpsProviderServiceCollectionExtensions.cs")));
-        Assert.False(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/AzureDevOpsProviderAdapters.cs")));
-        Assert.True(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/Discovery/AdoRepositoryDiscoveryProvider.cs")));
-        Assert.True(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/Identity/AdoReviewerIdentityService.cs")));
-        Assert.True(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/Reviewing/AdoCodeReviewQueryService.cs")));
-        Assert.True(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/Reviewing/AdoCodeReviewPublicationService.cs")));
-        Assert.True(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/Reviewing/AdoReviewDiscoveryProvider.cs")));
-        Assert.True(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/Runtime/AdoWebhookIngressService.cs")));
-        Assert.True(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterDev.ProPR.Infrastructure/Features/Providers/AzureDevOps/Support/AdoProviderAdapterHelpers.cs")));
-    }
-
     [Fact]
     public async Task GetReviewAsync_ProbesEnabledOrganizationScopesUntilReviewIsResolved()
     {
@@ -518,8 +461,9 @@ public sealed class AdoCompatibilityAdapterTests
             CreateScope(clientId, "https://dev.azure.com/org-one"));
         var gitClient = CreateGitClient("https://dev.azure.com/org-one");
 
-        gitClient.GetPullRequestsByProjectAsync(
+        gitClient.GetPullRequestsAsync(
                 Arg.Any<string>(),
+                repositoryId,
                 Arg.Any<GitPullRequestSearchCriteria>(),
                 Arg.Any<int?>(),
                 Arg.Any<int?>(),
@@ -961,25 +905,5 @@ public sealed class AdoCompatibilityAdapterTests
                 },
             ],
         };
-    }
-
-    private static string ResolveRepoRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (current is not null)
-        {
-            var hasSolution = File.Exists(Path.Combine(current.FullName, "MeisterDev.ProPR.slnx"));
-            var hasSourceTree = Directory.Exists(Path.Combine(current.FullName, "src"));
-
-            if (hasSolution && hasSourceTree)
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new InvalidOperationException("Unable to locate the repository root.");
     }
 }

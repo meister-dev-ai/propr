@@ -8,7 +8,9 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using MeisterDev.ProPR.Application.Features.Clients.Models;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
 
@@ -17,8 +19,22 @@ public sealed class ClientScmConnectionRepository(
     MeisterProPRDbContext dbContext,
     ISecretProtectionCodec secretProtectionCodec,
     IProviderActivationService? providerActivationService = null,
-    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : IClientScmConnectionRepository
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
+    IEnumerable<IScmConnectionConfigurationPolicy>? connectionPolicies = null,
+    IEnumerable<IReviewSourcePolicy>? sourcePolicies = null) : IClientScmConnectionRepository
 {
+    private readonly IReadOnlyDictionary<ScmProvider, IScmConnectionConfigurationPolicy> _connectionPolicies =
+        (connectionPolicies ?? ScmLocalPolicyFactory.CreateConfigurationPolicies()).ToDictionary(policy => policy.Provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, IReviewSourcePolicy> _sourcePolicies =
+        (sourcePolicies ?? ScmLocalPolicyFactory.CreateSourcePolicies()).ToDictionary(policy => policy.Provider);
+
+    private IScmConnectionConfigurationPolicy ConnectionPolicy(ScmProvider provider) =>
+        this._connectionPolicies.TryGetValue(provider, out var policy) ? policy : new UnregisteredScmConnectionConfigurationPolicy(provider);
+
+    private IReviewSourcePolicy SourcePolicy(ScmProvider provider) =>
+        this._sourcePolicies.TryGetValue(provider, out var policy) ? policy : new UnregisteredReviewSourcePolicy(provider);
+
     private const string SecretPurpose = "ClientScmConnectionSecret";
 
     public async Task<IReadOnlyList<ClientScmConnectionDto>> GetByClientIdAsync(
@@ -98,23 +114,9 @@ public sealed class ClientScmConnectionRepository(
             return null;
         }
 
+        var selection = this.ConnectionPolicy(host.Provider).PrepareOperationalConnectionSelection(host.HostBaseUrl);
         ClientScmConnectionRecord? record;
-        if (host.Provider == ScmProvider.AzureDevOps)
-        {
-            record = (await this.WithReadDbAsync(
-                    db => db.ClientScmConnections
-                        .AsNoTracking()
-                        .Where(connection =>
-                            connection.ClientId == clientId
-                            && connection.Provider == host.Provider
-                            && connection.IsActive)
-                        .ToListAsync(ct),
-                    ct))
-                .Where(connection => AzureDevOpsHostBaseUrlMatches(connection.HostBaseUrl, host.HostBaseUrl))
-                .OrderByDescending(connection => connection.HostBaseUrl.Length)
-                .FirstOrDefault();
-        }
-        else
+        if (selection.ExactHost is not null)
         {
             record = await this.WithReadDbAsync(
                 db => db.ClientScmConnections
@@ -123,10 +125,26 @@ public sealed class ClientScmConnectionRepository(
                         connection =>
                             connection.ClientId == clientId
                             && connection.Provider == host.Provider
-                            && connection.HostBaseUrl == host.HostBaseUrl
+                            && connection.HostBaseUrl == selection.ExactHost
                             && connection.IsActive,
                         ct),
                 ct);
+        }
+        else
+        {
+            var candidates = (await this.WithReadDbAsync(
+                    db => db.ClientScmConnections
+                        .AsNoTracking()
+                        .Where(connection => connection.ClientId == clientId
+                                             && connection.Provider == host.Provider
+                                             && connection.IsActive)
+                        .ToListAsync(ct),
+                    ct))
+                .Where(connection => selection.MatchesStoredHost(connection.HostBaseUrl));
+            record = (selection.PreferLongestMatch
+                    ? candidates.OrderByDescending(connection => connection.HostBaseUrl.Length)
+                    : candidates)
+                .FirstOrDefault();
         }
 
         return record is null ? null : this.ToCredentialDto(record);
@@ -171,8 +189,8 @@ public sealed class ClientScmConnectionRepository(
         string displayName,
         string secret,
         bool isActive,
-        long? gitHubAppId = null,
-        long? gitHubAppInstallationId = null,
+        ScmApplicationId? appId = null,
+        ScmInstallationId? installationId = null,
         string? userName = null,
         bool storeThreads = false,
         bool storeDiffs = false,
@@ -195,7 +213,6 @@ public sealed class ClientScmConnectionRepository(
         }
 
         var now = DateTimeOffset.UtcNow;
-        var usesGitHubAppInstallation = UsesGitHubAppInstallation(providerFamily, authenticationKind);
         var record = new ClientScmConnectionRecord
         {
             Id = Guid.NewGuid(),
@@ -206,12 +223,9 @@ public sealed class ClientScmConnectionRepository(
             UserName = NormalizeUserName(providerFamily, authenticationKind, userName),
             OAuthTenantId = NormalizeOptional(oAuthTenantId),
             OAuthClientId = NormalizeOptional(oAuthClientId),
-            GitHubAppId = usesGitHubAppInstallation
-                ? NormalizeRequiredPositiveIdentifier(gitHubAppId, nameof(gitHubAppId))
-                : null,
-            GitHubAppInstallationId = usesGitHubAppInstallation
-                ? NormalizeRequiredPositiveIdentifier(gitHubAppInstallationId, nameof(gitHubAppInstallationId))
-                : null,
+            GitHubAppId = NormalizeGitHubAppIdentifier(providerFamily, authenticationKind, appId, "gitHubAppId"),
+            GitHubAppInstallationId =
+                NormalizeGitHubAppIdentifier(providerFamily, authenticationKind, installationId, "gitHubAppInstallationId"),
             DisplayName = NormalizeRequired(displayName),
             EncryptedSecretMaterial = secretProtectionCodec.Protect(NormalizeRequired(secret), SecretPurpose),
             VerificationStatus = "unknown",
@@ -246,8 +260,8 @@ public sealed class ClientScmConnectionRepository(
         string displayName,
         string? secret,
         bool isActive,
-        long? gitHubAppId = null,
-        long? gitHubAppInstallationId = null,
+        ScmApplicationId? appId = null,
+        ScmInstallationId? installationId = null,
         string? userName = null,
         bool storeThreads = false,
         bool storeDiffs = false,
@@ -294,13 +308,13 @@ public sealed class ClientScmConnectionRepository(
                                       || record.GitHubAppId != NormalizeGitHubAppIdentifier(
                                           record.Provider,
                                           authenticationKind,
-                                          gitHubAppId,
-                                          nameof(gitHubAppId))
+                                          appId,
+                                          "gitHubAppId")
                                       || record.GitHubAppInstallationId != NormalizeGitHubAppIdentifier(
                                           record.Provider,
                                           authenticationKind,
-                                          gitHubAppInstallationId,
-                                          nameof(gitHubAppInstallationId))
+                                          installationId,
+                                          "gitHubAppInstallationId")
                                       || !string.IsNullOrWhiteSpace(secret);
         var wasActive = record.IsActive;
         var secretRotated = !string.IsNullOrWhiteSpace(secret);
@@ -313,13 +327,13 @@ public sealed class ClientScmConnectionRepository(
         record.GitHubAppId = NormalizeGitHubAppIdentifier(
             record.Provider,
             authenticationKind,
-            gitHubAppId,
-            nameof(gitHubAppId));
+            appId,
+            "gitHubAppId");
         record.GitHubAppInstallationId = NormalizeGitHubAppIdentifier(
             record.Provider,
             authenticationKind,
-            gitHubAppInstallationId,
-            nameof(gitHubAppInstallationId));
+            installationId,
+            "gitHubAppInstallationId");
         record.DisplayName = NormalizeRequired(displayName);
         record.IsActive = isActive;
         record.StoreThreads = storeThreads;
@@ -332,10 +346,10 @@ public sealed class ClientScmConnectionRepository(
             record.EncryptedSecretMaterial = secretProtectionCodec.Protect(NormalizeRequired(secret), SecretPurpose);
         }
 
-        if (record.Provider == ScmProvider.AzureDevOps
-            && !string.Equals(previousHostBaseUrl, normalizedHostBaseUrl, StringComparison.OrdinalIgnoreCase))
+        var scopeProjection = this.SourcePolicy(record.Provider).CreateScopeRepointing(previousHostBaseUrl, normalizedHostBaseUrl);
+        if (scopeProjection is not null)
         {
-            this.RepointAzureDevOpsOrganizationScopes(clientId, connectionId, previousHostBaseUrl, normalizedHostBaseUrl);
+            this.RepointProviderScopes(clientId, connectionId, scopeProjection);
         }
 
         if (onboardingInputsChanged)
@@ -421,26 +435,18 @@ public sealed class ClientScmConnectionRepository(
         return true;
     }
 
-    /// <summary>
-    ///     For Azure DevOps provider connections, if the host URL changes, we need to update all existing scopes that point to the old host URL so they continue to
-    ///     function correctly.
-    ///     Otherwise, the scopes would still point at the old host and fail discovery and verification until manually updated.
-    ///     This method performs that repointing automatically during connection updates.
-    /// </summary>
-    private void RepointAzureDevOpsOrganizationScopes(
-        Guid clientId,
-        Guid connectionId,
-        string previousHostBaseUrl,
-        string newHostBaseUrl)
+    /// <summary>Applies the native local projection to this connection's saved scopes.</summary>
+    private void RepointProviderScopes(Guid clientId, Guid connectionId, Func<string, string?> projectScope)
     {
         foreach (var scope in dbContext.ClientScmScopes.Where(scope => scope.ClientId == clientId && scope.ConnectionId == connectionId))
         {
-            if (!TryRepointAzureDevOpsScopePath(scope.ScopePath, previousHostBaseUrl, newHostBaseUrl, out var repointedScopePath))
+            var projected = projectScope(scope.ScopePath);
+            if (projected is null)
             {
                 continue;
             }
 
-            scope.ScopePath = repointedScopePath;
+            scope.ScopePath = projected;
             scope.UpdatedAt = DateTimeOffset.UtcNow;
         }
     }
@@ -476,8 +482,8 @@ public sealed class ClientScmConnectionRepository(
             record.LastVerificationFailureCategory,
             record.CreatedAt,
             record.UpdatedAt,
-            GitHubAppId: record.GitHubAppId,
-            GitHubAppInstallationId: record.GitHubAppInstallationId,
+            AppId: record.GitHubAppId,
+            InstallationId: record.GitHubAppInstallationId,
             UserName: record.UserName,
             StoreThreads: record.StoreThreads,
             StoreDiffs: record.StoreDiffs,
@@ -560,45 +566,11 @@ public sealed class ClientScmConnectionRepository(
             ct);
     }
 
-    private static bool UsesGitHubAppInstallation(ScmProvider providerFamily, ScmAuthenticationKind authenticationKind)
-    {
-        return providerFamily == ScmProvider.GitHub
-               && authenticationKind == ScmAuthenticationKind.AppInstallation;
-    }
+    private long? NormalizeGitHubAppIdentifier(ScmProvider providerFamily, ScmAuthenticationKind authenticationKind, long? value, string parameterName) =>
+        this.ConnectionPolicy(providerFamily).NormalizePersistedAppIdentifier(authenticationKind, value, parameterName);
 
-    private static long? NormalizeGitHubAppIdentifier(
-        ScmProvider providerFamily,
-        ScmAuthenticationKind authenticationKind,
-        long? value,
-        string parameterName)
-    {
-        return UsesGitHubAppInstallation(providerFamily, authenticationKind)
-            ? NormalizeRequiredPositiveIdentifier(value, parameterName)
-            : null;
-    }
-
-    private static long NormalizeRequiredPositiveIdentifier(long? value, string parameterName)
-    {
-        if (!value.HasValue || value.Value <= 0)
-        {
-            throw new InvalidOperationException($"{parameterName} must be a positive numeric identifier.");
-        }
-
-        return value.Value;
-    }
-
-    private static string? NormalizeUserName(
-        ScmProvider providerFamily,
-        ScmAuthenticationKind authenticationKind,
-        string? userName)
-    {
-        if (providerFamily != ScmProvider.AzureDevOps || authenticationKind != ScmAuthenticationKind.WindowsUserAccount)
-        {
-            return null;
-        }
-
-        return NormalizeRequired(userName, nameof(userName), 256);
-    }
+    private string? NormalizeUserName(ScmProvider providerFamily, ScmAuthenticationKind authenticationKind, string? userName) =>
+        this.ConnectionPolicy(providerFamily).NormalizePersistedUserName(authenticationKind, userName);
 
     private async Task PurgeExpiredAuditEntriesAsync(CancellationToken ct)
     {
@@ -725,81 +697,8 @@ public sealed class ClientScmConnectionRepository(
             : normalized[..maxLength].TrimEnd();
     }
 
-    private static string NormalizeHostBaseUrl(ScmProvider providerFamily, string hostBaseUrl)
-    {
-        if (providerFamily == ScmProvider.AzureDevOps && !IsHostedAzureDevOpsHost(hostBaseUrl))
-        {
-            return NormalizeAbsoluteUrlPreservingPath(hostBaseUrl);
-        }
-
-        return new ProviderHostRef(providerFamily, hostBaseUrl).HostBaseUrl;
-    }
-
-    private static bool AzureDevOpsHostBaseUrlMatches(string left, string right)
-    {
-        var normalizedLeft = left.Trim().TrimEnd('/');
-        var normalizedRight = right.Trim().TrimEnd('/');
-        if (string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return normalizedLeft.StartsWith(normalizedRight + "/", StringComparison.OrdinalIgnoreCase)
-               || normalizedRight.StartsWith(normalizedLeft + "/", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryRepointAzureDevOpsScopePath(
-        string scopePath,
-        string previousHostBaseUrl,
-        string newHostBaseUrl,
-        out string repointedScopePath)
-    {
-        repointedScopePath = string.Empty;
-        if (!Uri.TryCreate(scopePath.Trim(), UriKind.Absolute, out _))
-        {
-            return false;
-        }
-
-        var normalizedScopePath = NormalizeAbsoluteUrlPreservingPath(scopePath);
-        var normalizedPreviousHostBaseUrl = NormalizeAbsoluteUrlPreservingPath(previousHostBaseUrl);
-        var normalizedNewHostBaseUrl = NormalizeAbsoluteUrlPreservingPath(newHostBaseUrl);
-        if (!string.Equals(normalizedScopePath, normalizedPreviousHostBaseUrl, StringComparison.OrdinalIgnoreCase)
-            && !normalizedScopePath.StartsWith(normalizedPreviousHostBaseUrl + "/", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var suffix = normalizedScopePath[normalizedPreviousHostBaseUrl.Length..];
-        repointedScopePath = (normalizedNewHostBaseUrl + suffix).TrimEnd('/');
-        return true;
-    }
-
-    private static string NormalizeAbsoluteUrlPreservingPath(string value)
-    {
-        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri))
-        {
-            throw new ArgumentException("HostBaseUrl must be an absolute URL.", nameof(value));
-        }
-
-        var builder = new UriBuilder(uri)
-        {
-            Query = string.Empty,
-            Fragment = string.Empty,
-        };
-
-        return builder.Uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
-    }
-
-    private static bool IsHostedAzureDevOpsHost(string hostBaseUrl)
-    {
-        if (!Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        return string.Equals(uri.Host, "dev.azure.com", StringComparison.OrdinalIgnoreCase)
-               || uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase);
-    }
+    private string NormalizeHostBaseUrl(ScmProvider providerFamily, string hostBaseUrl) =>
+        this.ConnectionPolicy(providerFamily).NormalizeConnectionHost(hostBaseUrl);
 
     private static string NormalizeRequired(string value)
     {

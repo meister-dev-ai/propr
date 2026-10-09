@@ -3,7 +3,7 @@
 
 using Azure.Core;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
@@ -21,6 +21,8 @@ using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.TeamFoundation.Wiki.WebApi;
 using Microsoft.VisualStudio.Services.WebApi;
 using NSubstitute;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Security;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -33,6 +35,57 @@ public sealed class AdoDiscoveryServiceTests
     private const string SecretPurpose = "ClientScmConnectionSecret";
     private static readonly Guid ClientId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly Guid ScopeId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+
+    [Fact]
+    public async Task GuidedSource_ForwardsSelectedConnectionBeforeNativeRequests()
+    {
+        var connectionId = Guid.NewGuid();
+        var scopes = Substitute.For<IClientScmScopeRepository>();
+        var service = new AdoDiscoveryService(
+            new VssConnectionFactory(Substitute.For<TokenCredential>()),
+            Substitute.For<IClientScmConnectionRepository>(), scopes);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ResolveGuidedSourceAsync(
+            ClientId, ScopeId, "project",
+            ProCursorSourceKind.Repository, new("azureDevOps", "repository"), connectionId: connectionId));
+
+        await scopes.Received(1).GetByIdAsync(ClientId, connectionId, ScopeId, Arg.Any<CancellationToken>());
+        await scopes.DidNotReceiveWithAnyArgs().GetByClientIdAsync(default, default, null!, default);
+    }
+
+    [Fact]
+    public async Task GuidedSource_RejectsConflictingConnectionScopeBeforeNativeRequests()
+    {
+        var connectionId = Guid.NewGuid();
+        var discovery = Substitute.For<IProviderAdminDiscoveryService>();
+        discovery.GetScopeAsync(ClientId, ScopeId, Arg.Any<CancellationToken>(), connectionId)
+            .Returns(
+                new ClientScmScopeDto(
+                    ScopeId, ClientId, Guid.NewGuid(), "organization", "org", "https://dev.azure.com/org",
+                    "Organization", "verified", true, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => AdoGuidedDiscovery.ResolveSourceAsync(
+            discovery, ClientId, ScopeId, "project",
+            ProCursorSourceKind.Repository, new("azureDevOps", "repository"), CancellationToken.None, connectionId));
+
+        await discovery.DidNotReceiveWithAnyArgs().ListSourceOptionsAsync(default, default, null!, default, default, default);
+        await discovery.DidNotReceiveWithAnyArgs().ListBranchOptionsAsync(default, default, null!, default, null!, default, default);
+    }
+
+    [Fact]
+    public async Task NeutralProjectOptionsPreserveNativeCompatibilityProjection()
+    {
+        var service = new TestableAdoDiscoveryService();
+        var projectId = Guid.NewGuid();
+        service.SetProjects(new TeamProjectReference { Id = projectId, Name = "Project" });
+
+        var option = Assert.Single(await service.ListProjectOptionsAsync(ClientId, ScopeId));
+
+        Assert.Equal(ScopeId, option.ScopeId);
+        Assert.Equal(projectId.ToString(), option.ProjectId);
+        Assert.Equal("Project", option.ProjectName);
+        Assert.Equal(typeof(IProviderAdminDiscoveryService).Assembly, option.GetType().Assembly);
+    }
 
     [Fact]
     public async Task ListProjectsAsync_ReturnsSortedProjectOptionsForEnabledScope()
@@ -50,19 +103,19 @@ public sealed class AdoDiscoveryServiceTests
                 Name = "Alpha",
             });
 
-        var result = await service.ListProjectsAsync(ClientId, ScopeId, CancellationToken.None);
+        var result = await service.ListProjectOptionsAsync(ClientId, ScopeId, CancellationToken.None);
 
         Assert.Collection(
             result,
             first =>
             {
-                Assert.Equal(ScopeId, first.OrganizationScopeId);
+                Assert.Equal(ScopeId, first.ScopeId);
                 Assert.Equal("10000000-0000-0000-0000-000000000011", first.ProjectId);
                 Assert.Equal("Alpha", first.ProjectName);
             },
             second =>
             {
-                Assert.Equal(ScopeId, second.OrganizationScopeId);
+                Assert.Equal(ScopeId, second.ScopeId);
                 Assert.Equal("10000000-0000-0000-0000-000000000010", second.ProjectId);
                 Assert.Equal("Zeta", second.ProjectName);
             });
@@ -87,7 +140,7 @@ public sealed class AdoDiscoveryServiceTests
                 DefaultBranch = "refs/heads/develop",
             });
 
-        var result = await service.ListSourcesAsync(
+        var result = await service.ListSourceOptionsAsync(
             ClientId,
             ScopeId,
             "project-1",
@@ -132,7 +185,7 @@ public sealed class AdoDiscoveryServiceTests
                 RepositoryId = Guid.Parse("10000000-0000-0000-0000-000000000042"),
             });
 
-        var result = await service.ListSourcesAsync(
+        var result = await service.ListSourceOptionsAsync(
             ClientId,
             ScopeId,
             "project-1",
@@ -165,7 +218,7 @@ public sealed class AdoDiscoveryServiceTests
         service.SetScopeAvailability(isEnabled: false);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.ListProjectsAsync(ClientId, ScopeId, CancellationToken.None));
+            service.ListProjectOptionsAsync(ClientId, ScopeId, CancellationToken.None));
 
         Assert.Contains("disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -203,7 +256,7 @@ public sealed class AdoDiscoveryServiceTests
             new GitBranchStats { Name = "refs/heads/wiki-main" },
             new GitBranchStats { Name = "refs/heads/Guides" });
 
-        var result = await service.ListBranchesAsync(
+        var result = await service.ListBranchOptionsAsync(
             ClientId,
             ScopeId,
             "project-1",
@@ -240,7 +293,7 @@ public sealed class AdoDiscoveryServiceTests
                 RepositoryId = Guid.Empty,
             });
 
-        var result = await service.ListBranchesAsync(
+        var result = await service.ListBranchOptionsAsync(
             ClientId,
             ScopeId,
             "project-1",
@@ -270,10 +323,10 @@ public sealed class AdoDiscoveryServiceTests
                 Name = "Provider-backed Project",
             });
 
-        var result = await service.ListProjectsAsync(clientId, scopeId, CancellationToken.None);
+        var result = await service.ListProjectOptionsAsync(clientId, scopeId, CancellationToken.None);
 
         var project = Assert.Single(result);
-        Assert.Equal(scopeId, project.OrganizationScopeId);
+        Assert.Equal(scopeId, project.ScopeId);
         Assert.Equal(scopeId, service.LastResolvedScope!.Id);
         Assert.Equal("https://dev.azure.com/org", service.LastResolvedScope.OrganizationUrl);
         Assert.NotNull(service.LastResolvedCredentials);
@@ -312,6 +365,50 @@ public sealed class AdoDiscoveryServiceTests
         Assert.DoesNotContain(
             services,
             descriptor => string.Equals(descriptor.ServiceType.Name, "IAdoDiscoveryService", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ListProjectsAndRepositories_SavedServicesPatUsesRealScopeAndCredentialResolution()
+    {
+        await using var db = CreateContext();
+        var clientId = await SeedClientAsync(db);
+        var repository = new ClientScmConnectionRepository(db, CreateCodec());
+        var connection = await repository.AddAsync(
+            clientId, ScmProvider.AzureDevOps, "https://dev.azure.com", ScmAuthenticationKind.PersonalAccessToken,
+            null, null, "Services PAT", "synthetic-pat", true);
+        var scopeId = await SeedAzureOrganizationScopeAsync(db, clientId, connection!.Id, "https://dev.azure.com/org");
+        var globalCredential = Substitute.For<TokenCredential>();
+        var service = new SavedPatDiscoveryService(new VssConnectionFactory(globalCredential), repository, new ClientScmScopeRepository(db));
+
+        var projects = await service.ListProjectOptionsAsync(clientId, scopeId);
+        Assert.Equal("Saved PAT project", Assert.Single(projects).ProjectName);
+        var sources = await service.ListSourceOptionsAsync(clientId, scopeId, projects[0].ProjectId, ProCursorSourceKind.Repository);
+        Assert.Equal("Saved PAT repository", Assert.Single(sources).DisplayName);
+        Assert.Equal(2, service.RemoteCalls);
+        await globalCredential.DidNotReceiveWithAnyArgs().GetTokenAsync(default, default);
+    }
+
+    private sealed class SavedPatDiscoveryService(
+        VssConnectionFactory factory,
+        IClientScmConnectionRepository connections,
+        IClientScmScopeRepository scopes) : AdoDiscoveryService(factory, connections, scopes)
+    {
+        public int RemoteCalls { get; private set; }
+
+        protected internal override Task<IReadOnlyList<TeamProjectReference>> GetProjectsAsync(VssConnection connection, CancellationToken ct)
+        {
+            Assert.Equal("https://dev.azure.com/org", connection.Uri.ToString().TrimEnd('/'));
+            Assert.IsType<Microsoft.VisualStudio.Services.Common.VssBasicCredential>(connection.Credentials.Federated);
+            this.RemoteCalls++;
+            return Task.FromResult<IReadOnlyList<TeamProjectReference>>([new() { Id = Guid.NewGuid(), Name = "Saved PAT project" }]);
+        }
+
+        protected internal override Task<IReadOnlyList<GitRepository>> GetRepositoriesAsync(VssConnection connection, string projectId, CancellationToken ct)
+        {
+            Assert.IsType<Microsoft.VisualStudio.Services.Common.VssBasicCredential>(connection.Credentials.Federated);
+            this.RemoteCalls++;
+            return Task.FromResult<IReadOnlyList<GitRepository>>([new() { Id = Guid.NewGuid(), Name = "Saved PAT repository" }]);
+        }
     }
 
     private static ISecretProtectionCodec CreateCodec()

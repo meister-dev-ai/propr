@@ -16,6 +16,9 @@ internal sealed partial class StubAdoThreadClient(ILogger<StubAdoThreadClient> l
 {
     public ScmProvider Provider => ScmProvider.AzureDevOps;
 
+    public Task ResolveThreadAsync(Guid clientId, ReviewThreadRef thread, CancellationToken ct = default) =>
+        ((IReviewThreadStatusWriter)this).UpdateThreadStatusAsync(clientId, thread, "fixed", ct);
+
     public Task UpdateThreadStatusAsync(
         Guid clientId,
         ReviewThreadRef thread,

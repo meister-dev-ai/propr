@@ -68,7 +68,17 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var coverage = await this.FindCoveringConfigurationAsync(command, cancellationToken);
+        PullRequestCoverage? coverage;
+        try
+        {
+            coverage = await this.FindCoveringConfigurationAsync(command, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (command.IsCustomerRequest && ex is not OperationCanceledException)
+        {
+            LogSubmissionFailed(logger, command.ClientId, command.PullRequestId, ex);
+            return SubmissionFailed();
+        }
+
         if (coverage is null)
         {
             LogNotCovered(logger, command.ClientId, command.RepositoryId, command.PullRequestId);
@@ -116,11 +126,16 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
                 Reason: $"Pull request #{command.PullRequestId} is {item.ReviewState.ToString().ToLowerInvariant()} and cannot be reviewed.");
         }
 
+        if (coverage.IsCanonicalRepositoryTarget && !MatchesCanonicalRepository(coverage, item.Repository))
+        {
+            return new SubmitReviewByCoordinatesResult(
+                SubmitReviewByCoordinatesOutcome.NotAuthorized,
+                Reason: "The provider repository does not match this client's selected repository target.");
+        }
+
         ReviewRevision? revision;
         try
         {
-            // The reference the adapter answered with is the one it can act on; the one built from
-            // coordinates was a best effort that the adapter may have corrected while answering.
             revision = item.ReviewRevision
                        ?? await queryService.GetLatestRevisionAsync(command.ClientId, item.CodeReview, cancellationToken);
         }
@@ -135,10 +150,10 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
             return UnresolvableRevision();
         }
 
-        PullRequestSynchronizationOutcome outcome;
+        PreparedPullRequestSynchronization prepared;
         try
         {
-            outcome = await synchronizationService.SynchronizeAsync(
+            prepared = await synchronizationService.PrepareAsync(
                 new PullRequestSynchronizationRequest
                 {
                     ActivationSource = PullRequestActivationSource.Manual,
@@ -157,36 +172,84 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
                     ReviewState = item.ReviewState,
                     AllowUnchangedResubmission = true,
                     PrTitle = item.Title,
-
-                    // A repository reference falls back to the provider identity when nobody supplied a
-                    // name, so passing it on unchecked would show a bare number where a name belongs.
-                    RepositoryName = string.Equals(
-                        item.Repository.RepositoryName,
-                        item.Repository.ExternalRepositoryId,
-                        StringComparison.Ordinal)
+                    RepositoryName = string.Equals(item.Repository.RepositoryName, item.Repository.ExternalRepositoryId, StringComparison.Ordinal)
                         ? null
                         : item.Repository.RepositoryName,
                     SourceBranch = item.SourceBranch,
                     TargetBranch = item.TargetBranch,
-                    ProCursorSourceScopeMode = coverage.ProCursorSourceScopeMode,
-                    ProCursorSourceIds = coverage.ProCursorSourceIds ?? [],
-                    InvalidProCursorSourceIds = coverage.InvalidProCursorSourceIds ?? [],
-                    ReviewTemperature = coverage.ReviewTemperature,
-                },
+                }, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogSubmissionFailed(logger, command.ClientId, command.PullRequestId, ex);
+            return SubmissionFailed();
+        }
+
+        IAsyncDisposable? admissionLease = null;
+        try
+        {
+            if (command.IsCustomerRequest)
+            {
+                admissionLease = await crawlConfigurationRepository.AcquireReviewTargetAdmissionAsync(command.ClientId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogSubmissionFailed(logger, command.ClientId, command.PullRequestId, ex);
+            return SubmissionFailed();
+        }
+
+        await using var admission = admissionLease;
+        try
+        {
+            coverage = await this.FindCoveringConfigurationAsync(command, cancellationToken, item.Repository, coverage.Provider);
+        }
+        catch (Exception ex) when (command.IsCustomerRequest && ex is not OperationCanceledException)
+        {
+            LogSubmissionFailed(logger, command.ClientId, command.PullRequestId, ex);
+            return SubmissionFailed();
+        }
+
+        if (coverage is null)
+        {
+            return new SubmitReviewByCoordinatesResult(
+                SubmitReviewByCoordinatesOutcome.NotAuthorized,
+                Reason: "The repository is no longer covered by this client's configuration.");
+        }
+
+        var patterns = coverage.IsCanonicalRepositoryTarget ? coverage.CoveredRepositories[0].TargetBranchPatterns : null;
+        if (!DestinationBranchPolicy.TryCreate(patterns, out var policy) || !policy!.Matches(item.TargetBranch))
+        {
+            return new SubmitReviewByCoordinatesResult(
+                SubmitReviewByCoordinatesOutcome.NotSubmittable,
+                Reason: "The current destination branch is not allowed by this repository's review target.");
+        }
+
+        PullRequestSynchronizationOutcome outcome;
+        try
+        {
+            outcome = await prepared.CompleteAsync(
+                new PullRequestReviewSettings(
+                    coverage.ProCursorSourceScopeMode, coverage.ProCursorSourceIds ?? [],
+                    coverage.InvalidProCursorSourceIds ?? [], coverage.ReviewTemperature),
                 cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Everything the request asked about resolved; the failure is ours. Saying so plainly beats an
-            // unhandled fault, which would reach the caller as a bare error with nothing to render and
-            // nothing to distinguish it from the pull request itself being unreviewable.
+            // Return a named submission failure without exposing internal diagnostics.
             LogSubmissionFailed(logger, command.ClientId, command.PullRequestId, ex);
-            return new SubmitReviewByCoordinatesResult(
-                SubmitReviewByCoordinatesOutcome.SubmissionFailed,
-                Reason: "The pull request was resolved, but queueing the review failed. Try again; if it keeps failing, the server logs carry the detail.");
+            return SubmissionFailed();
         }
 
         return MapOutcome(outcome);
+    }
+
+    private static SubmitReviewByCoordinatesResult SubmissionFailed()
+    {
+        return new SubmitReviewByCoordinatesResult(
+            SubmitReviewByCoordinatesOutcome.SubmissionFailed,
+            Reason: "The review could not be submitted. Try again; contact the operator if the failure continues.");
     }
 
     private static SubmitReviewByCoordinatesResult UnresolvableRevision()
@@ -231,29 +294,88 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
     /// </summary>
     private async Task<PullRequestCoverage?> FindCoveringConfigurationAsync(
         SubmitReviewByCoordinatesCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        RepositoryRef? authoritativeRepository = null,
+        ScmProvider? provider = null)
     {
         Guid[] clientIds = [command.ClientId];
         var crawlConfigurations = await crawlConfigurationRepository.GetByClientIdsAsync(clientIds, cancellationToken);
         var webhookConfigurations = await webhookConfigurationRepository.GetByClientIdsAsync(clientIds, cancellationToken);
 
+        if (command.IsCustomerRequest)
+        {
+            var targets = await crawlConfigurationRepository.GetManagementTargetsAsync(command.ClientId, cancellationToken).ConfigureAwait(false);
+            if (targets.Any(target => target.ClientId == command.ClientId && target.ReviewTargetLifecycle != ReviewTargetLifecycle.Enabled &&
+                                      (provider is null || target.Provider == provider) && Matches(
+                                          target.ProviderScopePath.TrimEnd('/'), command.ProviderScopePath.TrimEnd('/')) &&
+                                      Matches(target.ProviderProjectKey, command.ProviderProjectKey) && target.RepoFilters.Count == 1 &&
+                                      target.RepoFilters[0].CanonicalSourceRef is { } reference &&
+                                      providerRegistry.GetSourceIdentityPolicy(target.Provider).MatchesCapturedRepository(
+                                          reference.Value, target.RepoFilters[0].RepositoryName, target.ProviderProjectKey,
+                                          authoritativeRepository?.ExternalRepositoryId ?? command.RepositoryId,
+                                          authoritativeRepository?.ProjectPath ?? command.RepositoryId, normalizeWhitespace: true)))
+            {
+                return null;
+            }
+        }
+
         var coverages = new List<PullRequestCoverage>(crawlConfigurations.Count + webhookConfigurations.Count);
         coverages.AddRange(crawlConfigurations.Select(PullRequestCoverage.FromCrawlConfiguration));
-        coverages.AddRange(webhookConfigurations.Select(PullRequestCoverage.FromWebhookConfiguration));
+        coverages.AddRange(
+            webhookConfigurations.Select(configuration => PullRequestCoverage.FromWebhookConfiguration(
+                configuration, providerRegistry.CompatibilityCodec.ResolveCoverageProvider(configuration.ProviderType))));
 
         return coverages
             // Scoping the read to the client is not enough on its own: a repository that over-returns would
             // otherwise let one client's request run under another client's configuration.
             .Where(coverage => coverage.ClientId == command.ClientId
+                               && (provider is null || coverage.Provider == provider)
                                && Matches(coverage.ProviderScopePath, command.ProviderScopePath)
                                && Matches(coverage.ProviderProjectKey, command.ProviderProjectKey)
-                               && CoversRepository(coverage, command.RepositoryId))
+                               && (authoritativeRepository is not null && coverage.IsCanonicalRepositoryTarget
+                                   ? MatchesCanonicalRepository(coverage, authoritativeRepository)
+                                   : CoversRepository(coverage, command.RepositoryId)))
             // An inactive configuration still authorizes. Switching a crawl or webhook configuration off
             // means "stop starting reviews by yourself", not "revoke the right to ask for one", and asking
             // by hand against an otherwise idle configuration is a mode people deliberately run in.
-            .OrderByDescending(coverage => FindNamedRepository(coverage, command.RepositoryId) is not null)
+            .OrderByDescending(coverage => CanonicalTargetPriority(coverage, command.RepositoryId, authoritativeRepository))
+            .ThenByDescending(coverage => FindNamedRepository(coverage, command.RepositoryId) is not null)
             .ThenByDescending(coverage => coverage.IsActive)
             .FirstOrDefault();
+    }
+
+    private int CanonicalTargetPriority(PullRequestCoverage coverage, string requestedId, RepositoryRef? repository)
+    {
+        if (!coverage.IsCanonicalRepositoryTarget)
+        {
+            return 0;
+        }
+
+        if (repository is not null && string.Equals(
+                coverage.CoveredRepositories[0].ExternalRepositoryId, repository.ExternalRepositoryId, StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        if (repository is not null && MatchesCanonicalRepository(coverage, repository))
+        {
+            return 2;
+        }
+
+        return FindNamedRepository(coverage, requestedId) is not null ? 1 : 0;
+    }
+
+    private bool MatchesCanonicalRepository(PullRequestCoverage coverage, RepositoryRef repository)
+    {
+        if (!coverage.IsCanonicalRepositoryTarget)
+        {
+            return false;
+        }
+
+        var named = coverage.CoveredRepositories[0];
+        return providerRegistry.GetSourceIdentityPolicy(coverage.Provider).MatchesCapturedRepository(
+            named.ExternalRepositoryId!, named.Name, coverage.ProviderProjectKey,
+            repository.ExternalRepositoryId, repository.ProjectPath);
     }
 
     /// <summary>
@@ -285,26 +407,12 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
     }
 
     /// <summary>
-    ///     Fills in the repository name the coordinates may not carry, and the project path that is built
-    ///     from it.
+    ///     Resolves missing repository names before native captured-repository projection.
     /// </summary>
     /// <remarks>
-    ///     <para>
-    ///         There is no single shape for "the repository identity". Azure DevOps stores a GUID and reads
-    ///         the project path as the project itself. GitHub, Forgejo and GitLab all address a repository as
-    ///         <c>owner/name</c> and derive it from the project path, but what they store as the identity
-    ///         differs even within one provider: GitHub and Forgejo store a number, GitLab's discovery
-    ///         reports a number while a GitLab review job records the namespaced path. A request that assumed
-    ///         any one of those shapes would ask some host for <c>owner/12345</c>, or drop the name entirely
-    ///         and produce a clone URL with no repository in it.
-    ///     </para>
-    ///     <para>
-    ///         So the name is resolved cheapest-first, and every rung has to tolerate all three shapes: the
-    ///         covering configuration, which often recorded the name; the identity itself when it is already
-    ///         a path, which needs no lookup and cannot be wrong; repository discovery, whose answer is the
-    ///         adapter's own and is taken whole; and finally the project key alone, which is right for Azure
-    ///         DevOps and is the best remaining answer elsewhere.
-    ///     </para>
+    ///     Resolution preserves the existing sequence: covering configuration, captured path identity,
+    ///     provider discovery, then the saved project key. Native source policy owns the resulting
+    ///     repository coordinates.
     /// </remarks>
     private async Task<RepositoryRef> ResolveRepositoryAsync(
         PullRequestCoverage coverage,
@@ -318,9 +426,7 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
             return BuildRepositoryRef(coverage, host, command.RepositoryId, named.Name.Trim());
         }
 
-        // An identity that is already a path carries the name in its last segment, which GitLab
-        // records on a review job. Reading it costs nothing and cannot miss, so it comes before asking the
-        // provider. Identities that are a GUID or a number contain no slash and fall through untouched.
+        // Captured path identities provide a repository name before live discovery is needed.
         if (command.RepositoryId.Contains('/', StringComparison.Ordinal))
         {
             return BuildRepositoryRef(coverage, host, command.RepositoryId, command.RepositoryId);
@@ -335,32 +441,13 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
         return new RepositoryRef(host, command.RepositoryId, coverage.ProviderProjectKey, coverage.ProviderProjectKey);
     }
 
-    private static RepositoryRef BuildRepositoryRef(
+    private RepositoryRef BuildRepositoryRef(
         PullRequestCoverage coverage,
         ProviderHostRef host,
         string repositoryId,
-        string repositoryName)
-    {
-        if (coverage.Provider == ScmProvider.AzureDevOps)
-        {
-            // Azure DevOps reads the project path as the project itself, both for its API calls and for the
-            // clone URL it builds from it, so the repository name belongs in the name field and nowhere else.
-            return new RepositoryRef(
-                host,
-                repositoryId,
-                coverage.ProviderProjectKey,
-                coverage.ProviderProjectKey,
-                LastSegment(repositoryName));
-        }
-
-        // The Git-hosting families address a repository as owner plus the last segment of the project path,
-        // so a name recorded on its own has to be qualified with the owner the project key holds.
-        var projectPath = repositoryName.Contains('/', StringComparison.Ordinal)
-            ? repositoryName
-            : $"{coverage.ProviderProjectKey}/{repositoryName}";
-
-        return new RepositoryRef(host, repositoryId, coverage.ProviderProjectKey, projectPath, LastSegment(repositoryName));
-    }
+        string repositoryName) =>
+        providerRegistry.GetSourceIdentityPolicy(coverage.Provider).CreateCapturedRepository(
+            host.HostBaseUrl, repositoryId, coverage.ProviderProjectKey, repositoryName);
 
     private async Task<RepositoryRef?> TryDiscoverRepositoryAsync(
         PullRequestCoverage coverage,
@@ -382,20 +469,8 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
                 coverage.ProviderProjectKey,
                 cancellationToken);
 
-            // Match on more than the identity, most specific first. Providers disagree about what they
-            // store as one — GitLab discovery answers with a numeric project id while a GitLab review job
-            // records the namespaced path — so comparing identities alone finds nothing for the very
-            // repository that was asked about, and the caller then falls back to an answer carrying no
-            // repository name at all.
-            return Match(repositories, repository => repository.ExternalRepositoryId)
-                   ?? Match(repositories, repository => repository.ProjectPath)
-                   ?? Match(repositories, repository => LastSegment(repository.ProjectPath));
-
-            RepositoryRef? Match(IReadOnlyList<RepositoryRef> candidates, Func<RepositoryRef, string> identity)
-            {
-                return candidates.FirstOrDefault(candidate =>
-                    string.Equals(identity(candidate), repositoryId, StringComparison.OrdinalIgnoreCase));
-            }
+            return providerRegistry.GetSourceIdentityPolicy(coverage.Provider)
+                .FindRepositoryByCapturedIdentity(repositories, repositoryId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -415,13 +490,6 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
     private static bool Matches(string? configured, string? requested)
     {
         return string.Equals(configured?.Trim(), requested?.Trim(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string LastSegment(string value)
-    {
-        var trimmed = value.Trim().TrimEnd('/');
-        var separator = trimmed.LastIndexOf('/');
-        return separator < 0 ? trimmed : trimmed[(separator + 1)..];
     }
 
     [LoggerMessage(
@@ -447,7 +515,7 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
         EventId = 6314,
         Level = LogLevel.Error,
         Message =
-            "Queueing the requested review of pull request {PullRequestId} for client {ClientId} failed after the pull request had been resolved.")]
+            "Review admission or submission failed for pull request {PullRequestId} for client {ClientId}.")]
     private static partial void LogSubmissionFailed(
         ILogger logger,
         Guid clientId,

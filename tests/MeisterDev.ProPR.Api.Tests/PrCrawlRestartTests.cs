@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Api.Tests.Fixtures;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Entities;
@@ -60,6 +61,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
         fixture.SkipIfUnavailable();
 
         var connectionString = fixture.ConnectionString;
+        var clientId = Guid.NewGuid();
 
         // Step 1 — run migrations and seed the Completed job BEFORE the factory starts.
         // This prevents a race between the AdoPrCrawlerWorker's immediate startup crawl
@@ -74,7 +76,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             var repo = new JobRepository(db, new TestDbContextFactory(dbOptions), NullLogger<JobRepository>.Instance);
             var job = new ReviewJob(
                 Guid.NewGuid(),
-                Guid.NewGuid(),
+                clientId,
                 "https://dev.azure.com/org",
                 "proj",
                 "repo-42",
@@ -88,7 +90,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
         var crawlConfigRepo = Substitute.For<ICrawlConfigurationRepository>();
         var config = new CrawlConfigurationDto(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            clientId,
             ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "proj",
@@ -146,7 +148,9 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
                 prFetcher,
                 jobs,
                 Substitute.For<IPrStatusFetcher>(),
-                Substitute.For<ILogger<PrCrawlService>>());
+                Substitute.For<ILogger<PrCrawlService>>(),
+                new PullRequestSynchronizationService(
+                    MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry, jobs, NullLogger<PullRequestSynchronizationService>.Instance));
             await crawlService.CrawlAsync();
         }
 

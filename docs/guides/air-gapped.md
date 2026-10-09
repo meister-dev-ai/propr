@@ -58,9 +58,9 @@ Three family-specific consequences of a private endpoint:
 - **Your AI provider**, unless you host the model yourself. The compliance host list constrains which
   provider families and endpoint hosts a tenant may reach - see
   [restrict where your code goes](restrict-where-code-goes.md).
-- **Your SCM host.** The self-hosted variants authenticate with a credential issued by that host. Hosted
-  Azure DevOps Services is the exception: it authenticates through Microsoft Entra, so it needs reachable
-  Microsoft identity endpoints as well as the Azure DevOps host itself. See
+- **Your SCM host.** Token connections authenticate with a credential issued by that host. Azure
+  DevOps Services OAuth connections also contact Microsoft Entra token endpoints. Azure DevOps Services
+  PAT connections contact the SCM host without acquiring an Entra token. See
   [support matrix](../platforms/index.md#support-matrix).
 - **Your own collectors**, if you configured a trace or log endpoint - see
   [observability](../operate/observability.md).
@@ -78,8 +78,8 @@ Three family-specific consequences of a private endpoint:
 4. Trigger one review from the API and read its protocol - see
    [trigger a review](../reference/api.md#trigger-a-review).
 5. Read your egress logs for that review. A review reads data from your SCM host and contacts your
-   configured AI models. On hosted Azure DevOps you also see Microsoft identity endpoints, and you see your
-   own collectors if you configured them. An entry for `telemetry.meister-dev.ai` is the daily usage report,
+   configured AI models. Azure DevOps Services OAuth connections also contact Microsoft identity endpoints.
+   You see your own collectors if configured. An entry for `telemetry.meister-dev.ai` is the daily usage report,
    not part of the review.
 6. On a Community installation, switch the usage report off, then confirm `telemetry.meister-dev.ai` no
    longer appears in your egress logs.

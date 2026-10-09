@@ -412,8 +412,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Deletes a crawl configuration.
-         *     Admins may delete any config; non-Admin users may only delete configs for their clients.
+         * Deletes a generic crawl configuration. Managed canonical targets require revision-checked lifecycle removal.
+         *     Admins may delete eligible generic configurations; non-Admin users may only delete eligible configurations for their clients.
          */
         delete: {
             parameters: {
@@ -465,6 +465,17 @@ export interface paths {
                         "text/plain": components["schemas"]["ProblemDetails"];
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Deletion was rejected; managed canonical targets require lifecycle removal. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": string;
+                        "application/json": string;
+                        "text/json": string;
                     };
                 };
             };
@@ -540,6 +551,17 @@ export interface paths {
                 };
                 /** @description Configuration not found. */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The update conflicts with the current target lifecycle or protected filters, the repository replacement is incompatible or conflicts with an existing target, or the capability is unavailable. */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1243,7 +1265,7 @@ export interface paths {
                         "text/json": components["schemas"]["MentionConfigResponse"];
                     };
                 };
-                /** @description The repository list was given but empty. */
+                /** @description Repository selections are empty or conflict with stored or discovered coordinates. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3435,432 +3457,6 @@ export interface paths {
         };
         trace?: never;
     };
-    "/admin/clients/{clientId}/ado/discovery/projects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Lists projects available within one configured Azure DevOps organization scope.
-         *     Requires global admin or `ClientUser` access for the specified client.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Organization-scope identifier. */
-                    organizationScopeId?: string;
-                    /** @description Optional discovery purpose. Use `crawl` to enforce premium capability checks. */
-                    purpose?: string;
-                };
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Projects found. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["AdoProjectOptionDto"][];
-                        "application/json": components["schemas"]["AdoProjectOptionDto"][];
-                        "text/json": components["schemas"]["AdoProjectOptionDto"][];
-                    };
-                };
-                /** @description The query is invalid. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller lacks required client access. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description The organization scope was not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description The requested premium capability is unavailable. */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/clients/{clientId}/ado/discovery/sources": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Lists repositories or wikis available within one configured Azure DevOps project.
-         *     Requires global admin or `ClientUser` access for the specified client.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Organization-scope identifier. */
-                    organizationScopeId?: string;
-                    /** @description Azure DevOps project identifier. */
-                    projectId?: string;
-                    /** @description Source type: `repository` or `adoWiki`. */
-                    sourceKind?: string;
-                };
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Sources found. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["AdoSourceOptionDto"][];
-                        "application/json": components["schemas"]["AdoSourceOptionDto"][];
-                        "text/json": components["schemas"]["AdoSourceOptionDto"][];
-                    };
-                };
-                /** @description The query is invalid. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller lacks required client access. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description The organization scope was not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description The requested premium capability is unavailable. */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/clients/{clientId}/ado/discovery/branches": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Lists branches available for one discovered repository or wiki source.
-         *     Requires global admin or `ClientUser` access for the specified client.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Organization-scope identifier. */
-                    organizationScopeId?: string;
-                    /** @description Azure DevOps project identifier. */
-                    projectId?: string;
-                    /** @description Source type: `repository` or `adoWiki`. */
-                    sourceKind?: string;
-                    /** @description Canonical source-reference provider. */
-                    canonicalSourceProvider?: string;
-                    /** @description Canonical source-reference value. */
-                    canonicalSourceValue?: string;
-                };
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Branches found. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["AdoBranchOptionDto"][];
-                        "application/json": components["schemas"]["AdoBranchOptionDto"][];
-                        "text/json": components["schemas"]["AdoBranchOptionDto"][];
-                    };
-                };
-                /** @description The query is invalid. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller lacks required client access. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description The organization scope was not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description The requested premium capability is unavailable. */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/clients/{clientId}/ado/discovery/crawl-filters": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Lists repository options and branch suggestions suitable for crawl-filter configuration.
-         *     Requires global admin or `ClientUser` access for the specified client.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Organization-scope identifier. */
-                    organizationScopeId?: string;
-                    /** @description Azure DevOps project identifier. */
-                    projectId?: string;
-                    /** @description Optional discovery purpose. Use `crawl` to enforce crawl-configuration premium checks. */
-                    purpose?: string;
-                };
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Crawl-filter options found. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["AdoCrawlFilterOptionDto"][];
-                        "application/json": components["schemas"]["AdoCrawlFilterOptionDto"][];
-                        "text/json": components["schemas"]["AdoCrawlFilterOptionDto"][];
-                    };
-                };
-                /** @description The query is invalid. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller lacks required client access. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description The organization scope was not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description The requested premium capability is unavailable. */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ai-provider-actions/dispatch": {
         parameters: {
             query?: never;
@@ -4608,7 +4204,13 @@ export interface paths {
             };
         };
         put?: never;
-        /** Creates a new AI connection profile for the specified client. */
+        /**
+         * Creates an AI connection profile for the specified client.
+         * @description CreationRequestId is an optional, immutable correlation identifier scoped to the client.
+         *     Clients can read the profile list to recover the result of an interrupted creation request.
+         *     A repeated identifier returns 409; the endpoint does not replay the original 201 response.
+         *     Physical deletion of the profile permits later reuse of the identifier.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4626,7 +4228,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Created */
+                /** @description The profile was created. */
                 201: {
                     headers: {
                         [name: string]: unknown;
@@ -4661,6 +4263,17 @@ export interface paths {
                 };
                 /** @description Forbidden */
                 403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The client already has a profile with the supplied creation correlation identifier. */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6621,7 +6234,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Creates a provider connection for a client. */
+        /** Creates a provider connection for a client. Azure DevOps Services supports OAuth client credentials and personal access tokens. */
         post: {
             parameters: {
                 query?: never;
@@ -6844,7 +6457,10 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Applies partial updates to one provider connection. */
+        /**
+         * Applies partial updates to one provider connection. Changing authentication kind requires a replacement
+         *     secret; Azure DevOps OAuth client-credentials authentication also requires tenant and client identifiers.
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -7163,52 +6779,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/clients/{clientId}/providers/{provider}/discovery/scopes": {
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/descriptor": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Lists the owners, organizations, or groups the connection can reach. */
+        /** Returns native labels, hierarchy and supported operations. */
         get: {
             parameters: {
-                query?: {
-                    /** @description Provider-connection identifier. */
-                    connectionId?: string;
+                query: {
+                    /** @description Required configuration purpose: crawl, mention, webhook or procursor. */
+                    purpose: string;
                 };
                 header?: never;
                 path: {
                     /** @description Client identifier. */
                     clientId: string;
-                    /** @description Provider family the connection belongs to. */
-                    provider: components["schemas"]["ScmProvider"];
+                    /** @description Selected connection identifier. */
+                    connectionId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description The scopes the connection can reach. */
+                /** @description The native discovery descriptor. */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ProviderScopeOptionResponse"][];
-                        "application/json": components["schemas"]["ProviderScopeOptionResponse"][];
-                        "text/json": components["schemas"]["ProviderScopeOptionResponse"][];
+                        "text/plain": components["schemas"]["ConnectionDiscoveryDescriptor"];
+                        "application/json": components["schemas"]["ConnectionDiscoveryDescriptor"];
+                        "text/json": components["schemas"]["ConnectionDiscoveryDescriptor"];
                     };
                 };
-                /** @description The connection is unusable, or the provider refused the request. */
+                /** @description Invalid purpose or unavailable connection. */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
+                    content?: never;
                 };
                 /** @description Missing or invalid credentials. */
                 401: {
@@ -7221,7 +6833,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller is not an administrator of the client. */
+                /** @description Insufficient client role. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -7232,7 +6844,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description The provider family has no discovery in this deployment. */
+                /** @description The selected resource is not available. */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -7243,7 +6855,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description This installation is not entitled to answer mentions. */
+                /** @description Required licensed capability is unavailable. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -7253,6 +6865,13 @@ export interface paths {
                         "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
                         "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
                     };
+                };
+                /** @description The operation is unsupported. */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -7264,54 +6883,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/clients/{clientId}/providers/{provider}/discovery/repositories": {
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/scopes": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Lists the repositories in one scope the connection can reach. */
+        /** Lists scopes reachable through the selected connection. */
         get: {
             parameters: {
-                query?: {
-                    /** @description Provider-connection identifier. */
-                    connectionId?: string;
-                    /** @description The owner, organization, or group to list within. */
-                    scopePath?: string;
+                query: {
+                    /** @description Required configuration purpose. */
+                    purpose: string;
                 };
                 header?: never;
                 path: {
                     /** @description Client identifier. */
                     clientId: string;
-                    /** @description Provider family the connection belongs to. */
-                    provider: components["schemas"]["ScmProvider"];
+                    /** @description Selected connection identifier. */
+                    connectionId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description The repositories in that scope. */
+                /** @description Scopes, including an empty successful listing. */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ProviderRepositoryOptionResponse"][];
-                        "application/json": components["schemas"]["ProviderRepositoryOptionResponse"][];
-                        "text/json": components["schemas"]["ProviderRepositoryOptionResponse"][];
+                        "text/plain": components["schemas"]["ConnectionDiscoveryScope"][];
+                        "application/json": components["schemas"]["ConnectionDiscoveryScope"][];
+                        "text/json": components["schemas"]["ConnectionDiscoveryScope"][];
                     };
                 };
-                /** @description The connection is unusable, the scope is missing, or the provider refused. */
+                /** @description Invalid selection or provider request failure. */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
+                    content?: never;
                 };
                 /** @description Missing or invalid credentials. */
                 401: {
@@ -7324,7 +6937,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller is not an administrator of the client. */
+                /** @description Insufficient client role. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -7335,7 +6948,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description The provider family has no discovery in this deployment. */
+                /** @description The selected resource is not available. */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -7346,7 +6959,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description This installation is not entitled to answer mentions. */
+                /** @description Required licensed capability is unavailable. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -7356,6 +6969,559 @@ export interface paths {
                         "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
                         "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
                     };
+                };
+                /** @description The operation is unsupported. */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists projects when the native hierarchy has a project stage. */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Required configuration purpose. */
+                    purpose: string;
+                    /** @description Native scope key. */
+                    scopeKey?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Selected connection identifier. */
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Native projects. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ScmDiscoveryProjectOption"][];
+                        "application/json": components["schemas"]["ScmDiscoveryProjectOption"][];
+                        "text/json": components["schemas"]["ScmDiscoveryProjectOption"][];
+                    };
+                };
+                /** @description Invalid selection or provider request failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Insufficient client role. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The selected resource is not available. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Required licensed capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+                /** @description The connection has no project stage. */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists sources with native persistent coordinates and identities. */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Required configuration purpose. */
+                    purpose: string;
+                    /** @description Native scope key. */
+                    scopeKey?: string;
+                    /** @description Native project key when the hierarchy declares that stage. */
+                    projectId?: string;
+                    /** @description Declared source kind. */
+                    sourceKind: components["schemas"]["ProCursorSourceKind"];
+                };
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Selected connection identifier. */
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Native source selections. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ConnectionDiscoverySource"][];
+                        "application/json": components["schemas"]["ConnectionDiscoverySource"][];
+                        "text/json": components["schemas"]["ConnectionDiscoverySource"][];
+                    };
+                };
+                /** @description Invalid selection or provider request failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Insufficient client role. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The selected resource is not available. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Required licensed capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+                /** @description The source kind is unsupported. */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/branches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists branches when native branch discovery is supported. */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Required configuration purpose. */
+                    purpose: string;
+                    /** @description Native scope key. */
+                    scopeKey?: string;
+                    /** @description Native project key. */
+                    projectId?: string;
+                    /** @description Declared source kind. */
+                    sourceKind: components["schemas"]["ProCursorSourceKind"];
+                    /** @description Canonical provider key returned by source discovery. */
+                    canonicalSourceProvider?: string;
+                    /** @description Canonical value returned by source discovery. */
+                    canonicalSourceValue?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Selected connection identifier. */
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Native branch suggestions. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ScmDiscoveryBranchOption"][];
+                        "application/json": components["schemas"]["ScmDiscoveryBranchOption"][];
+                        "text/json": components["schemas"]["ScmDiscoveryBranchOption"][];
+                    };
+                };
+                /** @description Invalid selection or provider request failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Insufficient client role. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The selected resource is not available. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Required licensed capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+                /** @description Branch discovery is unsupported. */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Projects repository sources into filter options without requiring branch discovery. */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Required configuration purpose. */
+                    purpose: string;
+                    /** @description Native scope key. */
+                    scopeKey?: string;
+                    /** @description Optional native project key. */
+                    projectId?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Selected connection identifier. */
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Filter options with known default branch suggestions. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ScmDiscoveryCrawlFilterOption"][];
+                        "application/json": components["schemas"]["ScmDiscoveryCrawlFilterOption"][];
+                        "text/json": components["schemas"]["ScmDiscoveryCrawlFilterOption"][];
+                    };
+                };
+                /** @description Invalid selection or provider request failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Insufficient client role. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The selected resource is not available. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Required licensed capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+                /** @description The operation is unsupported. */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolves native configuration coordinates for the selected hierarchy. */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Required configuration purpose. */
+                    purpose: string;
+                    /** @description Native scope key. */
+                    scopeKey?: string;
+                    /** @description Optional native project key. */
+                    projectId?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Selected connection identifier. */
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Native persistent selection coordinates. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ConnectionDiscoverySelection"];
+                        "application/json": components["schemas"]["ConnectionDiscoverySelection"];
+                        "text/json": components["schemas"]["ConnectionDiscoverySelection"];
+                    };
+                };
+                /** @description Invalid selection or provider request failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Insufficient client role. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The selected resource is not available. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Required licensed capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+                /** @description The operation is unsupported. */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -8059,6 +8225,349 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/review-targets/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Returns a rich pull request page with shared source freshness and immutable generation navigation. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Authorized source selections, page bounds and retained generation cursor. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ClientPullRequestOverviewRequest"];
+                    "text/json": components["schemas"]["ClientPullRequestOverviewRequest"];
+                    "application/*+json": components["schemas"]["ClientPullRequestOverviewRequest"];
+                };
+            };
+            responses: {
+                /** @description Pull requests, metadata, source outcomes and refresh availability; bounded capacity refusals return no rows or cursor and a null total. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientPullRequestOverviewPage"];
+                        "application/json": components["schemas"]["ClientPullRequestOverviewPage"];
+                        "text/json": components["schemas"]["ClientPullRequestOverviewPage"];
+                    };
+                };
+                /** @description The page bounds or retained generation are invalid or obsolete. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Current client or source access is unavailable. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The crawl configuration capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Shared page storage is unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-targets/management/{targetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reads one owned saved repository target, including removed targets, without provider access. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                    /** @description Saved repository target identifier. */
+                    targetId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The authoritative saved target and revision. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewTargetResponse"];
+                        "application/json": components["schemas"]["ClientReviewTargetResponse"];
+                        "text/json": components["schemas"]["ClientReviewTargetResponse"];
+                    };
+                };
+                /** @description The caller cannot access this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The client does not own a canonical repository target with this identifier. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The configuration capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-targets/management": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Searches and pages saved repository metadata without contacting a provider. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Repository name, project, or host search. */
+                    search?: string;
+                    /** @description Optional provider family filter. */
+                    provider?: string;
+                    /** @description Optional enabled or disabled review availability filter. */
+                    status?: string;
+                    /** @description One-based page number. */
+                    page?: number;
+                    /** @description Rows per page, from 1 to 100. */
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The owned saved configuration page and opaque version of its entire matched representation. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewTargetPageResponse"];
+                        "application/json": components["schemas"]["ClientReviewTargetPageResponse"];
+                        "text/json": components["schemas"]["ClientReviewTargetPageResponse"];
+                    };
+                };
+                /** @description The filters or bounds are invalid. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller cannot access this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The configuration capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-targets/{targetId}/lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Conditionally enables, disables, or removes a saved repository target. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                    /** @description Saved repository target identifier. */
+                    targetId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Expected revision, lifecycle, and removal confirmation. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ChangeClientReviewTargetLifecycleRequest"];
+                    "text/json": components["schemas"]["ChangeClientReviewTargetLifecycleRequest"];
+                    "application/*+json": components["schemas"]["ChangeClientReviewTargetLifecycleRequest"];
+                };
+            };
+            responses: {
+                /** @description The saved lifecycle and revision. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewTargetResponse"];
+                        "application/json": components["schemas"]["ClientReviewTargetResponse"];
+                        "text/json": components["schemas"]["ClientReviewTargetResponse"];
+                    };
+                };
+                /** @description The lifecycle or confirmation is invalid. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller cannot administer this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The client does not own this target. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The target changed or the configuration capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/clients/{clientId}/review-targets/repositories": {
         parameters: {
             query?: never;
@@ -8216,7 +8725,7 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            /** @description Verified connection and repository coordinates. */
+            /** @description Verified connection, repository coordinates, and optional destination branch patterns. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["CreateClientReviewTargetRequest"];
@@ -8269,7 +8778,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description The project already has a different configuration or the capability is unavailable. */
+                /** @description The repository identity conflicts with stored configuration or the capability is unavailable. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -8295,7 +8804,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Lists open pull requests for one configured repository review target. */
+        /** Lists up to 100 open pull requests using the selected verified connection and saved target scope. */
         get: {
             parameters: {
                 query?: {
@@ -8383,6 +8892,202 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-targets/{targetId}/open-reviews/{number}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reads bounded comment and discussion metadata for one configured pull request.
+         * @description Installed adapters address reviews by their native number. The overview reconstructs the external review identifier from this number; opaque-only identifiers are not supported by this route.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Verified selected connection identifier. */
+                    connectionId?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                    /** @description Configured review target identifier. */
+                    targetId: string;
+                    /** @description Positive provider-native pull request or merge request number. */
+                    number: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Counts and their completeness and resolution availability. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewOverviewDto"];
+                        "application/json": components["schemas"]["ReviewOverviewDto"];
+                        "text/json": components["schemas"]["ReviewOverviewDto"];
+                    };
+                };
+                /** @description The pull request number or connection is invalid. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller cannot access this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The target or metadata capability is unavailable. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The crawl configuration capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+                /** @description The selected provider could not return metadata. */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-targets/{targetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Conditionally replaces a repository target's destination branch policy. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                    /** @description Saved repository target identifier. */
+                    targetId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Verified connection, expected stored patterns, and replacement patterns. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateClientReviewTargetPolicyRequest"];
+                    "text/json": components["schemas"]["UpdateClientReviewTargetPolicyRequest"];
+                    "application/*+json": components["schemas"]["UpdateClientReviewTargetPolicyRequest"];
+                };
+            };
+            responses: {
+                /** @description The policy was saved without changing target activation or settings. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewTargetResponse"];
+                        "application/json": components["schemas"]["ClientReviewTargetResponse"];
+                        "text/json": components["schemas"]["ClientReviewTargetResponse"];
+                    };
+                };
+                /** @description The patterns or connection are invalid. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller cannot administer this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The client does not own this canonical repository target. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The target identity or stored policy changed, or the capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/clients": {
@@ -9243,6 +9948,85 @@ export interface paths {
                     };
                 };
                 /** @description Caller has no client access, lacks the licence, or asked for a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/reviewing/completed-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns a keyset page of finalized usage facts for a tenant-owned client. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Last processed sequence, omitted for the first page. */
+                    after?: number;
+                    /** @description Maximum facts, from 1 to 100. */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description A page of immutable completed-review usage facts. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CompletedReviewUsagePage"];
+                        "application/json": components["schemas"]["CompletedReviewUsagePage"];
+                        "text/json": components["schemas"]["CompletedReviewUsagePage"];
+                    };
+                };
+                /** @description Invalid cursor or page size. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid machine credential. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not a tenant machine or does not own the client. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -14485,7 +15269,7 @@ export interface paths {
                         "text/json": components["schemas"]["ReviewByCoordinatesResponse"];
                     };
                 };
-                /** @description The pull request resolved, but queueing the review failed. */
+                /** @description The review could not be admitted or submitted. */
                 500: {
                     headers: {
                         [name: string]: unknown;
@@ -19428,31 +20212,6 @@ export interface components {
              */
             token: string | null;
         };
-        /** @description A branch option discovered for one source. */
-        AdoBranchOptionDto: {
-            branchName?: string | null;
-            isDefault?: boolean;
-        };
-        /** @description A crawl-filter option discovered for one project. */
-        AdoCrawlFilterOptionDto: {
-            canonicalSourceRef?: components["schemas"]["CanonicalSourceReferenceDto"];
-            displayName?: string | null;
-            branchSuggestions?: components["schemas"]["AdoBranchOptionDto"][] | null;
-        };
-        /** @description A project option discovered for one organization scope. */
-        AdoProjectOptionDto: {
-            /** Format: uuid */
-            organizationScopeId?: string;
-            projectId?: string | null;
-            projectName?: string | null;
-        };
-        /** @description A repository or wiki option discovered for one project. */
-        AdoSourceOptionDto: {
-            sourceKind?: string | null;
-            canonicalSourceRef?: components["schemas"]["CanonicalSourceReferenceDto"];
-            displayName?: string | null;
-            defaultBranch?: string | null;
-        };
         /** @description One authentication mode a provider family authenticates with, with what an operator sees where it is offered. */
         AiAuthModeOptionDto: {
             /** @description The shape, as it is submitted and stored. */
@@ -19654,6 +20413,11 @@ export interface components {
              * @description Owning tenant ID for a tenant-scoped connection (inherited by the tenant's clients); null for a client-scoped one.
              */
             tenantId?: string | null;
+            /**
+             * Format: uuid
+             * @description Optional immutable client-scoped identifier supplied on creation for interrupted-request readback.
+             */
+            creationRequestId?: string | null;
             availability?: components["schemas"]["AiConnectionAvailabilityDto"];
             /**
              * @description The non-secret configuration values this connection's provider family declared, by declared field name,
@@ -20435,6 +21199,12 @@ export interface components {
             provider?: string | null;
             value?: string | null;
         };
+        /** @description A conditional saved repository lifecycle transition. */
+        ChangeClientReviewTargetLifecycleRequest: {
+            expectedRevision?: string | null;
+            lifecycle?: string | null;
+            confirmationName?: string | null;
+        };
         /** @description Password change request payload. */
         ChangePasswordRequest: {
             currentPassword?: string | null;
@@ -20556,6 +21326,98 @@ export interface components {
             title?: string | null;
             webUrl?: string | null;
             state?: string | null;
+            sourceBranch?: string | null;
+            targetBranch?: string | null;
+            authorName?: string | null;
+            headSha?: string | null;
+            providerRevisionId?: string | null;
+        };
+        /** @description Current source coverage and permitted refresh time. */
+        ClientPullRequestOverviewOutcome: {
+            /** Format: uuid */
+            targetId?: string;
+            /** Format: uuid */
+            connectionId?: string;
+            status?: string | null;
+            failureKind?: string | null;
+            /** Format: date-time */
+            listedAt?: string | null;
+            /** Format: date-time */
+            nextRefreshAt?: string;
+        };
+        /** @description An immutable cumulative page with explicit freshness and coverage. */
+        ClientPullRequestOverviewPage: {
+            items?: components["schemas"]["ClientPullRequestOverviewRow"][] | null;
+            sources?: components["schemas"]["ClientPullRequestOverviewOutcome"][] | null;
+            cursor?: string | null;
+            nextCursor?: string | null;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int32 */
+            totalRows?: number | null;
+            /** Format: int32 */
+            totalSources?: number;
+            /** Format: int32 */
+            attemptedSources?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            isStale?: boolean;
+            /** Format: date-time */
+            nextRefreshAt?: string | null;
+            status?: string | null;
+            /** Format: int32 */
+            perSourceLimit?: number;
+        };
+        /** @description Client-scoped source selection, generation navigation and row bounds. */
+        ClientPullRequestOverviewRequest: {
+            sources?: components["schemas"]["ClientPullRequestOverviewSource"][] | null;
+            binding?: string | null;
+            cursor?: string | null;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            loadMore?: boolean;
+            reload?: boolean;
+        };
+        /** @description Discovery and metadata observations for one pull request revision. */
+        ClientPullRequestOverviewRow: {
+            /** Format: uuid */
+            targetId?: string;
+            /** Format: uuid */
+            connectionId?: string;
+            /**
+             * Format: int32
+             * @description Positive provider-native pull request or merge request number required by installed adapter operations.
+             */
+            number?: number;
+            title?: string | null;
+            webUrl?: string | null;
+            state?: string | null;
+            sourceBranch?: string | null;
+            targetBranch?: string | null;
+            authorName?: string | null;
+            headSha?: string | null;
+            providerRevisionId?: string | null;
+            metadata?: components["schemas"]["ReviewOverviewDto"];
+            metadataStatus?: string | null;
+            /** Format: date-time */
+            listedAt?: string;
+            /** Format: date-time */
+            metadataAt?: string | null;
+            /** @description Authorized source associations for a deduplicated pull request. */
+            associations?: components["schemas"]["ClientPullRequestOverviewSource"][] | null;
+        };
+        /** @description Source coordinates selected by an authenticated client caller. */
+        ClientPullRequestOverviewSource: {
+            /** Format: uuid */
+            targetId?: string;
+            /** Format: uuid */
+            connectionId?: string;
         };
         /** @description Client response — key, ADO secret, and credential metadata are never included. */
         ClientResponse: {
@@ -20599,6 +21461,28 @@ export interface components {
             /** Format: date-time */
             updatedAtUtc?: string | null;
         };
+        /** @description A server-filtered page of saved repository configuration. */
+        ClientReviewTargetPageResponse: {
+            /** @description Saved target rows. */
+            items?: components["schemas"]["ClientReviewTargetResponse"][] | null;
+            /**
+             * Format: int32
+             * @description Number of matched targets.
+             */
+            totalCount?: number;
+            /**
+             * Format: int32
+             * @description One-based page number.
+             */
+            page?: number;
+            /**
+             * Format: int32
+             * @description Maximum rows per page.
+             */
+            pageSize?: number;
+            /** @description Opaque lowercase SHA-256 version of all matched target metadata. */
+            snapshotVersion?: string | null;
+        };
         /** @description A repository reachable through a verified provider connection. */
         ClientReviewTargetRepositoryResponse: {
             repositoryId?: string | null;
@@ -20616,6 +21500,10 @@ export interface components {
             repositoryId?: string | null;
             repositoryName?: string | null;
             isActive?: boolean;
+            providerFamily?: string | null;
+            targetBranchPatterns?: string[] | null;
+            lifecycle?: string | null;
+            revision?: string | null;
         };
         /** @description Client-scoped provider reviewer-trigger identity returned by admin APIs. */
         ClientReviewerIdentityDto: {
@@ -21676,6 +22564,80 @@ export interface components {
          * @enum {string}
          */
         CommentSeverity: "info" | "warning" | "error" | "suggestion";
+        /**
+         * @description Measured usage from one completed review. EstimatedCostUsd is a decimal US-dollar amount with up to
+         *     six fractional digits; null means no priced cost was available, not zero cost. CostIsApproximate is
+         *     true when any component used an estimate or a priced total excludes an unpriced component.
+         */
+        CompletedReviewUsageFact: {
+            /** Format: int64 */
+            sequence?: number;
+            /** Format: uuid */
+            jobId?: string;
+            /** Format: uuid */
+            clientId?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: int64 */
+            executionDurationMilliseconds?: number;
+            /** Format: uuid */
+            aiConnectionId?: string | null;
+            /** Format: double */
+            estimatedCostUsd?: number | null;
+            costIsApproximate?: boolean;
+        };
+        /**
+         * @description A bounded sequence page of finalized review facts. NextCursor is the last returned sequence, or null
+         *     when this page has no items; retain the supplied cursor in that case. Replaying a cursor can include
+         *     facts finalized after the previous request.
+         */
+        CompletedReviewUsagePage: {
+            items?: components["schemas"]["CompletedReviewUsageFact"][] | null;
+            /** Format: int64 */
+            nextCursor?: number | null;
+        };
+        /** @description Describes the native hierarchy and the operations registered for a connection. */
+        ConnectionDiscoveryDescriptor: {
+            provider?: components["schemas"]["ScmProvider"];
+            scopeLabel?: string | null;
+            projectLabel?: string | null;
+            sourceKinds?: components["schemas"]["ConnectionDiscoverySourceKind"][] | null;
+            supportsBranches?: boolean;
+            supportsKnowledgeSources?: boolean;
+        };
+        /** @description One native scope with its saved identity when the provider uses saved scopes. */
+        ConnectionDiscoveryScope: {
+            scopeKey?: string | null;
+            displayName?: string | null;
+            /** Format: uuid */
+            savedScopeId?: string | null;
+        };
+        ConnectionDiscoverySelection: {
+            provider?: components["schemas"]["ScmProvider"];
+            /** Format: uuid */
+            connectionId?: string;
+            scopeKey?: string | null;
+            /** Format: uuid */
+            organizationScopeId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
+        };
+        /** @description Native source identity and persistent configuration coordinates. */
+        ConnectionDiscoverySource: {
+            /** Format: uuid */
+            organizationScopeId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
+            repositoryId?: string | null;
+            sourceKind?: components["schemas"]["ProCursorSourceKind"];
+            canonicalSourceRef?: components["schemas"]["CanonicalSourceReferenceDto"];
+            displayName?: string | null;
+            defaultBranch?: string | null;
+        };
+        ConnectionDiscoverySourceKind: {
+            kind?: components["schemas"]["ProCursorSourceKind"];
+            label?: string | null;
+        };
         /** @description Summary of an external memory record that contributed to a review in this pull request. */
         ContributingMemorySummaryDto: {
             /** Format: uuid */
@@ -21733,7 +22695,7 @@ export interface components {
             /** Format: uuid */
             clientId: string;
             providerProjectKey?: string | null;
-            provider?: components["schemas"]["ScmProvider"];
+            provider?: components["schemas"]["ScmProvider"] | null;
             /** Format: uuid */
             organizationScopeId?: string | null;
             providerScopePath?: string | null;
@@ -21744,12 +22706,15 @@ export interface components {
             proCursorSourceIds?: string[] | null;
             /** Format: float */
             reviewTemperature?: number | null;
+            /** Format: uuid */
+            connectionId?: string | null;
+            scopeKey?: string | null;
         };
         /** @description Request body for creating an admin-managed webhook configuration. */
         CreateAdminWebhookConfigRequest: {
             /** Format: uuid */
             clientId: string;
-            provider?: components["schemas"]["WebhookProviderType"];
+            provider?: components["schemas"]["WebhookProviderType"] | null;
             /** Format: uuid */
             organizationScopeId?: string | null;
             providerScopePath?: string | null;
@@ -21758,6 +22723,9 @@ export interface components {
             repoFilters?: components["schemas"]["WebhookRepoFilterRequest"][] | null;
             /** Format: float */
             reviewTemperature?: number | null;
+            /** Format: uuid */
+            connectionId?: string | null;
+            scopeKey?: string | null;
         };
         /** @description Request body for creating a provider-neutral AI connection profile. */
         CreateAiConnectionRequest: {
@@ -21777,6 +22745,11 @@ export interface components {
             providerSettings?: {
                 [key: string]: string;
             } | null;
+            /**
+             * Format: uuid
+             * @description Optional immutable client-scoped correlation identifier for creation readback. Reuse while the profile exists returns 409.
+             */
+            creationRequestId?: string | null;
         };
         /** @description Request body for creating a client-scoped provider connection. */
         CreateClientProviderConnectionRequest: {
@@ -21820,6 +22793,9 @@ export interface components {
             repositoryId?: string | null;
             repositoryName?: string | null;
             providerScopePath?: string | null;
+            targetBranchPatterns?: string[] | null;
+            restoreRemovedTarget?: boolean;
+            expectedRemovedRevision?: string | null;
         };
         /** @description Request to declare that a client answers mentions on repositories in one project. */
         CreateMentionConfigRequest: {
@@ -21828,7 +22804,7 @@ export interface components {
              * @description The client that answers.
              */
             clientId?: string;
-            provider?: components["schemas"]["ScmProvider"];
+            provider?: components["schemas"]["ScmProvider"] | null;
             /** @description Provider scope path the project lives under. */
             providerScopePath?: string | null;
             /** @description Provider project, workspace, or namespace key. */
@@ -21840,6 +22816,9 @@ export interface components {
              * @description Shortest gap between two scans. Defaults to 60 seconds.
              */
             scanIntervalSeconds?: number | null;
+            /** Format: uuid */
+            connectionId?: string | null;
+            scopeKey?: string | null;
         };
         /** @description Create-PAT request. */
         CreatePatRequest: {
@@ -22564,6 +23543,13 @@ export interface components {
             isActive?: boolean | null;
             /** @description Optional full-replacement repository filter set. */
             repoFilters?: components["schemas"]["CrawlRepoFilterRequest"][] | null;
+            /**
+             * Format: uuid
+             * @description Selected connection used to validate a guided filter replacement.
+             */
+            connectionId?: string | null;
+            /** @description Native scope key used to validate a guided filter replacement. */
+            scopeKey?: string | null;
             proCursorSourceScopeMode?: components["schemas"]["ProCursorSourceScopeMode"];
             /** @description Optional selected ProCursor source IDs. */
             proCursorSourceIds?: string[] | null;
@@ -22595,6 +23581,13 @@ export interface components {
             enabledEvents?: components["schemas"]["WebhookEventType"][] | null;
             /** @description Optional full-replacement repository filter set. */
             repoFilters?: components["schemas"]["WebhookRepoFilterRequest"][] | null;
+            /**
+             * Format: uuid
+             * @description Selected connection used to validate a guided filter replacement.
+             */
+            connectionId?: string | null;
+            /** @description Native scope key used to validate a guided filter replacement. */
+            scopeKey?: string | null;
             /**
              * Format: float
              * @description Optional review temperature override. Set this property explicitly to null to clear the
@@ -22671,6 +23664,9 @@ export interface components {
             isActive?: boolean | null;
             /** @description Replacement repository list, or null to leave it. Must not be empty when given. */
             repoFilters?: components["schemas"]["MentionRepoFilterRequest"][] | null;
+            /** Format: uuid */
+            connectionId?: string | null;
+            scopeKey?: string | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
@@ -22951,6 +23947,9 @@ export interface components {
             organizationScopeId?: string | null;
             canonicalSourceRef?: components["schemas"]["CanonicalSourceReferenceDto"];
             sourceDisplayName?: string | null;
+            /** Format: uuid */
+            connectionId?: string | null;
+            scopeKey?: string | null;
         };
         /** @description Response payload for a ProCursor knowledge source. */
         ProCursorKnowledgeSourceResponse: {
@@ -23781,22 +24780,6 @@ export interface components {
             connections?: components["schemas"]["ProviderConnectionOperationalStatusDto"][] | null;
             providerFamilies?: components["schemas"]["ProviderFamilyOperationalStatusDto"][] | null;
         };
-        /** @description One repository a connection can reach within a scope. */
-        ProviderRepositoryOptionResponse: {
-            /** @description The provider-native identifier, which survives a rename. */
-            repositoryId?: string | null;
-            /** @description The repository's path, for reading. */
-            displayName?: string | null;
-            /** @description The owner, organization, or group it belongs to. */
-            scopePath?: string | null;
-        };
-        /** @description One owner, organization, or group a connection can reach. */
-        ProviderScopeOptionResponse: {
-            /** @description What the provider is addressed by, and what a configuration stores. */
-            scopePath?: string | null;
-            /** @description What to show an operator. */
-            displayName?: string | null;
-        };
         /** @description One pull request in the grouped review history, with every review run against it. */
         PullRequestHistoryItem: {
             /** @description Provider scope (organization or host) the pull request belongs to. */
@@ -24396,6 +25379,28 @@ export interface components {
             repository?: components["schemas"]["ReviewRepositoryRefDto"];
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
+        };
+        /** @description Comment messages and native discussion resolution metadata for one pull request. */
+        ReviewOverviewDto: {
+            /**
+             * Format: int32
+             * @description Published user messages from all authors; null when the count is unavailable or incomplete.
+             */
+            totalComments?: number | null;
+            /**
+             * Format: int32
+             * @description Native resolved discussions, not resolved messages; null when unavailable or unsupported.
+             */
+            resolvedDiscussions?: number | null;
+            /**
+             * Format: int32
+             * @description Native unresolved discussions, not unresolved messages; null when unavailable or unsupported.
+             */
+            unresolvedDiscussions?: number | null;
+            /** @description Whether the provider read completed within its bounds. */
+            isComplete?: boolean;
+            /** @description Whether the provider exposes discussion resolution; Forgejo does not. */
+            resolutionSupported?: boolean;
         };
         /** @description One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model. */
         ReviewPassEntry: {
@@ -25724,6 +26729,22 @@ export interface components {
          * @enum {string}
          */
         ScmAuthenticationKind: "oauthClientCredentials" | "personalAccessToken" | "appInstallation" | "windowsUserAccount";
+        ScmDiscoveryBranchOption: {
+            branchName?: string | null;
+            isDefault?: boolean;
+        };
+        ScmDiscoveryCrawlFilterOption: {
+            canonicalSourceRef?: components["schemas"]["CanonicalSourceReferenceDto"];
+            displayName?: string | null;
+            branchSuggestions?: components["schemas"]["ScmDiscoveryBranchOption"][] | null;
+        };
+        /** @description Saved scope and project coordinates returned by a discovery capability. */
+        ScmDiscoveryProjectOption: {
+            /** Format: uuid */
+            scopeId?: string;
+            projectId?: string | null;
+            projectName?: string | null;
+        };
         /**
          * @description Supported source-control provider families.
          * @enum {string}
@@ -26395,6 +27416,18 @@ export interface components {
             providerSettings?: {
                 [key: string]: string;
             } | null;
+        };
+        /** @description A policy-only conditional update for a saved repository target. */
+        UpdateClientReviewTargetPolicyRequest: {
+            /**
+             * Format: uuid
+             * @description Selected verified connection identifier.
+             */
+            connectionId: string;
+            /** @description Required raw stored policy snapshot; an empty array represents All. */
+            expectedTargetBranchPatterns: string[];
+            /** @description Required replacement policy; an empty array represents All. */
+            targetBranchPatterns: string[];
         };
         /** @description Request to replace the override text of an existing prompt override. */
         UpdatePromptOverrideRequest: {

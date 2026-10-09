@@ -64,8 +64,7 @@ public sealed class RunnerReviewPipelineTests
             "The composition report names parameters no mirrored constructor takes: " + string.Join(", ", stale));
     }
 
-    // Absences are decisions, not defaults. A new absence must be added here deliberately, with its
-    // consequence written down, and that separates a smaller review from a different one.
+    // Native namespace projection is unavailable with the exposure collector that consumes it.
     [Fact]
     public void TheAbsences_AreExactlyTheDecidedOnes()
     {
@@ -77,7 +76,7 @@ public sealed class RunnerReviewPipelineTests
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(["exposureCollector", "prWideCandidateGeneratorFactory"], absent);
+        Assert.Equal(["exposureCollector", "prWideCandidateGeneratorFactory", "providerRegistry"], absent);
     }
 
     [Fact]

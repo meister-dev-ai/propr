@@ -26,24 +26,9 @@ public enum ProviderCommentIdScope
     Thread = 1,
 }
 
-/// <summary>
-///     Which comment-id regime each provider family uses. Stated once here rather than inferred per call site,
-///     because getting it wrong in either direction is silent: too loose and ProPR claims a stranger's thread,
-///     too strict and it stops recognising its own.
-/// </summary>
+/// <summary>Uses the local provider declaration, with conservative scope when unavailable.</summary>
 public static class ProviderCommentIdScopes
 {
-    /// <summary>The regime <paramref name="provider" /> numbers its comments under.</summary>
-    public static ProviderCommentIdScope For(ScmProvider provider)
-    {
-        return provider switch
-        {
-            ScmProvider.GitHub or ScmProvider.GitLab or ScmProvider.Forgejo => ProviderCommentIdScope.PullRequest,
-
-            // Azure DevOps, and anything not yet classified. Requiring the thread id to match is the side that
-            // errs towards not claiming a thread, which costs a missed reply rather than a reply posted into
-            // someone else's conversation.
-            _ => ProviderCommentIdScope.Thread,
-        };
-    }
+    public static ProviderCommentIdScope For(MeisterDev.ProPR.Application.Interfaces.IScmIdentityPolicy? policy) =>
+        policy?.CommentIdScope ?? ProviderCommentIdScope.Thread;
 }

@@ -14,7 +14,7 @@ public sealed class ProviderReadinessEvaluatorTests
 {
     private readonly Guid _clientId = Guid.NewGuid();
     private readonly Guid _connectionId = Guid.NewGuid();
-    private readonly IScmProviderRegistry _providerRegistry = Substitute.For<IScmProviderRegistry>();
+    private readonly IScmProviderRegistry _providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
     private readonly IClientReviewerIdentityRepository _reviewerIdentityRepository =
         Substitute.For<IClientReviewerIdentityRepository>();
@@ -55,7 +55,7 @@ public sealed class ProviderReadinessEvaluatorTests
             this._scopeRepository,
             this._reviewerIdentityRepository,
             this._providerRegistry,
-            new StaticProviderReadinessProfileCatalog());
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies));
 
         var result = await sut.EvaluateAsync(this._clientId, connection, CancellationToken.None);
 
@@ -110,7 +110,7 @@ public sealed class ProviderReadinessEvaluatorTests
             this._scopeRepository,
             this._reviewerIdentityRepository,
             this._providerRegistry,
-            new StaticProviderReadinessProfileCatalog());
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies));
 
         var result = await sut.EvaluateAsync(this._clientId, connection, CancellationToken.None);
 
@@ -135,7 +135,7 @@ public sealed class ProviderReadinessEvaluatorTests
             this._scopeRepository,
             this._reviewerIdentityRepository,
             this._providerRegistry,
-            new StaticProviderReadinessProfileCatalog());
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies));
 
         var result = await sut.EvaluateAsync(this._clientId, connection, CancellationToken.None);
 
@@ -193,7 +193,7 @@ public sealed class ProviderReadinessEvaluatorTests
             this._scopeRepository,
             this._reviewerIdentityRepository,
             this._providerRegistry,
-            new StaticProviderReadinessProfileCatalog());
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies));
 
         var result = await sut.EvaluateAsync(this._clientId, connection, CancellationToken.None);
 
@@ -220,8 +220,8 @@ public sealed class ProviderReadinessEvaluatorTests
             "authentication",
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
-            GitHubAppId: 123456,
-            GitHubAppInstallationId: 789012);
+            AppId: 123456,
+            InstallationId: 789012);
         this._providerRegistry.IsRegistered(ScmProvider.GitHub).Returns(true);
         this._scopeRepository.GetByConnectionIdAsync(this._clientId, this._connectionId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ClientScmScopeDto>>([]));
@@ -235,7 +235,7 @@ public sealed class ProviderReadinessEvaluatorTests
             this._scopeRepository,
             this._reviewerIdentityRepository,
             this._providerRegistry,
-            new StaticProviderReadinessProfileCatalog());
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies));
 
         var result = await sut.EvaluateAsync(this._clientId, connection, CancellationToken.None);
 
@@ -268,7 +268,7 @@ public sealed class ProviderReadinessEvaluatorTests
             null,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
-            GitHubAppId: gitHubAppId,
-            GitHubAppInstallationId: gitHubAppInstallationId);
+            AppId: gitHubAppId,
+            InstallationId: gitHubAppInstallationId);
     }
 }

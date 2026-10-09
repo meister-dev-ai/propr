@@ -14,6 +14,15 @@ namespace MeisterDev.ProPR.Application.Tests.Features.Licensing;
 /// </summary>
 public sealed class AutomationAuthorPolicyTests
 {
+    [Fact]
+    public void NativeAccountEvidenceIsConsumedByTheFixedLicensingDecision()
+    {
+        Assert.True(
+            AutomationAuthorPolicy.IsAutomation(
+                Observed((ScmProvider)99, "account"),
+                new MeisterDev.ProPR.Application.Interfaces.ScmNativeAccountFacts(IsServiceAccount: true)));
+    }
+
     /// <summary>The flag is a statement only when it is true, and it is the one signal every provider shape shares.</summary>
     public static TheoryData<ScmProvider> EveryProvider { get; } = [.. Enum.GetValues<ScmProvider>()];
 
@@ -21,7 +30,7 @@ public sealed class AutomationAuthorPolicyTests
     [MemberData(nameof(EveryProvider))]
     public void AProviderStatedBotFlag_IsAutomationOnEveryProvider(ScmProvider provider)
     {
-        Assert.True(AutomationAuthorPolicy.IsAutomation(Observed(provider, "octo.dev", isBot: true)));
+        Assert.True(Classify(Observed(provider, "octo.dev", isBot: true)));
     }
 
     // False and absent are the same answer. The review side carries the flag from GitHub alone and the mention
@@ -31,7 +40,7 @@ public sealed class AutomationAuthorPolicyTests
     [InlineData(null)]
     public void AFlagThatStatesNothing_LeavesTheAuthorCounted(bool? isBot)
     {
-        Assert.False(AutomationAuthorPolicy.IsAutomation(Observed(ScmProvider.GitHub, "octo.dev", isBot)));
+        Assert.False(Classify(Observed(ScmProvider.GitHub, "octo.dev", isBot)));
     }
 
     [Theory]
@@ -40,14 +49,14 @@ public sealed class AutomationAuthorPolicyTests
     [InlineData("PROJECT_BOT_UPPER")]
     public void AGitLabServiceAccountLogin_IsAutomation(string login)
     {
-        Assert.True(AutomationAuthorPolicy.IsAutomation(Observed(ScmProvider.GitLab, login)));
+        Assert.True(Classify(Observed(ScmProvider.GitLab, login)));
     }
 
     // The prefix is GitLab's own convention. The same login on another provider is a name somebody chose.
     [Fact]
     public void AGitLabServiceAccountLoginOnAnotherProvider_LeavesTheAuthorCounted()
     {
-        Assert.False(AutomationAuthorPolicy.IsAutomation(Observed(ScmProvider.GitHub, "project_bot_1234")));
+        Assert.False(Classify(Observed(ScmProvider.GitHub, "project_bot_1234")));
     }
 
     [Theory]
@@ -57,7 +66,7 @@ public sealed class AutomationAuthorPolicyTests
     [InlineData(ScmProvider.AzureDevOps, "some-app[bot]")]
     public void ALoginEndingInTheBotSuffix_IsAutomation(ScmProvider provider, string login)
     {
-        Assert.True(AutomationAuthorPolicy.IsAutomation(Observed(provider, login)));
+        Assert.True(Classify(Observed(provider, login)));
     }
 
     [Theory]
@@ -70,7 +79,7 @@ public sealed class AutomationAuthorPolicyTests
     [InlineData("release-please")]
     public void AKnownAutomationLogin_IsAutomation(string login)
     {
-        Assert.True(AutomationAuthorPolicy.IsAutomation(Observed(ScmProvider.Forgejo, login)));
+        Assert.True(Classify(Observed(ScmProvider.Forgejo, login)));
     }
 
     // The two space-separated entries are display names rather than logins, because a provider does not allow
@@ -87,7 +96,7 @@ public sealed class AutomationAuthorPolicyTests
             "svc-account",
             displayName);
 
-        Assert.True(AutomationAuthorPolicy.IsAutomation(observation));
+        Assert.True(Classify(observation));
     }
 
     // The mention side stores the one name a comment payload carries as both the login and the display name,
@@ -102,7 +111,7 @@ public sealed class AutomationAuthorPolicyTests
             "svc-account",
             "GitHub Actions");
 
-        Assert.True(AutomationAuthorPolicy.IsAutomation(observation));
+        Assert.True(Classify(observation));
     }
 
     // The near misses. Each contains or resembles a name on the list and is a person.
@@ -115,7 +124,7 @@ public sealed class AutomationAuthorPolicyTests
     [InlineData("release-pleaser")]
     public void ALoginThatMerelyResemblesAutomation_LeavesTheAuthorCounted(string login)
     {
-        Assert.False(AutomationAuthorPolicy.IsAutomation(Observed(ScmProvider.GitHub, login)));
+        Assert.False(Classify(Observed(ScmProvider.GitHub, login)));
     }
 
     [Theory]
@@ -130,7 +139,7 @@ public sealed class AutomationAuthorPolicyTests
             displayName,
             displayName);
 
-        Assert.True(AutomationAuthorPolicy.IsAutomation(observation));
+        Assert.True(Classify(observation));
     }
 
     // The project-scoped shape has to be the whole tail of the name, so a name that merely mentions it in the
@@ -145,7 +154,7 @@ public sealed class AutomationAuthorPolicyTests
             "dana.lee@acme.example",
             "Dana Lee, Build Service (contoso) administrator");
 
-        Assert.False(AutomationAuthorPolicy.IsAutomation(observation));
+        Assert.False(Classify(observation));
     }
 
     [Fact]
@@ -158,7 +167,7 @@ public sealed class AutomationAuthorPolicyTests
             "octo.dev@acme.example",
             "Octo Dev");
 
-        Assert.False(AutomationAuthorPolicy.IsAutomation(observation));
+        Assert.False(Classify(observation));
     }
 
     // Forgejo and Gitea report one placeholder account for every deleted user. It is not a person, and it is
@@ -173,7 +182,7 @@ public sealed class AutomationAuthorPolicyTests
             "Ghost",
             "Ghost");
 
-        Assert.True(AutomationAuthorPolicy.IsAutomation(observation));
+        Assert.True(Classify(observation));
     }
 
     // The identifier is Forgejo's placeholder only on Forgejo. Nothing states that another provider issues it,
@@ -188,7 +197,7 @@ public sealed class AutomationAuthorPolicyTests
             "octo.dev",
             "Octo Dev");
 
-        Assert.False(AutomationAuthorPolicy.IsAutomation(observation));
+        Assert.False(Classify(observation));
     }
 
     [Fact]
@@ -199,8 +208,14 @@ public sealed class AutomationAuthorPolicyTests
             "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
             AuthorActivitySource.Review);
 
-        Assert.False(AutomationAuthorPolicy.IsAutomation(observation));
+        Assert.False(Classify(observation));
     }
+
+    private static bool Classify(AuthorActivityObservation observation) =>
+        AutomationAuthorPolicy.IsAutomation(
+            observation, MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry
+                .GetIdentityPolicy(observation.Host.Provider)
+                .GetAccountFacts(observation.ExternalUserId, observation.Login, observation.DisplayName));
 
     private static ProviderHostRef Host(ScmProvider provider)
     {

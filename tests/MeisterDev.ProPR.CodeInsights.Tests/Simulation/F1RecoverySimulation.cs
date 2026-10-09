@@ -616,6 +616,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
         this.WithClassifier(actedOnWhenResolved: true, actedOnWhenOpen: false);
 
         this._harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             this._store,
             this._store,
             this._classifier,
@@ -676,7 +677,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
 
         // A pull request seeded as closing while its review was still running is what takes the crawl into
         // lifecycle synchronization, and it is also the case with a job left to cancel.
-        this._jobs.GetActiveJobsForConfigAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        this._jobs.GetActiveJobsForConfigAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ => this._prs.Values
                 .Where(pr => pr.ReviewJobStillActiveAtClose && !this._cancelledJobs.Contains(pr.ActiveJobId))
                 .Select(pr => new ReviewJob(pr.ActiveJobId, ClientId, ProviderSourcePath, "project", Repository, (int)pr.Id, 1))
@@ -701,6 +702,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
             .Returns([]);
 
         this._dispositions = new CodeInsightDispositionService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             this._store,
             this._store,
             Substitute.For<IDisregardedFindingClassifier>(),
@@ -722,6 +724,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
         var projector = new ReviewerPerformanceCountProjector(this._db, gate, NullLogger<ReviewerPerformanceCountProjector>.Instance);
         var coverage = new CodeInsightHarvestCoverageRecorder(this._db, gate, projector, NullLogger<CodeInsightHarvestCoverageRecorder>.Instance);
         this._closeObserver = new PullRequestCloseObserver(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             NullLogger<PullRequestCloseObserver>.Instance,
             this._provider,
             this._harvester,
@@ -734,6 +737,7 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
             harvestCoverageRecorder: coverage);
 
         this._synchronization = new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             jobs,
             NullLogger<PullRequestSynchronizationService>.Instance,
             codeInsightMetricSealer: this._sealer,

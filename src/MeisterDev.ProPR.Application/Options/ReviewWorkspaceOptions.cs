@@ -15,8 +15,7 @@ public static class ReviewWorkspaceFetchDepthPolicies
 
     /// <summary>
     ///     Fetch commits and trees but leave file contents on the server, to be downloaded on demand.
-    ///     Requires a server that advertises the <c>filter</c> capability, which Azure DevOps and GitHub both
-    ///     do.
+    ///     Requires a server that advertises the <c>filter</c> capability.
     /// </summary>
     /// <remarks>
     ///     What this saves is the file contents of the revisions no review checks out. The head revision is

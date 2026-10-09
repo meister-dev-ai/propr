@@ -8,7 +8,7 @@ using FluentValidation.Results;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
@@ -16,6 +16,9 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using MeisterDev.ProPR.Web;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 
@@ -27,6 +30,7 @@ public sealed partial class AdminCrawlConfigsController(
     IUserRepository userRepository,
     IClientAdminService clientAdminService,
     IScmProviderRegistry providerRegistry,
+    IReviewConfigurationSelectionService selections,
     IProCursorKnowledgeSourceRepository proCursorKnowledgeSourceRepository,
     ILogger<AdminCrawlConfigsController> logger,
     IProviderActivationService? providerActivationService = null,
@@ -135,114 +139,38 @@ public sealed partial class AdminCrawlConfigsController(
                ?? throw new InvalidOperationException("Each repository filter must include a repository name, display name, or canonical source reference.");
     }
 
-    private async Task<(Guid? OrganizationScopeId, string OrganizationUrl)> ResolveOrganizationSelectionAsync(
-        Guid clientId,
-        ScmProvider provider,
-        Guid? organizationScopeId,
-        string? organizationUrl,
-        CancellationToken ct)
+    private Task<(Guid? OrganizationScopeId, string OrganizationUrl)> ResolveOrganizationSelectionAsync(
+        Guid clientId, ScmProvider provider, Guid? organizationScopeId, string? organizationUrl, CancellationToken ct) =>
+        selections.ResolveScopeAsync(clientId, provider, organizationScopeId, organizationUrl, ct);
+
+    private Task<IReadOnlyList<CrawlRepoFilterDto>> ResolveRepoFiltersAsync(
+        Guid clientId, ScmProvider provider,
+        Guid? organizationScopeId, string projectId, IReadOnlyList<CrawlRepoFilterRequest>? repoFilters, CancellationToken ct) =>
+        selections.ResolveFiltersAsync(
+            clientId, provider, organizationScopeId, projectId,
+            repoFilters?.Select(filter => new CrawlRepoFilterDto(
+                Guid.Empty, filter.RepositoryName!, filter.TargetBranchPatterns ?? [], filter.CanonicalSourceRef, filter.DisplayName)).ToList(), ct);
+
+    private async Task<IReadOnlyList<CrawlRepoFilterDto>> ResolveConnectionPatchFiltersAsync(
+        CrawlConfigurationDto existing, PatchAdminCrawlConfigRequest request, CancellationToken ct)
     {
-        if (provider != ScmProvider.AzureDevOps)
-        {
-            var normalizedProviderOrganizationUrl = NormalizeOptional(organizationUrl)
-                                                    ?? throw new InvalidOperationException(
-                                                        "ProviderScopePath is required for non-Azure DevOps crawl configurations.");
-
-            return (null, normalizedProviderOrganizationUrl);
-        }
-
-        if (organizationScopeId.HasValue)
-        {
-            var scope = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
-                            .GetScopeAsync(clientId, organizationScopeId.Value, ct)
-                        ?? throw new InvalidOperationException("The selected Azure DevOps organization is no longer available for this client.");
-
-            if (!scope.IsEnabled)
-            {
-                throw new InvalidOperationException("The selected Azure DevOps organization is disabled.");
-            }
-
-            return (scope.Id, scope.ScopePath);
-        }
-
-        var normalizedOrganizationUrl = NormalizeOptional(organizationUrl)
-                                        ?? throw new InvalidOperationException("ProviderScopePath is required when OrganizationScopeId is not provided.");
-
-        return (null, normalizedOrganizationUrl);
-    }
-
-    private async Task<IReadOnlyList<CrawlRepoFilterDto>> ResolveRepoFiltersAsync(
-        Guid clientId,
-        ScmProvider provider,
-        Guid? organizationScopeId,
-        string projectId,
-        IReadOnlyList<CrawlRepoFilterRequest>? repoFilters,
-        CancellationToken ct)
-    {
-        if (repoFilters is null)
-        {
-            return [];
-        }
-
-        var filterDtos = new List<CrawlRepoFilterDto>(repoFilters.Count);
-        IReadOnlyList<AdoCrawlFilterOptionDto> availableFilters = [];
-
-        if (provider == ScmProvider.AzureDevOps && organizationScopeId.HasValue)
-        {
-            availableFilters = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
-                .ListCrawlFiltersAsync(clientId, organizationScopeId.Value, projectId, ct);
-        }
-
-        foreach (var filter in repoFilters)
-        {
-            var canonicalSourceRef = filter.CanonicalSourceRef;
-            var normalizedProvider = NormalizeOptional(canonicalSourceRef?.Provider);
-            var normalizedValue = NormalizeOptional(canonicalSourceRef?.Value);
-            var normalizedDisplayName = NormalizeOptional(filter.DisplayName);
-            var repositoryName = ResolveRepositoryName(filter);
-            var targetBranchPatterns = NormalizeBranchPatterns(filter.TargetBranchPatterns);
-
-            if (provider == ScmProvider.AzureDevOps && organizationScopeId.HasValue && normalizedProvider is not null &&
-                normalizedValue is not null)
-            {
-                var matchedFilter = availableFilters.FirstOrDefault(option =>
-                    string.Equals(
-                        option.CanonicalSourceRef.Provider,
-                        normalizedProvider,
-                        StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(
-                        option.CanonicalSourceRef.Value,
-                        normalizedValue,
-                        StringComparison.OrdinalIgnoreCase));
-
-                if (matchedFilter is null)
-                {
-                    throw new InvalidOperationException(
-                        $"The selected crawl filter '{normalizedDisplayName ?? repositoryName}' is no longer available in Azure DevOps.");
-                }
-
-                filterDtos.Add(
-                    new CrawlRepoFilterDto(
-                        Guid.Empty,
-                        repositoryName,
-                        targetBranchPatterns,
-                        new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue),
-                        normalizedDisplayName ?? matchedFilter.DisplayName));
-                continue;
-            }
-
-            filterDtos.Add(
-                new CrawlRepoFilterDto(
-                    Guid.Empty,
-                    repositoryName,
-                    targetBranchPatterns,
-                    normalizedProvider is not null && normalizedValue is not null
-                        ? new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue)
-                        : null,
-                    normalizedDisplayName));
-        }
-
-        return filterDtos.AsReadOnly();
+        var scopeKey = request.ScopeKey ?? throw new InvalidOperationException("ScopeKey is required for guided filter replacement.");
+        await selections.ResolveConnectionSelectionAsync(
+            existing.ClientId, request.ConnectionId!.Value, scopeKey,
+            existing.ProviderProjectKey, existing.Provider, existing.OrganizationScopeId, existing.ProviderScopePath, ct);
+        var context = await selections.GetConnectionContextAsync(existing.ClientId, request.ConnectionId.Value, ct);
+        var requested = request.RepoFilters ?? [];
+        var retained = requested.Select(filter => existing.RepoFilters.SingleOrDefault(saved =>
+            saved.CanonicalSourceRef is null && filter.CanonicalSourceRef is null && saved.RepositoryName == filter.RepositoryName &&
+            (filter.DisplayName == saved.DisplayName || saved.DisplayName is null && filter.DisplayName == saved.RepositoryName) &&
+            saved.TargetBranchPatterns.SequenceEqual(filter.TargetBranchPatterns ?? []))).ToList();
+        var changed = requested.Where((_, index) => retained[index] is null)
+            .Select(filter => new CrawlRepoFilterDto(
+                Guid.Empty, filter.RepositoryName!,
+                filter.TargetBranchPatterns ?? [], filter.CanonicalSourceRef, filter.DisplayName)).ToList();
+        var resolved = await selections.ResolveConnectionFiltersAsync(context, scopeKey, existing.ProviderProjectKey, changed, ct);
+        var resolvedIndex = 0;
+        return retained.Select(saved => saved ?? resolved[resolvedIndex++]).ToList();
     }
 
     private async Task<IReadOnlyList<Guid>> ValidateSelectedProCursorSourcesAsync(
@@ -370,26 +298,38 @@ public sealed partial class AdminCrawlConfigsController(
             return authorization;
         }
 
-        if (!await this.IsProviderEnabledAsync(request.Provider, ct))
-        {
-            return this.Conflict(new { error = DisabledProviderMessage });
-        }
-
         try
         {
-            var resolvedOrganization = await this.ResolveOrganizationSelectionAsync(
-                request.ClientId,
-                request.Provider,
-                request.OrganizationScopeId,
-                request.ProviderScopePath,
-                ct);
-            var repoFilters = await this.ResolveRepoFiltersAsync(
-                request.ClientId,
-                request.Provider,
-                resolvedOrganization.OrganizationScopeId,
-                request.ProviderProjectKey.Trim(),
-                request.RepoFilters,
-                ct);
+            var selected = request.ConnectionId.HasValue
+                ? await selections.ResolveConnectionSelectionAsync(
+                    request.ClientId, request.ConnectionId.Value,
+                    request.ScopeKey ?? throw new InvalidOperationException("ScopeKey is required for connection selection."),
+                    request.ProviderProjectKey, request.Provider, request.OrganizationScopeId, request.ProviderScopePath, ct)
+                : ((ScmProvider Provider, Guid? OrganizationScopeId, string ProviderScopePath, string ProviderProjectKey)?)null;
+            var provider = (selected?.Provider ?? request.Provider)
+                           ?? throw new InvalidOperationException("Specify a connection or an explicit manual provider.");
+            if (!await this.IsProviderEnabledAsync(provider, ct))
+            {
+                return this.Conflict(new { error = DisabledProviderMessage });
+            }
+
+            var projectKey = selected?.ProviderProjectKey ?? request.ProviderProjectKey.Trim();
+            var resolvedOrganization = selected.HasValue
+                ? (OrganizationScopeId: selected.Value.OrganizationScopeId, OrganizationUrl: selected.Value.ProviderScopePath)
+                : await this.ResolveOrganizationSelectionAsync(request.ClientId, provider, request.OrganizationScopeId, request.ProviderScopePath, ct);
+            var repoFilters = request.ConnectionId.HasValue
+                ? await selections.ResolveConnectionFiltersAsync(
+                    await selections.GetConnectionContextAsync(request.ClientId, request.ConnectionId.Value, ct),
+                    request.ScopeKey!, projectKey,
+                    request.RepoFilters?.Select(filter => new CrawlRepoFilterDto(
+                        Guid.Empty, filter.RepositoryName!, filter.TargetBranchPatterns ?? [], filter.CanonicalSourceRef, filter.DisplayName)).ToList(), ct)
+                : await this.ResolveRepoFiltersAsync(
+                    request.ClientId,
+                    provider,
+                    resolvedOrganization.OrganizationScopeId,
+                    projectKey,
+                    request.RepoFilters,
+                    ct);
             var selectedProCursorSourceIds = await this.ValidateSelectedProCursorSourcesAsync(
                 request.ClientId,
                 request.ProCursorSourceScopeMode,
@@ -399,7 +339,7 @@ public sealed partial class AdminCrawlConfigsController(
             if (await crawlConfigRepo.ExistsAsync(
                     request.ClientId,
                     resolvedOrganization.OrganizationUrl,
-                    request.ProviderProjectKey.Trim(),
+                    projectKey,
                     null,
                     null,
                     ct))
@@ -409,9 +349,9 @@ public sealed partial class AdminCrawlConfigsController(
 
             var config = await crawlConfigRepo.AddAsync(
                 request.ClientId,
-                request.Provider,
+                provider,
                 resolvedOrganization.OrganizationUrl,
-                request.ProviderProjectKey.Trim(),
+                projectKey,
                 request.CrawlIntervalSeconds,
                 resolvedOrganization.OrganizationScopeId,
                 ct,
@@ -470,12 +410,14 @@ public sealed partial class AdminCrawlConfigsController(
     /// <response code="401">No valid credentials provided.</response>
     /// <response code="403">Non-Admin caller does not own this config's client.</response>
     /// <response code="404">Configuration not found.</response>
+    /// <response code="409">The update conflicts with the current target lifecycle or protected filters, the repository replacement is incompatible or conflicts with an existing target, or the capability is unavailable.</response>
     [HttpPatch("{configId:guid}")]
     [ProducesResponseType(typeof(CrawlConfigResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> PatchCrawlConfiguration(
         Guid configId,
         [FromBody] PatchAdminCrawlConfigRequest request,
@@ -521,32 +463,37 @@ public sealed partial class AdminCrawlConfigsController(
 
         try
         {
+            var filterDtos = request.RepoFilters is not null
+                ? request.ConnectionId.HasValue
+                    ? await this.ResolveConnectionPatchFiltersAsync(existing, request, ct)
+                    : await this.ResolveRepoFiltersAsync(
+                        existing.ClientId,
+                        existing.Provider,
+                        existing.OrganizationScopeId,
+                        existing.ProviderProjectKey,
+                        request.RepoFilters,
+                        ct)
+                : null;
+
             Guid? ownerScope = isAdmin ? null : existing.ClientId;
-            var updated = await crawlConfigRepo.UpdateAsync(
+            var updated = await crawlConfigRepo.UpdateWithResultAsync(
                 configId,
                 request.CrawlIntervalSeconds,
                 request.IsActive,
                 ownerScope,
                 ct,
                 request.ReviewTemperature,
-                request.ShouldUpdateReviewTemperature);
+                request.ShouldUpdateReviewTemperature,
+                filterDtos);
 
-            if (!updated)
+            if (updated == CrawlConfigurationUpdateResult.NotFound)
             {
                 return this.NotFound();
             }
 
-            // Update repo filters when explicitly provided (omitting the field = leave unchanged).
-            if (request.RepoFilters is not null)
+            if (updated == CrawlConfigurationUpdateResult.Conflict)
             {
-                var filterDtos = await this.ResolveRepoFiltersAsync(
-                    existing.ClientId,
-                    existing.Provider,
-                    existing.OrganizationScopeId,
-                    existing.ProviderProjectKey,
-                    request.RepoFilters,
-                    ct);
-                await crawlConfigRepo.UpdateRepoFiltersAsync(configId, filterDtos, ct);
+                return this.Conflict(new { error = "The update conflicts with the current review target state." });
             }
 
             await this.UpdateProCursorSourceScopeIfRequestedAsync(configId, request, existing, ct);
@@ -558,6 +505,10 @@ public sealed partial class AdminCrawlConfigsController(
             }
 
             return this.Ok(ToCrawlConfigResponse(refreshed));
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return this.Conflict(new { error = "The repository replacement conflicts with an existing configuration." });
         }
         catch (InvalidOperationException ex)
         {
@@ -596,8 +547,8 @@ public sealed partial class AdminCrawlConfigsController(
     }
 
     /// <summary>
-    ///     Deletes a crawl configuration.
-    ///     Admins may delete any config; non-Admin users may only delete configs for their clients.
+    ///     Deletes a generic crawl configuration. Managed canonical targets require revision-checked lifecycle removal.
+    ///     Admins may delete eligible generic configurations; non-Admin users may only delete eligible configurations for their clients.
     /// </summary>
     /// <param name="configId">Configuration identifier.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -605,11 +556,13 @@ public sealed partial class AdminCrawlConfigsController(
     /// <response code="401">No valid credentials provided.</response>
     /// <response code="403">Non-Admin caller does not own this config's client.</response>
     /// <response code="404">Configuration not found.</response>
+    /// <response code="409">Deletion was rejected; managed canonical targets require lifecycle removal.</response>
     [HttpDelete("{configId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteCrawlConfiguration(Guid configId, CancellationToken ct = default)
     {
         var auth = this.RequireAuth(out var isAdmin, out var userId);
@@ -643,7 +596,11 @@ public sealed partial class AdminCrawlConfigsController(
             }
         }
 
-        await crawlConfigRepo.DeleteAsync(configId, existing.ClientId, ct);
+        if (!await crawlConfigRepo.DeleteAsync(configId, existing.ClientId, ct))
+        {
+            return this.Conflict("The configuration cannot be deleted. Use revision-checked lifecycle removal for managed repository targets.");
+        }
+
         LogCrawlConfigDeleted(logger, configId);
         return this.NoContent();
     }
@@ -653,14 +610,16 @@ public sealed partial class AdminCrawlConfigsController(
 public sealed record CreateAdminCrawlConfigRequest(
     [property: JsonRequired] Guid ClientId,
     string ProviderProjectKey,
-    ScmProvider Provider = ScmProvider.AzureDevOps,
+    ScmProvider? Provider = null,
     Guid? OrganizationScopeId = null,
     string? ProviderScopePath = null,
     int CrawlIntervalSeconds = 60,
     IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters = null,
     ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
     IReadOnlyList<Guid>? ProCursorSourceIds = null,
-    float? ReviewTemperature = null);
+    float? ReviewTemperature = null,
+    Guid? ConnectionId = null,
+    string? ScopeKey = null);
 
 /// <summary>
 ///     Request body for patching an admin-managed crawl configuration.
@@ -678,6 +637,12 @@ public sealed record PatchAdminCrawlConfigRequest
 
     /// <summary>Optional full-replacement repository filter set.</summary>
     public IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters { get; init; }
+
+    /// <summary>Selected connection used to validate a guided filter replacement.</summary>
+    public Guid? ConnectionId { get; init; }
+
+    /// <summary>Native scope key used to validate a guided filter replacement.</summary>
+    public string? ScopeKey { get; init; }
 
     /// <summary>Optional ProCursor source-scope mode update.</summary>
     public ProCursorSourceScopeMode? ProCursorSourceScopeMode { get; init; }

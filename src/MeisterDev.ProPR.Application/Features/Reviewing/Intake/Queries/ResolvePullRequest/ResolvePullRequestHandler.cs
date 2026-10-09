@@ -15,16 +15,16 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.Resolve
 ///     <para>
 ///         Every review-scoped endpoint is addressed by scope path, project key, repository identity, and
 ///         number. An address supplies a host, an owner segment, a repository <em>name</em>, and a number —
-///         so two of the four are missing, and for Azure DevOps and Forgejo the missing two are opaque
-///         identifiers that appear nowhere in the address.
+///         so the saved scope and project coordinates can be missing. Opaque identifiers may not appear
+///         in the address.
 ///     </para>
 ///     <para>
 ///         Configuration supplies most of it. A repository reaches ProPR either through a crawl
 ///         configuration or through a webhook configuration, and either is sufficient: both record the scope
 ///         path and project key verbatim as the review pipeline uses them, plus the repositories they cover
 ///         by name. Those two values are returned rather than reconstructed, because they are stored
-///         settings — Forgejo keeps the host in the scope path while Azure DevOps keeps host plus
-///         organization, so any derivation would disagree with what a review job carries for one of them.
+///         settings whose scope path can contain a host authority or a longer selected scope. Reconstructing
+///         them from an address could disagree with the coordinates captured in the review job.
 ///     </para>
 ///     <para>
 ///         What configuration often lacks is the repository identity: a webhook is registered by name, so it
@@ -167,7 +167,9 @@ public sealed partial class ResolvePullRequestHandler(
 
         var coverages = new List<PullRequestCoverage>(crawlConfigurations.Count + webhookConfigurations.Count);
         coverages.AddRange(crawlConfigurations.Select(PullRequestCoverage.FromCrawlConfiguration));
-        coverages.AddRange(webhookConfigurations.Select(PullRequestCoverage.FromWebhookConfiguration));
+        coverages.AddRange(
+            webhookConfigurations.Select(configuration => PullRequestCoverage.FromWebhookConfiguration(
+                configuration, providerRegistry.CompatibilityCodec.ResolveCoverageProvider(configuration.ProviderType))));
 
         return coverages;
     }
@@ -201,10 +203,8 @@ public sealed partial class ResolvePullRequestHandler(
                 coverage.ProviderProjectKey,
                 cancellationToken);
 
-            var wanted = repositoryName.Trim();
-            var found = repositories.FirstOrDefault(repository =>
-                string.Equals(repository.RepositoryName, wanted, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(LastSegment(repository.ProjectPath), wanted, StringComparison.OrdinalIgnoreCase));
+            var found = providerRegistry.GetSourceIdentityPolicy(coverage.Provider)
+                .FindRepositoryByAddressName(repositories, repositoryName);
 
             return found?.ExternalRepositoryId;
         }
@@ -226,63 +226,21 @@ public sealed partial class ResolvePullRequestHandler(
     }
 
     /// <summary>
-    ///     Matches the address's owner segment against configuration, which splits that identity by
-    ///     provider: Azure DevOps puts the organization in the scope path, while Forgejo, GitHub, and GitLab
-    ///     keep only the host there and put the owner in the project key.
+    ///     Matches the address's owner segment against saved configuration using the provider's local source policy.
     /// </summary>
-    private static bool CoversScope(PullRequestCoverage coverage, string scope)
-    {
-        if (scope.Length == 0)
-        {
-            return true;
-        }
+    private bool CoversScope(PullRequestCoverage coverage, string scope) =>
+        providerRegistry.GetSourceIdentityPolicy(coverage.Provider)
+            .MatchesAddressScope(coverage.ProviderProjectKey, coverage.ProviderScopePath, scope);
 
-        if (string.Equals(coverage.ProviderProjectKey, scope, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // When the scope path names only a host the owner lives in the project key, which was already
-        // compared above. Accepting the configuration here would match a different owner on the same host.
-        var configuredPath = TryReadPath(coverage.ProviderScopePath);
-
-        return string.Equals(configuredPath, scope, StringComparison.OrdinalIgnoreCase)
-               || configuredPath.EndsWith('/' + scope, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static CoveredRepository? FindRepository(PullRequestCoverage coverage, string repositoryName)
-    {
-        var wanted = repositoryName.Trim();
-
-        return coverage.CoveredRepositories.FirstOrDefault(repository =>
-            string.Equals(repository.Name, wanted, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(LastSegment(repository.Name), wanted, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string LastSegment(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
-        var trimmed = value.Trim().TrimEnd('/');
-        var separator = trimmed.LastIndexOf('/');
-        return separator < 0 ? trimmed : trimmed[(separator + 1)..];
-    }
+    private CoveredRepository? FindRepository(PullRequestCoverage coverage, string repositoryName) =>
+        coverage.CoveredRepositories.FirstOrDefault(repository =>
+            providerRegistry.GetSourceIdentityPolicy(coverage.Provider).MatchesRepositoryName(repository.Name, repositoryName));
 
     private static string? TryReadAuthority(string? value)
     {
         return Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) && uri.IsAbsoluteUri
             ? uri.GetLeftPart(UriPartial.Authority).TrimEnd('/')
             : null;
-    }
-
-    private static string TryReadPath(string? value)
-    {
-        return Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri)
-            ? Uri.UnescapeDataString(uri.AbsolutePath).Trim('/')
-            : string.Empty;
     }
 
     [LoggerMessage(

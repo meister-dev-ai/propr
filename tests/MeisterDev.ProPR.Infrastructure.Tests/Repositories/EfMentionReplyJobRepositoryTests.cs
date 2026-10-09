@@ -617,7 +617,8 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
             this._dbContext,
             new AuthorActivityRecorder(
                 new ThrowingAuthorActivityRollupStore(),
-                new ConfiguredReviewerIdentityRepository(this._dbContext)));
+                new ConfiguredReviewerIdentityRepository(this._dbContext),
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies));
         var job = MakeJob(prId: 35, threadId: "350", commentId: 3500, commentAuthorNativeId: "vss-guid-35");
         await repo.AddAsync(job);
         await repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
@@ -667,7 +668,8 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
             .Returns<Task<IReadOnlyList<string>>>(_ => throw new InvalidOperationException("unreachable"));
         var repo = new EfMentionReplyJobRepository(
             this._dbContext,
-            new AuthorActivityRecorder(new AuthorActivityRollupRepository(this._dbContext), identities));
+            new AuthorActivityRecorder(
+                new AuthorActivityRollupRepository(this._dbContext), identities, MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies));
         var job = MakeJob(prId: 37, threadId: "370", commentId: 3700, commentAuthorNativeId: "vss-guid-37");
         await repo.AddAsync(job);
         await repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
@@ -685,6 +687,7 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
             this._dbContext,
             new AuthorActivityRecorder(
                 new AuthorActivityRollupRepository(this._dbContext),
-                new ConfiguredReviewerIdentityRepository(this._dbContext)));
+                new ConfiguredReviewerIdentityRepository(this._dbContext),
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies));
     }
 }

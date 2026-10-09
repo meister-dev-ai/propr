@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Application.Interfaces;
 
 namespace MeisterDev.ProPR.Application.Features.Providers.Identity;
 
@@ -20,30 +21,17 @@ public sealed record ProviderSourceIdentity
     public string Value { get; }
 
     /// <summary>Uses the immutable source captured by the review job.</summary>
-    public static ProviderSourceIdentity FromReviewJob(ReviewJob job)
+    public static ProviderSourceIdentity FromReviewJob(ReviewJob job, IReviewSourcePolicy policy)
     {
         ArgumentNullException.ThrowIfNull(job);
-        var source = job.Provider == ScmProvider.AzureDevOps
-            ? job.OrganizationUrl
-            : job.HostBaseUrl ?? job.OrganizationUrl;
-        return FromReviewSource(job.Provider, source);
+        var source = policy.SelectCapturedSource(job.OrganizationUrl, job.HostBaseUrl);
+        return FromReviewSource(job.Provider, source, policy);
     }
 
-    /// <summary>Uses authority identity except for self-hosted Azure DevOps collection paths.</summary>
-    public static ProviderSourceIdentity FromReviewSource(ScmProvider provider, string sourcePath)
+    /// <summary>Uses the provider's local namespace projection.</summary>
+    public static ProviderSourceIdentity FromReviewSource(ScmProvider provider, string sourcePath, IReviewSourcePolicy policy)
     {
-        if (!Uri.TryCreate(sourcePath, UriKind.Absolute, out var uri))
-        {
-            return new(provider, string.Empty);
-        }
-
-        var host = new ProviderHostRef(provider, sourcePath).HostBaseUrl;
-        if (provider == ScmProvider.AzureDevOps && !IsHostedAzureDevOps(uri))
-        {
-            host = sourcePath;
-        }
-
-        return FromConfiguredHost(provider, host);
+        return FromConfiguredHost(provider, policy.NormalizeNamespace(sourcePath));
     }
 
     /// <summary>Retains the configured base path for provider-native identifiers.</summary>
@@ -53,11 +41,5 @@ public sealed record ProviderSourceIdentity
             ? $"{provider}:{uri.GetComponents(UriComponents.SchemeAndServer | UriComponents.Path, UriFormat.UriEscaped).TrimEnd('/')}"
             : string.Empty;
         return new(provider, value);
-    }
-
-    private static bool IsHostedAzureDevOps(Uri uri)
-    {
-        return string.Equals(uri.Host, "dev.azure.com", StringComparison.OrdinalIgnoreCase)
-               || uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase);
     }
 }

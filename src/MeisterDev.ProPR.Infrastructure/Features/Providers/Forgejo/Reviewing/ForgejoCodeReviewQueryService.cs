@@ -200,7 +200,8 @@ internal sealed class ForgejoCodeReviewQueryService(
         [property: JsonPropertyName("assignees")]
         IReadOnlyList<ForgejoUserResponse>? Assignees,
         [property: JsonPropertyName("requested_reviewers")]
-        IReadOnlyList<ForgejoUserResponse>? RequestedReviewers);
+        IReadOnlyList<ForgejoUserResponse>? RequestedReviewers,
+        [property: JsonPropertyName("user")] ForgejoUserResponse? User = null);
 
     internal sealed record ForgejoBranchResponse(
         [property: JsonPropertyName("ref")] string? Ref,

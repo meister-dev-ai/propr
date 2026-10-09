@@ -104,6 +104,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         }
 
         public ReviewJob? FindActiveJob(
+            Guid clientId,
             string organizationUrl,
             string projectId,
             string repositoryId,
@@ -114,6 +115,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         }
 
         public ReviewJob? FindCompletedJob(
+            Guid clientId,
             string organizationUrl,
             string projectId,
             string repositoryId,
@@ -124,6 +126,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         }
 
         public ReviewJob? FindFailedJob(
+            Guid clientId,
             string organizationUrl,
             string projectId,
             string repositoryId,
@@ -384,6 +387,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         }
 
         public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
+            Guid clientId,
             string organizationUrl,
             string projectId,
             CancellationToken ct = default)
@@ -416,6 +420,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         }
 
         public Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+            Guid clientId,
             string organizationUrl,
             string projectId,
             string repositoryId,
@@ -427,6 +432,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         }
 
         public Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            Guid clientId,
             string organizationUrl,
             string projectId,
             string repositoryId,
@@ -438,6 +444,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         }
 
         public Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
+            Guid clientId,
             string organizationUrl,
             string projectId,
             string repositoryId,
@@ -461,6 +468,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         }
 
         public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            Guid clientId,
             string organizationUrl,
             string projectId,
             string repositoryId,

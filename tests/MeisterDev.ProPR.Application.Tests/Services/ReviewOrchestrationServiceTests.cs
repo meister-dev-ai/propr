@@ -176,7 +176,7 @@ public partial class ReviewOrchestrationServiceTests
         var statusWriter = threadStatusWriter ?? CreateThreadStatusWriter();
         var replyPublisher = threadReplyPublisher ?? CreateThreadReplyPublisher();
         var reviewQueryService = queryService ?? CreateCodeReviewQueryService();
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.GetCodeReviewQueryService(Arg.Any<ScmProvider>()).Returns(reviewQueryService);
         registry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(commentPoster);
         registry.GetReviewAssignmentService(Arg.Any<ScmProvider>()).Returns(reviewerManager);
@@ -3234,6 +3234,7 @@ public partial class ReviewOrchestrationServiceTests
     private static void SetupReusableBaselineReturns(IReviewJobExecutionStore jobs, ReviewJob? baseline)
     {
         jobs.GetLatestReusableTerminalJobAsync(
+                Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3416,6 +3417,7 @@ public partial class ReviewOrchestrationServiceTests
         // Baseline is selected from job history, excluding the current job and its own revision key.
         await jobs.Received(1)
             .GetLatestReusableTerminalJobAsync(
+                job.ClientId,
                 job.OrganizationUrl,
                 job.ProjectId,
                 job.RepositoryId,
@@ -3426,6 +3428,7 @@ public partial class ReviewOrchestrationServiceTests
         // Same-revision resume lookup still runs against the current revision key.
         await jobs.Received(1)
             .GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                job.ClientId,
                 job.OrganizationUrl,
                 job.ProjectId,
                 job.RepositoryId,
@@ -3485,6 +3488,7 @@ public partial class ReviewOrchestrationServiceTests
         failedPriorJob.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
 
         jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3493,6 +3497,7 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewJob?>(null));
         jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3585,6 +3590,7 @@ public partial class ReviewOrchestrationServiceTests
         failedPriorJob.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
 
         jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3626,6 +3632,7 @@ public partial class ReviewOrchestrationServiceTests
 
         await jobs.Received(1)
             .GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                job.ClientId,
                 job.OrganizationUrl,
                 job.ProjectId,
                 job.RepositoryId,
@@ -3693,6 +3700,7 @@ public partial class ReviewOrchestrationServiceTests
         failedCurrentJob.CompletedAt = DateTimeOffset.UtcNow;
         failedCurrentJob.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "ado-revision-2", null));
         jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3775,6 +3783,7 @@ public partial class ReviewOrchestrationServiceTests
 
         // No prior completed job
         jobs.GetCompletedJobWithFileResultsAsync(
+                Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3851,6 +3860,7 @@ public partial class ReviewOrchestrationServiceTests
                     new ReviewPrScan(
                         Guid.NewGuid(), job.ClientId, "https://provider.example", "project", job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
         jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),

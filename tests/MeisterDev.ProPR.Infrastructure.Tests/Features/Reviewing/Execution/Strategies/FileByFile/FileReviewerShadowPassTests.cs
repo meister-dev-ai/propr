@@ -80,6 +80,7 @@ public sealed class FileReviewerShadowPassTests
             });
 
         return new FileReviewer(
+            null,
             this._aiCore,
             this._recorder,
             this._jobRepository,

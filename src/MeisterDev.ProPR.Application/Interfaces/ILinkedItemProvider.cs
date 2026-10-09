@@ -7,10 +7,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 namespace MeisterDev.ProPR.Application.Interfaces;
 
 /// <summary>
-///     Provider-neutral capability that retrieves the work items (Azure DevOps) or issues
-///     (GitHub, GitLab, Forgejo) linked to a pull request, plus the on-demand detail lookups the
-///     review model can request. One implementation per <see cref="ScmProvider" />, resolved through
-///     <see cref="IScmProviderRegistry.GetLinkedItemProvider" />.
+///     Retrieves items linked to a pull request and their on-demand details through a provider capability.
 /// </summary>
 /// <remarks>
 ///     All members must fail soft: a provider error (auth, rate limit, missing or inaccessible item)

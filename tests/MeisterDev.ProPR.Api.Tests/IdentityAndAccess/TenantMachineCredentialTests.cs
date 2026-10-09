@@ -107,10 +107,13 @@ public sealed class TenantMachineCredentialTests
     [InlineData("ReviewJobs", "GetClientReview", true)]
     [InlineData("ReviewJobs", "GetReview", true)]
     [InlineData("ReviewJobs", "SubmitReviewByCoordinates", true)]
+    [InlineData("CompletedReviewUsage", "GetCompletedUsage", true)]
     [InlineData("ClientReviewTargets", "GetTargets", true)]
     [InlineData("ClientReviewTargets", "CreateTarget", true)]
+    [InlineData("ClientReviewTargets", "UpdateTargetPolicy", true)]
     [InlineData("ClientReviewTargets", "GetRepositories", true)]
     [InlineData("ClientReviewTargets", "GetOpenReviews", true)]
+    [InlineData("ClientReviewTargets", "GetOverview", true)]
     [InlineData("AdminCrawlConfigs", "CreateCrawlConfiguration", false)]
     [InlineData("Clients", "PatchClient", false)]
     [InlineData("Jobs", "GetJobProtocol", false)]
@@ -124,6 +127,7 @@ public sealed class TenantMachineCredentialTests
 
     [Theory]
     [InlineData("Clients", "GetClient")]
+    [InlineData("ClientReviewTargets", "GetOverview")]
     [InlineData("ClientAiConnections", "VerifyUpdateAiConnection")]
     [InlineData("ClientAiConnections", "SelectAiPurposes")]
     [InlineData("ClientLogicalModels", "ListEffective")]
@@ -153,6 +157,9 @@ public sealed class TenantMachineCredentialTests
         context.Items[TenantMachineOperationPolicy.TenantItemKey] = tenantA;
 
         Assert.True(await TenantMachineOperationPolicy.AuthorizeAsync(context));
+        var roles = Assert.IsType<Dictionary<Guid, MeisterDev.ProPR.Domain.Enums.ClientRole>>(context.Items["ClientRoles"]);
+        Assert.Equal(clientId, Assert.Single(roles).Key);
+        Assert.Equal(MeisterDev.ProPR.Domain.Enums.ClientRole.ClientAdministrator, roles[clientId]);
         Assert.Null(AuthHelpers.RequireClientRole(context, clientId, MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser));
 
         context.Items[TenantMachineOperationPolicy.AuthorizedItemKey] = false;

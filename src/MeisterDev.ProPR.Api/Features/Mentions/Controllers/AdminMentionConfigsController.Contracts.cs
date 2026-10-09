@@ -48,11 +48,13 @@ public sealed record MentionRepoFilterResponse(
 /// <param name="ScanIntervalSeconds">Shortest gap between two scans. Defaults to 60 seconds.</param>
 public sealed record CreateMentionConfigRequest(
     Guid ClientId,
-    ScmProvider Provider,
+    ScmProvider? Provider,
     string ProviderScopePath,
     string ProviderProjectKey,
     IReadOnlyList<MentionRepoFilterRequest> RepoFilters,
-    int? ScanIntervalSeconds = null);
+    int? ScanIntervalSeconds = null,
+    Guid? ConnectionId = null,
+    string? ScopeKey = null);
 
 /// <summary>Request to change a mention configuration. Omitted fields are left as they are.</summary>
 /// <param name="ScanIntervalSeconds">New scan interval, or null to leave it.</param>
@@ -61,7 +63,9 @@ public sealed record CreateMentionConfigRequest(
 public sealed record PatchMentionConfigRequest(
     int? ScanIntervalSeconds = null,
     bool? IsActive = null,
-    IReadOnlyList<MentionRepoFilterRequest>? RepoFilters = null);
+    IReadOnlyList<MentionRepoFilterRequest>? RepoFilters = null,
+    Guid? ConnectionId = null,
+    string? ScopeKey = null);
 
 /// <summary>One repository in a create or patch request.</summary>
 /// <param name="RepositoryId">Provider-native repository identifier.</param>

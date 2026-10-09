@@ -33,8 +33,8 @@ public interface IMentionScanRepository
     ///     Gets the per-PR scan watermark, or <c>null</c> if this PR has not been scanned before.
     /// </summary>
     /// <param name="crawlConfigurationId">The crawl configuration identifier.</param>
-    /// <param name="repositoryId">ADO repository identifier.</param>
-    /// <param name="pullRequestId">ADO pull request number.</param>
+    /// <param name="repositoryId">Provider repository identifier.</param>
+    /// <param name="pullRequestId">Provider pull request number.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<MentionPrScan?> GetPrScanAsync(
         Guid crawlConfigurationId,

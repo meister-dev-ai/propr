@@ -10,6 +10,7 @@ using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.TestSupport;
+using MeisterDev.ProPR.Infrastructure.Features.Mentions.Persistence;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
@@ -88,6 +89,23 @@ public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixtur
         }
     }
 
+
+    [Fact]
+    public async Task UnrelatedConfigurationPatch_PreservesFilterIdentityAndClaimTime()
+    {
+        var repository = new MentionConfigurationRepository(this._dbContext);
+        var before = await repository.GetByIdAsync(ConfigId);
+        var original = Assert.Single(before!.RepoFilters);
+
+        Assert.True(await repository.UpdateAsync(ConfigId, SeedClientId, 120, null, null));
+
+        var after = await repository.GetByIdAsync(ConfigId);
+        var retained = Assert.Single(after!.RepoFilters);
+        Assert.Equal(original.Id, retained.Id);
+        Assert.Equal(original.RepositoryId, retained.RepositoryId);
+        Assert.Equal(original.ClaimedAt, retained.ClaimedAt);
+        Assert.Equal(120, after.ScanIntervalSeconds);
+    }
 
     [Fact]
     public async Task GetProjectScanAsync_WhenNotExists_ReturnsNull()

@@ -586,6 +586,7 @@ public sealed class CodeInsightMissHarvesterTests
                 .Returns(true);
 
             this.Harvester = new CodeInsightMissHarvester(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                 this.Store,
                 this.Misses,
                 this.Classifier,

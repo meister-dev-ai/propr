@@ -82,6 +82,7 @@ public partial class ReviewOrchestrationServiceTests
             Arg.Any<ReviewThreadRef>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
+        await statusWriter.DidNotReceiveWithAnyArgs().ResolveThreadAsync(default, default!, default);
         await statusWriter.DidNotReceive().UpdateThreadStatusAsync(
             Arg.Any<Guid>(),
             Arg.Any<ReviewThreadRef>(),

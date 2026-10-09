@@ -17,6 +17,8 @@ using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
@@ -118,9 +120,18 @@ public sealed partial class ClientAiConnectionsController(
         return this.Ok(new PermittedProvidersResponse(providers, policy.IsRestricted));
     }
 
-    /// <summary>Creates a new AI connection profile for the specified client.</summary>
+    /// <summary>Creates an AI connection profile for the specified client.</summary>
+    /// <remarks>
+    /// CreationRequestId is an optional, immutable correlation identifier scoped to the client.
+    /// Clients can read the profile list to recover the result of an interrupted creation request.
+    /// A repeated identifier returns 409; the endpoint does not replay the original 201 response.
+    /// Physical deletion of the profile permits later reuse of the identifier.
+    /// </remarks>
+    /// <response code="201">The profile was created.</response>
+    /// <response code="409">The client already has a profile with the supplied creation correlation identifier.</response>
     [HttpPost]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -151,6 +162,18 @@ public sealed partial class ClientAiConnectionsController(
             return this.ValidationProblem();
         }
 
+        if (request.CreationRequestId == Guid.Empty)
+        {
+            this.ModelState.AddModelError(nameof(request.CreationRequestId), "A creation request ID must not be empty.");
+            return this.ValidationProblem();
+        }
+
+        if (request.CreationRequestId is { } creationRequestId &&
+            (await aiConnections.GetByClientAsync(clientId, ct)).Any(profile => profile.CreationRequestId == creationRequestId))
+        {
+            return this.Conflict();
+        }
+
         try
         {
             var connection = await aiConnections.AddAsync(clientId, writeRequest, ct);
@@ -167,6 +190,14 @@ public sealed partial class ClientAiConnectionsController(
         {
             this.ModelState.AddModelError($"providerSettings.{ex.FieldName}", ex.Reason);
             return this.ValidationProblem();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+                                           {
+                                               SqlState: PostgresErrorCodes.UniqueViolation,
+                                               ConstraintName: "ux_ai_connection_profiles_client_creation_request"
+                                           })
+        {
+            return this.Conflict();
         }
     }
 
@@ -759,7 +790,8 @@ public sealed partial class ClientAiConnectionsController(
             NormalizeMap(request.DefaultQueryParams),
             probeOptions.Secret,
             declared.Settings,
-            declared.Secrets);
+            declared.Secrets,
+            request.CreationRequestId);
     }
 
     private AiConnectionWriteRequestDto? TryBuildWriteRequest(AiConnectionDto existing, UpdateAiConnectionRequest request)
@@ -1564,6 +1596,8 @@ public sealed record AiPurposeBindingRequest(
     bool IsEnabled = true);
 
 /// <summary>Request body for creating a provider-neutral AI connection profile.</summary>
+/// <remarks>The optional correlation supports profile-list readback after an interrupted response. The client and identifier remain unique while the profile exists; the identifier contains no credential, has no independent expiry, and does not replay responses.</remarks>
+/// <param name="CreationRequestId">Optional immutable client-scoped correlation identifier for creation readback. Reuse while the profile exists returns 409.</param>
 public sealed record CreateAiConnectionRequest(
     string DisplayName,
     [property: JsonRequired] string ProviderKind,
@@ -1574,7 +1608,8 @@ public sealed record CreateAiConnectionRequest(
     IReadOnlyDictionary<string, string>? DefaultQueryParams = null,
     IReadOnlyList<AiConfiguredModelRequest>? ConfiguredModels = null,
     IReadOnlyList<AiPurposeBindingRequest>? PurposeBindings = null,
-    IReadOnlyDictionary<string, string>? ProviderSettings = null)
+    IReadOnlyDictionary<string, string>? ProviderSettings = null,
+    Guid? CreationRequestId = null)
 {
     /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
     [JsonIgnore]

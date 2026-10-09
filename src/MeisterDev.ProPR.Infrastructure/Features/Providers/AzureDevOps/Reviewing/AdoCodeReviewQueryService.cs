@@ -59,7 +59,7 @@ internal sealed class AdoCodeReviewQueryService(
                     review.Repository,
                     pullRequest,
                     revision,
-                    SelectRequestedReviewer(review.Repository.Host, pullRequest));
+                    SelectRequestedReviewer(review.Repository.Host, pullRequest), organizationUrl);
             }
             catch when (!ct.IsCancellationRequested)
             {

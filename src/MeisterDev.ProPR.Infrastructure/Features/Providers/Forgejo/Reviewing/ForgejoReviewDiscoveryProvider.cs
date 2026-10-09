@@ -8,6 +8,8 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Security;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Support;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
 
@@ -21,17 +23,21 @@ internal sealed class ForgejoReviewDiscoveryProvider(
         Guid clientId,
         RepositoryRef repository,
         ReviewerIdentity? reviewer,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewDiscoveryContext? context = null)
     {
-        var context = await connectionVerifier.VerifyAsync(clientId, repository.Host, ct);
+        var authentication = context is null
+            ? await connectionVerifier.VerifyAsync(clientId, repository.Host, ct).ConfigureAwait(false)
+            : await connectionVerifier.VerifyAsync(clientId, repository.Host, context, ct).ConfigureAwait(false);
         using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
             ForgejoConnectionVerifier.BuildApiUri(
                 repository.Host,
                 $"/repos/{ForgejoCodeReviewQueryService.BuildRepositoryPath(repository)}/pulls",
                 "state=open&limit=100"),
-            context.Connection.Secret);
+            authentication.Connection.Secret);
         using var response = await httpClientFactory.CreateClient("ForgejoProvider").SendAsync(request, ct);
 
+        MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Support.ForgejoReadFailures.ThrowIfDeniedOrThrottled(response);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException($"Forgejo review discovery failed with status {(int)response.StatusCode}.");
@@ -91,7 +97,8 @@ internal sealed class ForgejoReviewDiscoveryProvider(
             payload.Title ?? $"Pull Request #{payload.Number}",
             payload.HtmlUrl,
             payload.Head?.Ref,
-            payload.Base?.Ref);
+            payload.Base?.Ref,
+            ReviewOverviewPresentation.AuthorName(payload.User?.FullName, payload.User?.Login));
     }
 
     private static bool IsBot(string? login)

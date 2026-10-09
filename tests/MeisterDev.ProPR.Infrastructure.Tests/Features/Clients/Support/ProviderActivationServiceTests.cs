@@ -50,7 +50,7 @@ public sealed class ProviderActivationServiceTests
             db,
             factory,
             serviceProvider,
-            new StaticProviderReadinessProfileCatalog());
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies));
 
         var tasks = Enumerable.Range(0, 6)
             .Select(_ => sut.IsEnabledAsync(ScmProvider.GitHub, CancellationToken.None));
@@ -62,6 +62,13 @@ public sealed class ProviderActivationServiceTests
 
     private sealed class TestScmProviderRegistry : IScmProviderRegistry
     {
+        public IScmProviderCompatibilityCodec CompatibilityCodec => throw new NotSupportedException();
+        public IScmIdentityPolicy GetIdentityPolicy(ScmProvider provider) => throw new NotSupportedException();
+        public IWebhookIngressPolicy GetWebhookIngressPolicy(ScmProvider provider) => throw new NotSupportedException();
+        public ICodeReviewPreparationPolicy GetCodeReviewPreparationPolicy(ScmProvider provider) => throw new NotSupportedException();
+        public IReviewSourcePolicy GetSourceIdentityPolicy(ScmProvider provider) => throw new NotSupportedException();
+        public IScmConnectionConfigurationPolicy GetConnectionConfigurationPolicy(ScmProvider provider) => throw new NotSupportedException();
+
         public bool IsRegistered(ScmProvider provider)
         {
             return true;
@@ -104,6 +111,14 @@ public sealed class ProviderActivationServiceTests
         }
 
         public IReviewDiscoveryProvider GetReviewDiscoveryProvider(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IReviewSourcePolicy GetReviewSourcePolicy(ScmProvider provider) => throw new InvalidOperationException();
+
+
+        public IReviewOverviewProvider GetReviewOverviewProvider(ScmProvider provider)
         {
             throw new NotSupportedException();
         }

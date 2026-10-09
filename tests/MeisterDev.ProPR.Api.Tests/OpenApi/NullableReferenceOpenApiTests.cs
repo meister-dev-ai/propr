@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Text.Json;
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.OpenApi;
+using MeisterDev.ProPR.Api.Features.Crawling.Configuration.Controllers;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -12,10 +13,38 @@ namespace MeisterDev.ProPR.Api.Tests.OpenApi;
 
 public sealed class NullableReferenceOpenApiTests
 {
+    [Fact]
+    public void PolicyPatchSchema_RequiresNonNullableArraysAndAllowsEmptyAll()
+    {
+        var repository = new SchemaRepository();
+        var generator = new SchemaGenerator(
+            new SchemaGeneratorOptions(),
+            new JsonSerializerDataContractResolver(new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        generator.GenerateSchema(typeof(UpdateClientReviewTargetPolicyRequest), repository);
+        var schema = repository.Schemas[nameof(UpdateClientReviewTargetPolicyRequest)];
+        Assert.Contains("connectionId", schema.Required!);
+        foreach (var propertyName in new[] { "expectedTargetBranchPatterns", "targetBranchPatterns" })
+        {
+            Assert.Contains(propertyName, schema.Required!);
+            using var document = JsonDocument.Parse(SerializeAsV3(schema.Properties![propertyName]));
+            Assert.False(document.RootElement.TryGetProperty("nullable", out var nullable) && nullable.GetBoolean());
+            Assert.False(document.RootElement.TryGetProperty("minItems", out var minimum) && minimum.GetInt32() > 0);
+        }
+
+        var request = new UpdateClientReviewTargetPolicyRequest(Guid.NewGuid(), [], []);
+        Assert.True(
+            System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
+                request,
+                new System.ComponentModel.DataAnnotations.ValidationContext(request), null, true));
+    }
+
     // The scope is null on a review stopped by a refusal that named no cap. Emitted as a bare reference, the
     // document promises a scope on every budget status and the generated client types it as always present.
     [Theory]
     [InlineData(typeof(JobsController.BudgetStatusDto), "scope", "BudgetScopeKind")]
+    [InlineData(typeof(CreateAdminCrawlConfigRequest), "provider", "ScmProvider")]
+    [InlineData(typeof(CreateAdminWebhookConfigRequest), "provider", "WebhookProviderType")]
+    [InlineData(typeof(CreateMentionConfigRequest), "provider", "ScmProvider")]
     public void Filter_WrapsTheNullableReferencedPropertyInANullableAllOf(
         Type dtoType,
         string propertyName,

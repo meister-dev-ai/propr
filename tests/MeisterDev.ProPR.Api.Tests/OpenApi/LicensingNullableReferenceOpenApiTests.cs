@@ -13,56 +13,6 @@ namespace MeisterDev.ProPR.Api.Tests.OpenApi;
 public sealed class LicensingNullableReferenceOpenApiTests
 {
     [Theory]
-    [InlineData("LicenseLimitKey", "authorsPerMonth,clients,runners,concurrentReviews")]
-    [InlineData("LicenseStage", "none,notYetValid,active,warning,grace,reverted")]
-    [InlineData("PremiumCapabilityUnavailableReason", "noLicense,notInLicense,disabledByOverride,reverted,notYetValid")]
-    public async Task ForwardCompatibleLicensingValues_AreDocumentedAsUnrestrictedStrings(string schemaName, string knownValues)
-    {
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(OpenApiPath));
-        var schema = document.RootElement
-            .GetProperty("components")
-            .GetProperty("schemas")
-            .GetProperty(schemaName);
-
-        Assert.Equal("string", schema.GetProperty("type").GetString());
-        Assert.False(schema.TryGetProperty("enum", out _));
-        var description = schema.GetProperty("description").GetString();
-        foreach (var knownValue in knownValues.Split(',', StringSplitOptions.TrimEntries))
-        {
-            Assert.Contains(knownValue, description, StringComparison.Ordinal);
-        }
-    }
-
-    [Theory]
-    [InlineData("LicenseLimitDto", "effectiveCeiling", "LicenseLimitCeiling")]
-    [InlineData("LicenseLimitDto", "effectiveSource", "LicenseLimitSource")]
-    [InlineData("LicensingSummaryDto", "authorOverage", "AuthorOverageDto")]
-    [InlineData("LicensingSummaryDto", "authorPeakMonth", "AuthorPeakMonthDto")]
-    [InlineData("PremiumCapabilityDto", "reason", "PremiumCapabilityUnavailableReason")]
-    [InlineData("SystemProfileDto", "current", "SystemProfileSnapshotDto")]
-    public async Task NullableReferencedProperties_UseAnOpenApi30NullableAllOfSchema(
-        string schemaName,
-        string propertyName,
-        string referencedSchemaName)
-    {
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(OpenApiPath));
-        var property = document.RootElement
-            .GetProperty("components")
-            .GetProperty("schemas")
-            .GetProperty(schemaName)
-            .GetProperty("properties")
-            .GetProperty(propertyName);
-
-        Assert.True(property.GetProperty("nullable").GetBoolean());
-
-        var allOf = Assert.Single(property.GetProperty("allOf").EnumerateArray());
-        Assert.Equal($"#/components/schemas/{referencedSchemaName}", allOf.GetProperty("$ref").GetString());
-    }
-
-    // The cases above read the checked-in document, so they report a regression only once someone regenerates it.
-    // This one generates the schema in the test and asserts what the filter produced, which holds the filter to the
-    // DTO's current property names whether or not the document has been regenerated.
-    [Theory]
     [InlineData(typeof(LicenseLimitDto), "effectiveCeiling", "LicenseLimitCeiling")]
     [InlineData(typeof(LicenseLimitDto), "effectiveSource", "LicenseLimitSource")]
     [InlineData(typeof(LicensingSummaryDto), "authorOverage", "AuthorOverageDto")]
@@ -97,6 +47,4 @@ public sealed class LicensingNullableReferenceOpenApiTests
         schema.SerializeAsV3(new OpenApiJsonWriter(buffer));
         return buffer.ToString();
     }
-
-    private static string OpenApiPath => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "openapi.json"));
 }

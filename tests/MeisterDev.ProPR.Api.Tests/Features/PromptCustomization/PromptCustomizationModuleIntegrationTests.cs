@@ -25,6 +25,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 
 namespace MeisterDev.ProPR.Api.Tests.Features.PromptCustomization;
 

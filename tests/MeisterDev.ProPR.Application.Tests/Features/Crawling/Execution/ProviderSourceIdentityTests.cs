@@ -27,7 +27,10 @@ public sealed class ProviderSourceIdentityTests
     [InlineData(ScmProvider.AzureDevOps, "invalid", "", "")]
     public void SourceAndConfiguredHostRetainTheirDistinctNamespaces(ScmProvider provider, string input, string source, string configured)
     {
-        Assert.Equal(source, ProviderSourceIdentity.FromReviewSource(provider, input).Value);
+        Assert.Equal(
+            source, ProviderSourceIdentity.FromReviewSource(
+                provider, input,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetReviewSourcePolicy(provider)).Value);
         Assert.Equal(configured, ProviderSourceIdentity.FromConfiguredHost(provider, input).Value);
     }
 
@@ -37,6 +40,9 @@ public sealed class ProviderSourceIdentityTests
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://ado.example/tfs/collection", "project", "repository", 1, 1);
 
         Assert.Equal("https://ado.example", job.HostBaseUrl);
-        Assert.Equal("AzureDevOps:https://ado.example/tfs/collection", ProviderSourceIdentity.FromReviewJob(job).Value);
+        Assert.Equal(
+            "AzureDevOps:https://ado.example/tfs/collection", ProviderSourceIdentity.FromReviewJob(
+                job,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetReviewSourcePolicy(job.Provider)).Value);
     }
 }

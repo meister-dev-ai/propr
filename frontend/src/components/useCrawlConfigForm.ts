@@ -2,14 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { listAdoCrawlFilters, listAdoOrganizationScopes, listAdoProjects } from '@/services/adoDiscoveryService'
-import type {
-  AdoBranchOptionDto,
-  AdoCrawlFilterOptionDto,
-  AdoProjectOptionDto,
-  ClientAdoOrganizationScopeDto,
-} from '@/services/adoDiscoveryService'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useConnectionDiscovery } from '@/composables/useConnectionDiscovery'
+import type { DiscoveryBranch, DiscoveryFilter } from '@/services/providerDiscoveryService'
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import { createOverride, deleteOverride, listOverrides } from '@/services/promptOverridesService'
 import { listProCursorSources } from '@/services/proCursorService'
@@ -26,16 +21,11 @@ import type {
 } from './crawlConfigForm.types'
 import {
   cloneCanonicalSourceRef,
-  formatProvider,
   isValidUuid,
-  normalizeProvider,
   normalizeStringList,
   normalizeText,
   sortBranchSuggestions,
-  sortCrawlFilterOptions,
-  sortOrganizationScopes,
   sortProCursorSources,
-  sortProjects,
   sourceOptionKey,
 } from './crawlConfigFormatters'
 
@@ -81,11 +71,14 @@ type CrawlConfigFormEmit = (event: 'config-saved', config: CrawlConfigResponse) 
  * helpers live in ./crawlConfigFormatters. `emit` is passed in from the SFC.
  */
 export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfigFormEmit) {
-  const editMode = computed(() => !!props.config)
+  const editMode = computed(() => !!props.config && (!props.clientId || props.config.clientId === props.clientId))
   const clientId = ref(props.clientId ?? props.config?.clientId ?? '')
-  const provider = computed<ScmProvider>(() => normalizeProvider(props.config?.provider))
-  const organizationScopeId = ref(props.config?.organizationScopeId ?? '')
-  const projectId = ref(props.config?.providerProjectKey ?? '')
+  const effectiveClientId = computed(() => (props.clientId ?? props.config?.clientId ?? clientId.value).trim())
+  const discovery = useConnectionDiscovery(() => effectiveClientId.value, 'crawl')
+  const provider = computed<ScmProvider | undefined>(() => discovery.state.selection?.provider ?? (editMode.value ? props.config?.provider : undefined))
+  const providerLabel = computed(() => discovery.state.connections.find(connection => connection.id === discovery.state.connectionId)?.displayName ?? props.config?.provider ?? '')
+  const organizationScopeId = computed(() => discovery.state.selection?.organizationScopeId ?? (editMode.value ? props.config?.organizationScopeId : undefined) ?? '')
+  const projectId = computed(() => discovery.state.selection?.providerProjectKey ?? (editMode.value ? props.config?.providerProjectKey : undefined) ?? '')
   const crawlIntervalSeconds = ref<number>(props.config?.crawlIntervalSeconds ?? 60)
   const reviewTemperatureInput = ref(props.config?.reviewTemperature?.toString() ?? '')
   const isActive = ref(props.config?.isActive ?? true)
@@ -97,20 +90,14 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     ),
   )
 
-  const organizationScopes = ref<ClientAdoOrganizationScopeDto[]>([])
-  const projects = ref<AdoProjectOptionDto[]>([])
-  const crawlFilterOptions = ref<AdoCrawlFilterOptionDto[]>([])
+  const crawlFilterOptions = computed(() => discovery.state.filters)
   const proCursorSources = ref<ProCursorKnowledgeSourceDto[]>([])
   const repoFilters = ref<FilterRow[]>(createInitialFilterRows(props.config?.repoFilters))
 
-  const organizationScopesLoading = ref(false)
-  const projectsLoading = ref(false)
-  const crawlFilterOptionsLoading = ref(false)
+  const crawlFilterOptionsLoading = computed(() => discovery.state.loading.sources)
   const proCursorSourcesLoading = ref(false)
 
-  const organizationScopesError = ref('')
-  const projectsError = ref('')
-  const crawlFilterOptionsError = ref('')
+  const crawlFilterOptionsError = computed(() => discovery.state.errors.sources)
   const proCursorSourcesError = ref('')
 
   const overrides = ref<PromptOverrideDto[]>([])
@@ -132,20 +119,8 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   const formError = ref('')
   const loading = ref(false)
 
-  const effectiveClientId = computed(() => (props.clientId ?? props.config?.clientId ?? clientId.value).trim())
   const canLoadOrganizationScopes = computed(() => isValidUuid(effectiveClientId.value))
-  const isAzureDevOpsProvider = computed(() => provider.value === 'azureDevOps')
-  const canEditOrganizationSelection = computed(() => isAzureDevOpsProvider.value && !editMode.value && canLoadOrganizationScopes.value)
-  const canEditProjectSelection = computed(() => isAzureDevOpsProvider.value && !editMode.value && !!organizationScopeId.value)
-  const canEditRepoFilters = computed(() => isAzureDevOpsProvider.value && !!organizationScopeId.value && !!projectId.value)
-  const selectedOrganizationScope = computed(() =>
-    organizationScopes.value.find((scope) => scope.id === organizationScopeId.value),
-  )
-  const organizationScopeMissing = computed(() => !!organizationScopeId.value && !selectedOrganizationScope.value)
-  const currentProjectOption = computed(() =>
-    projects.value.find((project) => normalizeText(project.projectId) === projectId.value),
-  )
-  const projectMissing = computed(() => !!projectId.value && !currentProjectOption.value)
+  const canEditRepoFilters = computed(() => discovery.ready.value)
   const usesSelectedProCursorSources = computed(() => proCursorSourceScopeMode.value === 'selectedSources')
   const selectableProCursorSources = computed(() =>
     proCursorSources.value.filter((source) => normalizeText(source.sourceId).length > 0 && source.status !== 'disabled'),
@@ -154,154 +129,57 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   const filteredOverrides = computed(() =>
     overrides.value.filter((override) => override.scope === 'crawlConfigScope' && override.crawlConfigId === props.config?.id),
   )
-  const providerLabel = computed(() => formatProvider(provider.value))
 
-  watch(
-    () => effectiveClientId.value,
-    async (nextClientId, previousClientId) => {
-      if (editMode.value || props.clientId || nextClientId === previousClientId) {
-        return
-      }
+  let disposed = false
+  let ownerRequest = 0
+  let proCursorSourceRequest = 0
 
-      resetDiscoveryState()
-      resetProCursorSourceState()
+  async function initializeOwner() {
+    const request = ++ownerRequest
+    const client = effectiveClientId.value
+    const config = editMode.value ? props.config : undefined
+    discovery.reset()
+    loading.value = false
+    formError.value = ''
+    resetProCursorSourceState()
+    repoFilters.value = createInitialFilterRows(config?.repoFilters)
+    crawlIntervalSeconds.value = config?.crawlIntervalSeconds ?? 60
+    reviewTemperatureInput.value = config?.reviewTemperature?.toString() ?? ''
+    isActive.value = config?.isActive ?? true
+    proCursorSourceScopeMode.value = config?.proCursorSourceScopeMode ?? 'allClientSources'
+    repairRequiredProCursorSourceIds.value = normalizeStringList(config?.invalidProCursorSourceIds)
+    proCursorSourceIds.value = normalizeStringList(config?.proCursorSourceIds).filter(id => !repairRequiredProCursorSourceIds.value.includes(id))
+    initialRepoFilters = JSON.stringify(serializeRepoFilters())
+    overrides.value = []
+    overridesLoading.value = false
+    if (config) void loadOverrides()
+    if (!canLoadOrganizationScopes.value) return
+    if (config) await discovery.resolveForEdit(config)
+    else await discovery.loadConnections()
+    if (disposed || request !== ownerRequest || client !== effectiveClientId.value) return
+    await loadProCursorSources()
+  }
+  watch(() => [effectiveClientId.value, props.config], () => { void initializeOwner() }, { flush: 'sync' })
+  watch(() => [discovery.state.connectionId, discovery.state.scopeKey, discovery.state.projectId], () => {
+    if (!editMode.value) repoFilters.value = []
+  }, { flush: 'sync' })
 
-      if (isValidUuid(nextClientId)) {
-        await Promise.all([loadOrganizationScopes(false), loadProCursorSources()])
-      }
-    },
-  )
-
-  onMounted(async () => {
-    if (editMode.value) {
-      loadOverrides()
-    }
-
-    if (!canLoadOrganizationScopes.value) {
-      return
-    }
-
-    await Promise.all([loadOrganizationScopes(true), loadProCursorSources()])
-
-    if (!organizationScopeId.value) {
-      return
-    }
-
-    await loadProjects(true)
-
-    if (projectId.value) {
-      await loadCrawlFilterOptions(true)
-    }
-  })
+  onMounted(() => { void initializeOwner() })
+  onBeforeUnmount(() => { disposed = true })
+  function captureOwner() {
+    const client = effectiveClientId.value
+    const config = props.config
+    return () => !disposed && client === effectiveClientId.value && config === props.config
+  }
 
   function resetProCursorSourceState(): void {
+    proCursorSourceRequest++
     proCursorSourceScopeMode.value = 'allClientSources'
     proCursorSourceIds.value = []
     repairRequiredProCursorSourceIds.value = []
     proCursorSources.value = []
     proCursorSourcesError.value = ''
     proCursorSourcesLoading.value = false
-  }
-
-  function resetFilterSelection(): void {
-    crawlFilterOptions.value = []
-    crawlFilterOptionsError.value = ''
-    repoFilters.value = []
-  }
-
-  function resetProjectSelection(): void {
-    projects.value = []
-    projectsError.value = ''
-    projectId.value = ''
-    resetFilterSelection()
-  }
-
-  function resetDiscoveryState(): void {
-    organizationScopes.value = []
-    organizationScopesError.value = ''
-    organizationScopeId.value = ''
-    resetProjectSelection()
-  }
-
-  async function loadOrganizationScopes(preserveSelection: boolean): Promise<void> {
-    if (!canLoadOrganizationScopes.value) {
-      return
-    }
-
-    organizationScopesLoading.value = true
-    organizationScopesError.value = ''
-
-    try {
-      organizationScopes.value = sortOrganizationScopes(await listAdoOrganizationScopes(effectiveClientId.value))
-
-      if (!preserveSelection && !organizationScopes.value.some((scope) => scope.id === organizationScopeId.value)) {
-        organizationScopeId.value = ''
-        resetProjectSelection()
-      }
-    } catch (error) {
-      organizationScopes.value = []
-      organizationScopesError.value = error instanceof Error ? error.message : 'Failed to load organization scopes.'
-      if (!preserveSelection) {
-        organizationScopeId.value = ''
-        resetProjectSelection()
-      }
-    } finally {
-      organizationScopesLoading.value = false
-    }
-  }
-
-  async function loadProjects(preserveProject: boolean): Promise<void> {
-    if (!canLoadOrganizationScopes.value || !organizationScopeId.value) {
-      return
-    }
-
-    projectsLoading.value = true
-    projectsError.value = ''
-
-    try {
-      projects.value = sortProjects(await listAdoProjects(effectiveClientId.value, organizationScopeId.value, 'crawl'))
-
-      if (!preserveProject && !projects.value.some((project) => normalizeText(project.projectId) === projectId.value)) {
-        projectId.value = ''
-        resetFilterSelection()
-      }
-    } catch (error) {
-      projects.value = []
-      projectsError.value = error instanceof Error ? error.message : 'Failed to load Azure DevOps projects.'
-      if (!preserveProject) {
-        projectId.value = ''
-        resetFilterSelection()
-      }
-    } finally {
-      projectsLoading.value = false
-    }
-  }
-
-  async function loadCrawlFilterOptions(preserveRows: boolean): Promise<void> {
-    if (!canLoadOrganizationScopes.value || !organizationScopeId.value || !projectId.value) {
-      return
-    }
-
-    crawlFilterOptionsLoading.value = true
-    crawlFilterOptionsError.value = ''
-
-    try {
-      crawlFilterOptions.value = sortCrawlFilterOptions(
-        await listAdoCrawlFilters(effectiveClientId.value, organizationScopeId.value, projectId.value, 'crawl'),
-      )
-
-      if (!preserveRows) {
-        repoFilters.value = []
-      }
-    } catch (error) {
-      crawlFilterOptions.value = []
-      crawlFilterOptionsError.value = error instanceof Error ? error.message : 'Failed to load repository filters.'
-      if (!preserveRows) {
-        repoFilters.value = []
-      }
-    } finally {
-      crawlFilterOptionsLoading.value = false
-    }
   }
 
   async function loadProCursorSources(): Promise<void> {
@@ -311,15 +189,21 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
 
     proCursorSourcesLoading.value = true
     proCursorSourcesError.value = ''
+    const request = ++proCursorSourceRequest
+    const client = effectiveClientId.value
+    const current = () => !disposed && request === proCursorSourceRequest && client === effectiveClientId.value
 
     try {
-      proCursorSources.value = sortProCursorSources(await listProCursorSources(effectiveClientId.value))
+      const sources = await listProCursorSources(effectiveClientId.value)
+      if (!current()) return
+      proCursorSources.value = sortProCursorSources(sources)
       reconcileSelectedProCursorSources()
     } catch (error) {
+      if (!current()) return
       proCursorSources.value = []
       proCursorSourcesError.value = error instanceof Error ? error.message : 'Failed to load ProCursor sources.'
     } finally {
-      proCursorSourcesLoading.value = false
+      if (current()) proCursorSourcesLoading.value = false
     }
   }
 
@@ -343,23 +227,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     proCursorSourceIds.value = proCursorSourceIds.value.filter((sourceId) => availableSourceIds.has(sourceId))
   }
 
-  async function handleOrganizationScopeChange(): Promise<void> {
-    resetProjectSelection()
-
-    if (organizationScopeId.value) {
-      await loadProjects(false)
-    }
-  }
-
-  async function handleProjectChange(): Promise<void> {
-    resetFilterSelection()
-
-    if (projectId.value) {
-      await loadCrawlFilterOptions(false)
-    }
-  }
-
-  function getAvailableFilterOptions(rowId: string): AdoCrawlFilterOptionDto[] {
+  function getAvailableFilterOptions(rowId: string): DiscoveryFilter[] {
     const selectedKeys = new Set(
       repoFilters.value
         .filter((row) => row.id !== rowId)
@@ -370,7 +238,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     return crawlFilterOptions.value.filter((option) => !selectedKeys.has(sourceOptionKey(option.canonicalSourceRef)))
   }
 
-  function findFilterOptionByKey(selectedFilterKey: string): AdoCrawlFilterOptionDto | undefined {
+  function findFilterOptionByKey(selectedFilterKey: string): DiscoveryFilter | undefined {
     return crawlFilterOptions.value.find((option) => sourceOptionKey(option.canonicalSourceRef) === selectedFilterKey)
   }
 
@@ -397,7 +265,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     filter.isLegacy = false
   }
 
-  function getBranchSuggestions(filter: FilterRow): AdoBranchOptionDto[] {
+  function getBranchSuggestions(filter: FilterRow): DiscoveryBranch[] {
     return sortBranchSuggestions(findFilterOptionByKey(filter.selectedFilterKey)?.branchSuggestions)
   }
 
@@ -485,12 +353,14 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     }
 
     overridesLoading.value = true
+    const current = captureOwner()
     try {
-      overrides.value = await listOverrides(props.config.clientId)
+      const loaded = await listOverrides(props.config.clientId)
+      if (current()) overrides.value = loaded
     } catch {
-      console.error('Failed to load overrides')
+      if (current()) console.error('Failed to load overrides')
     } finally {
-      overridesLoading.value = false
+      if (current()) overridesLoading.value = false
     }
   }
 
@@ -500,6 +370,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     }
 
     overridesLoading.value = true
+    const current = captureOwner()
     try {
       const createdOverride = await createOverride(props.config.clientId, {
         scope: 'crawlConfigScope',
@@ -507,14 +378,15 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
         promptKey: newOverride.promptKey,
         overrideText: newOverride.overrideText,
       })
+      if (!current()) return
       overrides.value.push(createdOverride)
       newOverride.promptKey = ''
       newOverride.overrideText = ''
       showOverrideForm.value = false
     } catch {
-      alert('Failed to save override. Duplicate key?')
+      if (current()) alert('Failed to save override. Duplicate key?')
     } finally {
-      overridesLoading.value = false
+      if (current()) overridesLoading.value = false
     }
   }
 
@@ -529,11 +401,12 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
       return
     }
 
+    const current = captureOwner()
     try {
       await deleteOverride(props.config.clientId, id)
-      overrides.value = overrides.value.filter((override) => override.id !== id)
+      if (current()) overrides.value = overrides.value.filter((override) => override.id !== id)
     } catch {
-      alert('Failed to delete override.')
+      if (current()) alert('Failed to delete override.')
     }
   }
 
@@ -548,13 +421,11 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   }
 
   function validateOrganizationScope(): string {
-    return !organizationScopeId.value
-      ? 'Select an allowed Azure DevOps organization.'
-      : ''
+    return editMode.value || discovery.state.connectionId && discovery.state.scopeKey ? '' : 'Select a connection and scope.'
   }
 
   function validateProject(): string {
-    return projectId.value.trim() ? '' : 'Project selection is required.'
+    return editMode.value || discovery.ready.value ? '' : 'Complete the connection selection.'
   }
 
   function validateInterval(): string {
@@ -619,20 +490,23 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     ].every((message) => message === '')
   }
 
-  async function submitUpdate(configId: string): Promise<void> {
+  async function submitUpdate(configId: string, current: () => boolean): Promise<void> {
     const reviewTemperature = parseReviewTemperature()
     const { data, error, response } = await createAdminClient().PATCH('/admin/crawl-configurations/{configId}', {
       params: { path: { configId } },
       body: {
         crawlIntervalSeconds: crawlIntervalSeconds.value,
         isActive: isActive.value,
-        repoFilters: canEditRepoFilters.value ? serializeRepoFilters() : undefined,
+        repoFilters: canEditRepoFilters.value && JSON.stringify(serializeRepoFilters()) !== initialRepoFilters ? serializeRepoFilters() : undefined,
+        connectionId: discovery.ready.value ? discovery.state.connectionId : undefined,
+        scopeKey: discovery.ready.value ? discovery.state.scopeKey : undefined,
         proCursorSourceScopeMode: proCursorSourceScopeMode.value,
         proCursorSourceIds: serializeProCursorSourceIds(),
         reviewTemperature,
       },
     })
 
+    if (!current()) return
     if (response.status === 404) {
       formError.value = 'Configuration no longer exists.'
       return
@@ -644,7 +518,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     }
 
     if (response.status === 409) {
-      formError.value = getApiErrorMessage(error, 'One or more guided selections are no longer available in Azure DevOps.')
+      formError.value = getApiErrorMessage(error, 'One or more selections are unavailable through the selected connection.')
       return
     }
 
@@ -656,11 +530,14 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     emit('config-saved', data as CrawlConfigResponse)
   }
 
-  async function submitCreate(): Promise<void> {
+  async function submitCreate(current: () => boolean): Promise<void> {
     const reviewTemperature = parseReviewTemperature()
     const body: CreateAdminCrawlConfigRequest = {
       clientId: effectiveClientId.value,
       provider: provider.value,
+      connectionId: discovery.state.connectionId,
+      scopeKey: discovery.state.scopeKey,
+      providerScopePath: discovery.state.selection?.providerScopePath,
       organizationScopeId: organizationScopeId.value || undefined,
       providerProjectKey: projectId.value.trim(),
       crawlIntervalSeconds: crawlIntervalSeconds.value,
@@ -674,6 +551,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
       body,
     })
 
+    if (!current()) return
     if (response.status === 403) {
       formError.value = 'You do not have permission to create a configuration for this client.'
       return
@@ -685,7 +563,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     }
 
     if (response.status === 409) {
-      formError.value = getApiErrorMessage(error, 'A configuration for this organisation and project already exists for this client.')
+      formError.value = getApiErrorMessage(error, 'A configuration for this selected target already exists for this client.')
       return
     }
 
@@ -703,21 +581,25 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     }
 
     loading.value = true
+    const current = discovery.capture()
 
     try {
       if (editMode.value && props.config?.id) {
-        await submitUpdate(props.config.id)
+        await submitUpdate(props.config.id, current)
       } else {
-        await submitCreate()
+        await submitCreate(current)
       }
     } catch (error) {
-      formError.value = error instanceof Error ? error.message : 'Connection error. Please try again.'
+      if (current()) formError.value = error instanceof Error ? error.message : 'Connection error. Please try again.'
     } finally {
-      loading.value = false
+      if (current()) loading.value = false
     }
   }
 
+  let initialRepoFilters = JSON.stringify(serializeRepoFilters())
+
   return {
+    discovery,
     // identity / mode
     editMode,
     provider,
@@ -732,18 +614,12 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     repairRequiredProCursorSourceIds,
     proCursorSourceScopeMode,
     proCursorSourceIds,
-    organizationScopes,
-    projects,
     crawlFilterOptions,
     proCursorSources,
     repoFilters,
     // loading / error flags
-    organizationScopesLoading,
-    projectsLoading,
     crawlFilterOptionsLoading,
     proCursorSourcesLoading,
-    organizationScopesError,
-    projectsError,
     crawlFilterOptionsError,
     proCursorSourcesError,
     // overrides
@@ -767,22 +643,13 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     // derived
     effectiveClientId,
     canLoadOrganizationScopes,
-    isAzureDevOpsProvider,
-    canEditOrganizationSelection,
-    canEditProjectSelection,
     canEditRepoFilters,
-    selectedOrganizationScope,
-    organizationScopeMissing,
-    currentProjectOption,
-    projectMissing,
     usesSelectedProCursorSources,
     selectableProCursorSources,
     selectedProCursorSourceCount,
     filteredOverrides,
     // actions
     serializeProCursorSourceIds,
-    handleOrganizationScopeChange,
-    handleProjectChange,
     getAvailableFilterOptions,
     isUnavailableCanonicalFilter,
     handleFilterSelectionChange,

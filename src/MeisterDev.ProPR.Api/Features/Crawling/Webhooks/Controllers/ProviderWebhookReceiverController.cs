@@ -42,7 +42,7 @@ public sealed partial class ProviderWebhookReceiverController(
         [FromBody] JsonElement payload,
         CancellationToken ct = default)
     {
-        if (!TryMapSupportedProvider(provider, out var mappedProvider))
+        if (!ScmProviderVocabulary.TryParseWebhook(provider, out var mappedProvider))
         {
             LogRejectedUnsupportedProvider(logger, provider, pathKey);
             return this.NotFound();
@@ -66,17 +66,6 @@ public sealed partial class ProviderWebhookReceiverController(
 
         LogRejectedWebhookDelivery(logger, mappedProvider, pathKey, providerDecision.HttpStatusCode);
         return this.StatusCode(providerDecision.HttpStatusCode);
-    }
-
-    private static bool TryMapSupportedProvider(string provider, out ScmProvider mappedProvider)
-    {
-        if (string.Equals(provider, "ado", StringComparison.OrdinalIgnoreCase))
-        {
-            mappedProvider = ScmProvider.AzureDevOps;
-            return true;
-        }
-
-        return Enum.TryParse(provider, true, out mappedProvider);
     }
 
     [LoggerMessage(

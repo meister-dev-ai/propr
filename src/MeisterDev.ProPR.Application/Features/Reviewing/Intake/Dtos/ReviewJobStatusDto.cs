@@ -24,7 +24,7 @@ public sealed record ReviewJobStatusDto(
     public Guid ClientId { get; init; }
 
     /// <summary>Normalized SCM provider family for the stored review job.</summary>
-    public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
+    public required ScmProvider Provider { get; init; }
 
     /// <summary>Normalized provider host reference when available.</summary>
     public ProviderHostRef? Host { get; init; }

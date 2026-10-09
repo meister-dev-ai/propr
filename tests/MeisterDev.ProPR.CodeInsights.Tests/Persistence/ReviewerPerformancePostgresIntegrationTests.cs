@@ -704,6 +704,7 @@ public sealed class ReviewerPerformancePostgresIntegrationTests(PostgresContaine
             human.JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>())
                 .Returns(new HumanMissJudgement(true, true, true, .9, "accepted"));
             return await new CodeInsightMissHarvester(
+                    MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                     store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance)
                 .HandleThreadObservedAsync(evt);
         }
@@ -766,6 +767,7 @@ public sealed class ReviewerPerformancePostgresIntegrationTests(PostgresContaine
             return release.Task;
         });
         var first = new CodeInsightMissHarvester(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                 firstStore, firstStore, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance)
             .HandleThreadObservedAsync(evt);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -775,6 +777,7 @@ public sealed class ReviewerPerformancePostgresIntegrationTests(PostgresContaine
             await using var db = new MeisterProPRDbContext(_options);
             var store = new CodeInsightFindingStore(db, Codec());
             return await new CodeInsightMissHarvester(
+                    MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                     store, store, Substitute.For<IHumanMissClassifier>(), OpenGate(),
                     TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance)
                 .HandleThreadObservedAsync(
@@ -801,6 +804,7 @@ public sealed class ReviewerPerformancePostgresIntegrationTests(PostgresContaine
         var otherStore = new CodeInsightFindingStore(otherDb, Codec());
         Assert.True(
             await new CodeInsightMissHarvester(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                 otherStore, otherStore, human, OpenGate(), TestPostedCommentComposer.Default,
                 NullLogger<CodeInsightMissHarvester>.Instance).HandleThreadObservedAsync(evt with { ProviderScope = other }));
         Assert.True(

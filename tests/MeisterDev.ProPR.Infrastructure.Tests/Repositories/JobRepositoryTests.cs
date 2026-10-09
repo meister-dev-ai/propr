@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
@@ -72,6 +73,227 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         int iterationId = 1)
     {
         return new ReviewJob(Guid.NewGuid(), clientId ?? Guid.NewGuid(), orgUrl, projectId, repoId, prId, iterationId);
+    }
+
+    [Fact]
+    public async Task Intake_ConcurrentSameClientAndRevision_AddsOneJobAndReturnsItsDuplicate()
+    {
+        var first = MakeJob();
+        first.SetReviewRevision(new ReviewRevision("head", "base", null, "revision", "patch"));
+        var second = MakeJob(first.ClientId);
+        second.SetReviewRevision(first.ReviewRevisionReference);
+
+        var results = await this.SubmitConcurrentlyAsync(first, second);
+
+        var accepted = Assert.Single(results, result => result.WasAdded);
+        Assert.Null(accepted.DuplicateJob);
+        var rejected = Assert.Single(results, result => !result.WasAdded);
+        Assert.NotNull(rejected.DuplicateJob);
+        Assert.Equal(first.ClientId, rejected.DuplicateJob.ClientId);
+        Assert.All(results, result => Assert.Equal(0, result.CancelledSupersededJobCount));
+
+        await using var readContext = new MeisterProPRDbContext(this.ContextOptions());
+        var stored = Assert.Single(await readContext.ReviewJobs.AsNoTracking().ToListAsync());
+        Assert.Contains(stored.Id, new[] { first.Id, second.Id });
+        Assert.Equal(stored.Id, rejected.DuplicateJob.Id);
+        Assert.Equal(first.ClientId, stored.ClientId);
+        Assert.Equal(JobStatus.Pending, stored.Status);
+        Assert.Null(stored.CompletedAt);
+    }
+
+    [Fact]
+    public async Task Intake_ConcurrentDifferentClientsAndSameRevision_AcceptsBothJobs()
+    {
+        var first = MakeJob();
+        first.SetReviewRevision(new ReviewRevision("head", "base", null, "revision", "patch"));
+        var second = MakeJob();
+        second.SetReviewRevision(first.ReviewRevisionReference);
+
+        var results = await this.SubmitConcurrentlyAsync(first, second);
+
+        Assert.All(
+            results, result =>
+            {
+                Assert.True(result.WasAdded);
+                Assert.Null(result.DuplicateJob);
+                Assert.Equal(0, result.CancelledSupersededJobCount);
+            });
+        await using var readContext = new MeisterProPRDbContext(this.ContextOptions());
+        var stored = await readContext.ReviewJobs.AsNoTracking().ToListAsync();
+        Assert.Equal(2, stored.Count);
+        Assert.Equal(first.ClientId, Assert.Single(stored, job => job.Id == first.Id).ClientId);
+        Assert.Equal(second.ClientId, Assert.Single(stored, job => job.Id == second.Id).ClientId);
+        Assert.All(
+            stored, job =>
+            {
+                Assert.Equal(JobStatus.Pending, job.Status);
+                Assert.Null(job.CompletedAt);
+            });
+    }
+
+    [Fact]
+    public async Task Intake_ConcurrentDifferentClientIncrements_SupersedeOnlyTheirOwnPriorJobs()
+    {
+        var firstPrior = MakeJob();
+        var secondPrior = MakeJob();
+        foreach (var prior in new[] { firstPrior, secondPrior })
+        {
+            prior.SetReviewRevision(new ReviewRevision("old-head", "base", null, "old-revision", "old-patch"));
+            await this._repo.AddAsync(prior);
+        }
+
+        var firstIncrement = MakeJob(firstPrior.ClientId, iterationId: 2);
+        var secondIncrement = MakeJob(secondPrior.ClientId, iterationId: 2);
+        foreach (var increment in new[] { firstIncrement, secondIncrement })
+        {
+            increment.SetReviewRevision(new ReviewRevision("new-head", "base", null, "new-revision", "new-patch"));
+        }
+
+        var results = await this.SubmitConcurrentlyAsync(firstIncrement, secondIncrement);
+
+        Assert.All(
+            results, result =>
+            {
+                Assert.True(result.WasAdded);
+                Assert.Null(result.DuplicateJob);
+                Assert.Equal(1, result.CancelledSupersededJobCount);
+            });
+        await using var readContext = new MeisterProPRDbContext(this.ContextOptions());
+        var stored = await readContext.ReviewJobs.AsNoTracking().ToListAsync();
+        Assert.Equal(4, stored.Count);
+        foreach (var prior in new[] { firstPrior, secondPrior })
+        {
+            var persisted = Assert.Single(stored, job => job.Id == prior.Id);
+            Assert.Equal(prior.ClientId, persisted.ClientId);
+            Assert.Equal(JobStatus.Superseded, persisted.Status);
+            Assert.NotNull(persisted.CompletedAt);
+        }
+
+        foreach (var increment in new[] { firstIncrement, secondIncrement })
+        {
+            var persisted = Assert.Single(stored, job => job.Id == increment.Id);
+            Assert.Equal(increment.ClientId, persisted.ClientId);
+            Assert.Equal(JobStatus.Pending, persisted.Status);
+            Assert.Null(persisted.CompletedAt);
+        }
+    }
+
+    private async Task<TryAddReviewJobResult[]> SubmitConcurrentlyAsync(ReviewJob first, ReviewJob second)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>(this.ContextOptions())
+            .AddInterceptors(new ConcurrentIntakeTransactionBarrier())
+            .Options;
+        var contextFactory = new TestDbContextFactory(options);
+        await using var firstContext = contextFactory.CreateDbContext();
+        await using var secondContext = contextFactory.CreateDbContext();
+        await Task.WhenAll(
+            firstContext.Database.OpenConnectionAsync(timeout.Token),
+            secondContext.Database.OpenConnectionAsync(timeout.Token));
+        var firstRepository = new JobRepository(firstContext, contextFactory, NullLogger<JobRepository>.Instance);
+        var secondRepository = new JobRepository(secondContext, contextFactory, NullLogger<JobRepository>.Instance);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<TryAddReviewJobResult> SubmitAsync(JobRepository repository, ReviewJob job)
+        {
+            await release.Task.WaitAsync(timeout.Token);
+            return await repository.TryAddIfNoActiveDuplicateAsync(job, timeout.Token);
+        }
+
+        var firstTask = SubmitAsync(firstRepository, first);
+        var secondTask = SubmitAsync(secondRepository, second);
+        release.SetResult();
+        return await Task.WhenAll(firstTask, secondTask).WaitAsync(timeout.Token);
+    }
+
+    private sealed class ConcurrentIntakeTransactionBarrier : DbTransactionInterceptor
+    {
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _startedTransactions;
+
+        public override async ValueTask<DbTransaction> TransactionStartedAsync(
+            DbConnection connection,
+            TransactionEndEventData eventData,
+            DbTransaction result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref this._startedTransactions) == 2)
+            {
+                this._release.SetResult();
+            }
+
+            await this._release.Task.WaitAsync(cancellationToken);
+            return result;
+        }
+    }
+
+    [Fact]
+    public async Task Intake_DoesNotDeduplicateOrSupersedeAnotherClientsJob()
+    {
+        var foreign = MakeJob();
+        foreign.SetReviewRevision(new ReviewRevision("head", "base", null, "revision", "patch"));
+        await this._repo.AddAsync(foreign);
+        var own = MakeJob();
+        own.SetReviewRevision(foreign.ReviewRevisionReference);
+
+        var accepted = await this._repo.TryAddIfNoActiveDuplicateAsync(own);
+
+        Assert.True(accepted.WasAdded);
+        Assert.Null(accepted.DuplicateJob);
+        var increment = MakeJob(own.ClientId, iterationId: 2);
+        increment.SetReviewRevision(new ReviewRevision("new-head", "base", null, "new-revision", "new-patch"));
+        var newer = await this._repo.TryAddIfNoActiveDuplicateAsync(increment);
+        Assert.Equal(1, newer.CancelledSupersededJobCount);
+        Assert.Equal(JobStatus.Pending, this._repo.GetById(foreign.Id)!.Status);
+        Assert.Equal(JobStatus.Superseded, this._repo.GetById(own.Id)!.Status);
+    }
+
+    [Fact]
+    public async Task ReuseAndLifecycleQueries_ExcludeAnotherClientsJobs()
+    {
+        var own = MakeJob();
+        var foreign = MakeJob();
+        foreign.SetReviewRevision(new ReviewRevision("head", "base", null, "revision", "patch"));
+        await this._repo.AddAsync(foreign);
+        Assert.Null(this._repo.FindActiveJob(own.ClientId, own.OrganizationUrl, own.ProjectId, own.RepositoryId, 1, 1));
+        Assert.Empty(await this._repo.GetActiveJobsForConfigAsync(own.ClientId, own.OrganizationUrl, own.ProjectId));
+        await this._repo.SetResultAsync(foreign.Id, new ReviewResult("done", []));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(foreign.Id, "src/a.cs"));
+        var revision = ReviewRevisionKeys.GetStoredKey(foreign.ReviewRevisionReference, foreign.IterationId);
+
+        Assert.Null(this._repo.FindCompletedJob(own.ClientId, own.OrganizationUrl, own.ProjectId, own.RepositoryId, 1, 1));
+        Assert.Null(await this._repo.GetCompletedJobWithFileResultsAsync(own.ClientId, own.OrganizationUrl, own.ProjectId, own.RepositoryId, 1, 1));
+        Assert.Null(
+            await this._repo.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                own.ClientId, own.OrganizationUrl, own.ProjectId, own.RepositoryId, 1, revision));
+        Assert.Null(
+            await this._repo.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                own.ClientId, own.OrganizationUrl, own.ProjectId, own.RepositoryId, 1, revision));
+        Assert.Null(
+            await this._repo.GetLatestReusableTerminalJobAsync(own.ClientId, own.OrganizationUrl, own.ProjectId, own.RepositoryId, 1, own.Id, "new-revision"));
+        Assert.Equal(
+            foreign.Id,
+            (await this._repo.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                foreign.ClientId, foreign.OrganizationUrl, foreign.ProjectId, foreign.RepositoryId, 1, revision))!.Id);
+    }
+
+    [Fact]
+    public async Task CompletedUnchangedRevision_AllowsExplicitManualReview()
+    {
+        var completed = MakeJob();
+        completed.SetReviewRevision(new ReviewRevision("head", "base", null, "revision", "patch"));
+        await this._repo.AddAsync(completed);
+        await this._repo.SetResultAsync(completed.Id, new ReviewResult("done", []));
+        var rerun = MakeJob(completed.ClientId);
+        rerun.SetReviewRevision(completed.ReviewRevisionReference);
+        rerun.SetAllowUnchangedResubmission(true);
+
+        var result = await this._repo.TryAddIfNoActiveDuplicateAsync(rerun);
+
+        Assert.True(result.WasAdded);
+        Assert.Null(result.DuplicateJob);
+        Assert.Equal(0, result.CancelledSupersededJobCount);
+        Assert.Equal(JobStatus.Completed, this._repo.GetById(completed.Id)!.Status);
     }
 
     [Fact]
@@ -437,7 +659,8 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             NullLogger<JobRepository>.Instance,
             new AuthorActivityRecorder(
                 new ThrowingAuthorActivityRollupStore(),
-                new ConfiguredReviewerIdentityRepository(this._dbContext)));
+                new ConfiguredReviewerIdentityRepository(this._dbContext),
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies));
         var job = MakeJob();
         await repo.AddAsync(job);
         await repo.UpdatePullRequestAuthorAsync(
@@ -475,7 +698,8 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             this._dbContext,
             new TestDbContextFactory(this.ContextOptions()),
             NullLogger<JobRepository>.Instance,
-            new AuthorActivityRecorder(rollup, new ConfiguredReviewerIdentityRepository(this._dbContext)));
+            new AuthorActivityRecorder(
+                rollup, new ConfiguredReviewerIdentityRepository(this._dbContext), MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies));
         var job = MakeJob();
         job.ApplyLease("replica-a", 1, DateTimeOffset.UtcNow.AddMinutes(5), DateTimeOffset.UtcNow);
         await repo.AddAsync(job);
@@ -516,7 +740,8 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             this._dbContext,
             new TestDbContextFactory(this.ContextOptions()),
             NullLogger<JobRepository>.Instance,
-            new AuthorActivityRecorder(new AuthorActivityRollupRepository(this._dbContext), identities));
+            new AuthorActivityRecorder(
+                new AuthorActivityRollupRepository(this._dbContext), identities, MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies));
         var job = MakeJob();
         await repo.AddAsync(job);
         await repo.UpdatePullRequestAuthorAsync(
@@ -574,7 +799,8 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             NullLogger<JobRepository>.Instance,
             new AuthorActivityRecorder(
                 new AuthorActivityRollupRepository(intercepted),
-                new ConfiguredReviewerIdentityRepository(intercepted)));
+                new ConfiguredReviewerIdentityRepository(intercepted),
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies));
 
         var job = MakeJob();
         job.ApplyLease("replica-a", 1, DateTimeOffset.UtcNow.AddMinutes(5), DateTimeOffset.UtcNow);
@@ -608,7 +834,8 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             NullLogger<JobRepository>.Instance,
             new AuthorActivityRecorder(
                 new AuthorActivityRollupRepository(this._dbContext),
-                new ConfiguredReviewerIdentityRepository(this._dbContext)));
+                new ConfiguredReviewerIdentityRepository(this._dbContext),
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies));
     }
 
     private DbContextOptions<MeisterProPRDbContext> ContextOptions()
@@ -733,6 +960,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         await this._repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
 
         var found = this._repo.FindActiveJob(
+            job.ClientId,
             job.OrganizationUrl,
             job.ProjectId,
             job.RepositoryId,
@@ -804,6 +1032,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         await this._repo.SetResultAsync(job2.Id, new ReviewResult("summary 2", []));
 
         var found = this._repo.FindCompletedJob(
+            job1.ClientId,
             job1.OrganizationUrl,
             job1.ProjectId,
             job1.RepositoryId,
@@ -833,6 +1062,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         await this._repo.SetFailedAsync(failedJob.Id, "boom");
 
         var found = this._repo.FindFailedJob(
+            activeJob.ClientId,
             activeJob.OrganizationUrl,
             activeJob.ProjectId,
             activeJob.RepositoryId,
@@ -843,7 +1073,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         Assert.Equal(failedJob.Id, found.Id);
 
         // No failed job for a different iteration.
-        Assert.Null(this._repo.FindFailedJob(activeJob.OrganizationUrl, activeJob.ProjectId, activeJob.RepositoryId, 510, 99));
+        Assert.Null(this._repo.FindFailedJob(activeJob.ClientId, activeJob.OrganizationUrl, activeJob.ProjectId, activeJob.RepositoryId, 510, 99));
     }
 
     [Fact]
@@ -858,6 +1088,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         var storedRevisionKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
 
         var found = await this._repo.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            job.ClientId,
             job.OrganizationUrl,
             job.ProjectId,
             job.RepositoryId,
@@ -882,6 +1113,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         await this._repo.SetCancelledAsync(cancelledJob.Id);
 
         var found = await this._repo.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            failedJob.ClientId,
             failedJob.OrganizationUrl,
             failedJob.ProjectId,
             failedJob.RepositoryId,
@@ -915,6 +1147,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         var storedRevisionKey = ReviewRevisionKeys.GetStoredKey(olderFailedJob.ReviewRevisionReference, olderFailedJob.IterationId);
 
         var found = await this._repo.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            olderFailedJob.ClientId,
             olderFailedJob.OrganizationUrl,
             olderFailedJob.ProjectId,
             olderFailedJob.RepositoryId,
@@ -942,6 +1175,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             stoppedJob.IterationId);
 
         var found = await this._repo.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            stoppedJob.ClientId,
             stoppedJob.OrganizationUrl,
             stoppedJob.ProjectId,
             stoppedJob.RepositoryId,
@@ -1152,6 +1386,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         var currentKey = ReviewRevisionKeys.GetStoredKey(currentJob.ReviewRevisionReference, currentJob.IterationId);
 
         var found = await this._repo.GetLatestReusableTerminalJobAsync(
+            currentJob.ClientId,
             currentJob.OrganizationUrl,
             currentJob.ProjectId,
             currentJob.RepositoryId,
@@ -1383,6 +1618,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         await this._repo.AddFileResultAsync(CreateCompletedFileResult(failed.Id, "src/A.cs"));
 
         var found = await this._repo.GetLatestReusableTerminalJobAsync(
+            currentJob.ClientId,
             currentJob.OrganizationUrl,
             currentJob.ProjectId,
             currentJob.RepositoryId,
@@ -1409,6 +1645,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         await this._repo.AddFileResultAsync(CreateCompletedFileResult(superseded.Id, "src/A.cs"));
 
         var found = await this._repo.GetLatestReusableTerminalJobAsync(
+            currentJob.ClientId,
             currentJob.OrganizationUrl,
             currentJob.ProjectId,
             currentJob.RepositoryId,
@@ -1452,6 +1689,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         await this._repo.SetFailedAsync(job.Id, "test error");
 
         var found = this._repo.FindActiveJob(
+            job.ClientId,
             job.OrganizationUrl,
             job.ProjectId,
             job.RepositoryId,
@@ -1468,6 +1706,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         await this._repo.AddAsync(job);
 
         var found = this._repo.FindActiveJob(
+            job.ClientId,
             job.OrganizationUrl,
             job.ProjectId,
             job.RepositoryId,
@@ -2055,6 +2294,53 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         // The slot the interrupted job held is available again at the same ceiling.
         var claim = await store.TryClaimWithinProcessingCapAsync(waiting.Id, "host-b", TimeSpan.FromMinutes(2), 1);
         Assert.Equal(ReviewJobCappedClaimOutcome.Granted, claim.Outcome);
+    }
+
+    [Fact]
+    public async Task SetResultAsync_WhenUsageMarkerFails_KeepsTheCompletedReview()
+    {
+        var job = MakeJob(prId: 952);
+        await this._repo.AddAsync(job);
+        var interceptor = new ThrowingUsageMarkerInterceptor();
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .AddInterceptors(interceptor)
+            .Options;
+        await using var context = new MeisterProPRDbContext(options);
+        var repository = new JobRepository(context, new TestDbContextFactory(options), NullLogger<JobRepository>.Instance);
+
+        await repository.SetResultAsync(job.Id, new ReviewResult("completed", []));
+
+        await using var readContext = new MeisterProPRDbContext(
+            new DbContextOptionsBuilder<MeisterProPRDbContext>()
+                .UseNpgsql(fixture.ConnectionString, o => o.UseVector()).Options);
+        var stored = await readContext.ReviewJobs.AsNoTracking().SingleAsync(item => item.Id == job.Id);
+        Assert.True(interceptor.MarkerAttempted);
+        Assert.Equal(JobStatus.Completed, stored.Status);
+        Assert.Equal("completed", stored.Result?.Summary);
+        Assert.Equal("completed", stored.ResultSummary);
+        Assert.Null(stored.UsageFinalizedAt);
+    }
+
+    private sealed class ThrowingUsageMarkerInterceptor : DbCommandInterceptor
+    {
+        public bool MarkerAttempted { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("usage_finalized_at", StringComparison.OrdinalIgnoreCase) &&
+                command.CommandText.Contains("UPDATE", StringComparison.OrdinalIgnoreCase))
+            {
+                this.MarkerAttempted = true;
+                throw new InvalidOperationException("Usage marker persistence failed in the test.");
+            }
+
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 
     /// <summary>

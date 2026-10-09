@@ -1,19 +1,10 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useNotification } from '@/composables/useNotification'
 import { useSession } from '@/composables/useSession'
-import {
-  listAdoBranches,
-  listAdoOrganizationScopes,
-  listAdoProjects,
-  listAdoSources,
-  type AdoBranchOptionDto,
-  type AdoSourceKind,
-  type AdoSourceOptionDto,
-  type ClientAdoOrganizationScopeDto,
-} from '@/services/adoDiscoveryService'
+import { useConnectionDiscovery } from '@/composables/useConnectionDiscovery'
 import {
   createProCursorSource,
   createProCursorTrackedBranch,
@@ -39,12 +30,7 @@ import {
   refreshKeyForBranch,
   refreshKeyForSource,
   sortBranches,
-  sortDiscoveredBranches,
-  sortOrganizationScopes,
-  sortProjects,
-  sortSourceOptions,
   sortSources,
-  sourceOptionKey,
   toErrorMessage,
   trimOptional,
 } from './clientProCursorFormatters'
@@ -99,22 +85,6 @@ export function useClientProCursorTab(props: { clientId: string }) {
     saving: false,
     error: '',
     displayName: '',
-    sourceKind: 'repository' as ProCursorSourceKind,
-    organizationScopeId: '',
-    organizationScopes: [] as ClientAdoOrganizationScopeDto[],
-    loadingScopes: false,
-    scopeError: '',
-    projectId: '',
-    projects: [] as Array<{ projectId?: string | null; projectName?: string | null }>,
-    loadingProjects: false,
-    projectError: '',
-    selectedSourceKey: '',
-    sourceOptions: [] as AdoSourceOptionDto[],
-    loadingSourceOptions: false,
-    sourceError: '',
-    branchOptions: [] as AdoBranchOptionDto[],
-    loadingBranches: false,
-    branchError: '',
     defaultBranch: '',
     rootPath: '',
     symbolMode: 'auto',
@@ -123,18 +93,8 @@ export function useClientProCursorTab(props: { clientId: string }) {
     initialMiniIndexEnabled: true,
   })
 
-  const selectedOrganizationScope = computed(() => {
-    return createSourceModal.organizationScopes.find((scope) => scope.id === createSourceModal.organizationScopeId) ?? null
-  })
-
-  const selectedSourceOption = computed(() => {
-    return createSourceModal.sourceOptions.find((sourceOption) => sourceOptionKey(sourceOption) === createSourceModal.selectedSourceKey) ?? null
-  })
-
-  let createSourceScopesRequestId = 0
-  let createSourceProjectsRequestId = 0
-  let createSourceSourcesRequestId = 0
-  let createSourceBranchesRequestId = 0
+  const discovery = useConnectionDiscovery(() => props.clientId, 'procursor', () => createSourceModal.open)
+  const selectedSourceOption = discovery.selectedSource
 
   const createBranchModal = reactive({
     open: false,
@@ -405,230 +365,11 @@ export function useClientProCursorTab(props: { clientId: string }) {
     void Promise.all([loadSourceUsage(sourceId), loadRecentEvents(sourceId)])
   }
 
-  function clearCreateSourceBranches() {
-    createSourceBranchesRequestId += 1
-    createSourceModal.branchOptions = []
-    createSourceModal.loadingBranches = false
-    createSourceModal.branchError = ''
-    createSourceModal.defaultBranch = ''
-    createSourceModal.initialBranchName = ''
-  }
-
-  function clearCreateSourceSources() {
-    createSourceSourcesRequestId += 1
-    createSourceModal.selectedSourceKey = ''
-    createSourceModal.sourceOptions = []
-    createSourceModal.loadingSourceOptions = false
-    createSourceModal.sourceError = ''
-    clearCreateSourceBranches()
-  }
-
-  function clearCreateSourceProjects() {
-    createSourceProjectsRequestId += 1
-    createSourceModal.projectId = ''
-    createSourceModal.projects = []
-    createSourceModal.loadingProjects = false
-    createSourceModal.projectError = ''
-    clearCreateSourceSources()
-  }
-
-  async function loadCreateSourceOrganizationScopes() {
-    const requestId = ++createSourceScopesRequestId
-    createSourceModal.loadingScopes = true
-    createSourceModal.scopeError = ''
-
-    try {
-      const scopes = sortOrganizationScopes(
-        (await listAdoOrganizationScopes(props.clientId)).filter((scope) => Boolean(scope.isEnabled)),
-      )
-
-      if (requestId !== createSourceScopesRequestId) {
-        return
-      }
-
-      createSourceModal.organizationScopes = scopes
-      if (!scopes.some((scope) => scope.id === createSourceModal.organizationScopeId)) {
-        createSourceModal.organizationScopeId = ''
-        clearCreateSourceProjects()
-      }
-    } catch (cause) {
-      if (requestId !== createSourceScopesRequestId) {
-        return
-      }
-
-      createSourceModal.organizationScopes = []
-      createSourceModal.scopeError = toErrorMessage(cause, 'Failed to load organization scopes.')
-      createSourceModal.organizationScopeId = ''
-      clearCreateSourceProjects()
-    } finally {
-      if (requestId === createSourceScopesRequestId) {
-        createSourceModal.loadingScopes = false
-      }
-    }
-  }
-
-  async function loadCreateSourceProjects(scopeId: string) {
-    const requestId = ++createSourceProjectsRequestId
-    createSourceModal.loadingProjects = true
-    createSourceModal.projectError = ''
-
-    try {
-      const projects = sortProjects(await listAdoProjects(props.clientId, scopeId))
-      if (requestId !== createSourceProjectsRequestId || createSourceModal.organizationScopeId !== scopeId) {
-        return
-      }
-
-      createSourceModal.projects = projects
-    } catch (cause) {
-      if (requestId !== createSourceProjectsRequestId || createSourceModal.organizationScopeId !== scopeId) {
-        return
-      }
-
-      createSourceModal.projects = []
-      createSourceModal.projectError = toErrorMessage(cause, 'Failed to load Azure DevOps projects.')
-    } finally {
-      if (requestId === createSourceProjectsRequestId && createSourceModal.organizationScopeId === scopeId) {
-        createSourceModal.loadingProjects = false
-      }
-    }
-  }
-
-  async function loadCreateSourceOptions(scopeId: string, projectId: string, sourceKind: ProCursorSourceKind) {
-    const requestId = ++createSourceSourcesRequestId
-    createSourceModal.loadingSourceOptions = true
-    createSourceModal.sourceError = ''
-
-    try {
-      const sourceOptions = sortSourceOptions(
-        await listAdoSources(props.clientId, scopeId, projectId, sourceKind as AdoSourceKind),
-      )
-
-      if (
-        requestId !== createSourceSourcesRequestId ||
-        createSourceModal.organizationScopeId !== scopeId ||
-        createSourceModal.projectId !== projectId ||
-        createSourceModal.sourceKind !== sourceKind
-      ) {
-        return
-      }
-
-      createSourceModal.sourceOptions = sourceOptions
-    } catch (cause) {
-      if (
-        requestId !== createSourceSourcesRequestId ||
-        createSourceModal.organizationScopeId !== scopeId ||
-        createSourceModal.projectId !== projectId ||
-        createSourceModal.sourceKind !== sourceKind
-      ) {
-        return
-      }
-
-      createSourceModal.sourceOptions = []
-      createSourceModal.sourceError = toErrorMessage(cause, 'Failed to load Azure DevOps sources.')
-    } finally {
-      if (
-        requestId === createSourceSourcesRequestId &&
-        createSourceModal.organizationScopeId === scopeId &&
-        createSourceModal.projectId === projectId &&
-        createSourceModal.sourceKind === sourceKind
-      ) {
-        createSourceModal.loadingSourceOptions = false
-      }
-    }
-  }
-
-  async function loadCreateSourceBranches(
-    scopeId: string,
-    projectId: string,
-    sourceKind: ProCursorSourceKind,
-    sourceOption: AdoSourceOptionDto,
-  ) {
-    const canonicalSourceRef = sourceOption.canonicalSourceRef
-    const provider = canonicalSourceRef?.provider?.trim()
-    const value = canonicalSourceRef?.value?.trim()
-    if (!provider || !value) {
-      createSourceModal.branchError = 'The selected source is missing its canonical reference.'
-      return
-    }
-
-    const requestId = ++createSourceBranchesRequestId
-    createSourceModal.loadingBranches = true
-    createSourceModal.branchError = ''
-
-    try {
-      const branchOptions = sortDiscoveredBranches(
-        await listAdoBranches(props.clientId, scopeId, projectId, sourceKind as AdoSourceKind, {
-          provider,
-          value,
-        }),
-      )
-
-      if (
-        requestId !== createSourceBranchesRequestId ||
-        createSourceModal.organizationScopeId !== scopeId ||
-        createSourceModal.projectId !== projectId ||
-        createSourceModal.sourceKind !== sourceKind ||
-        createSourceModal.selectedSourceKey !== sourceOptionKey(sourceOption)
-      ) {
-        return
-      }
-
-      createSourceModal.branchOptions = branchOptions
-      const defaultBranch = branchOptions.find((branch) => branch.isDefault)?.branchName || branchOptions[0]?.branchName || ''
-      createSourceModal.defaultBranch = defaultBranch
-      createSourceModal.initialBranchName = defaultBranch
-    } catch (cause) {
-      if (
-        requestId !== createSourceBranchesRequestId ||
-        createSourceModal.organizationScopeId !== scopeId ||
-        createSourceModal.projectId !== projectId ||
-        createSourceModal.sourceKind !== sourceKind ||
-        createSourceModal.selectedSourceKey !== sourceOptionKey(sourceOption)
-      ) {
-        return
-      }
-
-      createSourceModal.branchOptions = []
-      createSourceModal.branchError = toErrorMessage(cause, 'Failed to load Azure DevOps branches.')
-      createSourceModal.defaultBranch = ''
-      createSourceModal.initialBranchName = ''
-    } finally {
-      if (
-        requestId === createSourceBranchesRequestId &&
-        createSourceModal.organizationScopeId === scopeId &&
-        createSourceModal.projectId === projectId &&
-        createSourceModal.sourceKind === sourceKind &&
-        createSourceModal.selectedSourceKey === sourceOptionKey(sourceOption)
-      ) {
-        createSourceModal.loadingBranches = false
-      }
-    }
-  }
-
   function resetCreateSourceModal() {
-    createSourceScopesRequestId += 1
-    createSourceProjectsRequestId += 1
-    createSourceSourcesRequestId += 1
-    createSourceBranchesRequestId += 1
+    discovery.reset()
     createSourceModal.saving = false
     createSourceModal.error = ''
     createSourceModal.displayName = ''
-    createSourceModal.sourceKind = 'repository'
-    createSourceModal.organizationScopeId = ''
-    createSourceModal.organizationScopes = []
-    createSourceModal.loadingScopes = false
-    createSourceModal.scopeError = ''
-    createSourceModal.projectId = ''
-    createSourceModal.projects = []
-    createSourceModal.loadingProjects = false
-    createSourceModal.projectError = ''
-    createSourceModal.selectedSourceKey = ''
-    createSourceModal.sourceOptions = []
-    createSourceModal.loadingSourceOptions = false
-    createSourceModal.sourceError = ''
-    createSourceModal.branchOptions = []
-    createSourceModal.loadingBranches = false
-    createSourceModal.branchError = ''
     createSourceModal.defaultBranch = ''
     createSourceModal.rootPath = ''
     createSourceModal.symbolMode = 'auto'
@@ -640,59 +381,20 @@ export function useClientProCursorTab(props: { clientId: string }) {
   function openCreateSourceModal() {
     resetCreateSourceModal()
     createSourceModal.open = true
-    void loadCreateSourceOrganizationScopes()
+    void discovery.loadConnections()
   }
 
-  function handleCreateSourceOrganizationScopeChange() {
-    createSourceModal.error = ''
-    clearCreateSourceProjects()
-
-    if (!createSourceModal.organizationScopeId) {
-      return
-    }
-
-    void loadCreateSourceProjects(createSourceModal.organizationScopeId)
-  }
-
-  function handleCreateSourceProjectChange() {
-    createSourceModal.error = ''
-    clearCreateSourceSources()
-
-    if (!createSourceModal.organizationScopeId || !createSourceModal.projectId) {
-      return
-    }
-
-    void loadCreateSourceOptions(
-      createSourceModal.organizationScopeId,
-      createSourceModal.projectId,
-      createSourceModal.sourceKind,
-    )
-  }
-
-  function handleCreateSourceKindChange() {
-    handleCreateSourceProjectChange()
-  }
-
-  function handleCreateSourceSelectionChange() {
-    createSourceModal.error = ''
-    clearCreateSourceBranches()
-
-    const sourceOption = selectedSourceOption.value
-    if (!sourceOption || !createSourceModal.organizationScopeId || !createSourceModal.projectId) {
-      return
-    }
-
-    if (!createSourceModal.displayName.trim()) {
-      createSourceModal.displayName = sourceOption.displayName || createSourceModal.displayName
-    }
-
-    void loadCreateSourceBranches(
-      createSourceModal.organizationScopeId,
-      createSourceModal.projectId,
-      createSourceModal.sourceKind,
-      sourceOption,
-    )
-  }
+  watch(() => discovery.state.sourceKey, () => {
+    createSourceModal.defaultBranch = ''
+    createSourceModal.initialBranchName = ''
+    const source = selectedSourceOption.value
+    if (source && !createSourceModal.displayName.trim()) createSourceModal.displayName = source.displayName ?? ''
+  }, { flush: 'sync' })
+  watch(() => discovery.state.branches, branches => {
+    const defaultBranch = branches.find(branch => branch.isDefault)?.branchName ?? branches[0]?.branchName ?? ''
+    createSourceModal.defaultBranch = defaultBranch
+    createSourceModal.initialBranchName = defaultBranch
+  })
 
   function handleDefaultBranchChange() {
     if (!createSourceModal.initialBranchName) {
@@ -704,16 +406,15 @@ export function useClientProCursorTab(props: { clientId: string }) {
     createSourceModal.error = ''
 
     const displayName = createSourceModal.displayName.trim()
-    const organizationScope = selectedOrganizationScope.value
     const sourceOption = selectedSourceOption.value
     const canonicalSourceRef = sourceOption?.canonicalSourceRef
-    const projectId = createSourceModal.projectId.trim()
+    const projectId = selectedSourceOption.value?.providerProjectKey ?? ''
     const defaultBranch = createSourceModal.defaultBranch.trim()
     const trackedBranchName = (createSourceModal.initialBranchName.trim() || defaultBranch).trim()
 
     if (
       !displayName ||
-      !organizationScope?.id ||
+      !discovery.state.connectionId || !discovery.state.descriptor?.supportsKnowledgeSources ||
       !projectId ||
       !canonicalSourceRef?.provider ||
       !canonicalSourceRef.value ||
@@ -726,10 +427,12 @@ export function useClientProCursorTab(props: { clientId: string }) {
 
     const request: ProCursorKnowledgeSourceRequest = {
       displayName,
-      sourceKind: createSourceModal.sourceKind,
-      providerScopePath: organizationScope.organizationUrl ?? null,
+      sourceKind: sourceOption!.sourceKind!,
+      connectionId: discovery.state.connectionId,
+      scopeKey: discovery.state.scopeKey,
+      providerScopePath: sourceOption!.providerScopePath,
       providerProjectKey: projectId,
-      repositoryId: canonicalSourceRef.value,
+      repositoryId: sourceOption!.repositoryId,
       defaultBranch,
       rootPath: trimOptional(createSourceModal.rootPath),
       symbolMode: createSourceModal.symbolMode,
@@ -740,22 +443,24 @@ export function useClientProCursorTab(props: { clientId: string }) {
           miniIndexEnabled: createSourceModal.initialMiniIndexEnabled,
         },
       ],
-      organizationScopeId: organizationScope.id,
+      organizationScopeId: sourceOption!.organizationScopeId,
       canonicalSourceRef,
       sourceDisplayName: sourceOption?.displayName || canonicalSourceRef.value,
     }
 
     createSourceModal.saving = true
+    const current = discovery.capture()
     try {
       await createProCursorSource(props.clientId, request)
+      if (!current()) return
       createSourceModal.open = false
       resetCreateSourceModal()
       notify('ProCursor source created.')
       await loadSources()
     } catch (cause) {
-      createSourceModal.error = toErrorMessage(cause, 'Failed to create ProCursor source.')
+      if (current()) createSourceModal.error = toErrorMessage(cause, 'Failed to create ProCursor source.')
     } finally {
-      createSourceModal.saving = false
+      if (current()) createSourceModal.saving = false
     }
   }
 
@@ -952,7 +657,7 @@ export function useClientProCursorTab(props: { clientId: string }) {
     sourceUsagePeriod,
     canManage,
     createSourceModal,
-    selectedOrganizationScope,
+    discovery,
     selectedSourceOption,
     createBranchModal,
     editBranchModal,
@@ -975,10 +680,6 @@ export function useClientProCursorTab(props: { clientId: string }) {
     reloadSourceDrilldown,
     // create-source modal
     openCreateSourceModal,
-    handleCreateSourceOrganizationScopeChange,
-    handleCreateSourceProjectChange,
-    handleCreateSourceKindChange,
-    handleCreateSourceSelectionChange,
     handleDefaultBranchChange,
     handleCreateSource,
     // branch modals + actions

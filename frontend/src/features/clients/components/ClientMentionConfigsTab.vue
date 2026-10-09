@@ -68,7 +68,7 @@
           </td>
           <!-- Read straight off the configuration, so one whose provider was disabled after it was created
                still shows what it answers on. -->
-          <td>{{ formatProviderFamily((config.provider ?? 'azureDevOps') as ScmProviderFamily) }}</td>
+          <td>{{ config.provider ? formatProviderFamily(config.provider as ScmProviderFamily) : 'Provider unavailable' }}</td>
           <td>
             <div class="mention-project">{{ config.providerProjectKey }}</div>
             <div class="mention-scope">{{ config.providerScopePath }}</div>
@@ -103,65 +103,7 @@
     >
       <form class="mention-form" @submit.prevent="submitForm">
         <div class="form-grid">
-          <!-- First, because it decides what the fields under it mean. Fixed once a configuration exists,
-               the same way its scope path and project are. -->
-          <div class="form-group">
-            <label for="mentionProvider">Provider</label>
-            <select
-              id="mentionProvider"
-              :value="discovery.state.provider"
-              :disabled="!!editingConfig || providerOptions.length <= 1"
-              @change="onProviderChanged"
-            >
-              <option v-for="option in providerOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-            <p v-if="loadingProviders" class="mention-hint">Loading providers...</p>
-            <p v-else-if="providerError" class="mention-form-error">{{ providerError }}</p>
-            <p v-else-if="!providerOptions.length" class="mention-hint">
-              No provider in this deployment can answer mentions.
-            </p>
-          </div>
-
-          <div class="form-group">
-            <label for="mentionScopePath">{{ hostLabel }}</label>
-            <select
-              id="mentionScopePath"
-              :value="discovery.state.hostId"
-              :disabled="!!editingConfig || discovery.state.loadingHosts"
-              @change="onHostChanged"
-            >
-              <option value="">Select {{ hostLabel.toLowerCase() }}</option>
-              <option v-for="host in discovery.state.hosts" :key="host.id" :value="host.id">
-                {{ host.label }}
-              </option>
-            </select>
-            <p v-if="discovery.state.loadingHosts" class="mention-hint">Loading...</p>
-            <p v-else-if="discovery.state.hostError" class="mention-form-error">
-              {{ discovery.state.hostError }}
-            </p>
-            <p v-else-if="!discovery.state.hosts.length" class="mention-hint">{{ noHostsHint }}</p>
-          </div>
-
-          <div class="form-group">
-            <label for="mentionProjectKey">{{ scopeLabel }}</label>
-            <select
-              id="mentionProjectKey"
-              :value="discovery.state.scopeId"
-              :disabled="!!editingConfig || !discovery.state.hostId || discovery.state.loadingScopes"
-              @change="onScopeChanged"
-            >
-              <option value="">Select {{ scopeLabel.toLowerCase() }}</option>
-              <option v-for="scope in discovery.state.scopes" :key="scope.id" :value="scope.id">
-                {{ scope.label }}
-              </option>
-            </select>
-            <p v-if="discovery.state.loadingScopes" class="mention-hint">Loading...</p>
-            <p v-else-if="discovery.state.scopeError" class="mention-form-error">
-              {{ discovery.state.scopeError }}
-            </p>
-          </div>
+          <ConnectionDiscoveryFields :discovery="discovery" id-prefix="mention" :locked="!!editingConfig" :disabled="saving" />
 
           <div class="form-group">
             <label for="mentionScanInterval">Scan interval (seconds)</label>
@@ -190,18 +132,18 @@
               required.
             </p>
 
-            <p v-if="discovery.state.loadingRepositories" class="mention-hint">Loading repositories...</p>
-            <p v-else-if="discovery.state.repositoryError" class="mention-form-error">
-              {{ discovery.state.repositoryError }}
+            <p v-if="discovery.state.loading.sources" class="mention-hint">Loading repositories...</p>
+            <p v-else-if="discovery.state.errors.sources" class="mention-form-error">
+              {{ discovery.state.errors.sources }}
             </p>
-            <p v-else-if="discovery.state.unresolvedScope" class="mention-hint">
-              The saved scope path matches none of this client's enabled connections or organization scopes.
+            <p v-else-if="discovery.state.unresolved" class="mention-hint">
+              The saved target is unavailable through the current connections.
               The repositories below are the ones already stored on this configuration.
             </p>
-            <p v-else-if="!discovery.state.scopeId" class="mention-hint">
-              Choose {{ hostLabel.toLowerCase() }} and {{ scopeLabel.toLowerCase() }} to list its repositories.
+            <p v-else-if="!discovery.state.scopeKey" class="mention-hint">
+              Complete the connection selection to list repositories.
             </p>
-            <p v-else-if="!discovery.state.repositories.length" class="mention-hint">
+            <p v-else-if="!discovery.state.sources.length" class="mention-hint">
               No repositories are available there.
             </p>
 
@@ -239,7 +181,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import ConnectionDiscoveryFields from '@/components/ConnectionDiscoveryFields.vue'
+import { computed, onMounted, reactive, ref, watch, onBeforeUnmount } from 'vue'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
@@ -248,19 +191,12 @@ import { useSession } from '@/composables/useSession'
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import {
   formatProviderFamily,
-  listProviderActivationStatuses,
 } from '@/services/providerActivationService'
 import type { ScmProviderFamily } from '@/services/providerConnectionsService'
 import type { components } from '@/types'
 import { useMentionConfigDiscovery } from './useMentionConfigDiscovery'
 
 type MentionConfigResponse = components['schemas']['MentionConfigResponse']
-
-/**
- * What the registry names the two capabilities answering a mention needs: finding the question, and replying
- * where it was asked. Without both, a configuration would be created that no scan could ever serve.
- */
-const MentionCapabilities = ['activePullRequestDiscovery', 'reviewThreadReply']
 
 interface RepositoryChoice {
   repositoryId: string
@@ -299,32 +235,8 @@ const form = reactive({
   isActive: true,
 })
 
-const discovery = useMentionConfigDiscovery(() => props.clientId)
+const discovery = useMentionConfigDiscovery(() => props.clientId, () => showForm.value)
 const selectedRepositoryIds = ref<string[]>([])
-
-const providerOptions = ref<Array<{ value: ScmProviderFamily; label: string }>>([])
-const loadingProviders = ref(false)
-const providerError = ref('')
-
-// The second and third pickers hold different things per provider, so they are named for what they hold.
-const hostLabel = computed(() => (discovery.state.provider === 'azureDevOps' ? 'Organization' : 'Connection'))
-
-const scopeLabel = computed(() => {
-  switch (discovery.state.provider) {
-    case 'azureDevOps':
-      return 'Project'
-    case 'gitLab':
-      return 'Group'
-    default:
-      return 'Owner'
-  }
-})
-
-const noHostsHint = computed(() =>
-  discovery.state.provider === 'azureDevOps'
-    ? 'Add and enable an Azure DevOps organization for this client first.'
-    : `Add and enable a ${formatProviderFamily(discovery.state.provider)} connection for this client first.`,
-)
 
 // What an edited configuration already stores. Kept so a repository stays visible and selected even when
 // discovery cannot reach it, rather than silently dropping out of the list on save.
@@ -339,12 +251,13 @@ const repositoryChoices = computed<RepositoryChoice[]>(() => {
     choices.set(stored.repositoryId, stored)
   }
 
-  for (const option of discovery.state.repositories) {
-    choices.set(option.repositoryId, {
-      repositoryId: option.repositoryId,
-      displayName: option.displayName,
-      canonicalSourceRef: option.canonicalSourceRef,
-      sourceProvider: option.sourceProvider,
+  for (const option of discovery.state.sources) {
+    const stored = choices.get(option.repositoryId ?? '')
+    choices.set(option.repositoryId ?? '', {
+      repositoryId: option.repositoryId ?? '',
+      displayName: option.displayName ?? '',
+      canonicalSourceRef: stored ? stored.canonicalSourceRef : option.canonicalSourceRef?.value ?? undefined,
+      sourceProvider: stored ? stored.sourceProvider : option.canonicalSourceRef?.provider ?? undefined,
     })
   }
 
@@ -407,44 +320,7 @@ function openCreateForm() {
   storedRepositories.value = []
   showForm.value = true
   discovery.reset()
-  void openForProviderAsync()
-}
-
-/**
- * Offers only the providers this deployment has enabled and that can discover pull requests, then opens on
- * the first of them. A deployment with one such provider therefore has nothing to choose.
- */
-async function openForProviderAsync() {
-  loadingProviders.value = true
-  providerError.value = ''
-
-  try {
-    const statuses = await listProviderActivationStatuses()
-    providerOptions.value = statuses
-      .filter(
-        (status) =>
-          status.isEnabled
-          && MentionCapabilities.every((capability) =>
-            (status.registeredCapabilities ?? []).includes(capability),
-          ),
-      )
-      .map((status) => ({
-        value: status.providerFamily,
-        label: formatProviderFamily(status.providerFamily),
-      }))
-  } catch (cause) {
-    providerOptions.value = []
-    providerError.value =
-      cause instanceof Error && cause.message ? cause.message : 'Failed to load providers.'
-    return
-  } finally {
-    loadingProviders.value = false
-  }
-
-  const first = providerOptions.value[0]
-  if (first && showForm.value && !editingConfig.value) {
-    await discovery.selectProvider(first.value)
-  }
+  void discovery.loadConnections()
 }
 
 function openEditForm(config: MentionConfigResponse) {
@@ -462,38 +338,13 @@ function openEditForm(config: MentionConfigResponse) {
     .filter((filter) => filter.repositoryId.length > 0)
   selectedRepositoryIds.value = storedRepositories.value.map((filter) => filter.repositoryId)
   showForm.value = true
-  providerOptions.value = [
-    {
-      value: (config.provider ?? 'azureDevOps') as ScmProviderFamily,
-      label: formatProviderFamily((config.provider ?? 'azureDevOps') as ScmProviderFamily),
-    },
-  ]
-  void discovery.resolveForEdit(
-    (config.provider ?? 'azureDevOps') as ScmProviderFamily,
-    config.providerScopePath ?? '',
-    config.providerProjectKey ?? '',
-  )
+  void discovery.resolveForEdit(config)
 }
 
-// Everything picked under the previous provider goes, because a repository belonging to one provider must
-// not be submitted against another.
-async function onProviderChanged(event: Event) {
-  selectedRepositoryIds.value = []
-  storedRepositories.value = []
-  await discovery.selectProvider((event.target as HTMLSelectElement).value as ScmProviderFamily)
-}
-
-// The selection is cleared before the await, not after it. Clearing afterwards lets a slow request for an
-// abandoned scope come back and wipe repositories the operator has since picked for a different one.
-async function onHostChanged(event: Event) {
-  selectedRepositoryIds.value = []
-  await discovery.selectHost((event.target as HTMLSelectElement).value)
-}
-
-async function onScopeChanged(event: Event) {
-  selectedRepositoryIds.value = []
-  await discovery.selectScope((event.target as HTMLSelectElement).value)
-}
+watch(() => [discovery.state.connectionId, discovery.state.scopeKey, discovery.state.projectId], () => {
+  if (!editingConfig.value) selectedRepositoryIds.value = []
+}, { flush: 'sync' })
+onBeforeUnmount(() => { loadRequestId++; discovery.reset() })
 
 function toggleRepository(repositoryId: string) {
   const selected = selectedRepositoryIds.value
@@ -504,6 +355,7 @@ function toggleRepository(repositoryId: string) {
 
 function closeForm() {
   showForm.value = false
+  saving.value = false
   editingConfig.value = undefined
   // Abandons any discovery still in flight, so a request answered after the form is gone cannot select
   // anything in the next one.
@@ -537,13 +389,21 @@ async function submitForm() {
     return
   }
 
-  if (!editingConfig.value && (!discovery.scopePath.value || !discovery.state.scopeId)) {
-    formError.value = `Select ${hostLabel.value.toLowerCase()} and ${scopeLabel.value.toLowerCase()}.`
+  if (!editingConfig.value && !discovery.ready.value) {
+    formError.value = 'Complete the connection selection.'
+    return
+  }
+
+  const membershipChanged = !!editingConfig.value && JSON.stringify([...selectedRepositoryIds.value].sort()) !==
+    JSON.stringify((editingConfig.value.repoFilters ?? []).map(filter => filter.repositoryId ?? '').sort())
+  if (membershipChanged && !discovery.ready.value) {
+    formError.value = 'Resolve the connection before changing repositories.'
     return
   }
 
   saving.value = true
   formError.value = ''
+  const current = discovery.capture()
   try {
     const client = createAdminClient()
     const { error: apiError, response } = editingConfig.value
@@ -552,20 +412,25 @@ async function submitForm() {
           body: {
             scanIntervalSeconds: form.scanIntervalSeconds,
             isActive: form.isActive,
-            repoFilters,
+            repoFilters: membershipChanged ? repoFilters : undefined,
+            connectionId: discovery.ready.value ? discovery.state.connectionId : undefined,
+            scopeKey: discovery.ready.value ? discovery.state.scopeKey : undefined,
           },
         })
       : await client.POST('/admin/mention-configurations', {
           body: {
             clientId: props.clientId,
-            provider: discovery.state.provider,
-            providerScopePath: discovery.scopePath.value,
-            providerProjectKey: discovery.state.scopeId,
+            provider: discovery.state.selection?.provider,
+            connectionId: discovery.state.connectionId,
+            scopeKey: discovery.state.scopeKey,
+            providerScopePath: discovery.state.selection?.providerScopePath ?? '',
+            providerProjectKey: discovery.state.selection?.providerProjectKey ?? '',
             scanIntervalSeconds: form.scanIntervalSeconds,
             repoFilters,
           },
         })
 
+    if (!current()) return
     if (!response.ok) {
       formError.value = getApiErrorMessage(apiError, 'Failed to save the configuration.')
       return
@@ -575,9 +440,9 @@ async function submitForm() {
     closeForm()
     await loadConfigs()
   } catch {
-    formError.value = 'Connection error. Please try again.'
+    if (current()) formError.value = 'Connection error. Please try again.'
   } finally {
-    saving.value = false
+    if (current()) saving.value = false
   }
 }
 

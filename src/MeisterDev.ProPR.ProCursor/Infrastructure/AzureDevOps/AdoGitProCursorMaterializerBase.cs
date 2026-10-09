@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -11,6 +10,7 @@ using MeisterDev.ProPR.Infrastructure.ProCursor;
 using MeisterDev.ProPR.ProCursor.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Infrastructure.AzureDevOps.ProCursor;
 

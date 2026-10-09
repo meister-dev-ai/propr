@@ -1,8 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 using MeisterDev.ProPR.Domain.Enums;
+
 
 namespace MeisterDev.ProPR.Application.Tests.DTOs;
 

@@ -7,6 +7,8 @@ using MeisterDev.ProPR.Application.Features.Licensing.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using NSubstitute;
+using MeisterDev.ProPR.Application.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterDev.ProPR.Application.Tests.Features.Licensing;
 
@@ -19,10 +21,32 @@ public sealed class AuthorActivityRecorderTests
     private static readonly ProviderHostRef GitHubHost = new(ScmProvider.GitHub, "https://github.com");
 
     [Fact]
+    public async Task CountingResolvesWithNativeFactsAndNoLiveRegistry()
+    {
+        var store = Substitute.For<IAuthorActivityRollupStore>();
+        var identities = Identities();
+        var policy = Substitute.For<IScmIdentityPolicy>();
+        policy.Provider.Returns(ScmProvider.GitHub);
+        policy.GetAccountFacts("4242", "octo.dev", "octo.dev").Returns(new ScmNativeAccountFacts(IsServiceAccount: true));
+        var services = new ServiceCollection()
+            .AddSingleton(store)
+            .AddSingleton(identities)
+            .AddSingleton(policy)
+            .AddScoped<IAuthorActivityRecorder, AuthorActivityRecorder>();
+        using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = host.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<IAuthorActivityRecorder>().RecordAsync(Observation("octo.dev"));
+
+        await store.Received(1).RecordAuthorAsync(GitHubHost, "4242", AuthorActivitySource.Review, true, Arg.Any<CancellationToken>());
+        await identities.DidNotReceiveWithAnyArgs().ListExternalUserIdsAsync(default!);
+    }
+
+    [Fact]
     public async Task APersonOnAHostWithNoConfiguredIdentity_IsRecordedCounted()
     {
         var store = Substitute.For<IAuthorActivityRollupStore>();
-        var recorder = new AuthorActivityRecorder(store, Identities());
+        var recorder = new AuthorActivityRecorder(store, Identities(), MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies);
 
         await recorder.RecordAsync(Observation("octo.dev"));
 
@@ -38,7 +62,7 @@ public sealed class AuthorActivityRecorderTests
     public async Task AnAuthorTheNameRulesIdentify_IsRecordedExcluded()
     {
         var store = Substitute.For<IAuthorActivityRollupStore>();
-        var recorder = new AuthorActivityRecorder(store, Identities());
+        var recorder = new AuthorActivityRecorder(store, Identities(), MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies);
 
         await recorder.RecordAsync(Observation("dependabot[bot]"));
 
@@ -56,7 +80,8 @@ public sealed class AuthorActivityRecorderTests
     public async Task AnAuthorTheNameRulesIdentify_IsNotComparedAgainstTheConfiguredIdentities()
     {
         var identities = Identities();
-        var recorder = new AuthorActivityRecorder(Substitute.For<IAuthorActivityRollupStore>(), identities);
+        var recorder = new AuthorActivityRecorder(
+            Substitute.For<IAuthorActivityRollupStore>(), identities, MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies);
 
         await recorder.RecordAsync(Observation("dependabot[bot]"));
 
@@ -68,7 +93,7 @@ public sealed class AuthorActivityRecorderTests
     public async Task AnAuthorThatIsAConfiguredIdentity_IsRecordedExcluded()
     {
         var store = Substitute.For<IAuthorActivityRollupStore>();
-        var recorder = new AuthorActivityRecorder(store, Identities("9911", "4242"));
+        var recorder = new AuthorActivityRecorder(store, Identities("9911", "4242"), MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies);
 
         await recorder.RecordAsync(Observation("octo.dev"));
 
@@ -87,7 +112,8 @@ public sealed class AuthorActivityRecorderTests
     {
         var store = Substitute.For<IAuthorActivityRollupStore>();
         var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/acme");
-        var recorder = new AuthorActivityRecorder(store, Identities("0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0"));
+        var recorder = new AuthorActivityRecorder(
+            store, Identities("0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0"), MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies);
 
         await recorder.RecordAsync(
             new AuthorActivityObservation(
@@ -111,7 +137,8 @@ public sealed class AuthorActivityRecorderTests
         var identities = Substitute.For<IConfiguredReviewerIdentitySource>();
         identities.ListExternalUserIdsAsync(Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<string>>>(_ => throw new InvalidOperationException("unreachable"));
-        var recorder = new AuthorActivityRecorder(Substitute.For<IAuthorActivityRollupStore>(), identities);
+        var recorder = new AuthorActivityRecorder(
+            Substitute.For<IAuthorActivityRollupStore>(), identities, MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => recorder.RecordAsync(Observation("octo.dev")));
     }

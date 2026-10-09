@@ -41,7 +41,7 @@ public interface IPullRequestFetcher
     /// <param name="clientId">Optional client ID for credential retrieval.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <param name="compareToReviewRevision">
-    ///     Optional provider-neutral review revision used by non-Azure DevOps adapters to compute delta files.
+    ///     Optional provider-neutral review revision used by adapters that compute delta files from revisions.
     ///     Pass <c>null</c> to fetch the full current pull request scope.
     /// </param>
     /// <param name="workspace">
@@ -92,8 +92,7 @@ public interface IPullRequestFetcher
     /// <summary>
     ///     Fetches only the pull request's comment threads, without downloading changed-file content.
     ///     Used by the passive thread-retention observer so it does not pull whole pull-request contents on
-    ///     every crawl cycle. Provider adapters may serve this with a single thread-API call (Azure DevOps
-    ///     does); others fall back to a full fetch.
+    ///     every crawl cycle. Provider adapters can use a thread-only request or fall back to a full fetch.
     /// </summary>
     /// <param name="organizationUrl">The URL of the organization.</param>
     /// <param name="projectId">The ID of the project.</param>

@@ -32,6 +32,7 @@ public sealed class ThreadPassJob
 
     private ThreadPassJob()
     {
+        this.Provider = ScmProvider.AzureDevOps;
         this.OrganizationUrl = string.Empty;
         this.ProjectId = string.Empty;
         this.RepositoryId = string.Empty;
@@ -53,6 +54,44 @@ public sealed class ThreadPassJob
     ///     Two passes that carry the same value would do the same work, so the second is never created.
     /// </param>
     public ThreadPassJob(
+        Guid id,
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string revisionKey,
+        string triggerKey)
+        : this(
+            new CodeReviewSourceContext(
+                ScmProvider.AzureDevOps, organizationUrl, projectId, projectId,
+                CodeReviewPlatformKind.PullRequest, pullRequestId.ToString()), id, clientId, organizationUrl, projectId, repositoryId, pullRequestId,
+            iterationId, revisionKey, triggerKey)
+    {
+    }
+
+    /// <summary>Creates work using explicitly captured source coordinates.</summary>
+    public ThreadPassJob(
+        CodeReviewRef codeReview,
+        Guid id,
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string revisionKey,
+        string triggerKey)
+        : this(
+            CodeReviewSourceContext.FromReview(codeReview), id, clientId, organizationUrl, projectId, repositoryId, pullRequestId, iterationId, revisionKey,
+            triggerKey)
+    {
+    }
+
+    /// <summary>Creates work using explicitly prepared source coordinates.</summary>
+    public ThreadPassJob(
+        CodeReviewSourceContext sourceContext,
         Guid id,
         Guid clientId,
         string organizationUrl,
@@ -90,12 +129,13 @@ public sealed class ThreadPassJob
         this.IterationId = iterationId;
         this.RevisionKey = revisionKey;
         this.TriggerKey = triggerKey;
-        this.Provider = ScmProvider.AzureDevOps;
-        this.HostBaseUrl = new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl).HostBaseUrl;
-        this.RepositoryOwnerOrNamespace = projectId;
-        this.RepositoryProjectPath = projectId;
-        this.CodeReviewPlatformKind = CodeReviewPlatformKind.PullRequest;
-        this.ExternalCodeReviewId = pullRequestId.ToString();
+        this.Provider = sourceContext.Provider;
+        _ = new ProviderHostRef(sourceContext.Provider, organizationUrl);
+        this.HostBaseUrl = new ProviderHostRef(sourceContext.Provider, sourceContext.HostBaseUrl).HostBaseUrl;
+        this.RepositoryOwnerOrNamespace = sourceContext.OwnerOrNamespace;
+        this.RepositoryProjectPath = sourceContext.ProjectPath;
+        this.CodeReviewPlatformKind = sourceContext.Platform;
+        this.ExternalCodeReviewId = sourceContext.ExternalReviewId;
         this.Status = ThreadPassJobStatus.Pending;
         this.CreatedAt = DateTimeOffset.UtcNow;
     }
@@ -128,7 +168,7 @@ public sealed class ThreadPassJob
     public string TriggerKey { get; init; }
 
     /// <summary>Normalized source-control provider family.</summary>
-    public ScmProvider Provider { get; private set; } = ScmProvider.AzureDevOps;
+    public ScmProvider Provider { get; private set; }
 
     /// <summary>Normalized provider host base URL.</summary>
     public string? HostBaseUrl { get; private set; }

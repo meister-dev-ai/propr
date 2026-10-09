@@ -35,6 +35,7 @@ namespace MeisterDev.ProPR.CodeInsights.History;
 ///     </para>
 /// </remarks>
 public sealed partial class CodeInsightHistoryImporter(
+    MeisterDev.ProPR.Application.Interfaces.IScmProviderCompatibilityCodec compatibilityCodec,
     MeisterProPRDbContext dbContext,
     ICodeInsightsCollectionGate gate,
     ICodeInsightFindingIngestionService ingestionService,
@@ -407,7 +408,7 @@ public sealed partial class CodeInsightHistoryImporter(
                         null,
                         BuildCommentHistory(thread),
                         thread.UpdatedAt,
-                        ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status),
+                        compatibilityCodec.DecodeStoredThreadResolution(thread.Status),
                         // Whether the code moved after the finding was raised is not something a replay can see,
                         // and Unknown is what the outcome mapper is built to receive when nobody observed it.
                         ThreadAnchorCodeChange.Unknown,
@@ -457,9 +458,9 @@ public sealed partial class CodeInsightHistoryImporter(
             thread.Comments.Select(comment => $"{comment.AuthorIdentity}: {comment.Text}"));
     }
 
-    private static bool IsResolved(string? status)
+    private bool IsResolved(string? status)
     {
-        return ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(status));
+        return ThreadResolutionStatusInterpreter.IsResolved(compatibilityCodec.DecodeStoredThreadResolution(status));
     }
 
     /// <summary>

@@ -977,7 +977,7 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
                 .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
             services.AddSingleton(crawlRepo);
             services.AddSingleton(Substitute.For<IWebhookConfigurationRepository>());
-            services.AddSingleton(Substitute.For<IScmProviderRegistry>());
+            services.AddSingleton(MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute());
             services.AddSingleton(Substitute.For<MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports.IPullRequestSynchronizationService>());
 
             services.AddSingleton(Substitute.For<IJobRepository>());

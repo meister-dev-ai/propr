@@ -21,6 +21,10 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
         // A connection is scoped to exactly one owner: a client (client_id) or a tenant (tenant_id). Tenant-scoped
         // connections are inherited by the tenant's clients and referenced by tenant-catalog logical models.
         builder.Property(x => x.ClientId).HasColumnName("client_id");
+        builder.Property(x => x.CreationRequestId).HasColumnName("creation_request_id");
+        builder.HasIndex(x => new { x.ClientId, x.CreationRequestId })
+            .IsUnique().HasFilter("creation_request_id IS NOT NULL")
+            .HasDatabaseName("ux_ai_connection_profiles_client_creation_request");
         builder.Property(x => x.TenantId).HasColumnName("tenant_id");
         builder.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(200).IsRequired();
         // The identity of the family this connection belongs to, at the width an identity key needs. The same

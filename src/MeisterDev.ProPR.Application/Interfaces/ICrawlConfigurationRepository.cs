@@ -3,13 +3,36 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
 using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.Interfaces;
 
-/// <summary>Repository for per-client ADO crawl configurations.</summary>
+/// <summary>Repository for per-client provider crawl configurations.</summary>
 public interface ICrawlConfigurationRepository
 {
+    /// <summary>Serializes customer admission and repository target mutations across cell processes.</summary>
+    Task<IAsyncDisposable> AcquireReviewTargetAdmissionAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>Reads saved metadata without provider activation or credentials.</summary>
+    Task<IReadOnlyList<CrawlConfigurationDto>> GetManagementTargetsAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>Filters, counts, and pages saved canonical targets in the database.</summary>
+    /// <remarks>Requires page 1 or greater, pageSize from 1 to 100, and an offset no greater than Int32.MaxValue. Count, rows and representation version share a repeatable-read snapshot; removed targets are excluded.</remarks>
+    Task<CrawlConfigurationPageDto> GetManagementTargetPageAsync(
+        Guid clientId, string? search, ScmProvider? provider,
+        ReviewTargetLifecycle? lifecycle, int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>Conditionally changes lifecycle and stops crawling without deleting related records.</summary>
+    /// <remarks>Requires a positive expected revision and a defined lifecycle value. Missing, foreign, stale, removed, and non-managed targets return false. Success increments the revision and leaves crawling off. Admission serialization is acquired before the conditional write.</remarks>
+    Task<bool> ChangeReviewTargetLifecycleAsync(
+        Guid targetId, Guid clientId, long expectedRevision, ReviewTargetLifecycle lifecycle, CancellationToken ct = default);
+
+    /// <summary>Restores a removed target and its destination policy atomically, leaving crawling off.</summary>
+    /// <remarks>Requires an exact-one canonical expected filter, valid destination patterns and matching owned removed identity and revision. Invalid patterns are rejected before admission or database writes. Invalid, foreign, stale, or changed identity returns false. Success preserves the target identifier, increments its revision and replaces the policy under admission serialization.</remarks>
+    Task<bool> RestoreReviewTargetAsync(
+        CrawlConfigurationDto expectedTarget, Guid clientId, IReadOnlyList<string> targetBranchPatterns, CancellationToken ct = default);
+
     /// <summary>Adds a new crawl configuration for the given client.</summary>
     Task<CrawlConfigurationDto> AddAsync(
         Guid clientId,
@@ -29,9 +52,19 @@ public interface ICrawlConfigurationRepository
         string providerProjectKey,
         string repositoryId,
         string repositoryName,
+        CancellationToken ct = default,
+        IReadOnlyList<string>? targetBranchPatterns = null);
+
+    /// <summary>Atomically replaces only a canonical repository target's policy when its authorized identity and stored patterns match.</summary>
+    Task<bool> UpdateReviewTargetPolicyAsync(
+        CrawlConfigurationDto expectedTarget,
+        Guid clientId,
+        IReadOnlyList<string> expectedTargetBranchPatterns,
+        IReadOnlyList<string> targetBranchPatterns,
         CancellationToken ct = default);
 
-    /// <summary>Deletes a crawl configuration. Returns false if not found or not owned by clientId.</summary>
+    /// <summary>Deletes a generic crawl configuration. Returns false for missing or foreign configurations, exact-one canonical managed targets, and removed configurations retaining any canonical exclusion.</summary>
+    /// <remarks>Managed targets require revision-checked lifecycle removal, which retains identity, policy and review history.</remarks>
     Task<bool> DeleteAsync(Guid configId, Guid clientId, CancellationToken ct = default);
 
     /// <summary>Returns true if a configuration with the same org/project/repo/branch already exists for the client.</summary>
@@ -63,9 +96,12 @@ public interface ICrawlConfigurationRepository
     /// <summary>Returns a single crawl configuration by its own primary-key ID, or <see langword="null" /> if not found.</summary>
     Task<CrawlConfigurationDto?> GetByIdAsync(Guid configId, CancellationToken ct = default);
 
+    /// <summary>Returns the persisted policy and activation snapshot for a client-owned target after a policy edit.</summary>
+    Task<CrawlConfigurationDto?> GetReviewTargetPolicySnapshotAsync(Guid configId, Guid clientId, CancellationToken ct = default);
+
     /// <summary>
-    ///     Applies partial updates to a crawl configuration.
-    ///     Returns <see langword="false" /> if not found or <paramref name="ownerClientId" /> does not own it.
+    ///     Applies settings and optional replacement repository filters in one persistence operation.
+    ///     Returns <see langword="false" /> if missing, not owned by <paramref name="ownerClientId" />, or conflicting with protected state.
     /// </summary>
     Task<bool> UpdateAsync(
         Guid configId,
@@ -74,11 +110,26 @@ public interface ICrawlConfigurationRepository
         Guid? ownerClientId,
         CancellationToken ct = default,
         float? reviewTemperature = null,
-        bool shouldUpdateReviewTemperature = false);
+        bool shouldUpdateReviewTemperature = false,
+        IReadOnlyList<CrawlRepoFilterDto>? repoFilters = null);
+
+    /// <summary>
+    ///     Applies settings and optional replacement repository filters in one persistence operation.
+    ///     Distinguishes missing or foreign configurations from lifecycle and admission conflicts.
+    /// </summary>
+    Task<CrawlConfigurationUpdateResult> UpdateWithResultAsync(
+        Guid configId,
+        int? crawlIntervalSeconds,
+        bool? isActive,
+        Guid? ownerClientId,
+        CancellationToken ct = default,
+        float? reviewTemperature = null,
+        bool shouldUpdateReviewTemperature = false,
+        IReadOnlyList<CrawlRepoFilterDto>? repoFilters = null);
 
     /// <summary>
     ///     Replaces all repo filters for the given crawl configuration (full-replacement semantics).
-    ///     Pass an empty list to clear all filters. Returns <see langword="false" /> if config not found.
+    ///     Pass an empty list to clear all filters. Returns <see langword="false" /> if missing or conflicting with protected state.
     /// </summary>
     Task<bool> UpdateRepoFiltersAsync(
         Guid configId,

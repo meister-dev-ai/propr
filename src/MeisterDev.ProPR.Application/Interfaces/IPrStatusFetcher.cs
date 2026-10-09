@@ -9,13 +9,13 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 public interface IPrStatusFetcher
 {
     /// <summary>
-    ///     Returns the current ADO status of the specified pull request.
+    ///     Returns the current provider status of the specified pull request.
     ///     Returns <see cref="PrStatus.Active" /> on network or not-found errors so that
-    ///     transient ADO unavailability does not cause false cancellations.
+    ///     transient provider unavailability does not cause false cancellations.
     /// </summary>
-    /// <param name="organizationUrl">ADO organisation URL.</param>
-    /// <param name="projectId">ADO project ID.</param>
-    /// <param name="repositoryId">ADO repository ID.</param>
+    /// <param name="organizationUrl">Provider scope URL.</param>
+    /// <param name="projectId">Provider project key.</param>
+    /// <param name="repositoryId">Provider repository identifier.</param>
     /// <param name="pullRequestId">Numeric pull request ID.</param>
     /// <param name="clientId">Optional client ID for per-client credential resolution.</param>
     /// <param name="ct">Cancellation token.</param>

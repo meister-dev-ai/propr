@@ -18,6 +18,7 @@ using Microsoft.Extensions.Options;
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
 internal abstract class ProviderReviewContextToolsBase(
+    ProCursorReviewContextDto? symbolReviewContext,
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
     CodeReviewRef review,
@@ -33,6 +34,7 @@ internal abstract class ProviderReviewContextToolsBase(
     IScmProviderRegistry? providerRegistry = null,
     int? maxFileSizeBytes = null) : IReviewContextTools, IProCursorAvailabilityAware
 {
+    private readonly ProCursorReviewContextDto? _symbolReviewContext = symbolReviewContext;
     private readonly IScmProviderRegistry? _providerRegistry = providerRegistry;
     private int _linkedItemToolCallsUsed;
 
@@ -304,22 +306,6 @@ internal abstract class ProviderReviewContextToolsBase(
     {
         if (!this._clientId.HasValue)
         {
-            return Task.FromResult(
-                new ProCursorSymbolInsightDto(
-                    "unavailable",
-                    null,
-                    false,
-                    false,
-                    null,
-                    []));
-        }
-
-        if (this._provider != ScmProvider.AzureDevOps)
-        {
-            this._logger.LogInformation(
-                "ProCursor review-target symbol insight is unavailable for provider {Provider}; returning unavailable status.",
-                this._provider);
-
             return Task.FromResult(
                 new ProCursorSymbolInsightDto(
                     "unavailable",
@@ -630,6 +616,15 @@ internal abstract class ProviderReviewContextToolsBase(
     {
         try
         {
+            var reviewContext = this._symbolReviewContext;
+            if (reviewContext is null)
+            {
+                this._logger.LogInformation(
+                    "ProCursor review-target symbol insight is unavailable for provider {Provider}; returning unavailable status.",
+                    this._provider);
+                return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
+            }
+
             return await ToolTimingCollectorContext.RecordAsync(
                 ProtocolEventToolPhaseNames.ProviderApiCall,
                 "Provider API call",
@@ -639,11 +634,7 @@ internal abstract class ProviderReviewContextToolsBase(
                         symbol,
                         string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
                         StateMode: "reviewTarget",
-                        ReviewContext: new ProCursorReviewContextDto(
-                            this._repository.ExternalRepositoryId,
-                            this.NormalizeBranch(this._sourceBranch),
-                            this._pullRequestNumber,
-                            this._iterationId),
+                        ReviewContext: reviewContext with { SourceBranch = this.NormalizeBranch(reviewContext.SourceBranch) },
                         MaxRelations: maxRelations),
                     ct),
                 result => $"operation=procursor_symbol;status={result.Status};has_symbol={result.Symbol is not null}");

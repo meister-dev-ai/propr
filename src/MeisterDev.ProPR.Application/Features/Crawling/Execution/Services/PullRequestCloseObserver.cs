@@ -17,6 +17,7 @@ namespace MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 /// <summary>Collects final thread observations and finding dispositions before pull-request measurement sealing.</summary>
 /// <remarks>Active-pass archive retention is independent of this close-only collection operation.</remarks>
 public sealed partial class PullRequestCloseObserver(
+    IScmProviderRegistry providerRegistry,
     ILogger<PullRequestCloseObserver> logger,
     IPullRequestFetcher? pullRequestFetcher = null,
     ICodeInsightMissHarvester? missHarvester = null,
@@ -79,7 +80,9 @@ public sealed partial class PullRequestCloseObserver(
 
             var ownership = await this.ResolveOwnershipAsync(key, connection.ProviderFamily, ct);
             harvestScope = ProviderSourceIdentity.FromReviewSource(
-                connection.ProviderFamily, connection.ProviderFamily == ScmProvider.AzureDevOps ? providerScopePath : connection.HostBaseUrl).Value;
+                connection.ProviderFamily,
+                providerRegistry.GetSourceIdentityPolicy(connection.ProviderFamily).SelectCapturedSource(providerScopePath, connection.HostBaseUrl),
+                providerRegistry.GetSourceIdentityPolicy(connection.ProviderFamily)).Value;
 
             // The adapter contributes its account identity before human-thread authorship is resolved.
             var reviewerObservedAt = DateTimeOffset.UtcNow;
@@ -104,7 +107,9 @@ public sealed partial class PullRequestCloseObserver(
             {
                 var evt = ThreadUpdatedEventFactory.Build(
                     key.ClientId, connection.Id, key.RepositoryId, key.PullRequestId, thread, ownership, observedAt, harvestScope);
-                coverage.Observe(evt);
+                coverage.Observe(
+                    evt, providerRegistry.GetCodeReviewPreparationPolicy(connection.ProviderFamily)
+                        .InterpretThreadResolution(evt.Status));
                 if (string.IsNullOrWhiteSpace(thread.ThreadId))
                 {
                     if (ThreadUpdatedEventFactory.IsHumanThread(evt))
@@ -124,7 +129,7 @@ public sealed partial class PullRequestCloseObserver(
                 providerProjectKey,
                 reviewerThreads,
                 findings,
-                harvestScope, reviewerObservedAt,
+                harvestScope, reviewerObservedAt, connection.ProviderFamily,
                 ct);
             await harvestCoverageRecorder.RecordAsync(
                 key, harvestScope, coverage.AllHumanThreadsResolved, observedAt, ct, coverage.AllHumanObservationsRetained);
@@ -186,6 +191,7 @@ public sealed partial class PullRequestCloseObserver(
         IReadOnlyList<CodeInsightFindingView> findings,
         string providerScope,
         DateTimeOffset observedAt,
+        ScmProvider provider,
         CancellationToken ct)
     {
         if (dispositionService is null || reviewerThreads.Count == 0)
@@ -206,7 +212,7 @@ public sealed partial class PullRequestCloseObserver(
                 continue;
             }
 
-            var intent = ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status);
+            var intent = providerRegistry.GetCodeReviewPreparationPolicy(provider).InterpretThreadResolution(thread.Status);
             await dispositionService.HandleThreadResolvedAsync(
                 new ThreadResolvedDomainEvent(
                     key.ClientId,
@@ -243,7 +249,8 @@ public sealed partial class PullRequestCloseObserver(
         var matches = connections
             .Where(connection => connection.IsActive
                                  && !string.IsNullOrWhiteSpace(connection.HostBaseUrl)
-                                 && ScmConnectionHostMatch.MatchesAuthority(connection.HostBaseUrl, authority))
+                                 && providerRegistry.GetConnectionConfigurationPolicy(connection.ProviderFamily)
+                                     .MatchesObservedConnectionHost(connection.HostBaseUrl, authority))
             .ToList();
 
         // Conflicting provider families on one authority prevent unambiguous comment interpretation.
@@ -282,7 +289,7 @@ public sealed partial class PullRequestCloseObserver(
             return ThreadOwnershipResolver.Create(
                 provenance,
                 ThreadOwnerIdentity.None,
-                ProviderCommentIdScopes.For(provider));
+                providerRegistry.GetIdentityPolicy(provider).CommentIdScope);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {

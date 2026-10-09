@@ -8,6 +8,24 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 /// <summary>Resolves provider-family capabilities from the registered adapter set.</summary>
 public interface IScmProviderRegistry
 {
+    /// <summary>Decodes stored boundary evidence without enabling operational capabilities.</summary>
+    IScmProviderCompatibilityCodec CompatibilityCodec { get; }
+
+    /// <summary>Resolves credential-free native webhook diagnostic and retry metadata.</summary>
+    IWebhookIngressPolicy GetWebhookIngressPolicy(ScmProvider provider);
+
+    /// <summary>Resolves credential-free native identity rules.</summary>
+    IScmIdentityPolicy GetIdentityPolicy(ScmProvider provider);
+
+    /// <summary>Resolves credential-free revision, comparison and publication preparation.</summary>
+    ICodeReviewPreparationPolicy GetCodeReviewPreparationPolicy(ScmProvider provider);
+
+    /// <summary>Resolves local captured-source projection, including historical unknown provider values.</summary>
+    IReviewSourcePolicy GetSourceIdentityPolicy(ScmProvider provider);
+
+    /// <summary>Resolves local native authentication configuration rules.</summary>
+    IScmConnectionConfigurationPolicy GetConnectionConfigurationPolicy(ScmProvider provider);
+
     /// <summary>
     ///     Returns <c>true</c> when the provider family has the baseline adapter set used for onboarding,
     ///     core review query/publication, and webhook ingress.
@@ -51,6 +69,12 @@ public interface IScmProviderRegistry
 
     /// <summary>Resolves review-discovery capabilities for the given provider family.</summary>
     IReviewDiscoveryProvider GetReviewDiscoveryProvider(ScmProvider provider);
+
+    /// <summary>Resolves bounded pull request overview metadata for the given provider family.</summary>
+    IReviewOverviewProvider GetReviewOverviewProvider(ScmProvider provider);
+
+    /// <summary>Resolves local review-source scope and identity rules for the provider family.</summary>
+    IReviewSourcePolicy GetReviewSourcePolicy(ScmProvider provider);
 
     /// <summary>Resolves reviewer-identity capabilities for the given provider family.</summary>
     IReviewerIdentityService GetReviewerIdentityService(ScmProvider provider);

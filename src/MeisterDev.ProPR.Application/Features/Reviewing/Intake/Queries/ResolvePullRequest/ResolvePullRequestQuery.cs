@@ -13,7 +13,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.Resolve
 ///     administrator resolves. An empty collection resolves nothing.
 /// </param>
 /// <param name="HostBaseUrl">
-///     The host as it appears in the address, for example <c>https://dev.azure.com</c> or
+///     The host as it appears in the address, for example <c>https://scm.example</c> or
 ///     <c>http://localhost:8091</c>. Only the scheme and authority are significant.
 /// </param>
 /// <param name="ScopePath">

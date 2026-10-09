@@ -25,6 +25,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 [ApiController]
 [Route("auth")]
 public sealed class TenantAuthController(
+    IEnumerable<ScmBrowserOriginDeclaration> browserOriginDeclarations,
     ITenantAuthService tenantAuthService,
     ISessionFactory sessionFactory,
     ILogger<TenantAuthController> logger,
@@ -291,7 +292,7 @@ public sealed class TenantAuthController(
         }
 
         var origin = redirectUri.GetLeftPart(UriPartial.Authority);
-        return BrowserOriginPolicy.IsAllowedOrigin(origin, configuration);
+        return BrowserOriginPolicy.IsAllowedOrigin(origin, configuration, browserOriginDeclarations.ToArray());
     }
 
     private static bool IsSupportedRedirectScheme(Uri redirectUri)

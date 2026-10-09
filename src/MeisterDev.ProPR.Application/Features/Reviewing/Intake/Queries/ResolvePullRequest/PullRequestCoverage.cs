@@ -2,9 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.ResolvePullRequest;
 
@@ -40,6 +40,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.Resolve
 ///     scope, so a review is never quietly run against less context than it was configured for.
 /// </param>
 /// <param name="ReviewTemperature">The review temperature this configuration reviews at, when it sets one.</param>
+/// <param name="IsCanonicalRepositoryTarget">Whether the crawl configuration contains one repository identified by a canonical provider reference.</param>
 internal sealed record PullRequestCoverage(
     Guid ClientId,
     ScmProvider Provider,
@@ -51,7 +52,8 @@ internal sealed record PullRequestCoverage(
     ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
     IReadOnlyList<Guid>? ProCursorSourceIds = null,
     IReadOnlyList<Guid>? InvalidProCursorSourceIds = null,
-    float? ReviewTemperature = null)
+    float? ReviewTemperature = null,
+    bool IsCanonicalRepositoryTarget = false)
 {
     public static PullRequestCoverage FromCrawlConfiguration(CrawlConfigurationDto configuration)
     {
@@ -66,34 +68,23 @@ internal sealed record PullRequestCoverage(
             configuration.ProCursorSourceScopeMode,
             configuration.ProCursorSourceIds,
             configuration.InvalidProCursorSourceIds,
-            configuration.ReviewTemperature);
+            configuration.ReviewTemperature,
+            configuration.RepoFilters.Count == 1 && !string.IsNullOrWhiteSpace(configuration.RepoFilters[0].CanonicalSourceRef?.Value));
     }
 
-    public static PullRequestCoverage FromWebhookConfiguration(WebhookConfigurationDto configuration)
+    public static PullRequestCoverage FromWebhookConfiguration(WebhookConfigurationDto configuration, ScmProvider provider)
     {
         // A webhook configuration carries no code-knowledge source scope of its own, so a review it covers
         // reads whatever the client has, exactly as a webhook-triggered review does today.
         return new PullRequestCoverage(
             configuration.ClientId,
-            MapProvider(configuration.ProviderType),
+            provider,
             configuration.OrganizationUrl,
             configuration.ProjectId,
             configuration.IsActive,
             configuration.RepoFilters.Select(CoveredRepository.FromWebhookFilter).ToList().AsReadOnly(),
             CoverageSource.WebhookConfiguration,
             ReviewTemperature: configuration.ReviewTemperature);
-    }
-
-    private static ScmProvider MapProvider(WebhookProviderType providerType)
-    {
-        return providerType switch
-        {
-            WebhookProviderType.AzureDevOps => ScmProvider.AzureDevOps,
-            WebhookProviderType.GitHub => ScmProvider.GitHub,
-            WebhookProviderType.GitLab => ScmProvider.GitLab,
-            WebhookProviderType.Forgejo => ScmProvider.Forgejo,
-            _ => ScmProvider.AzureDevOps,
-        };
     }
 }
 
@@ -107,13 +98,14 @@ internal sealed record PullRequestCoverage(
 ///     through guided discovery usually have it; webhook configurations usually do not, because a
 ///     webhook is registered by name.
 /// </param>
-internal sealed record CoveredRepository(string Name, string? ExternalRepositoryId)
+/// <param name="TargetBranchPatterns">Saved crawl target destination policy; empty or absent permits all branches.</param>
+internal sealed record CoveredRepository(string Name, string? ExternalRepositoryId, IReadOnlyList<string>? TargetBranchPatterns = null)
 {
     public static CoveredRepository FromCrawlFilter(CrawlRepoFilterDto filter)
     {
         return new CoveredRepository(
             string.IsNullOrWhiteSpace(filter.RepositoryName) ? filter.DisplayName ?? string.Empty : filter.RepositoryName,
-            Identity(filter.CanonicalSourceRef));
+            Identity(filter.CanonicalSourceRef), filter.TargetBranchPatterns);
     }
 
     public static CoveredRepository FromWebhookFilter(WebhookRepoFilterDto filter)

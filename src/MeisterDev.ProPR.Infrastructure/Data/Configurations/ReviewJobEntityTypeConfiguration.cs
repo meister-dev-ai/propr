@@ -26,6 +26,12 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("client_id")
             .IsRequired();
 
+        builder.Property(j => j.ExecutionDurationMilliseconds)
+            .HasColumnName("execution_duration_ms");
+
+        builder.Property(j => j.UsageFinalizedAt)
+            .HasColumnName("usage_finalized_at");
+
         builder.Property(j => j.OrganizationUrl)
             .HasColumnName("organization_url")
             .IsRequired();

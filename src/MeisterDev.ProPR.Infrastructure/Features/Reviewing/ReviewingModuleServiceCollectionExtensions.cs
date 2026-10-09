@@ -38,11 +38,14 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.PostedFindings;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Usage;
+using MeisterDev.ProPR.Application.Features.Reviewing.Usage;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Threads.Persistence;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.ProRV.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -65,6 +68,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         IHostEnvironment? environment = null,
         string? selectedCommentRelevanceFilterId = null)
     {
+        services.AddScmProviderLocalDeclarations();
         var hasDatabase = configuration.HasDatabaseConnectionString();
 
         // Bound before the database gate so the back-fill worker resolves its budget even on a host where the
@@ -106,6 +110,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         if (hasDatabase)
         {
             services.AddScoped<IJobRepository, JobRepository>();
+            services.AddScoped<ICompletedReviewUsageExport, CompletedReviewUsageExport>();
             services.AddScoped<ICustomerDashboardReader, EfCustomerDashboardReader>();
             services.AddScoped<ICustomerReviewHistoryReader, EfCustomerReviewHistoryReader>();
             services.AddScoped<IThreadPassJobRepository, EfThreadPassJobRepository>();
@@ -175,6 +180,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         // collaborator added here must be given a disposition there as well, supplied, equivalent or absent,
         // and RunnerReviewPipelineTests fails until it is.
         services.AddScoped<FileReviewer>(sp => new FileReviewer(
+            sp.GetService<IScmProviderRegistry>(),
             sp.GetRequiredService<ApplicationIAiReviewCore>(),
             sp.GetRequiredService<IProtocolRecorder>(),
             sp.GetRequiredService<IJobRepository>(),

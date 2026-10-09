@@ -8,6 +8,15 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Common;
 public sealed class ProviderCursorPagerTests
 {
     [Fact]
+    public void NativePageSizeIsNotACommonCursorProtocolRule()
+    {
+        Assert.Null(
+            typeof(ProviderCursorPager).GetField(
+                "PageSize",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic));
+    }
+
+    [Fact]
     public async Task LoadAllAsync_ConnectionHasAnotherPage_ResumesFromItsCursorAndReturnsTheUnion()
     {
         var requestedCursors = new List<string?>();

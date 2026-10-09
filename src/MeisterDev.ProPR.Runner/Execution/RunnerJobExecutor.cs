@@ -285,6 +285,7 @@ public sealed partial class RunnerJobExecutor(
             new RunnerCallContext(manifest.JobId, manifest.LeaseGeneration, string.Empty),
             new HttpRunnerToolProxy(http),
             new LocalGitReviewContextTools(
+                null,
                 workspace,
                 new DisabledProCursorGateway(),
                 reviewOptions,

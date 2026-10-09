@@ -13,6 +13,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 using MeisterDev.ProPR.Web;
+using ProtocolResponse = MeisterDev.ProPR.Api.Features.Reviewing.Contracts.ReviewJobProtocolDto;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 
@@ -380,7 +381,7 @@ public sealed class JobsController(
     /// <response code="404">Job not found.</response>
     [HttpGet("{id:guid}/protocol")]
     [HttpGet("/jobs/{id:guid}/protocol")]
-    [ProducesResponseType(typeof(IReadOnlyList<ReviewJobProtocolDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<ProtocolResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetJobProtocol(
@@ -415,7 +416,7 @@ public sealed class JobsController(
             return this.NotFound();
         }
 
-        return this.Ok(protocolResult.Protocols);
+        return this.Ok(protocolResult.Protocols.Select(ProtocolResponse.FromApplication).ToList().AsReadOnly());
     }
 
     /// <summary>
@@ -431,7 +432,7 @@ public sealed class JobsController(
     /// <response code="404">Job or protocol pass not found.</response>
     [HttpGet("{id:guid}/protocol/{protocolId:guid}")]
     [HttpGet("/jobs/{id:guid}/protocol/{protocolId:guid}")]
-    [ProducesResponseType(typeof(ReviewJobProtocolDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProtocolResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetJobProtocolPass(
@@ -464,7 +465,7 @@ public sealed class JobsController(
         var protocolPass = job is null
             ? await diagnosticsReader.GetThreadPassProtocolPassAsync(id, protocolId, cancellationToken)
             : await diagnosticsReader.GetJobProtocolPassAsync(id, protocolId, cancellationToken);
-        return protocolPass is null ? this.NotFound() : this.Ok(protocolPass);
+        return protocolPass is null ? this.NotFound() : this.Ok(ProtocolResponse.FromApplication(protocolPass));
     }
 
     /// <summary>

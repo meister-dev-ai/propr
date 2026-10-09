@@ -138,7 +138,7 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
             Substitute.For<IWebhookReviewLifecycleSyncService>();
 
         private readonly IAdoWebhookPayloadParser _payloadParser = Substitute.For<IAdoWebhookPayloadParser>();
-        private readonly IScmProviderRegistry _providerRegistry = Substitute.For<IScmProviderRegistry>();
+        private readonly IScmProviderRegistry _providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
         public IPullRequestSynchronizationService SynchronizationService { get; } =
             Substitute.For<IPullRequestSynchronizationService>();
@@ -295,7 +295,7 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
                 this._authVerifier.IsAuthorized(Arg.Any<string?>(), Arg.Any<string>()).Returns(true);
                 this._payloadParser.Parse(Arg.Any<string>(), Arg.Any<JsonElement>())
                     .Returns(
-                        new IncomingAdoWebhookDelivery(
+                        new IncomingWebhookDelivery(
                             "path-key",
                             "git.pullrequest.updated",
                             WebhookEventType.PullRequestUpdated,

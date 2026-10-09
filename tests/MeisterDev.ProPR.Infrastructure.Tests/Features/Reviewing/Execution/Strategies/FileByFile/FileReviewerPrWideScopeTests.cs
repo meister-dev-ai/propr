@@ -15,6 +15,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Strategies.FileByFile;
 
@@ -41,7 +42,7 @@ public sealed class FileReviewerPrWideScopeTests
             .Returns(_ => Guid.NewGuid());
     }
 
-    private FileReviewer CreateReviewer(IAiRuntimeResolver? aiRuntimeResolver)
+    private FileReviewer CreateReviewer(IAiRuntimeResolver? aiRuntimeResolver, ICodeInsightReviewExposureCollector? exposureCollector = null)
     {
         this._aiCore
             .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -57,6 +58,7 @@ public sealed class FileReviewerPrWideScopeTests
             });
 
         return new FileReviewer(
+            exposureCollector is null ? null : MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             this._aiCore,
             this._recorder,
             this._jobRepository,
@@ -68,7 +70,8 @@ public sealed class FileReviewerPrWideScopeTests
             null,
             null,
             null,
-            null);
+            null,
+            exposureCollector: exposureCollector);
     }
 
     private static IAiRuntimeResolver ResolverForAnyModel()
@@ -111,6 +114,22 @@ public sealed class FileReviewerPrWideScopeTests
             ModelId = "gpt-5.3-codex",
             ReviewPasses = passes,
         };
+    }
+
+    [Fact]
+    public async Task CompletedFileExposureRetainsTheCapturedCollectionNamespace()
+    {
+        var collector = Substitute.For<ICodeInsightReviewExposureCollector>();
+        var reviewer = this.CreateReviewer(null, collector);
+        var file = HighTierFile();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://ado.test/tfs/collection", "project", "repo", 32, 1);
+        var (_, pullRequest) = Fixture(file);
+        var context = ContextWith();
+        await reviewer.ReviewAsync(job, pullRequest, file, 1, 1, context, null, Substitute.For<IChatClient>(), CancellationToken.None);
+        await collector.Received(1).RecordAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), job.Id, file.Path, Arg.Any<string>(), context.ModelId!,
+            Arg.Is<string?>(value => value == context.LogicalModelName), "AzureDevOps:https://ado.test/tfs/collection", "completed-file-baseline",
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

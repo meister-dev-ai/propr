@@ -260,7 +260,7 @@ public sealed class ReviewsControllerGetTests(ReviewsControllerGetTests.GetRevie
                 // configuration recorded, and submits through the shared synchronization path, which reaches
                 // the provider through the client's connections.
                 services.AddSingleton(Substitute.For<IWebhookConfigurationRepository>());
-                var providerRegistry = Substitute.For<IScmProviderRegistry>();
+                var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
                 providerRegistry.IsRegistered(Arg.Any<ScmProvider>()).Returns(false);
                 services.AddSingleton(providerRegistry);
                 services.AddSingleton(Substitute.For<IClientScmConnectionRepository>());

@@ -224,9 +224,7 @@ public sealed class InstallationLicenseRepository(
 
     private Task<int> AcquireMutationLockAsync(CancellationToken cancellationToken)
     {
-        return dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock({LicenseMutationLockKey})",
-            cancellationToken);
+        return PostgresAdvisoryLocks.AcquireTransactionAsync(dbContext, LicenseMutationLockKey, cancellationToken);
     }
 
     /// <summary>

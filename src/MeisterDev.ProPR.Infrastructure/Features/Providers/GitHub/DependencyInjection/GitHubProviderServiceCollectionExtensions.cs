@@ -3,6 +3,7 @@
 
 using System.Net.Http.Headers;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Discovery;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Identity;
@@ -18,9 +19,24 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.DependencyIn
 
 internal static class GitHubProviderServiceCollectionExtensions
 {
+    internal static IServiceCollection AddGitHubLocalPolicies(this IServiceCollection services)
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IReviewSourcePolicy, GitHubReviewSourcePolicy>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IWebhookIngressPolicy,
+                MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Webhooks.GitHubWebhookIngressPolicy>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IScmConnectionConfigurationPolicy, GitHubConnectionConfigurationPolicy>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IScmIdentityPolicy, GitHubIdentityPolicy>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ICodeReviewPreparationPolicy,
+                MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Reviewing.GitHubReviewPreparationPolicy>());
+        return services;
+    }
+
     public static IServiceCollection AddGitHubProviderAdapters(this IServiceCollection services)
     {
         services.AddPostedCommentComposer();
+        services.AddGitHubLocalPolicies();
 
         services.AddHttpClient(
                 "GitHubProvider",
@@ -54,9 +70,11 @@ internal static class GitHubProviderServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewContextToolsFactory, GitHubReviewContextToolsFactory>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IRepositoryDiscoveryProvider, GitHubDiscoveryService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewerIdentityService, GitHubReviewerIdentityService>());
+        services.TryAddKeyedScoped<IReviewerIdentityService, GitHubReviewerIdentityService>(MeisterDev.ProPR.Domain.Enums.ScmProvider.GitHub);
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewQueryService, GitHubCodeReviewQueryService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewPublicationService, GitHubCodeReviewPublicationService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewDiscoveryProvider, GitHubReviewDiscoveryProvider>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewOverviewProvider, GitHubReviewOverviewProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewAssignmentService, GitHubReviewAssignmentProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IWebhookIngressService, GitHubWebhookIngressService>());
 

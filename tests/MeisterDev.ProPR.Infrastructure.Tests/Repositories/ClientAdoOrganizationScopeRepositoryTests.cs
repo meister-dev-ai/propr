@@ -12,6 +12,27 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
 public sealed class ClientAdoOrganizationScopeRepositoryTests
 {
+    [Fact]
+    public async Task NeutralSavedScopeQueryPreservesDisabledConnectionAndExactScopeTypeAcceptance()
+    {
+        await using var db = CreateContext();
+        var clientId = await SeedClientAsync(db);
+        var connectionId = await SeedAzureConnectionAsync(db, clientId);
+        var selectedId = await SeedAzureScopeAsync(db, clientId, connectionId, "https://dev.azure.com/selected");
+        var wrongCaseId = await SeedAzureScopeAsync(db, clientId, connectionId, "https://dev.azure.com/wrong-case");
+        (await db.ClientScmConnections.FindAsync(connectionId))!.IsActive = false;
+        (await db.ClientScmScopes.FindAsync(wrongCaseId))!.ScopeType = "Organization";
+        db.ProviderActivations.Add(
+            new ProviderActivationRecord
+                { Provider = ScmProvider.AzureDevOps, IsEnabled = false, UpdatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var repository = new ClientScmScopeRepository(db);
+        var scopes = await repository.GetByClientIdAsync(clientId, ScmProvider.AzureDevOps, "organization", CancellationToken.None);
+        Assert.Equal(selectedId, Assert.Single(scopes).Id);
+        var compatibilityScopes = await new ClientAdoOrganizationScopeRepository(db).GetByClientIdAsync(clientId);
+        Assert.Equal(compatibilityScopes.Select(scope => scope.Id), scopes.Select(scope => scope.Id));
+    }
+
     private static MeisterProPRDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()

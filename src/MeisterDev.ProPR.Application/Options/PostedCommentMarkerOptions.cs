@@ -27,16 +27,10 @@ public sealed class PostedCommentMarkerOptions
     ///     <see cref="DefaultMarker" />.
     /// </summary>
     /// <remarks>
-    ///     The accepted characters are what every host renders unchanged. GitLab HTML-encodes the comment body,
-    ///     so <c>&lt;</c>, <c>&gt;</c>, <c>&amp;</c> and a double quote would reach the reader as entities. A
-    ///     leading slash is a quick action on GitLab and would be executed instead of shown. The Markdown syntax
-    ///     characters <c>*</c>, <c>_</c>, a backtick, <c>[</c>, <c>]</c> and <c>\</c> are rejected because the
-    ///     composer wraps the wording in emphasis: one of them inside the wording turns the marker into a link,
-    ///     into code or into differently placed emphasis, and the reader no longer sees the sentence the
-    ///     installation configured. A leading number sign would make the marker a heading for the same reason.
-    ///     The length bound keeps the marker small against the Azure DevOps comment cap, which the marker is
-    ///     reserved from before a body is truncated. The pattern ends at <c>\z</c> and not at <c>$</c>, because
-    ///     <c>$</c> also matches in front of a closing line break and would let a trailing newline through.
+    ///     The accepted characters preserve the marker wording across provider renderers. Characters that
+    ///     can become HTML entities, quick actions or Markdown syntax are rejected. The composer reserves
+    ///     the bounded marker length before truncating a body. The pattern ends at <c>\z</c> because
+    ///     <c>$</c> also matches before a closing line break and would permit a trailing newline.
     ///     <para>
     ///         Control characters (<c>\p{Cc}</c>, which covers the carriage return and the line feed), format
     ///         characters (<c>\p{Cf}</c>) and the two Unicode separators <c>U+2028</c> and <c>U+2029</c> are

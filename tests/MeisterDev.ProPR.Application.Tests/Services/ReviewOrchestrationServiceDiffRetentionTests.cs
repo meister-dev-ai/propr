@@ -209,7 +209,7 @@ public sealed class ReviewOrchestrationServiceDiffRetentionTests
                     Arg.Any<ReviewPublicationContext?>())
                 .Returns(ReviewCommentPostingDiagnosticsDto.Empty());
 
-            var registry = Substitute.For<IScmProviderRegistry>();
+            var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
             registry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(commentPoster);
             registry.GetRegisteredCapabilities(Arg.Any<ScmProvider>()).Returns([]);
             return registry;

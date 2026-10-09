@@ -120,7 +120,7 @@ export function getSupportedAuthenticationKinds(
 ): ScmAuthenticationKind[] {
   if (providerFamily === 'azureDevOps') {
     return !hostBaseUrl || isHostedAzureDevOpsHost(hostBaseUrl)
-      ? ['oauthClientCredentials']
+      ? ['oauthClientCredentials', 'personalAccessToken']
       : ['personalAccessToken', 'windowsUserAccount']
   }
 

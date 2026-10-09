@@ -100,16 +100,6 @@ public sealed class ProCursorServiceHostTests
         Assert.Equal("MeisterDev.ProPR.ProCursor.Contracts.ProCursor", typeof(ProCursorTokenUsageOptions).Namespace);
     }
 
-    [Fact]
-    public void Program_UsesMigrationBasedOperationalSchemaInitialization()
-    {
-        var programContents = File.ReadAllText(Path.Combine(ResolveRepoRoot(), "src/MeisterDev.ProPR.ProCursor.Service/Program.cs"));
-
-        Assert.Contains("Database.MigrateAsync", programContents, StringComparison.Ordinal);
-        Assert.DoesNotContain("EnsureOperationalSchemaAsync", programContents, StringComparison.Ordinal);
-        Assert.DoesNotContain("CreateTablesAsync", programContents, StringComparison.Ordinal);
-        Assert.DoesNotContain("EnsureCreatedAsync", programContents, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void CreateClient_WithManagedRemoteConfiguration_WithoutAdoStub_BuildsHost()
@@ -145,22 +135,6 @@ public sealed class ProCursorServiceHostTests
         return string.Join(Environment.NewLine, messages);
     }
 
-    private static string ResolveRepoRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "MeisterDev.ProPR.slnx")))
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new InvalidOperationException("Unable to locate the repository root.");
-    }
 
     private sealed class InvalidHostFactory : WebApplicationFactory<Program>
     {

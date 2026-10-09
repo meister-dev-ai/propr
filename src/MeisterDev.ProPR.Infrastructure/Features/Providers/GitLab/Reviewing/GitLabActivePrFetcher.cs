@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Security;
 using Microsoft.Extensions.Logging;
 
@@ -74,7 +75,7 @@ internal sealed class GitLabActivePrFetcher(
                 context.Connection.Secret);
             using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
 
-            if (ProviderThrottleSignal.IsThrottled(response))
+            if (GitLabReadFailures.IsThrottled(response))
             {
                 throw new ProviderThrottledException($"GitLab throttled the merge-request listing for {repository.RepositoryId}.");
             }
@@ -106,7 +107,7 @@ internal sealed class GitLabActivePrFetcher(
             }
 
             if (mergeRequests.Count == 0
-                || ProviderPaginationHeaders.ReadGitLabHasMore(response) == false
+                || GitLabPaginationHeaders.ReadGitLabHasMore(response) == false
                 || mergeRequests.Count < PageSize)
             {
                 reachedPageLimit = false;

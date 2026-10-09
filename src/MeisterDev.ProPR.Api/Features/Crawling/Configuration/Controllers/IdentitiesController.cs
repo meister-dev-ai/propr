@@ -13,7 +13,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Resolves Azure DevOps identities for use in crawl configuration.</summary>
 [ApiController]
 [Route("identities")]
-public sealed class IdentitiesController(IScmProviderRegistry providerRegistry) : ControllerBase
+public sealed class IdentitiesController(IScmProviderRegistry registry) : ControllerBase
 {
     /// <summary>
     ///     Resolves ADO identities matching the given display name within an organisation.
@@ -71,23 +71,12 @@ public sealed class IdentitiesController(IScmProviderRegistry providerRegistry) 
             return roleCheck;
         }
 
-        var matches = await providerRegistry.GetReviewerIdentityService(ScmProvider.AzureDevOps)
-            .ResolveCandidatesAsync(
-                clientId.Value,
-                new ProviderHostRef(ScmProvider.AzureDevOps, orgUrl),
-                displayName,
-                null,
-                ct);
-
+        var matches = await registry.GetReviewerIdentityService(ScmProvider.AzureDevOps).ResolveCandidatesAsync(
+            clientId.Value, new ProviderHostRef(ScmProvider.AzureDevOps, orgUrl), displayName, null, ct);
         var response = matches
-            .Select(match => new
-            {
-                Match = match,
-                ParsedId = Guid.TryParse(match.ExternalUserId, out var parsedId) ? parsedId : (Guid?)null,
-            })
-            .Where(entry => entry.ParsedId.HasValue)
-            .Select(entry => new IdentityResponse(entry.ParsedId!.Value, entry.Match.DisplayName))
-            .ToList();
+            .Select(match => (Id: Guid.TryParse(match.ExternalUserId, out var id) ? (Guid?)id : null, match.DisplayName))
+            .Where(match => match.Id.HasValue)
+            .Select(match => new IdentityResponse(match.Id!.Value, match.DisplayName)).ToList();
 
         if (response.Count == 0)
         {

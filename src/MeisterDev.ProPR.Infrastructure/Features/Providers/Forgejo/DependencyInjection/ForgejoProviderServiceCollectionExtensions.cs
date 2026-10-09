@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Discovery;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Identity;
@@ -17,9 +18,24 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.DependencyI
 
 internal static class ForgejoProviderServiceCollectionExtensions
 {
+    internal static IServiceCollection AddForgejoLocalPolicies(this IServiceCollection services)
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IReviewSourcePolicy, ForgejoReviewSourcePolicy>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IWebhookIngressPolicy,
+                MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Webhooks.ForgejoWebhookIngressPolicy>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IScmConnectionConfigurationPolicy, ForgejoConnectionConfigurationPolicy>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IScmIdentityPolicy, ForgejoIdentityPolicy>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ICodeReviewPreparationPolicy,
+                MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Reviewing.ForgejoReviewPreparationPolicy>());
+        return services;
+    }
+
     public static IServiceCollection AddForgejoProviderAdapters(this IServiceCollection services)
     {
         services.AddPostedCommentComposer();
+        services.AddForgejoLocalPolicies();
 
         services.AddHttpClient("ForgejoProvider").GuardEgress();
 
@@ -47,9 +63,11 @@ internal static class ForgejoProviderServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewContextToolsFactory, ForgejoReviewContextToolsFactory>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IRepositoryDiscoveryProvider, ForgejoDiscoveryService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewerIdentityService, ForgejoReviewerIdentityService>());
+        services.TryAddKeyedScoped<IReviewerIdentityService, ForgejoReviewerIdentityService>(MeisterDev.ProPR.Domain.Enums.ScmProvider.Forgejo);
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewQueryService, ForgejoCodeReviewQueryService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewPublicationService, ForgejoCodeReviewPublicationService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewDiscoveryProvider, ForgejoReviewDiscoveryProvider>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewOverviewProvider, ForgejoReviewOverviewProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IWebhookIngressService, ForgejoWebhookIngressService>());
 
         return services;

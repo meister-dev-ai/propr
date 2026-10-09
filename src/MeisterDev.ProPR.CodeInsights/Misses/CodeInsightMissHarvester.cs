@@ -16,6 +16,7 @@ namespace MeisterDev.ProPR.CodeInsights.Misses;
 /// <summary>Retains human review threads and evaluates missed findings after structural and ownership checks.</summary>
 /// <remarks>Collection failures are retained when source ownership is known; cancellation propagates to the caller.</remarks>
 public sealed partial class CodeInsightMissHarvester(
+    MeisterDev.ProPR.Application.Interfaces.IScmProviderCompatibilityCodec compatibilityCodec,
     ICodeInsightFindingStore findingStore,
     ICodeInsightMissStore missStore,
     IHumanMissClassifier classifier,
@@ -435,8 +436,8 @@ public sealed partial class CodeInsightMissHarvester(
     }
 
     /// <summary>Uses the shared provider-status interpreter to identify terminal thread states.</summary>
-    private static bool IsResolved(string? status)
+    private bool IsResolved(string? status)
     {
-        return ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(status));
+        return ThreadResolutionStatusInterpreter.IsResolved(compatibilityCodec.DecodeStoredThreadResolution(status));
     }
 }

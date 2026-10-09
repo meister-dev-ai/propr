@@ -6,11 +6,12 @@ using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Api.Validators;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Mentions.Services;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Http;
@@ -27,6 +28,49 @@ namespace MeisterDev.ProPR.Api.Tests.Controllers;
 /// </summary>
 public sealed class AdminMentionConfigsControllerTests
 {
+    [Fact]
+    public async Task Create_GuidedConnectionDerivesProviderWhenManualProviderIsOmitted()
+    {
+        var repo = CreateRepo();
+        var connectionId = Guid.NewGuid();
+        var context = new ConnectionDiscoveryContext(OwnedClient, connectionId, new(ScmProvider.AzureDevOps, "https://dev.azure.com"));
+        var selection = Substitute.For<IReviewConfigurationSelectionService>();
+        selection.ResolveConnectionSelectionAsync(OwnedClient, connectionId, "scope", "proj", null, null, "", Arg.Any<CancellationToken>())
+            .Returns((ScmProvider.AzureDevOps, (Guid?)null, "https://dev.azure.com/org", "proj"));
+        selection.GetConnectionContextAsync(OwnedClient, connectionId, Arg.Any<CancellationToken>()).Returns(context);
+        selection.GetSourcesAsync(context, "scope", "proj", ProCursorSourceKind.Repository, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ConnectionDiscoverySource>>(
+            [
+                new(
+                    null, "https://dev.azure.com/org", "proj", "repo-guid", ProCursorSourceKind.Repository,
+                    new("azureDevOps", "repo-guid"), "Repository", "main")
+            ]);
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), selections: selection);
+
+        var result = await controller.Create(
+            new(OwnedClient, null, "", "proj", [new("repo-guid")], ConnectionId: connectionId, ScopeKey: "scope"),
+            new CreateMentionConfigRequestValidator());
+
+        Assert.IsType<CreatedAtActionResult>(result);
+        await repo.Received(1).AddAsync(
+            OwnedClient, ScmProvider.AzureDevOps, "https://dev.azure.com/org", "proj",
+            Arg.Any<int>(), Arg.Any<IReadOnlyList<MentionRepoFilterDto>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NativeSavedOrganizationCoverageDoesNotConsultActiveConnections()
+    {
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        var scopes = ConfiguredOrganizations();
+        var validator = new MentionConfigurationScopeValidator(connections, DiscoveryForEveryProvider(), scopes);
+
+        var verdict = await validator.ValidateAsync(OwnedClient, ScmProvider.AzureDevOps, "https://dev.azure.com/org/");
+
+        Assert.Equal(MentionScopeVerdict.Accepted, verdict);
+        await scopes.Received(1).GetByClientIdAsync(OwnedClient, ScmProvider.AzureDevOps, "organization", Arg.Any<CancellationToken>());
+        await connections.DidNotReceiveWithAnyArgs().GetByClientIdAsync(default);
+    }
+
     private static readonly Guid OwnedClient = Guid.Parse("aaaaaaaa-1111-4111-8111-111111111111");
     private static readonly Guid OtherClient = Guid.Parse("bbbbbbbb-2222-4222-8222-222222222222");
 
@@ -191,17 +235,20 @@ public sealed class AdminMentionConfigsControllerTests
     {
         // Disabling an organization is how an operator withdraws it. It must not remain nameable here.
         var repo = CreateRepo();
-        var scopes = Substitute.For<IClientAdoOrganizationScopeRepository>();
-        scopes.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        var scopes = Substitute.For<IClientScmScopeRepository>();
+        scopes.GetByClientIdAsync(Arg.Any<Guid>(), ScmProvider.AzureDevOps, "organization", Arg.Any<CancellationToken>())
             .Returns(
             [
-                new ClientAdoOrganizationScopeDto(
+                new ClientScmScopeDto(
                     Guid.NewGuid(),
                     OwnedClient,
+                    Guid.NewGuid(),
+                    "organization",
+                    "org",
                     "https://dev.azure.com/org",
                     "org",
+                    "verified",
                     false,
-                    AdoOrganizationVerificationStatus.Verified,
                     null,
                     null,
                     DateTimeOffset.UtcNow,
@@ -322,7 +369,7 @@ public sealed class AdminMentionConfigsControllerTests
     public async Task Create_ForAProviderThisDeploymentCannotDiscover_IsRefusedSayingSo()
     {
         var repo = CreateRepo();
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.SupportsActivePullRequestDiscovery(Arg.Any<ScmProvider>()).Returns(false);
         registry.SupportsReviewThreadReply(Arg.Any<ScmProvider>()).Returns(true);
         var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), providerRegistry: registry);
@@ -348,7 +395,7 @@ public sealed class AdminMentionConfigsControllerTests
     public async Task Create_ForAProviderThatCannotReplyInAConversation_IsRefusedSayingSo()
     {
         var repo = CreateRepo();
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.SupportsActivePullRequestDiscovery(Arg.Any<ScmProvider>()).Returns(true);
         registry.SupportsReviewThreadReply(Arg.Any<ScmProvider>()).Returns(false);
         var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), providerRegistry: registry);
@@ -523,6 +570,122 @@ public sealed class AdminMentionConfigsControllerTests
         Assert.IsType<ConflictObjectResult>(result);
     }
 
+    [Theory]
+    [InlineData("conflicting", "azureDevOps", false)]
+    [InlineData("stored", "forgejo", false)]
+    [InlineData("conflicting", "azureDevOps", true)]
+    [InlineData("stored", "forgejo", true)]
+    public async Task GuidedPatch_RetainedRepositoryIdDoesNotAuthorizeChangedCoordinates(string canonical, string provider, bool matchesLiveSource)
+    {
+        var repo = CreateRepo();
+        var existing = Config() with
+        {
+            RepoFilters = [new(Guid.NewGuid(), "repo-guid", "stored", "Repository", "azureDevOps", DateTimeOffset.UtcNow.AddDays(-1))]
+        };
+        repo.GetByIdAsync(existing.Id, Arg.Any<CancellationToken>()).Returns(existing);
+        repo.UpdateAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<int?>(), Arg.Any<bool?>(), Arg.Any<IReadOnlyList<MentionRepoFilterDto>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        var connectionId = Guid.NewGuid();
+        var selection = Substitute.For<IReviewConfigurationSelectionService>();
+        var context = new ConnectionDiscoveryContext(OwnedClient, connectionId, new(ScmProvider.AzureDevOps, "https://dev.azure.com"));
+        selection.GetConnectionContextAsync(OwnedClient, connectionId, Arg.Any<CancellationToken>()).Returns(context);
+        selection.GetSourcesAsync(context, "scope", "proj", ProCursorSourceKind.Repository, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ConnectionDiscoverySource>>(
+            [
+                new(
+                    null, existing.ProviderScopePath, "proj", "repo-guid", ProCursorSourceKind.Repository,
+                    matchesLiveSource ? new(provider, canonical) : new("azureDevOps", "stored"), "Repository", "main")
+            ]);
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), selections: selection);
+
+        var result = await controller.Patch(
+            existing.Id,
+            new(RepoFilters: [new("repo-guid", CanonicalSourceRef: canonical, SourceProvider: provider)], ConnectionId: connectionId, ScopeKey: "scope"),
+            new PatchMentionConfigRequestValidator());
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceiveWithAnyArgs().UpdateAsync(default, default, default, default, default, default);
+    }
+
+    [Fact]
+    public async Task GuidedPatch_MixedMembershipPreservesRetainedCoordinatesWhileValidatingNewRepository()
+    {
+        var repo = CreateRepo();
+        var retained = new MentionRepoFilterDto(Guid.NewGuid(), "repo-guid", "stored-bytes", "Saved Repository", null, DateTimeOffset.UtcNow.AddDays(-1));
+        var existing = Config() with { RepoFilters = [retained] };
+        repo.GetByIdAsync(existing.Id, Arg.Any<CancellationToken>()).Returns(existing);
+        repo.UpdateAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<int?>(), Arg.Any<bool?>(), Arg.Any<IReadOnlyList<MentionRepoFilterDto>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        var connectionId = Guid.NewGuid();
+        var selection = Substitute.For<IReviewConfigurationSelectionService>();
+        var context = new ConnectionDiscoveryContext(OwnedClient, connectionId, new(ScmProvider.AzureDevOps, "https://dev.azure.com"));
+        selection.GetConnectionContextAsync(OwnedClient, connectionId, Arg.Any<CancellationToken>()).Returns(context);
+        selection.GetSourcesAsync(context, "scope", "proj", ProCursorSourceKind.Repository, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ConnectionDiscoverySource>>(
+            [
+                new(
+                    null, existing.ProviderScopePath, "proj", retained.RepositoryId, ProCursorSourceKind.Repository, new("azureDevOps", "live-new-bytes"),
+                    "Renamed Repository", "main"),
+                new(
+                    null, existing.ProviderScopePath, "proj", "repo-new", ProCursorSourceKind.Repository, new("azureDevOps", "new-canonical"), "New Repository",
+                    "main"),
+            ]);
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), selections: selection);
+
+        var result = await controller.Patch(
+            existing.Id, new(
+                RepoFilters:
+                [
+                    new(retained.RepositoryId, CanonicalSourceRef: retained.CanonicalSourceRef),
+                    new("repo-new", CanonicalSourceRef: "new-canonical", SourceProvider: "azureDevOps"),
+                ], ConnectionId: connectionId, ScopeKey: "scope"), new PatchMentionConfigRequestValidator());
+
+        Assert.IsType<OkObjectResult>(result);
+        await repo.Received(1).UpdateAsync(
+            existing.Id, OwnedClient, null, null,
+            Arg.Is<IReadOnlyList<MentionRepoFilterDto>?>(filters => filters != null && filters.Count == 2 &&
+                                                                    filters[0].CanonicalSourceRef == retained.CanonicalSourceRef &&
+                                                                    filters[0].SourceProvider == retained.SourceProvider &&
+                                                                    filters[0].ClaimedAt == retained.ClaimedAt &&
+                                                                    filters[1].CanonicalSourceRef == "new-canonical" &&
+                                                                    filters[1].SourceProvider == "azureDevOps"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GuidedPatch_RetainedInaccessibleRepositoryPreservesOmittedMetadataAndClaimTime()
+    {
+        var repo = CreateRepo();
+        var retained = new MentionRepoFilterDto(Guid.NewGuid(), "repo-guid", "stored", "Repository", "azureDevOps", DateTimeOffset.UtcNow.AddDays(-1));
+        var existing = Config() with { RepoFilters = [retained] };
+        repo.GetByIdAsync(existing.Id, Arg.Any<CancellationToken>()).Returns(existing);
+        repo.UpdateAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<int?>(), Arg.Any<bool?>(), Arg.Any<IReadOnlyList<MentionRepoFilterDto>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        var connectionId = Guid.NewGuid();
+        var selection = Substitute.For<IReviewConfigurationSelectionService>();
+        var context = new ConnectionDiscoveryContext(OwnedClient, connectionId, new(ScmProvider.AzureDevOps, "https://dev.azure.com"));
+        selection.GetConnectionContextAsync(OwnedClient, connectionId, Arg.Any<CancellationToken>()).Returns(context);
+        selection.GetSourcesAsync(context, "scope", "proj", ProCursorSourceKind.Repository, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ConnectionDiscoverySource>>([]);
+        var controller = CreateController(repo, clientRoles: AdminOf(OwnedClient), selections: selection);
+
+        var result = await controller.Patch(
+            existing.Id, new(RepoFilters: [new("repo-guid")], ConnectionId: connectionId, ScopeKey: "scope"), new PatchMentionConfigRequestValidator());
+
+        Assert.IsType<OkObjectResult>(result);
+        await repo.Received(1).UpdateAsync(
+            existing.Id, OwnedClient, null, null,
+            Arg.Is<IReadOnlyList<MentionRepoFilterDto>?>(filters => filters != null && filters.Count == 1 &&
+                                                                    filters[0].CanonicalSourceRef == retained.CanonicalSourceRef &&
+                                                                    filters[0].SourceProvider == retained.SourceProvider &&
+                                                                    filters[0].ClaimedAt == retained.ClaimedAt), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Patch_SendingAnEmptyRepositoryList_IsRefused()
     {
@@ -628,19 +791,22 @@ public sealed class AdminMentionConfigsControllerTests
     }
 
     /// <summary>An organization the client really has set up, so a refusal can only be the scope check.</summary>
-    private static IClientAdoOrganizationScopeRepository ConfiguredOrganizations(string organizationUrl = "https://dev.azure.com/org")
+    private static IClientScmScopeRepository ConfiguredOrganizations(string organizationUrl = "https://dev.azure.com/org")
     {
-        var scopes = Substitute.For<IClientAdoOrganizationScopeRepository>();
-        scopes.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        var scopes = Substitute.For<IClientScmScopeRepository>();
+        scopes.GetByClientIdAsync(Arg.Any<Guid>(), ScmProvider.AzureDevOps, "organization", Arg.Any<CancellationToken>())
             .Returns(
             [
-                new ClientAdoOrganizationScopeDto(
+                new ClientScmScopeDto(
                     Guid.NewGuid(),
                     OwnedClient,
+                    Guid.NewGuid(),
+                    "organization",
+                    "org",
                     organizationUrl,
                     "org",
+                    "verified",
                     true,
-                    AdoOrganizationVerificationStatus.Verified,
                     null,
                     null,
                     DateTimeOffset.UtcNow,
@@ -702,7 +868,7 @@ public sealed class AdminMentionConfigsControllerTests
     /// <summary>A deployment that can both discover pull requests and reply in them, for every provider.</summary>
     private static IScmProviderRegistry DiscoveryForEveryProvider()
     {
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.SupportsActivePullRequestDiscovery(Arg.Any<ScmProvider>()).Returns(true);
         registry.SupportsReviewThreadReply(Arg.Any<ScmProvider>()).Returns(true);
         return registry;
@@ -713,10 +879,11 @@ public sealed class AdminMentionConfigsControllerTests
         IUserRepository? users = null,
         bool isAdmin = false,
         IReadOnlyDictionary<Guid, ClientRole>? clientRoles = null,
-        IClientAdoOrganizationScopeRepository? organizationScopes = null,
+        IClientScmScopeRepository? organizationScopes = null,
         IClientScmConnectionRepository? connections = null,
         IScmProviderRegistry? providerRegistry = null,
-        ILicensingCapabilityService? licensing = null)
+        ILicensingCapabilityService? licensing = null,
+        IReviewConfigurationSelectionService? selections = null)
     {
         var clients = Substitute.For<IClientAdminService>();
         clients.ExistsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -734,7 +901,8 @@ public sealed class AdminMentionConfigsControllerTests
             scopeValidator,
             NullLogger<AdminMentionConfigsController>.Instance,
             null,
-            licensing)
+            licensing,
+            selections)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

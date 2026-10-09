@@ -101,20 +101,20 @@ public sealed class JobBudgetStatusTests(PostgresContainerFixture fixture) : IAs
         await this._repo.AddAsync(held);
         await this._repo.SetBudgetHeldAsync(held.Id, BudgetScopeKind.ClientMonthly, BudgetCapKind.Soft, 80m, 80m);
 
-        var exceeded = MakeJob(prId: 2);
+        var exceeded = MakeJob(prId: 2, clientId: held.ClientId);
         await this._repo.AddAsync(exceeded);
         await this._repo.TryTransitionAsync(exceeded.Id, JobStatus.Pending, JobStatus.Processing);
         await this._repo.SetBudgetExceededAsync(exceeded.Id, BudgetScopeKind.Increment, BudgetCapKind.Hard, 5m, 6m);
 
-        var active = await this._repo.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "proj");
+        var active = await this._repo.GetActiveJobsForConfigAsync(held.ClientId, "https://dev.azure.com/org", "proj");
 
         // Both budget-blocked jobs are still "live" so a PR close can cancel them and a new push can supersede them.
         Assert.Contains(active, j => j.Id == held.Id);
         Assert.Contains(active, j => j.Id == exceeded.Id);
     }
 
-    private static ReviewJob MakeJob(int prId = 1, int iterationId = 1)
+    private static ReviewJob MakeJob(int prId = 1, int iterationId = 1, Guid? clientId = null)
     {
-        return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", prId, iterationId);
+        return new ReviewJob(Guid.NewGuid(), clientId ?? Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", prId, iterationId);
     }
 }

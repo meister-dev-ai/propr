@@ -9,7 +9,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -23,12 +23,78 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
+using MeisterDev.ProPR.TestSupport;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
+using MeisterDev.ProPR.Api.Features.Crawling.Contracts.AzureDevOps;
 
 namespace MeisterDev.ProPR.Api.Tests.Features.Crawling.Webhooks;
 
 public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsControllerTests.AdminWebhookConfigsApiFactory factory)
     : IClassFixture<AdminWebhookConfigsControllerTests.AdminWebhookConfigsApiFactory>
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task CreateConfiguration_UnknownProviderWithoutPathPreserves400(string? path)
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/admin/webhook-configurations");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
+            {
+                clientId = factory.TestClientId, provider = 999, organizationScopeId = Guid.NewGuid(),
+                providerScopePath = path, providerProjectKey = "project", crawlIntervalSeconds = 60,
+                enabledEvents = new[] { "pullRequestCreated" },
+            });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var errors = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors");
+        Assert.Equal("Select a connection and scope, or supply an explicit provider and its manual scope coordinates.", errors.GetProperty("")[0].GetString());
+        Assert.False(errors.TryGetProperty("Provider", out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateWebhookConfiguration_UsesSuppliedSelectionForScopeAndFilters(bool rejectScope)
+    {
+        var selection = Substitute.For<IReviewConfigurationSelectionService>();
+        selection.HasScopeSelection(Arg.Any<WebhookProviderType>(), Arg.Any<Guid?>(), Arg.Any<string?>()).Returns(true);
+        selection.ResolveScopeAsync(
+            factory.TestClientId, Arg.Any<WebhookProviderType>(), Arg.Any<Guid?>(), Arg.Any<string?>(),
+            Arg.Any<CancellationToken>(), "webhook").Returns(_ => rejectScope
+            ? Task.FromException<(Guid?, string)>(new InvalidOperationException("selection scope refusal"))
+            : Task.FromResult<(Guid?, string)>((null, "https://dev.azure.com/selection")));
+        selection.ResolveFiltersAsync(
+                factory.TestClientId, Arg.Any<WebhookProviderType>(), Arg.Any<Guid?>(), Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<CrawlRepoFilterDto>?>(), Arg.Any<CancellationToken>(), "webhook")
+            .Returns(Task.FromException<IReadOnlyList<CrawlRepoFilterDto>>(new InvalidOperationException("selection filter refusal")));
+        using var selectedFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.AddSingleton(selection)));
+        var client = selectedFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/admin/webhook-configurations");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
+            {
+                clientId = factory.TestClientId, provider = "azureDevOps", providerScopePath = "https://dev.azure.com/selection",
+                providerProjectKey = "selection-project", enabledEvents = new[] { "pullRequestCreated" },
+            });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await selection.Received(1).ResolveScopeAsync(
+            factory.TestClientId, Arg.Any<WebhookProviderType>(), null,
+            "https://dev.azure.com/selection", Arg.Any<CancellationToken>(), "webhook");
+        await selection.Received(rejectScope ? 0 : 1).ResolveFiltersAsync(
+            factory.TestClientId, Arg.Any<WebhookProviderType>(), null,
+            "selection-project", null, Arg.Any<CancellationToken>(), "webhook");
+    }
+
     [Fact]
     public async Task GetWebhookConfigurations_WithAdminJwt_ReturnsAllConfigs()
     {
@@ -396,9 +462,9 @@ public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsContro
             Substitute.For<IWebhookDeliveryLogRepository>();
 
         public IProviderAdminDiscoveryService DiscoveryService { get; } =
-            Substitute.For<IProviderAdminDiscoveryService>();
+            MeisterDev.ProPR.TestSupport.AdoGuidedDiscoveryTestSupport.Create();
 
-        public IScmProviderRegistry ProviderRegistry { get; } = Substitute.For<IScmProviderRegistry>();
+        public IScmProviderRegistry ProviderRegistry { get; } = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
         public string GenerateUserToken(Guid userId, string globalRole = "User")
         {
@@ -446,6 +512,7 @@ public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsContro
                 services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
                 services.AddSingleton(Substitute.For<IJobRepository>());
+                this.ProviderRegistry.GetReviewSourcePolicy(Arg.Any<ScmProvider>()).Returns(call => ReviewSourcePolicies.Get(call.Arg<ScmProvider>()));
                 services.AddSingleton(this.ProviderRegistry);
 
                 services.AddScoped<IWebhookConfigurationRepository>(_ =>
@@ -522,18 +589,18 @@ public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsContro
                         Arg.Any<Guid>(),
                         Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<ClientScmScopeDto?>(null));
-                this.DiscoveryService.ListCrawlFiltersAsync(
+                this.DiscoveryService.ListCrawlFilterOptionsAsync(
                         testClientId,
                         guidedOrganizationScopeId,
                         Arg.Any<string>(),
                         Arg.Any<CancellationToken>())
                     .Returns(
-                        Task.FromResult<IReadOnlyList<AdoCrawlFilterOptionDto>>(
+                        Task.FromResult<IReadOnlyList<ScmDiscoveryCrawlFilterOption>>(
                         [
-                            new AdoCrawlFilterOptionDto(
+                            new ScmDiscoveryCrawlFilterOption(
                                 new CanonicalSourceReferenceDto("azureDevOps", "repo-1"),
                                 "Repository One",
-                                [new AdoBranchOptionDto("main", true)]),
+                                [new ScmDiscoveryBranchOption("main", true)]),
                         ]));
                 this.ProviderRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
                     .Returns(this.DiscoveryService);

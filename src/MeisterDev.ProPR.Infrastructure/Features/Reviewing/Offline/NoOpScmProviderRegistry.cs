@@ -11,6 +11,19 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 /// </summary>
 public sealed class NoOpScmProviderRegistry : IScmProviderRegistry
 {
+    private readonly IScmProviderRegistry _localPolicies =
+        MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection.ScmLocalPolicyFactory.CreateRegistry();
+
+    public IScmProviderCompatibilityCodec CompatibilityCodec => this._localPolicies.CompatibilityCodec;
+
+    public IScmIdentityPolicy GetIdentityPolicy(ScmProvider provider) => this._localPolicies.GetIdentityPolicy(provider);
+    public IWebhookIngressPolicy GetWebhookIngressPolicy(ScmProvider provider) => this._localPolicies.GetWebhookIngressPolicy(provider);
+    public ICodeReviewPreparationPolicy GetCodeReviewPreparationPolicy(ScmProvider provider) => this._localPolicies.GetCodeReviewPreparationPolicy(provider);
+    public IReviewSourcePolicy GetSourceIdentityPolicy(ScmProvider provider) => this._localPolicies.GetSourceIdentityPolicy(provider);
+
+    public IScmConnectionConfigurationPolicy GetConnectionConfigurationPolicy(ScmProvider provider) =>
+        this._localPolicies.GetConnectionConfigurationPolicy(provider);
+
     public bool IsRegistered(ScmProvider provider)
     {
         return false;
@@ -52,6 +65,14 @@ public sealed class NoOpScmProviderRegistry : IScmProviderRegistry
     }
 
     public IReviewDiscoveryProvider GetReviewDiscoveryProvider(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
+
+    public IReviewSourcePolicy GetReviewSourcePolicy(ScmProvider provider) => this._localPolicies.GetReviewSourcePolicy(provider);
+
+
+    public IReviewOverviewProvider GetReviewOverviewProvider(ScmProvider provider)
     {
         throw CreateUnavailableException(provider);
     }

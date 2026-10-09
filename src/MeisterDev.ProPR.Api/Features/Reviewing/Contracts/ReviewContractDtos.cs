@@ -115,7 +115,7 @@ public sealed record ReviewStatusResponse(
     string? Error)
 {
     /// <summary>Normalized provider family for the review job.</summary>
-    public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
+    public ScmProvider Provider { get; init; } = ScmProviderVocabulary.AzureDevOpsCompatibilityDefault;
 
     /// <summary>Normalized provider host base URL for the review job.</summary>
     public string? HostBaseUrl { get; init; }

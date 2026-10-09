@@ -14,40 +14,58 @@ public sealed class MentionDetectorTests
     public void IsMentioned_WithAdoGuidFormat_ReturnsTrue()
     {
         var content = $"@<{ReviewerGuid}> What do you think about this PR?";
-        Assert.True(MentionDetector.IsMentioned(content, ReviewerGuid));
+        Assert.True(
+            MentionDetector.IsMentioned(
+                content, ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     [Fact]
     public void IsMentioned_WithUpperCaseGuid_ReturnsTrue()
     {
         var content = $"@<{ReviewerGuid.ToString().ToUpperInvariant()}> Is this correct?";
-        Assert.True(MentionDetector.IsMentioned(content, ReviewerGuid));
+        Assert.True(
+            MentionDetector.IsMentioned(
+                content, ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     [Fact]
     public void IsMentioned_WithLowerCaseGuid_ReturnsTrue()
     {
         var content = $"@<{ReviewerGuid.ToString().ToLowerInvariant()}> Is this correct?";
-        Assert.True(MentionDetector.IsMentioned(content, ReviewerGuid));
+        Assert.True(
+            MentionDetector.IsMentioned(
+                content, ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     [Fact]
     public void IsMentioned_WithDifferentGuid_ReturnsFalse()
     {
         var content = $"@<{Guid.NewGuid()}> Can you review?";
-        Assert.False(MentionDetector.IsMentioned(content, ReviewerGuid));
+        Assert.False(
+            MentionDetector.IsMentioned(
+                content, ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     [Fact]
     public void IsMentioned_WithEmptyContent_ReturnsFalse()
     {
-        Assert.False(MentionDetector.IsMentioned(string.Empty, ReviewerGuid));
+        Assert.False(
+            MentionDetector.IsMentioned(
+                string.Empty, ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     [Fact]
     public void IsMentioned_ContentWithoutMention_ReturnsFalse()
     {
-        Assert.False(MentionDetector.IsMentioned("This is a regular comment with no mentions.", ReviewerGuid));
+        Assert.False(
+            MentionDetector.IsMentioned(
+                "This is a regular comment with no mentions.", ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     /// <summary>
@@ -60,7 +78,10 @@ public sealed class MentionDetectorTests
     {
         var quotedAnswer = $"> @<{ReviewerGuid}> What is this supposed to do?\n\nIt sorts ascending.";
 
-        Assert.False(MentionDetector.IsMentioned(quotedAnswer, ReviewerGuid));
+        Assert.False(
+            MentionDetector.IsMentioned(
+                quotedAnswer, ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     /// <summary>Quotes nest, and a quote of a quote is still a quote.</summary>
@@ -69,7 +90,10 @@ public sealed class MentionDetectorTests
     {
         var quotedTwice = $"> > @<{ReviewerGuid}> What is this?\n> \n> It is nothing.\n\nUnderstood.";
 
-        Assert.True(MentionDetector.IsMentioned(quotedTwice, ReviewerGuid) is false);
+        Assert.True(
+            MentionDetector.IsMentioned(
+                quotedTwice, ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)) is false);
     }
 
     [Fact]
@@ -77,20 +101,29 @@ public sealed class MentionDetectorTests
     {
         var followUp = $"> It sorts ascending.\n\n@<{ReviewerGuid}> then why is it labelled latest?";
 
-        Assert.True(MentionDetector.IsMentioned(followUp, ReviewerGuid));
+        Assert.True(
+            MentionDetector.IsMentioned(
+                followUp, ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     /// <summary>Markdown allows a blockquote to be indented, up to three spaces before the marker.</summary>
     [Fact]
     public void IsMentioned_MentionInsideAnIndentedQuote_ReturnsFalse()
     {
-        Assert.False(MentionDetector.IsMentioned($"  > @<{ReviewerGuid}> What is this?", ReviewerGuid));
+        Assert.False(
+            MentionDetector.IsMentioned(
+                $"  > @<{ReviewerGuid}> What is this?", ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 
     /// <summary>A greater-than sign inside a line is not a quote, and must not hide a real question.</summary>
     [Fact]
     public void IsMentioned_GreaterThanSignMidLine_StillReturnsTrue()
     {
-        Assert.True(MentionDetector.IsMentioned($"@<{ReviewerGuid}> is a > b here?", ReviewerGuid));
+        Assert.True(
+            MentionDetector.IsMentioned(
+                $"@<{ReviewerGuid}> is a > b here?", ReviewerGuid,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps)));
     }
 }

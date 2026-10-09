@@ -34,7 +34,7 @@ public sealed record PullRequestSynchronizationRequest
     public required PrStatus PullRequestStatus { get; init; }
 
     /// <summary>Normalized SCM provider family for the synchronized review context.</summary>
-    public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
+    public required ScmProvider Provider { get; init; }
 
     /// <summary>Normalized provider host reference when already known to the caller.</summary>
     public ProviderHostRef? Host { get; init; }

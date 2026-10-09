@@ -235,7 +235,7 @@ public class ReviewOrchestrationServiceReasoningCaptureTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(publicationService);
         registry.GetReviewAssignmentService(Arg.Any<ScmProvider>()).Returns(reviewerManager);
         registry.GetRegisteredCapabilities(Arg.Any<ScmProvider>()).Returns(["reviewAssignment"]);

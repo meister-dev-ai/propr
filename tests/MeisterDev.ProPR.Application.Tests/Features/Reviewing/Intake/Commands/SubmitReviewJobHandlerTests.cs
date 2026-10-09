@@ -25,7 +25,7 @@ public sealed class SubmitReviewJobHandlerTests
             "proj",
             "repo",
             42,
-            3);
+            3) { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps };
     }
 
     private static SubmitReviewJobRequestDto CreateGitHubRequest()

@@ -11,7 +11,7 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// </summary>
 /// <param name="Id">Unique identifier for the review job.</param>
 /// <param name="ClientId">Identifier of the client that owns this job.</param>
-/// <param name="OrganizationUrl">Azure DevOps organisation URL.</param>
+/// <param name="OrganizationUrl">Provider scope URL.</param>
 /// <param name="ProjectId">Project identifier in the organisation.</param>
 /// <param name="RepositoryId">Repository identifier.</param>
 /// <param name="PullRequestId">Pull request identifier.</param>

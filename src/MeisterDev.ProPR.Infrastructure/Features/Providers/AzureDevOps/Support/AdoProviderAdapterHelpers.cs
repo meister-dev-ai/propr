@@ -4,11 +4,13 @@
 using System.Globalization;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Support;
 
@@ -218,7 +220,8 @@ internal static class AdoProviderAdapterHelpers
         RepositoryRef repository,
         GitPullRequest pullRequest,
         ReviewRevision? revision,
-        ReviewerIdentity? requestedReviewer)
+        ReviewerIdentity? requestedReviewer,
+        string? organizationUrl = null)
     {
         var review = new CodeReviewRef(
             repository,
@@ -234,9 +237,12 @@ internal static class AdoProviderAdapterHelpers
             revision,
             requestedReviewer,
             pullRequest.Title ?? $"Pull Request #{pullRequest.PullRequestId}",
-            pullRequest.Url,
+            organizationUrl is null
+                ? null
+                : $"{organizationUrl.TrimEnd('/')}/{Uri.EscapeDataString(ResolveProjectId(repository))}/_git/{Uri.EscapeDataString(repository.ExternalRepositoryId)}/pullrequest/{pullRequest.PullRequestId}",
             StripRefsHeads(pullRequest.SourceRefName),
-            StripRefsHeads(pullRequest.TargetRefName));
+            StripRefsHeads(pullRequest.TargetRefName),
+            ReviewOverviewPresentation.AuthorName(pullRequest.CreatedBy?.DisplayName, pullRequest.CreatedBy?.UniqueName));
     }
 
     public static ReviewerIdentity? SelectRequestedReviewer(ProviderHostRef host, GitPullRequest pullRequest)
@@ -413,7 +419,7 @@ internal static class AdoProviderAdapterHelpers
         }
     }
 
-    private static bool IsHostedAzureDevOps(string organizationUrl)
+    internal static bool IsHostedAzureDevOps(string organizationUrl)
     {
         if (!Uri.TryCreate(organizationUrl, UriKind.Absolute, out var uri))
         {

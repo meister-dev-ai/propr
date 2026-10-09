@@ -28,6 +28,7 @@ using MeisterDev.ProPR.Application.Features.Providers.Identity;
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 internal sealed partial class FileReviewer(
+    IScmProviderRegistry? providerRegistry,
     IAiReviewCore aiCore,
     IProtocolRecorder protocolRecorder,
     IReviewFileResultStore jobRepository,
@@ -46,6 +47,10 @@ internal sealed partial class FileReviewer(
     IStructuralCodeAnalyzer? structuralAnalyzer = null,
     ICodeInsightReviewExposureCollector? exposureCollector = null)
 {
+    private readonly IScmProviderRegistry? _sourcePolicies = exposureCollector is null
+        ? providerRegistry
+        : providerRegistry ?? throw new ArgumentNullException(nameof(providerRegistry));
+
     // Stage id recorded on the ProRV-lens applicability screen's protocol events.
     private const string ProRvLensStageId = "file-by-file.prorv-lens";
 
@@ -1578,7 +1583,10 @@ internal sealed partial class FileReviewer(
             await exposureCollector.RecordAsync(
                 new CodeInsightPullRequestKey(job.ClientId, job.RepositoryId, job.PullRequestId), job.Id,
                 fileResult.FilePath, ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId),
-                fileContext.ModelId, fileContext.LogicalModelName, ProviderSourceIdentity.FromReviewJob(job).Value,
+                fileContext.ModelId, fileContext.LogicalModelName, ProviderSourceIdentity.FromReviewJob(
+                    job,
+                    this._sourcePolicies?.GetSourceIdentityPolicy(job.Provider)
+                    ?? throw new InvalidOperationException("Source identity policy is required for review exposure collection.")).Value,
                 "completed-file-baseline", DateTimeOffset.UtcNow, ct);
         }
 

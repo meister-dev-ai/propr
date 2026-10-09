@@ -19,6 +19,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 using MeisterDev.ProPR.Web;
+using ConnectionResponse = MeisterDev.ProPR.Api.Features.Clients.Contracts.ClientScmConnectionDto;
 
 namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 
@@ -30,6 +31,7 @@ public sealed partial class ClientProviderConnectionsController(
     IClientScmConnectionRepository connectionRepository,
     IClientScmScopeRepository scopeRepository,
     IScmProviderRegistry providerRegistry,
+    IProviderConnectionConfigurationService connectionConfiguration,
     IProviderReadinessEvaluator readinessEvaluator,
     IProviderOperationalStatusService providerOperationalStatusService,
     EgressUrlPolicy egressUrlPolicy,
@@ -63,9 +65,9 @@ public sealed partial class ClientProviderConnectionsController(
         return AuthHelpers.RequireClientRole(this.HttpContext, clientId, minimumRole);
     }
 
-    private ActionResult? ValidateSupportedAuthenticationConfiguration(AuthenticationConfigurationCandidate candidate)
+    private ActionResult? ValidateSupportedAuthenticationConfiguration(ScmAuthenticationConfiguration candidate)
     {
-        foreach (var (propertyName, message) in GetAuthenticationConfigurationErrors(candidate, egressUrlPolicy))
+        foreach (var (propertyName, message) in this.GetAuthenticationConfigurationErrors(candidate, egressUrlPolicy))
         {
             this.ModelState.AddModelError(propertyName, message);
         }
@@ -73,11 +75,11 @@ public sealed partial class ClientProviderConnectionsController(
         return this.ModelState.ErrorCount == 0 ? null : this.ValidationProblem();
     }
 
-    private static void EnsureSupportedAuthenticationConfiguration(
-        AuthenticationConfigurationCandidate candidate,
+    private void EnsureSupportedAuthenticationConfiguration(
+        ScmAuthenticationConfiguration candidate,
         EgressUrlPolicy egressUrlPolicy)
     {
-        var errors = GetAuthenticationConfigurationErrors(candidate, egressUrlPolicy)
+        var errors = this.GetAuthenticationConfigurationErrors(candidate, egressUrlPolicy)
             .Select(error => error.Message)
             .ToArray();
 
@@ -87,242 +89,17 @@ public sealed partial class ClientProviderConnectionsController(
         }
     }
 
-    private static IReadOnlyList<(string PropertyName, string Message)> GetAuthenticationConfigurationErrors(
-        AuthenticationConfigurationCandidate candidate,
-        EgressUrlPolicy egressUrlPolicy)
+    private IReadOnlyList<(string PropertyName, string Message)> GetAuthenticationConfigurationErrors(
+        ScmAuthenticationConfiguration candidate, EgressUrlPolicy policy)
     {
         var errors = new List<(string PropertyName, string Message)>();
-
-        AddHostUrlAndKindErrors(candidate, egressUrlPolicy, errors);
-        AddOAuthMetadataErrors(candidate, errors);
-        AddAzureDevOpsAuthenticationErrors(candidate, errors);
-
-        if (candidate.ProviderFamily != ScmProvider.GitHub)
+        if (candidate.ApplyHostBaseUrlEgressCheck &&
+            CreateClientProviderConnectionRequestValidator.GetHostBaseUrlRefusal(policy, candidate.HostBaseUrl) is { } refusal)
         {
-            AddNonGitHubProviderErrors(candidate, errors);
-            return errors;
+            errors.Add(("HostBaseUrl", refusal));
         }
 
-        return AddGitHubProviderErrors(candidate, errors);
-    }
-
-    private static void AddHostUrlAndKindErrors(
-        AuthenticationConfigurationCandidate candidate,
-        EgressUrlPolicy egressUrlPolicy,
-        List<(string PropertyName, string Message)> errors)
-    {
-        // Applied where the request puts an address into effect: a create, a patch that moves the connection to a
-        // different address, and a verification the operator asked for. A patch that leaves the stored address
-        // alone is exempt, so a connection saved before the installation tightened its posture can still be
-        // deactivated or otherwise corrected. Such a connection is not reachable in the meantime: the guard on
-        // every provider request and on the mirror fetch refuses the address at connect time.
-        if (candidate.ApplyHostBaseUrlEgressCheck)
-        {
-            var egressRefusal = CreateClientProviderConnectionRequestValidator.GetHostBaseUrlRefusal(
-                egressUrlPolicy,
-                candidate.HostBaseUrl);
-            if (egressRefusal is not null)
-            {
-                errors.Add((nameof(CreateClientProviderConnectionRequest.HostBaseUrl), egressRefusal));
-            }
-        }
-
-        if (CreateClientProviderConnectionRequestValidator.RequiresSecureAzureDevOpsServerCredentialHost(
-                candidate.ProviderFamily,
-                candidate.HostBaseUrl,
-                candidate.AuthenticationKind)
-            && !CreateClientProviderConnectionRequestValidator.IsHttpsUrl(candidate.HostBaseUrl))
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.HostBaseUrl),
-                    "Azure DevOps Server personal access token and Windows user-account authentication require an HTTPS host URL."));
-        }
-
-        if (!CreateClientProviderConnectionRequestValidator.IsSupportedAuthenticationKind(
-                candidate.ProviderFamily,
-                candidate.HostBaseUrl,
-                candidate.AuthenticationKind))
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.AuthenticationKind),
-                    CreateClientProviderConnectionRequestValidator.GetUnsupportedAuthenticationKindMessage(candidate.ProviderFamily)));
-        }
-    }
-
-    private static void AddOAuthMetadataErrors(
-        AuthenticationConfigurationCandidate candidate,
-        List<(string PropertyName, string Message)> errors)
-    {
-        if (!CreateClientProviderConnectionRequestValidator.RequiresOAuthMetadata(candidate.ProviderFamily, candidate.AuthenticationKind))
-        {
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(candidate.UserName))
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.UserName),
-                    "UserName is only valid for Azure DevOps Server Windows user-account connections."));
-        }
-
-        if (string.IsNullOrWhiteSpace(candidate.OAuthTenantId))
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.OAuthTenantId),
-                    "OAuthTenantId is required for Azure DevOps OAuth client-credentials connections."));
-        }
-
-        if (string.IsNullOrWhiteSpace(candidate.OAuthClientId))
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.OAuthClientId),
-                    "OAuthClientId is required for Azure DevOps OAuth client-credentials connections."));
-        }
-    }
-
-    private static void AddAzureDevOpsAuthenticationErrors(
-        AuthenticationConfigurationCandidate candidate,
-        List<(string PropertyName, string Message)> errors)
-    {
-        if (candidate.ProviderFamily == ScmProvider.AzureDevOps
-            && candidate.AuthenticationKind == ScmAuthenticationKind.WindowsUserAccount)
-        {
-            if (string.IsNullOrWhiteSpace(candidate.UserName))
-            {
-                errors.Add(
-                    (
-                        nameof(CreateClientProviderConnectionRequest.UserName),
-                        "UserName is required for Azure DevOps Server Windows user-account connections."));
-            }
-
-            if (!string.IsNullOrWhiteSpace(candidate.OAuthTenantId))
-            {
-                errors.Add(
-                    (
-                        nameof(CreateClientProviderConnectionRequest.OAuthTenantId),
-                        "OAuthTenantId is only valid for Azure DevOps OAuth client-credentials connections."));
-            }
-
-            if (!string.IsNullOrWhiteSpace(candidate.OAuthClientId))
-            {
-                errors.Add(
-                    (
-                        nameof(CreateClientProviderConnectionRequest.OAuthClientId),
-                        "OAuthClientId is only valid for Azure DevOps OAuth client-credentials connections."));
-            }
-
-            if (!candidate.HasCompatibleSecretMaterial)
-            {
-                errors.Add(
-                    (
-                        nameof(CreateClientProviderConnectionRequest.Secret),
-                        "A replacement secret is required when switching Azure DevOps authentication modes."));
-            }
-        }
-        else if (!string.IsNullOrWhiteSpace(candidate.UserName))
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.UserName),
-                    "UserName is only valid for Azure DevOps Server Windows user-account connections."));
-        }
-
-        if (candidate.ProviderFamily == ScmProvider.AzureDevOps
-            && candidate.AuthenticationKind == ScmAuthenticationKind.PersonalAccessToken
-            && !candidate.HasCompatibleSecretMaterial)
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.Secret),
-                    "A replacement secret is required when switching Azure DevOps authentication modes."));
-        }
-    }
-
-    private static void AddNonGitHubProviderErrors(
-        AuthenticationConfigurationCandidate candidate,
-        List<(string PropertyName, string Message)> errors)
-    {
-        if (candidate.GitHubAppId.HasValue)
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.GitHubAppId),
-                    "GitHubAppId is only valid for GitHub provider connections."));
-        }
-
-        if (candidate.GitHubAppInstallationId.HasValue)
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
-                    "GitHubAppInstallationId is only valid for GitHub provider connections."));
-        }
-    }
-
-    private static List<(string PropertyName, string Message)> AddGitHubProviderErrors(
-        AuthenticationConfigurationCandidate candidate,
-        List<(string PropertyName, string Message)> errors)
-    {
-        if (candidate.AuthenticationKind == ScmAuthenticationKind.AppInstallation)
-        {
-            if (!candidate.GitHubAppId.HasValue)
-            {
-                errors.Add(
-                    (
-                        nameof(CreateClientProviderConnectionRequest.GitHubAppId),
-                        "GitHubAppId is required for GitHub App connections."));
-            }
-
-            if (!candidate.GitHubAppInstallationId.HasValue)
-            {
-                errors.Add(
-                    (
-                        nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
-                        "GitHubAppInstallationId is required for GitHub App connections."));
-            }
-
-            if (!candidate.HasCompatibleSecretMaterial)
-            {
-                errors.Add(
-                    (
-                        nameof(CreateClientProviderConnectionRequest.Secret),
-                        "A GitHub App private key is required when switching to GitHub App authentication."));
-            }
-
-            return errors;
-        }
-
-        if (candidate.GitHubAppId.HasValue)
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.GitHubAppId),
-                    "GitHubAppId is only valid when AuthenticationKind is appInstallation."));
-        }
-
-        if (candidate.GitHubAppInstallationId.HasValue)
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
-                    "GitHubAppInstallationId is only valid when AuthenticationKind is appInstallation."));
-        }
-
-        if (candidate.ProviderFamily == ScmProvider.GitHub
-            && candidate.AuthenticationKind == ScmAuthenticationKind.PersonalAccessToken
-            && !candidate.HasCompatibleSecretMaterial)
-        {
-            errors.Add(
-                (
-                    nameof(CreateClientProviderConnectionRequest.Secret),
-                    "A personal access token is required when switching away from GitHub App authentication."));
-        }
-
+        errors.AddRange(connectionConfiguration.Validate(candidate));
         return errors;
     }
 
@@ -352,21 +129,21 @@ public sealed partial class ClientProviderConnectionsController(
         return await licensingCapabilityService.GetCapabilityAsync(PremiumCapabilityKey.MultipleScmProviders, ct);
     }
 
-    private async Task<ClientScmConnectionDto> EnrichConnectionAsync(
+    private async Task<ConnectionResponse> EnrichConnectionAsync(
         Guid clientId,
         ClientScmConnectionDto connection,
         CancellationToken ct)
     {
         var readiness = await readinessEvaluator.EvaluateAsync(clientId, connection, ct);
-        return ApplyReadiness(connection, readiness);
+        return ConnectionResponse.FromApplication(ApplyReadiness(connection, readiness));
     }
 
-    private async Task<IReadOnlyList<ClientScmConnectionDto>> EnrichConnectionsAsync(
+    private async Task<IReadOnlyList<ConnectionResponse>> EnrichConnectionsAsync(
         Guid clientId,
         IReadOnlyList<ClientScmConnectionDto> connections,
         CancellationToken ct)
     {
-        var enriched = new List<ClientScmConnectionDto>(connections.Count);
+        var enriched = new List<ConnectionResponse>(connections.Count);
         foreach (var connection in connections)
         {
             enriched.Add(await this.EnrichConnectionAsync(clientId, connection, ct));
@@ -396,7 +173,7 @@ public sealed partial class ClientProviderConnectionsController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client not found.</response>
     [HttpGet("provider-connections")]
-    [ProducesResponseType(typeof(IReadOnlyList<ClientScmConnectionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<ConnectionResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -426,7 +203,7 @@ public sealed partial class ClientProviderConnectionsController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client or provider connection not found.</response>
     [HttpGet("provider-connections/{connectionId:guid}")]
-    [ProducesResponseType(typeof(ClientScmConnectionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -513,7 +290,7 @@ public sealed partial class ClientProviderConnectionsController(
         return this.Ok(entries);
     }
 
-    /// <summary>Creates a provider connection for a client.</summary>
+    /// <summary>Creates a provider connection for a client. Azure DevOps Services supports OAuth client credentials and personal access tokens.</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="request">Provider-connection details, including the per-connection retention opt-in settings.</param>
     /// <param name="validator">Validator for the request body.</param>
@@ -525,7 +302,7 @@ public sealed partial class ClientProviderConnectionsController(
     /// <response code="404">Client not found.</response>
     /// <response code="409">A provider connection already exists for the same provider family and host.</response>
     [HttpPost("provider-connections")]
-    [ProducesResponseType(typeof(ClientScmConnectionDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ConnectionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -570,7 +347,7 @@ public sealed partial class ClientProviderConnectionsController(
         }
 
         var supportedAuthenticationValidation = this.ValidateSupportedAuthenticationConfiguration(
-            new AuthenticationConfigurationCandidate(
+            new ScmAuthenticationConfiguration(
                 request.ProviderFamily,
                 request.HostBaseUrl,
                 request.AuthenticationKind,
@@ -626,7 +403,10 @@ public sealed partial class ClientProviderConnectionsController(
         }
     }
 
-    /// <summary>Applies partial updates to one provider connection.</summary>
+    /// <summary>
+    /// Applies partial updates to one provider connection. Changing authentication kind requires a replacement
+    /// secret; Azure DevOps OAuth client-credentials authentication also requires tenant and client identifiers.
+    /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="connectionId">Provider-connection identifier.</param>
     /// <param name="request">Fields to update, including the per-connection retention opt-in settings; omit a field to leave it unchanged.</param>
@@ -639,7 +419,7 @@ public sealed partial class ClientProviderConnectionsController(
     /// <response code="404">Client or provider connection not found.</response>
     /// <response code="409">A provider connection already exists for the same provider family and host.</response>
     [HttpPatch("provider-connections/{connectionId:guid}")]
-    [ProducesResponseType(typeof(ClientScmConnectionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -684,15 +464,15 @@ public sealed partial class ClientProviderConnectionsController(
                                  && !string.Equals(request.HostBaseUrl, existing.HostBaseUrl, StringComparison.Ordinal);
 
         var supportedAuthenticationValidation = this.ValidateSupportedAuthenticationConfiguration(
-            new AuthenticationConfigurationCandidate(
+            new ScmAuthenticationConfiguration(
                 existing.ProviderFamily,
                 request.HostBaseUrl ?? existing.HostBaseUrl,
                 effective.AuthenticationKind,
-                effective.AuthenticationKind == ScmAuthenticationKind.WindowsUserAccount ? effective.UserName : request.UserName,
+                effective.CandidateUserName,
                 effective.OAuthTenantId,
                 effective.OAuthClientId,
-                effective.GitHubAppId,
-                effective.GitHubAppInstallationId,
+                effective.AppId,
+                effective.InstallationId,
                 effective.HasCompatibleSecretMaterial,
                 hostBaseUrlChanged));
         if (supportedAuthenticationValidation is not null)
@@ -712,9 +492,9 @@ public sealed partial class ClientProviderConnectionsController(
                 request.DisplayName ?? existing.DisplayName,
                 request.Secret,
                 request.IsActive ?? existing.IsActive,
-                effective.PersistedGitHubAppId,
-                effective.PersistedGitHubAppInstallationId,
-                effective.AuthenticationKind == ScmAuthenticationKind.WindowsUserAccount ? effective.UserName : null,
+                effective.PersistedAppId,
+                effective.PersistedInstallationId,
+                effective.PersistedUserName,
                 request.StoreThreads ?? existing.StoreThreads,
                 request.StoreDiffs ?? existing.StoreDiffs,
                 request.RetentionDays ?? existing.RetentionDays,
@@ -733,40 +513,11 @@ public sealed partial class ClientProviderConnectionsController(
         }
     }
 
-    private static EffectivePatchAuthentication ResolveEffectivePatchAuthentication(
-        PatchClientProviderConnectionRequest request,
-        ClientScmConnectionDto existing)
-    {
-        var effectiveAuthenticationKind = request.AuthenticationKind ?? existing.AuthenticationKind;
-        var effectiveUserName = request.UserName ?? existing.UserName;
-        var effectiveOAuthTenantId = request.OAuthTenantId ?? existing.OAuthTenantId;
-        var effectiveOAuthClientId = request.OAuthClientId ?? existing.OAuthClientId;
-        var hasCompatibleSecretMaterial = !string.IsNullOrWhiteSpace(request.Secret)
-                                          || existing.AuthenticationKind == effectiveAuthenticationKind;
-        var effectiveGitHubAppId = effectiveAuthenticationKind == ScmAuthenticationKind.AppInstallation
-            ? request.GitHubAppId ?? existing.GitHubAppId
-            : request.GitHubAppId;
-        var effectiveGitHubAppInstallationId = effectiveAuthenticationKind == ScmAuthenticationKind.AppInstallation
-            ? request.GitHubAppInstallationId ?? existing.GitHubAppInstallationId
-            : request.GitHubAppInstallationId;
-        var persistedGitHubAppId = effectiveAuthenticationKind == ScmAuthenticationKind.AppInstallation
-            ? request.GitHubAppId ?? existing.GitHubAppId
-            : null;
-        var persistedGitHubAppInstallationId = effectiveAuthenticationKind == ScmAuthenticationKind.AppInstallation
-            ? request.GitHubAppInstallationId ?? existing.GitHubAppInstallationId
-            : null;
+    private EffectiveScmAuthentication ResolveEffectivePatchAuthentication(PatchClientProviderConnectionRequest request, ClientScmConnectionDto existing) =>
+        ProviderConnectionConfigurationService.ResolvePatchAuthentication(
+            providerRegistry.GetConnectionConfigurationPolicy(existing.ProviderFamily), request.AuthenticationKind, request.UserName, request.OAuthTenantId,
+            request.OAuthClientId, request.GitHubAppId, request.GitHubAppInstallationId, !string.IsNullOrWhiteSpace(request.Secret), existing);
 
-        return new EffectivePatchAuthentication(
-            effectiveAuthenticationKind,
-            effectiveUserName,
-            effectiveOAuthTenantId,
-            effectiveOAuthClientId,
-            hasCompatibleSecretMaterial,
-            effectiveGitHubAppId,
-            effectiveGitHubAppInstallationId,
-            persistedGitHubAppId,
-            persistedGitHubAppInstallationId);
-    }
 
     private async Task<IActionResult?> CheckMultipleProviderActivationCapabilityAsync(
         Guid clientId,
@@ -822,7 +573,7 @@ public sealed partial class ClientProviderConnectionsController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client or provider connection not found.</response>
     [HttpPost("provider-connections/{connectionId:guid}/verify")]
-    [ProducesResponseType(typeof(ClientScmConnectionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -848,40 +599,19 @@ public sealed partial class ClientProviderConnectionsController(
 
         try
         {
-            EnsureSupportedAuthenticationConfiguration(
-                new AuthenticationConfigurationCandidate(
+            this.EnsureSupportedAuthenticationConfiguration(
+                new ScmAuthenticationConfiguration(
                     connection.ProviderFamily,
                     connection.HostBaseUrl,
                     connection.AuthenticationKind,
                     connection.UserName,
                     connection.OAuthTenantId,
                     connection.OAuthClientId,
-                    connection.GitHubAppId,
-                    connection.GitHubAppInstallationId),
+                    connection.AppId,
+                    connection.InstallationId),
                 egressUrlPolicy);
 
-            if (connection.ProviderFamily == ScmProvider.AzureDevOps)
-            {
-                var enabledScope = (await scopeRepository.GetByConnectionIdAsync(clientId, connectionId, ct))
-                    .FirstOrDefault(scope => scope.IsEnabled);
-
-                if (enabledScope is null)
-                {
-                    throw new InvalidOperationException("Add an enabled organization scope before verifying Azure DevOps provider connections.");
-                }
-
-                var discoveryService = providerRegistry.GetProviderAdminDiscoveryService(connection.ProviderFamily);
-                await discoveryService.ListProjectsAsync(clientId, enabledScope.Id, ct);
-            }
-            else
-            {
-                var host = new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl);
-                var repositoryDiscoveryProvider =
-                    providerRegistry.GetRepositoryDiscoveryProvider(connection.ProviderFamily);
-                await repositoryDiscoveryProvider.ListScopesAsync(clientId, host, ct);
-            }
-
-            providerRegistry.GetReviewerIdentityService(connection.ProviderFamily);
+            await connectionConfiguration.VerifyAsync(connection, ct);
         }
         catch (InvalidOperationException ex)
         {
@@ -904,36 +634,6 @@ public sealed partial class ClientProviderConnectionsController(
 
         return updated is null ? this.NotFound() : this.Ok(await this.EnrichConnectionAsync(clientId, updated, ct));
     }
-
-    /// <summary>
-    ///     The candidate authentication settings evaluated by <see cref="GetAuthenticationConfigurationErrors" />.
-    ///     <see cref="ApplyHostBaseUrlEgressCheck" /> states whether <see cref="HostBaseUrl" /> is measured against
-    ///     the installation's egress policy. It is on for a create and for a verification, and on for a patch only
-    ///     when the patch changes the address.
-    /// </summary>
-    private readonly record struct AuthenticationConfigurationCandidate(
-        ScmProvider ProviderFamily,
-        string HostBaseUrl,
-        ScmAuthenticationKind AuthenticationKind,
-        string? UserName,
-        string? OAuthTenantId,
-        string? OAuthClientId,
-        long? GitHubAppId = null,
-        long? GitHubAppInstallationId = null,
-        bool HasCompatibleSecretMaterial = true,
-        bool ApplyHostBaseUrlEgressCheck = true);
-
-    /// <summary>The resolved authentication settings a PATCH request would apply, merging the request over the existing connection.</summary>
-    private readonly record struct EffectivePatchAuthentication(
-        ScmAuthenticationKind AuthenticationKind,
-        string? UserName,
-        string? OAuthTenantId,
-        string? OAuthClientId,
-        bool HasCompatibleSecretMaterial,
-        long? GitHubAppId,
-        long? GitHubAppInstallationId,
-        long? PersistedGitHubAppId,
-        long? PersistedGitHubAppInstallationId);
 }
 
 /// <summary>Request body for creating a client-scoped provider connection.</summary>

@@ -35,6 +35,8 @@ internal static class StructuralReferenceToolTestHarness
         var analyzer = includeAnalyzer ? BuildComposite() : null;
 
         return new LocalGitReviewContextTools(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetSourceIdentityPolicy(host.Provider)
+                .PrepareProCursorSymbolContext(repository, "feature/demo", 42, 7),
             workspace,
             new DisabledProCursorGateway(),
             Microsoft.Extensions.Options.Options.Create(options ?? DefaultOptions()),

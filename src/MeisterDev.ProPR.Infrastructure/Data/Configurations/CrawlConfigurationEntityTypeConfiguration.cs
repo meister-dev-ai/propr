@@ -56,6 +56,10 @@ internal sealed class CrawlConfigurationEntityTypeConfiguration : IEntityTypeCon
             .HasColumnName("is_active")
             .HasDefaultValue(true);
 
+        builder.Property(c => c.ReviewTargetLifecycle).HasColumnName("review_target_lifecycle")
+            .HasConversion<int>().HasDefaultValue(ReviewTargetLifecycle.Enabled);
+        builder.Property(c => c.ReviewTargetRevision).HasColumnName("review_target_revision").HasDefaultValue(1L);
+
         builder.Property(c => c.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
@@ -12,7 +13,9 @@ internal static class ProviderResolutionUtilities
         string organizationUrl,
         Guid? clientId,
         IClientScmConnectionRepository? connectionRepository,
-        CancellationToken ct)
+        CancellationToken ct,
+        IEnumerable<IScmConnectionConfigurationPolicy>? configurationPolicies = null,
+        string ambiguityContext = "repository configuration")
     {
         if (!clientId.HasValue || connectionRepository is null)
         {
@@ -35,34 +38,29 @@ internal static class ProviderResolutionUtilities
             return matchingProviders[0];
         }
 
+        var compatibilityProviders = (configurationPolicies ?? ScmLocalPolicyFactory.CreateConfigurationPolicies())
+            .ToDictionary(policy => policy.Provider)
+            .Values.Where(policy => policy.MatchesCompatibilityScope(organizationUrl))
+            .Select(policy => policy.Provider).ToList();
+        var compatibilityProvider = compatibilityProviders.Count == 1 ? compatibilityProviders[0] : (ScmProvider?)null;
+
         if (matchingProviders.Count > 1)
         {
-            if (LooksLikeAzureDevOpsScope(organizationUrl) && matchingProviders.Contains(ScmProvider.AzureDevOps))
+            if (compatibilityProvider.HasValue && matchingProviders.Contains(compatibilityProvider.Value))
             {
-                return ScmProvider.AzureDevOps;
+                return compatibilityProvider.Value;
             }
 
             throw new InvalidOperationException(
-                $"Multiple active SCM providers share host {normalizedHostBaseUrl} for client {clientId.Value}. The repository configuration provider is ambiguous.");
+                $"Multiple active SCM providers share host {normalizedHostBaseUrl} for client {clientId.Value}. The {ambiguityContext} provider is ambiguous.");
         }
 
-        if (LooksLikeAzureDevOpsScope(organizationUrl))
+        if (compatibilityProvider.HasValue)
         {
-            return ScmProvider.AzureDevOps;
+            return compatibilityProvider.Value;
         }
 
         throw new InvalidOperationException($"No active SCM provider connection matched host {normalizedHostBaseUrl} for client {clientId.Value}.");
-    }
-
-    internal static bool LooksLikeAzureDevOpsScope(string organizationUrl)
-    {
-        if (!Uri.TryCreate(organizationUrl, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        return string.Equals(uri.Host, "dev.azure.com", StringComparison.OrdinalIgnoreCase)
-               || uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static string NormalizeHostBaseUrl(string value)

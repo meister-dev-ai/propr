@@ -99,7 +99,7 @@ internal sealed class AdoWebhookIngressService(
             : null;
     }
 
-    private static string ClassifyDeliveryKind(IncomingAdoWebhookDelivery delivery, Guid? configuredReviewerId)
+    private static string ClassifyDeliveryKind(IncomingWebhookDelivery delivery, Guid? configuredReviewerId)
     {
         return delivery.NormalizedEventType switch
         {
@@ -123,7 +123,7 @@ internal sealed class AdoWebhookIngressService(
     private static RepositoryRef ReadRepository(
         ProviderHostRef host,
         JsonElement payload,
-        IncomingAdoWebhookDelivery delivery)
+        IncomingWebhookDelivery delivery)
     {
         var repositoryName = TryReadString(payload, "resource", "repository", "name")
                              ?? delivery.RepositoryId;
@@ -134,7 +134,7 @@ internal sealed class AdoWebhookIngressService(
         return new RepositoryRef(host, delivery.RepositoryId, projectName, projectName, repositoryName);
     }
 
-    private static string BuildDeliveryId(JsonElement payload, IncomingAdoWebhookDelivery delivery)
+    private static string BuildDeliveryId(JsonElement payload, IncomingWebhookDelivery delivery)
     {
         return TryReadString(payload, "id")
                ?? TryReadString(payload, "message", "id")

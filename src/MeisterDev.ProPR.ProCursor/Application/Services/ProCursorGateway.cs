@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -19,8 +18,6 @@ public sealed partial class ProCursorGateway(
     ProCursorIndexCoordinator indexCoordinator,
     ILogger<ProCursorGateway> logger) : IProCursorGateway
 {
-    private const string AzureDevOpsProvider = "azureDevOps";
-
     /// <inheritdoc />
     public async Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(
         Guid clientId,
@@ -257,10 +254,8 @@ public sealed partial class ProCursorGateway(
         ProCursorIndexSnapshot? latestSnapshot,
         IReadOnlyList<ProCursorIndexSnapshot> snapshotsBySource)
     {
-        var canonicalSourceRef = !string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) &&
-                                 !string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
-            ? new CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue)
-            : new CanonicalSourceReferenceDto(AzureDevOpsProvider, source.RepositoryId);
+        var canonicalSourceRef = HistoricalProCursorSourceProjection.GetCanonicalReference(
+            source.CanonicalSourceProvider, source.CanonicalSourceValue, source.RepositoryId);
 
         return new ProCursorKnowledgeSourceDto(
             source.Id,

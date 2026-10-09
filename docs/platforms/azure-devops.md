@@ -7,7 +7,7 @@ when verification fails. The fields themselves are described once in
 
 Azure DevOps authentication depends on the host variant:
 
-- Azure DevOps Services on `https://dev.azure.com` or `*.visualstudio.com` uses `oauthClientCredentials`.
+- Azure DevOps Services on `https://dev.azure.com` or `*.visualstudio.com` supports `oauthClientCredentials` and `personalAccessToken`. OAuth is the default in the connection editor.
 - Self-hosted Azure DevOps Server uses `personalAccessToken` or `windowsUserAccount`.
 - `appInstallation` is not accepted for Azure DevOps.
 
@@ -18,7 +18,7 @@ Either way the organization or collection goes into a provider scope, never into
 | ProPR field | Expected value | Where to get it |
 |---|---|---|
 | `hostBaseUrl` | `https://dev.azure.com` | Fixed value for Azure DevOps Services |
-| `authenticationKind` | `oauthClientCredentials` | The only mode hosted Azure DevOps accepts |
+| `authenticationKind` | `oauthClientCredentials` | Default authentication mode |
 | `oAuthTenantId` | Microsoft Entra tenant ID (directory ID) | Azure Portal -> Microsoft Entra ID -> Overview -> Tenant ID, or App registrations -> your app -> Overview -> Directory (tenant) ID |
 | `oAuthClientId` | Application (client) ID | Azure Portal -> App registrations -> your app -> Overview -> Application (client) ID |
 | `secret` | Client secret **value** | Azure Portal -> App registrations -> your app -> Certificates & secrets -> Client secrets -> Value |
@@ -26,6 +26,17 @@ Either way the organization or collection goes into a provider scope, never into
 
 Use the secret value, not the secret ID, and the tenant ID, not a subscription ID or the service
 principal object ID. The service principal must be usable against the target organization and project.
+
+For a token connection, select `personalAccessToken`, enter the Azure DevOps Services PAT in `secret`,
+and leave `userName`, `oAuthTenantId` and `oAuthClientId` empty. The token must permit access to the
+organization, repositories and pull requests used by ProPR.
+
+Save an enabled organization scope before verifying either authentication mode. Verification checks
+provider access separately from connection creation.
+
+Editing the host URL preserves the selected authentication mode and OAuth identifiers. Changing
+between PAT and OAuth requires a replacement secret for the new mode. OAuth also requires tenant
+and client identifiers. Same-mode metadata edits can retain the saved secret by omitting `secret`.
 
 ## Azure DevOps Server
 
@@ -108,8 +119,10 @@ fall back to the global Azure credential of the backend process. Self-hosted Azu
 falls back: without stored credentials it fails with an explicit error telling you to re-save the
 connection or re-add the scope.
 
-That credential is configured on the backend process itself rather than per client; for the variables
-that supply it, see
+Selected-connection repository discovery and pull request overview reads do not use this fallback.
+They require the selected active, verified connection and its enabled saved scope.
+
+The global credential is configured on the backend process. For its variables, see
 [a process-wide Azure credential](../operate/configuration.md#a-process-wide-azure-credential).
 
 ## Webhook registration

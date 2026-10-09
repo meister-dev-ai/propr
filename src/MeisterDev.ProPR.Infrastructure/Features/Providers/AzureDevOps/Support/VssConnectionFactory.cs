@@ -13,6 +13,8 @@ using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.OAuth;
 using Microsoft.VisualStudio.Services.WebApi;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Support;
 
@@ -47,10 +49,16 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
         string organizationUrl,
         AdoConnectionCredentials? credentials = null,
         CancellationToken ct = default)
+        => await this.GetConnectionCoreAsync(organizationUrl, credentials, false, ct);
+
+    internal Task<VssConnection> GetOverviewConnectionAsync(string organizationUrl, AdoConnectionCredentials credentials, CancellationToken ct)
+        => this.GetConnectionCoreAsync(organizationUrl, credentials, true, ct);
+
+    private async Task<VssConnection> GetConnectionCoreAsync(string organizationUrl, AdoConnectionCredentials? credentials, bool overview, CancellationToken ct)
     {
         var normalizedUrl = organizationUrl.TrimEnd('/');
         this.RefuseUnlessPermitted(normalizedUrl);
-        var cacheKey = BuildCacheKey(normalizedUrl, credentials);
+        var cacheKey = BuildCacheKey(normalizedUrl, credentials) + (overview ? "::overview" : "");
 
         if (this._cache.TryGetValue(cacheKey, out var cached) &&
             cached.ExpiresOn - DateTimeOffset.UtcNow > ExpiryBuffer)
@@ -58,7 +66,7 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
             return cached.Connection;
         }
 
-        var (conn, expiresOn) = await this.CreateConnectionAsync(normalizedUrl, credentials, ct);
+        var (conn, expiresOn) = await this.CreateConnectionAsync(normalizedUrl, credentials, ct, overview);
 
         this._cache[cacheKey] = (conn, expiresOn);
         return conn;
@@ -133,23 +141,23 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
     private async Task<(VssConnection Connection, DateTimeOffset ExpiresOn)> CreateConnectionAsync(
         string normalizedUrl,
         AdoConnectionCredentials? credentials,
-        CancellationToken ct)
+        CancellationToken ct, bool overview = false)
     {
         if (credentials is null)
         {
             var token = await credential.GetTokenAsync(new TokenRequestContext([AdoResourceScope]), ct);
             return (
-                this.CreateGuardedConnection(normalizedUrl, new VssOAuthAccessTokenCredential(token.Token)),
+                this.CreateGuardedConnection(normalizedUrl, new VssOAuthAccessTokenCredential(token.Token), overview: overview),
                 token.ExpiresOn);
         }
 
         return credentials.AuthenticationKind switch
         {
-            ScmAuthenticationKind.OAuthClientCredentials => await this.CreateOAuthConnectionAsync(normalizedUrl, credentials, ct),
+            ScmAuthenticationKind.OAuthClientCredentials => await this.CreateOAuthConnectionAsync(normalizedUrl, credentials, ct, overview),
             ScmAuthenticationKind.PersonalAccessToken => (
-                this.CreateGuardedConnection(normalizedUrl, new VssBasicCredential(string.Empty, credentials.Secret)),
+                this.CreateGuardedConnection(normalizedUrl, new VssBasicCredential(string.Empty, credentials.Secret), overview: overview),
                 NonExpiringCredentials),
-            ScmAuthenticationKind.WindowsUserAccount => this.CreateWindowsConnection(normalizedUrl, credentials),
+            ScmAuthenticationKind.WindowsUserAccount => this.CreateWindowsConnection(normalizedUrl, credentials, overview),
             _ => throw new InvalidOperationException(
                 $"Azure DevOps authentication kind '{credentials.AuthenticationKind}' is not supported by the runtime connection factory."),
         };
@@ -158,7 +166,7 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
     private async Task<(VssConnection Connection, DateTimeOffset ExpiresOn)> CreateOAuthConnectionAsync(
         string normalizedUrl,
         AdoConnectionCredentials credentials,
-        CancellationToken ct)
+        CancellationToken ct, bool overview = false)
     {
         if (string.IsNullOrWhiteSpace(credentials.OAuthTenantId) || string.IsNullOrWhiteSpace(credentials.OAuthClientId))
         {
@@ -171,7 +179,7 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
             credentials.Secret);
         var token = await effectiveCredential.GetTokenAsync(new TokenRequestContext([AdoResourceScope]), ct);
         return (
-            this.CreateGuardedConnection(normalizedUrl, new VssOAuthAccessTokenCredential(token.Token)),
+            this.CreateGuardedConnection(normalizedUrl, new VssOAuthAccessTokenCredential(token.Token), overview: overview),
             token.ExpiresOn);
     }
 
@@ -194,7 +202,7 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
     private VssConnection CreateGuardedConnection(
         string normalizedUrl,
         VssCredentials credentials,
-        NetworkCredential? transportCredentials = null)
+        NetworkCredential? transportCredentials = null, bool overview = false)
     {
         var settings = VssClientHttpRequestSettings.Default.Clone();
         var transport = CreateGuardedTransport(
@@ -205,7 +213,7 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
         return new VssConnection(
             new Uri(normalizedUrl),
             new VssHttpMessageHandler(credentials, settings, transport),
-            []);
+            overview ? [new AdoOverviewResponseHandler()] : []);
     }
 
     /// <summary>The transport every connection this factory hands out sends its requests through.</summary>
@@ -262,7 +270,7 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
 
     private (VssConnection Connection, DateTimeOffset ExpiresOn) CreateWindowsConnection(
         string normalizedUrl,
-        AdoConnectionCredentials credentials)
+        AdoConnectionCredentials credentials, bool overview = false)
     {
         var networkCredential = CreateWindowsNetworkCredential(credentials.UserName, credentials.Secret);
 
@@ -270,7 +278,7 @@ public sealed class VssConnectionFactory(TokenCredential credential, EgressUrlPo
             this.CreateGuardedConnection(
                 normalizedUrl,
                 new VssCredentials(new WindowsCredential(networkCredential)),
-                networkCredential),
+                networkCredential, overview),
             NonExpiringCredentials);
     }
 

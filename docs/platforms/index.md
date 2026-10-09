@@ -31,6 +31,7 @@ ProPR any access to a repository.
 | Provider | Host Base URL | Authentication kind | Extra required fields | Secret field expects |
 |---|---|---|---|---|
 | [Azure DevOps](azure-devops.md) | `https://dev.azure.com` or `https://{org}.visualstudio.com` | `oauthClientCredentials` | `oAuthTenantId`, `oAuthClientId` | Azure app registration client secret value |
+| [Azure DevOps](azure-devops.md) | `https://dev.azure.com` or `https://{org}.visualstudio.com` | `personalAccessToken` | none | Azure DevOps Services PAT |
 | [Azure DevOps](azure-devops.md) | self-hosted Azure DevOps Server host, for example `https://ado-server.example.com/tfs` | `personalAccessToken` | none | Azure DevOps Server PAT |
 | [Azure DevOps](azure-devops.md) | self-hosted Azure DevOps Server host, for example `https://ado-server.example.com/tfs` | `windowsUserAccount` | `userName` | Windows account password |
 | [GitHub](github.md) | `https://github.com` or your GitHub Enterprise base URL | `personalAccessToken` | none | GitHub PAT |
@@ -38,9 +39,8 @@ ProPR any access to a repository.
 | [GitLab](gitlab.md) | `https://gitlab.com` or your self-managed base URL | `personalAccessToken` | none | GitLab PAT |
 | [Forgejo](forgejo.md) | your Forgejo base URL, for example `https://codeberg.org` | `personalAccessToken` | none | Forgejo access token |
 
-Any combination not in the table is refused when you save the connection, with an error naming the
-modes that provider does accept - so you find out at save time rather than at the first connection
-attempt. `appInstallation` in particular is GitHub-only.
+ProPR rejects unsupported combinations when saving the connection and reports the accepted modes.
+`appInstallation` is GitHub-only.
 
 ### Mention answering
 
@@ -154,7 +154,7 @@ Problems specific to one platform are on that platform's page. These two are sha
 
 | Rule | Applies to |
 |---|---|
-| Hosted Azure DevOps Services accepts only `oauthClientCredentials`, and `hostBaseUrl` stays `https://dev.azure.com` | Azure DevOps |
+| Azure DevOps Services accepts `oauthClientCredentials` or `personalAccessToken` over HTTPS. OAuth remains the default; the organization URL belongs in a scope | Azure DevOps |
 | Self-hosted Azure DevOps Server accepts only `personalAccessToken` or `windowsUserAccount`, over HTTPS | Azure DevOps |
 | `oAuthTenantId` and `oAuthClientId` are both required for `oauthClientCredentials`, and rejected on an Azure DevOps Server `windowsUserAccount` connection | Azure DevOps |
 | `userName` is required for `windowsUserAccount` and must be empty for every other authentication kind | Azure DevOps |

@@ -113,7 +113,8 @@ public sealed class ConfiguredReviewerIdentityExclusionTests(PostgresContainerFi
     {
         return new AuthorActivityRecorder(
             new AuthorActivityRollupRepository(db),
-            new ConfiguredReviewerIdentityRepository(db));
+            new ConfiguredReviewerIdentityRepository(db),
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.IdentityPolicies);
     }
 
     /// <summary>An observation whose names and flag carry no automation signal, so only the identity can decide.</summary>

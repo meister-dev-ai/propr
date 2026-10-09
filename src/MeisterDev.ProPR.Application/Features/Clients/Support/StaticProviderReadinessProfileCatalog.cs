@@ -8,88 +8,16 @@ using MeisterDev.ProPR.Domain.Enums;
 namespace MeisterDev.ProPR.Application.Features.Clients.Support;
 
 /// <summary>Static readiness evidence catalog used for provider support and host-variant classification.</summary>
-public sealed class StaticProviderReadinessProfileCatalog : IProviderReadinessProfileCatalog
+public sealed class StaticProviderReadinessProfileCatalog(IEnumerable<IScmConnectionConfigurationPolicy> localPolicies) : IProviderReadinessProfileCatalog
 {
+    private readonly IReadOnlyDictionary<ScmProvider, IScmConnectionConfigurationPolicy> _localPolicies =
+        localPolicies.ToDictionary(policy => policy.Provider);
+
     internal const string Hosted = "hosted";
     internal const string SelfHosted = "selfHosted";
 
-    private static readonly
-        IReadOnlyDictionary<(ScmProvider ProviderFamily, string HostVariant), ProviderReadinessProfile> Profiles =
-            new Dictionary<(ScmProvider ProviderFamily, string HostVariant), ProviderReadinessProfile>
-            {
-                [(ScmProvider.AzureDevOps, Hosted)] = new(
-                    ScmProvider.AzureDevOps,
-                    Hosted,
-                    true,
-                    true,
-                    true,
-                    true,
-                    true,
-                    "Azure DevOps Services is fully aligned to the provider support baseline."),
-                [(ScmProvider.AzureDevOps, SelfHosted)] = new(
-                    ScmProvider.AzureDevOps,
-                    SelfHosted,
-                    true,
-                    true,
-                    false,
-                    true,
-                    false,
-                    "Self-hosted Azure DevOps remains onboarding-ready until lifecycle continuity and observability proof match the hosted baseline."),
-                [(ScmProvider.GitHub, Hosted)] = new(
-                    ScmProvider.GitHub,
-                    Hosted,
-                    true,
-                    true,
-                    true,
-                    true,
-                    true,
-                    "GitHub Cloud satisfies the current workflow-complete support bar."),
-                [(ScmProvider.GitHub, SelfHosted)] = new(
-                    ScmProvider.GitHub,
-                    SelfHosted,
-                    true,
-                    true,
-                    true,
-                    true,
-                    false,
-                    "Self-hosted GitHub remains onboarding-ready until the observability proof matches the hosted baseline."),
-                [(ScmProvider.GitLab, Hosted)] = new(
-                    ScmProvider.GitLab,
-                    Hosted,
-                    true,
-                    true,
-                    false,
-                    true,
-                    true,
-                    "GitLab hosted support remains onboarding-ready until lifecycle continuity proof reaches the feature 036 bar."),
-                [(ScmProvider.GitLab, SelfHosted)] = new(
-                    ScmProvider.GitLab,
-                    SelfHosted,
-                    true,
-                    true,
-                    false,
-                    true,
-                    false,
-                    "Self-hosted GitLab remains onboarding-ready until lifecycle and observability proof are complete."),
-                [(ScmProvider.Forgejo, Hosted)] = new(
-                    ScmProvider.Forgejo,
-                    Hosted,
-                    true,
-                    true,
-                    false,
-                    true,
-                    true,
-                    "Hosted Forgejo-family support remains onboarding-ready until lifecycle continuity proof is complete."),
-                [(ScmProvider.Forgejo, SelfHosted)] = new(
-                    ScmProvider.Forgejo,
-                    SelfHosted,
-                    true,
-                    true,
-                    false,
-                    true,
-                    false,
-                    "Self-hosted Forgejo-family support remains onboarding-ready until lifecycle and observability proof are complete."),
-            };
+    private readonly IReadOnlyDictionary<(ScmProvider ProviderFamily, string HostVariant), ProviderReadinessProfile> _profiles =
+        localPolicies.SelectMany(policy => policy.ReadinessProfiles).ToDictionary(profile => (profile.ProviderFamily, profile.HostVariant));
 
     /// <summary>Gets the readiness profile for a specific provider family and host URL.</summary>
     /// <param name="providerFamily">The SCM provider family.</param>
@@ -97,8 +25,10 @@ public sealed class StaticProviderReadinessProfileCatalog : IProviderReadinessPr
     /// <returns>The readiness profile for the provider and host variant.</returns>
     public ProviderReadinessProfile GetProfile(ScmProvider providerFamily, string hostBaseUrl)
     {
-        var hostVariant = ResolveHostVariant(providerFamily, hostBaseUrl);
-        if (Profiles.TryGetValue((providerFamily, hostVariant), out var profile))
+        var hostVariant = this._localPolicies.TryGetValue(providerFamily, out var policy)
+            ? policy.ResolveHostVariant(hostBaseUrl)
+            : SelfHosted;
+        if (this._profiles.TryGetValue((providerFamily, hostVariant), out var profile))
         {
             return profile;
         }
@@ -119,32 +49,11 @@ public sealed class StaticProviderReadinessProfileCatalog : IProviderReadinessPr
     /// <returns>A read-only list of readiness profiles for the provider.</returns>
     public IReadOnlyList<ProviderReadinessProfile> GetProfiles(ScmProvider providerFamily)
     {
-        return Profiles
+        return this._profiles
             .Where(entry => entry.Key.ProviderFamily == providerFamily)
             .Select(entry => entry.Value)
             .OrderBy(entry => entry.HostVariant, StringComparer.Ordinal)
             .ToList()
             .AsReadOnly();
-    }
-
-    internal static string ResolveHostVariant(ScmProvider providerFamily, string hostBaseUrl)
-    {
-        if (!Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var uri))
-        {
-            return SelfHosted;
-        }
-
-        var host = uri.Host;
-        return providerFamily switch
-        {
-            ScmProvider.AzureDevOps when host.Equals("dev.azure.com", StringComparison.OrdinalIgnoreCase) => Hosted,
-            ScmProvider.AzureDevOps when host.EndsWith(
-                ".visualstudio.com",
-                StringComparison.OrdinalIgnoreCase) => Hosted,
-            ScmProvider.GitHub when host.Equals("github.com", StringComparison.OrdinalIgnoreCase) => Hosted,
-            ScmProvider.GitLab when host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase) => Hosted,
-            ScmProvider.Forgejo when host.Equals("codeberg.org", StringComparison.OrdinalIgnoreCase) => Hosted,
-            _ => SelfHosted,
-        };
     }
 }

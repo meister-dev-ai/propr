@@ -8,6 +8,8 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Support;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Security;
 
@@ -15,6 +17,22 @@ internal sealed class GitLabConnectionVerifier(
     IClientScmConnectionRepository connectionRepository,
     IHttpClientFactory httpClientFactory)
 {
+    public async Task<GitLabConnectionContext> VerifyAsync(ConnectionDiscoveryContext context, CancellationToken ct = default)
+    {
+        EnsureGitLab(context.Host);
+        var connection = await connectionRepository.GetOperationalConnectionByIdAsync(context.ClientId, context.ConnectionId, ct).ConfigureAwait(false);
+        if (connection is null || !connection.IsActive || connection.Id != context.ConnectionId || connection.ClientId != context.ClientId ||
+            connection.ProviderFamily != context.Host.Provider ||
+            !string.Equals(
+                new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl).HostBaseUrl,
+                context.Host.HostBaseUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The selected connection is not available for this client and host.");
+        }
+
+        return await this.VerifyConnectionAsync(connection, context.Host, ct).ConfigureAwait(false);
+    }
+
     public async Task<GitLabConnectionContext> VerifyAsync(
         Guid clientId,
         ProviderHostRef host,
@@ -28,6 +46,20 @@ internal sealed class GitLabConnectionVerifier(
             throw new InvalidOperationException("No active GitLab connection is configured for the supplied host.");
         }
 
+        return await this.VerifyConnectionAsync(connection, host, ct).ConfigureAwait(false);
+    }
+
+    public async Task<GitLabConnectionContext> VerifyAsync(Guid clientId, ProviderHostRef host, ReviewDiscoveryContext context, CancellationToken ct = default)
+    {
+        EnsureGitLab(host);
+        var connection = await ManualReviewDiscoveryCredentials.ResolveAsync(
+            connectionRepository, clientId, host, context, new GitLabReviewSourcePolicy().IsSelectedScopeCompatible, ct).ConfigureAwait(false);
+        return await this.VerifyConnectionAsync(connection, host, ct, true).ConfigureAwait(false);
+    }
+
+    private async Task<GitLabConnectionContext> VerifyConnectionAsync(
+        ClientScmConnectionCredentialDto connection, ProviderHostRef host, CancellationToken ct, bool readOutcomes = false)
+    {
         if (connection.AuthenticationKind != ScmAuthenticationKind.PersonalAccessToken)
         {
             throw new InvalidOperationException("GitLab onboarding currently requires personal access token authentication.");
@@ -35,6 +67,11 @@ internal sealed class GitLabConnectionVerifier(
 
         using var request = CreateAuthenticatedRequest(BuildApiUri(host, "/user"), connection.Secret);
         using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
+
+        if (readOutcomes)
+        {
+            GitLabReadFailures.ThrowIfDeniedOrThrottled(response, true);
+        }
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {

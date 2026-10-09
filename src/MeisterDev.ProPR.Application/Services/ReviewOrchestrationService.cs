@@ -73,9 +73,6 @@ public sealed partial class ReviewOrchestrationService(
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
     private const string LocalWorkspaceFallbackAppliedEventName = "local_workspace_fallback_applied";
 
-    // Provider-neutral resolved-thread status token used across the SCM adapters.
-    private const string ResolvedThreadStatus = "fixed";
-
     // Reply left on a freshly posted thread that the client's post configuration marks for auto-resolution.
     private const string AutoResolvedNote = "Auto-resolved by ProPR post configuration.";
 
@@ -89,7 +86,7 @@ public sealed partial class ReviewOrchestrationService(
     ///     same type from the container, and that keeps a remote review adopting exactly what a
     ///     local one would.
     /// </summary>
-    private ReviewJobReuse Reuse => this._reuse ??= new ReviewJobReuse(jobs, prScanRepository, logger);
+    private ReviewJobReuse Reuse => this._reuse ??= new ReviewJobReuse(jobs, prScanRepository, logger, providerRegistry);
 
     /// <summary>Processes the given review job end-to-end.</summary>
     public async Task ProcessAsync(ReviewJob job, CancellationToken ct)
@@ -256,7 +253,7 @@ public sealed partial class ReviewOrchestrationService(
             await this.LoadScanStateAsync(job, ct);
 
         // Lightweight fetch: get branch names so the workspace can be prepared before the
-        // full content fetch — avoids N GetItemAsync calls for ADO-backed reviews.
+        // full content fetch, which avoids per-file provider requests.
         var prRef = await this.FetchPullRequestRefAsync(job, ct);
 
         // Prepare workspace early using branch names; full content fetch uses it below. Preparation carries
@@ -685,7 +682,7 @@ public sealed partial class ReviewOrchestrationService(
                 observedAt,
                 ReviewFindingPublicationMapper.BuildProducedFindings(
                     result.Comments, publishedResult.Comments, diagnostics, postingEnabled,
-                    ProviderSourceIdentity.FromReviewJob(job).Value),
+                    ProviderSourceIdentity.FromReviewJob(job, providerRegistry.GetSourceIdentityPolicy(job.Provider)).Value),
                 pr.RepositoryName);
 
             await codeInsightFindingIngestionService.HandleReviewFindingsProducedAsync(evt, ct);
@@ -709,29 +706,7 @@ public sealed partial class ReviewOrchestrationService(
         var host = job.ProviderHost;
         var connections = await scmConnectionRepository.GetByClientIdAsync(job.ClientId, ct);
 
-        return connections
-            .Where(connection => connection.IsActive
-                                 && connection.ProviderFamily == host.Provider
-                                 && ConnectionHostMatchesAuthority(connection.HostBaseUrl, host.HostBaseUrl))
-            // Prefer the most specific host match when several connections share an authority.
-            .OrderByDescending(connection => connection.HostBaseUrl.Length)
-            .FirstOrDefault();
-    }
-
-    private static bool ConnectionHostMatchesAuthority(string connectionHostBaseUrl, string hostAuthority)
-    {
-        // The job host is normalized to an authority (scheme://host[:port]); a connection's stored host
-        // base URL may carry a path (e.g. an Azure DevOps organization URL). Match on the authority.
-        if (!Uri.TryCreate(connectionHostBaseUrl.Trim(), UriKind.Absolute, out var connectionUri))
-        {
-            return string.Equals(
-                connectionHostBaseUrl.Trim().TrimEnd('/'),
-                hostAuthority.Trim().TrimEnd('/'),
-                StringComparison.OrdinalIgnoreCase);
-        }
-
-        var connectionAuthority = connectionUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
-        return string.Equals(connectionAuthority, hostAuthority.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+        return RetentionConnectionResolver.Resolve(connections, host.Provider, host.HostBaseUrl);
     }
 
     private static string MapRetainedChangeType(ChangeType changeType)
@@ -1758,9 +1733,8 @@ public sealed partial class ReviewOrchestrationService(
 
             try
             {
-                // Resolve FIRST, then post the note. If the status update fails, the thread is left active with no
-                // reply — never an active thread carrying a note that (falsely) claims it was auto-resolved.
-                await statusWriter.UpdateThreadStatusAsync(job.ClientId, thread, ResolvedThreadStatus, ct);
+                // Resolve before posting the note so a failed resolution does not produce a misleading reply.
+                await statusWriter.ResolveThreadAsync(job.ClientId, thread, ct);
                 autoResolvedThreadIds.Add(posted.ProviderThreadId);
                 var noteCommentId = await replyPublisher.ReplyAsync(job.ClientId, thread, AutoResolvedNote, ct);
                 await this.RecordPostedReplyOriginAsync(job, thread.ExternalThreadId, noteCommentId, ct);
@@ -1786,179 +1760,18 @@ public sealed partial class ReviewOrchestrationService(
 
     private ReviewResult PrepareResultForPublication(ReviewJob job, PullRequest pr, ReviewResult result)
     {
-        if (!RequiresInsertedInlineAnchors(job.Provider) || result.Comments.Count == 0)
+        var prepared = providerRegistry.GetCodeReviewPreparationPolicy(job.Provider).PrepareResult(pr, result);
+        if (prepared.DowngradedCount > 0)
         {
-            return result;
+            logger.LogInformation(
+                "Downgraded {DowngradedCount} {Provider} inline review comment(s) to overview comments for job {JobId} because the referenced lines were not inserted diff lines.",
+                prepared.DowngradedCount, job.Provider, job.Id);
         }
 
-        var insertedLinesByPath = BuildInsertedLineLookup(pr.ChangedFiles);
-        var normalizedComments = new List<ReviewComment>(result.Comments.Count);
-        var downgradedCount = 0;
-
-        foreach (var comment in result.Comments)
-        {
-            if (!CanUseGitLabInlineAnchor(comment, insertedLinesByPath) &&
-                !string.IsNullOrWhiteSpace(comment.FilePath) && comment.LineNumber.HasValue &&
-                comment.LineNumber.Value > 0)
-            {
-                downgradedCount++;
-
-                // Keeps the comment's provenance across the rewrite. The scope classification is the one that
-                // decides publication, and a finding in pre-existing code never sits on an inserted line, so
-                // rebuilding without it would leave every out-of-scope finding unjudged on these providers.
-                normalizedComments.Add(comment.AsPullRequestLevel($"{NormalizeReviewPath(comment.FilePath)}:L{comment.LineNumber.Value}: {comment.Message}"));
-                continue;
-            }
-
-            normalizedComments.Add(comment);
-        }
-
-        if (downgradedCount == 0)
-        {
-            return result;
-        }
-
-        logger.LogInformation(
-            "Downgraded {DowngradedCount} {Provider} inline review comment(s) to overview comments for job {JobId} because the referenced lines were not inserted diff lines.",
-            downgradedCount,
-            job.Provider,
-            job.Id);
-
-        return result with { Comments = normalizedComments.AsReadOnly() };
+        return prepared.Result;
     }
 
-    private static bool RequiresInsertedInlineAnchors(ScmProvider provider)
-    {
-        return provider is ScmProvider.GitLab or ScmProvider.Forgejo;
-    }
-
-    private static bool CanUseGitLabInlineAnchor(
-        ReviewComment comment,
-        IReadOnlyDictionary<string, HashSet<int>> insertedLinesByPath)
-    {
-        if (string.IsNullOrWhiteSpace(comment.FilePath) || !comment.LineNumber.HasValue || comment.LineNumber.Value < 1)
-        {
-            return true;
-        }
-
-        return insertedLinesByPath.TryGetValue(NormalizeReviewPath(comment.FilePath), out var insertedLines)
-               && insertedLines.Contains(comment.LineNumber.Value);
-    }
-
-    private static IReadOnlyDictionary<string, HashSet<int>> BuildInsertedLineLookup(IReadOnlyList<ChangedFile> changedFiles)
-    {
-        var lookup = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var changedFile in changedFiles)
-        {
-            if (changedFile.IsBinary)
-            {
-                continue;
-            }
-
-            lookup[NormalizeReviewPath(changedFile.Path)] = ExtractInsertedNewLines(changedFile);
-        }
-
-        return lookup;
-    }
-
-    private static HashSet<int> ExtractInsertedNewLines(ChangedFile changedFile)
-    {
-        var insertedLines = new HashSet<int>();
-        var diffLines = changedFile.UnifiedDiff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-        var hasHunkHeader = false;
-        var currentNewLine = 0;
-
-        foreach (var diffLine in diffLines)
-        {
-            ProcessUnifiedDiffLine(diffLine, insertedLines, ref currentNewLine, ref hasHunkHeader);
-        }
-
-        if (!hasHunkHeader && changedFile.ChangeType == ChangeType.Add)
-        {
-            var lineCount = CountLines(changedFile.FullContent);
-            for (var lineNumber = 1; lineNumber <= lineCount; lineNumber++)
-            {
-                insertedLines.Add(lineNumber);
-            }
-        }
-
-        return insertedLines;
-    }
-
-    // Classifies a single unified-diff line and updates the running new-file line cursor.
-    private static void ProcessUnifiedDiffLine(
-        string diffLine,
-        HashSet<int> insertedLines,
-        ref int currentNewLine,
-        ref bool hasHunkHeader)
-    {
-        if (diffLine.StartsWith("@@", StringComparison.Ordinal))
-        {
-            if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
-            {
-                currentNewLine = newLineStart;
-                hasHunkHeader = true;
-            }
-
-            return;
-        }
-
-        if (!hasHunkHeader)
-        {
-            return;
-        }
-
-        switch (ReviewDiffProcessor.ClassifyHunkLine(diffLine))
-        {
-            case HunkLineKind.Added:
-                insertedLines.Add(currentNewLine);
-                currentNewLine++;
-                break;
-            case HunkLineKind.Context:
-                currentNewLine++;
-                break;
-            case HunkLineKind.Removed:
-            case HunkLineKind.Marker:
-                // Removed lines and non-payload markers occupy no new-file line.
-                break;
-        }
-    }
-
-    private static bool TryParseUnifiedDiffNewLineStart(string diffLine, out int newLineStart)
-    {
-        newLineStart = 0;
-
-        var plusIndex = diffLine.IndexOf('+');
-        if (plusIndex < 0)
-        {
-            return false;
-        }
-
-        var endIndex = plusIndex + 1;
-        while (endIndex < diffLine.Length && char.IsDigit(diffLine[endIndex]))
-        {
-            endIndex++;
-        }
-
-        return endIndex > plusIndex + 1
-               && int.TryParse(diffLine[(plusIndex + 1)..endIndex], out newLineStart)
-               && newLineStart > 0;
-    }
-
-    private static int CountLines(string content)
-    {
-        if (string.IsNullOrEmpty(content))
-        {
-            return 0;
-        }
-
-        return content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Length;
-    }
-
-    private static string NormalizeReviewPath(string path)
-    {
-        return path.TrimStart('/');
-    }
+    private static string NormalizeReviewPath(string path) => ReviewDiffAnchors.NormalizePath(path);
 
     /// <summary>
     ///     Loads prompt overrides for every known prompt key for the given client.
@@ -2105,41 +1918,27 @@ public sealed partial class ReviewOrchestrationService(
         Message = "Review job {JobId} for pull request {PullRequestId} was refused before it started: {Reason}")]
     private static partial void LogReviewRefusedBySize(ILogger logger, Guid jobId, int pullRequestId, string reason);
 
-    private static ReviewerIdentity ResolvePublicationIdentity(ReviewJob job, PullRequest pr)
+    private ReviewerIdentity ResolvePublicationIdentity(ReviewJob job, PullRequest pr)
     {
         var externalUserId = pr.AuthorizedIdentityName
                              ?? pr.AuthorizedIdentityId?.ToString("D")
                              ?? $"connection:{job.ClientId:D}:{job.Provider}:{job.RepositoryId}:{job.PullRequestId}";
         var login = pr.AuthorizedIdentityName ?? externalUserId;
         var displayName = pr.AuthorizedIdentityName ?? login;
-        var isBot = job.Provider is ScmProvider.GitHub && login.EndsWith("[bot]", StringComparison.OrdinalIgnoreCase);
-
+        var isBot = providerRegistry.GetIdentityPolicy(job.Provider).IsPublicationBot(login);
         return new ReviewerIdentity(job.ProviderHost, externalUserId, login, displayName, isBot);
     }
 
-    private static ReviewPublicationContext BuildPublicationContext(
-        ReviewJob job,
-        PullRequest pr,
-        ReviewRevision revision,
-        ReviewerIdentity publicationIdentity,
-        int? compareToIterationId)
-    {
-        object? providerSpecificContext = job.Provider == ScmProvider.AzureDevOps
-            ? new AzureDevOpsPublicationContext(compareToIterationId)
-            : null;
-
-        return new ReviewPublicationContext(
-            job.CodeReviewReference,
-            revision,
-            publicationIdentity,
-            pr.ExistingThreads ?? [],
-            providerSpecificContext);
-    }
+    private ReviewPublicationContext BuildPublicationContext(
+        ReviewJob job, PullRequest pr, ReviewRevision revision, ReviewerIdentity publicationIdentity, int? compareToIterationId) =>
+        new(
+            job.CodeReviewReference, revision, publicationIdentity, pr.ExistingThreads ?? [],
+            providerRegistry.GetCodeReviewPreparationPolicy(job.Provider).CreatePublicationContext(compareToIterationId));
 
     private async Task<ReviewRevision> ResolvePublicationReviewRevisionAsync(ReviewJob job, CancellationToken ct)
     {
         var reviewRevision = job.ReviewRevisionReference;
-        if (job.Provider != ScmProvider.AzureDevOps && RequiresLiveRevisionRefresh(reviewRevision))
+        if (providerRegistry.GetCodeReviewPreparationPolicy(job.Provider).RequiresLiveRevisionRefresh(reviewRevision))
         {
             var latestRevision = await providerRegistry
                 .GetCodeReviewQueryService(job.Provider)
@@ -2158,62 +1957,8 @@ public sealed partial class ReviewOrchestrationService(
         return ResolveReviewRevision(job);
     }
 
-    private static bool RequiresLiveRevisionRefresh(ReviewRevision? revision)
-    {
-        if (revision is null)
-        {
-            return true;
-        }
-
-        return !LooksLikeCommitSha(revision.HeadSha)
-               || !LooksLikeCommitSha(revision.BaseSha)
-               || (revision.StartSha is not null && !LooksLikeCommitSha(revision.StartSha));
-    }
-
-    private static bool LooksLikeCommitSha(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-
-        var trimmed = value.Trim();
-        if (trimmed.Length is < 7 or > 64)
-        {
-            return false;
-        }
-
-        foreach (var character in trimmed)
-        {
-            if (!Uri.IsHexDigit(character))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static ReviewRevision ResolveReviewRevision(ReviewJob job)
-    {
-        if (job.ReviewRevisionReference is { } reviewRevision)
-        {
-            return reviewRevision;
-        }
-
-        if (job.Provider == ScmProvider.AzureDevOps)
-        {
-            var legacyRevisionId = job.IterationId.ToString(CultureInfo.InvariantCulture);
-            return new ReviewRevision(
-                $"ado-head-{legacyRevisionId}",
-                $"ado-base-{legacyRevisionId}",
-                null,
-                legacyRevisionId,
-                null);
-        }
-
-        throw new InvalidOperationException($"Review job {job.Id} is missing normalized review revision data for provider {job.Provider}.");
-    }
+    private ReviewRevision ResolveReviewRevision(ReviewJob job) =>
+        providerRegistry.GetCodeReviewPreparationPolicy(job.Provider).ResolveStoredRevision(job);
 
     private sealed record ResolvedReviewerContext(ReviewerIdentity? ConfiguredTriggerReviewer);
 

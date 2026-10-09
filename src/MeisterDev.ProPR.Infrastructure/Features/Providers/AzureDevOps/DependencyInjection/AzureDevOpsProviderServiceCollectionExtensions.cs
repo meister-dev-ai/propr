@@ -5,6 +5,7 @@ using Azure.Core;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Support;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Crawling.Webhooks.Runtime;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Stub;
@@ -14,20 +15,45 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Security;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Webhooks;
+using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
+using Microsoft.Extensions.Logging;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
+
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 
 internal static class AzureDevOpsProviderServiceCollectionExtensions
 {
+    internal static IServiceCollection AddAzureDevOpsLocalPolicies(this IServiceCollection services)
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<ScmBrowserOriginDeclaration, AdoBrowserOriginDeclaration>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IReviewSourcePolicy, AdoReviewSourcePolicy>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IWebhookIngressPolicy,
+                MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Webhooks.AdoWebhookIngressPolicy>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IScmConnectionConfigurationPolicy, AdoConnectionConfigurationPolicy>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IScmIdentityPolicy, AdoIdentityPolicy>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ICodeReviewPreparationPolicy,
+                MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing.AdoReviewPreparationPolicy>());
+        return services;
+    }
+
     public static IServiceCollection AddAzureDevOpsProviderAdapters(this IServiceCollection services)
     {
         services.AddPostedCommentComposer();
+        services.AddAzureDevOpsLocalPolicies();
 
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IRepositoryDiscoveryProvider, AdoRepositoryDiscoveryProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewerIdentityService, AdoReviewerIdentityService>());
+        services.TryAddKeyedScoped<IReviewerIdentityService, AdoReviewerIdentityService>(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps);
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewQueryService, AdoCodeReviewQueryService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewPublicationService, AdoCodeReviewPublicationService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewDiscoveryProvider, AdoReviewDiscoveryProvider>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewOverviewProvider, AdoReviewOverviewProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IWebhookIngressService, AdoWebhookIngressService>());
 
         return services;
@@ -90,10 +116,25 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
         return services;
     }
 
+    public static IServiceCollection AddAzureDevOpsOperationalServices(this IServiceCollection services, IConfiguration configuration)
+    {
+        var credential = configuration.GetValue<bool>("ADO_STUB_PR") ? null : AdoCredentialResolver.Resolve(configuration);
+        return services.AddAzureDevOpsInfrastructureServices(configuration, credential);
+    }
+
     public static IServiceCollection AddAzureDevOpsCrawlingServices(
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddScoped<IWebhookReviewActivationService>(sp => new WebhookReviewActivationService(
+            sp.GetRequiredService<IPullRequestIterationResolver>(),
+            sp.GetRequiredService<SubmitReviewJobHandler>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger(
+                "MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Services.WebhookReviewActivationService")));
+        services.AddScoped<IWebhookReviewLifecycleSyncService>(sp => new WebhookReviewLifecycleSyncService(
+            sp.GetRequiredService<IJobRepository>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger(
+                "MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Services.WebhookReviewLifecycleSyncService")));
         if (configuration.HasDatabaseConnectionString())
         {
             services.TryAddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();

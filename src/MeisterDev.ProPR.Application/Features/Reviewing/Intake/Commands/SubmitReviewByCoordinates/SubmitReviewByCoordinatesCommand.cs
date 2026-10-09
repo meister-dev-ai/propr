@@ -15,9 +15,11 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.Submit
 /// <param name="ProviderProjectKey">Project, workspace, or namespace key exactly as the covering configuration stores it.</param>
 /// <param name="RepositoryId">Provider repository identity.</param>
 /// <param name="PullRequestId">Pull request number as the provider numbers it.</param>
+/// <param name="IsCustomerRequest">Whether repository lifecycle exclusions apply to this customer admission.</param>
 public sealed record SubmitReviewByCoordinatesCommand(
     Guid ClientId,
     string ProviderScopePath,
     string ProviderProjectKey,
     string RepositoryId,
-    int PullRequestId);
+    int PullRequestId,
+    bool IsCustomerRequest = false);

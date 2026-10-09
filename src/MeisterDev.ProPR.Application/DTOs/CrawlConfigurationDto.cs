@@ -1,8 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Application.DTOs;
 
@@ -23,6 +23,8 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <param name="ProCursorSourceIds">Explicit ProCursor source IDs selected for this crawl when source scoping is enabled.</param>
 /// <param name="InvalidProCursorSourceIds">Selected ProCursor source IDs that are now invalid and need operator repair.</param>
 /// <param name="ReviewTemperature">Optional review-temperature override for crawl-triggered review jobs.</param>
+/// <param name="ReviewTargetLifecycle">Customer review availability independent of crawler activation.</param>
+/// <param name="ReviewTargetRevision">Conditional target lifecycle and policy revision.</param>
 public sealed record CrawlConfigurationDto(
     Guid Id,
     Guid ClientId,
@@ -37,7 +39,9 @@ public sealed record CrawlConfigurationDto(
     ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
     IReadOnlyList<Guid>? ProCursorSourceIds = null,
     IReadOnlyList<Guid>? InvalidProCursorSourceIds = null,
-    float? ReviewTemperature = null);
+    float? ReviewTemperature = null,
+    ReviewTargetLifecycle ReviewTargetLifecycle = ReviewTargetLifecycle.Enabled,
+    long ReviewTargetRevision = 1);
 
 /// <summary>Data transfer object for a crawl repository filter entry.</summary>
 /// <param name="Id">Unique identifier.</param>

@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
@@ -12,6 +11,9 @@ using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.TestSupport;
+using MeisterDev.ProPR.Application.Interfaces;
+using NSubstitute;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
@@ -92,6 +94,41 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
             .Where(client => clientIds.Contains(client.Id))
             .ExecuteDeleteAsync();
         await this._dbContext.DisposeAsync();
+    }
+
+    [Theory]
+    [InlineData(WebhookProviderType.AzureDevOps, ScmProvider.AzureDevOps)]
+    [InlineData(WebhookProviderType.GitHub, ScmProvider.GitHub)]
+    [InlineData(WebhookProviderType.GitLab, ScmProvider.GitLab)]
+    [InlineData(WebhookProviderType.Forgejo, ScmProvider.Forgejo)]
+    public async Task ActivationChecksPreserveKnownProviderMappings(WebhookProviderType providerType, ScmProvider expected)
+    {
+        var configuration = await this._configRepo.AddAsync(
+            this._clientId, providerType,
+            Guid.NewGuid().ToString("N"), "https://host.example", "project", "synthetic-ciphertext", []);
+        var activation = Substitute.For<IProviderActivationService>();
+        activation.IsEnabledAsync(expected, Arg.Any<CancellationToken>()).Returns(true);
+        var repository = new EfWebhookConfigurationRepository(this._dbContext, activation);
+
+        Assert.NotNull(await repository.GetByIdAsync(configuration.Id));
+        await activation.Received(1).IsEnabledAsync(expected, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UndefinedSavedProviderRetainsStrictActivationError()
+    {
+        var providerType = (WebhookProviderType)999;
+        var configuration = await this._configRepo.AddAsync(
+            this._clientId, providerType,
+            Guid.NewGuid().ToString("N"), "https://host.example", "project", "synthetic-ciphertext", []);
+        var activation = Substitute.For<IProviderActivationService>();
+        var repository = new EfWebhookConfigurationRepository(this._dbContext, activation);
+
+        var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => repository.GetByIdAsync(configuration.Id));
+        Assert.Equal("providerType", error.ParamName);
+        Assert.Equal(providerType, error.ActualValue);
+        await activation.DidNotReceive().IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>());
+        Assert.Equal(providerType, (await this._configRepo.GetByIdAsync(configuration.Id))!.ProviderType);
     }
 
     [Fact]

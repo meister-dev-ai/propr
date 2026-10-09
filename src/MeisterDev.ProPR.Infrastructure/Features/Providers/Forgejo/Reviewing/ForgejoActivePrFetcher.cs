@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Security;
 using Microsoft.Extensions.Logging;
 
@@ -88,7 +89,7 @@ internal sealed class ForgejoActivePrFetcher(
                 ForgejoConnectionVerifier.BuildApiUri(host, $"/repos/{repositoryPath}/pulls", listingQuery),
                 ct);
 
-            if (ProviderThrottleSignal.IsThrottled(response))
+            if (ForgejoReadFailures.IsThrottled(response))
             {
                 throw new ProviderThrottledException($"Forgejo throttled the pull-request listing for {repositoryPath}.");
             }
@@ -173,7 +174,7 @@ internal sealed class ForgejoActivePrFetcher(
                 $"/repositories/{Uri.EscapeDataString(repository.RepositoryId)}"),
             ct);
 
-        if (ProviderThrottleSignal.IsThrottled(response))
+        if (ForgejoReadFailures.IsThrottled(response))
         {
             throw new ProviderThrottledException($"Forgejo throttled the repository lookup for {repository.RepositoryId}.");
         }

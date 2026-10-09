@@ -68,7 +68,7 @@ public sealed class AdoWebhookIngressServiceTests
             .Returns(new ReviewerIdentity(host, reviewerId.ToString("D"), "review-bot", "Review Bot", true));
         parser.Parse(Arg.Any<string>(), Arg.Any<JsonElement>())
             .Returns(
-                new IncomingAdoWebhookDelivery(
+                new IncomingWebhookDelivery(
                     "providers/ado",
                     "git.pullrequest.updated",
                     WebhookEventType.PullRequestUpdated,

@@ -86,7 +86,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
         var reviewerManager = CreateReviewerManager();
         var threadStatusWriter = CreateThreadStatusWriter();
         var threadReplyPublisher = CreateThreadReplyPublisher();
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(commentPoster);
         registry.GetReviewAssignmentService(Arg.Any<ScmProvider>()).Returns(reviewerManager);
         registry.GetReviewThreadStatusWriter(Arg.Any<ScmProvider>()).Returns(threadStatusWriter);

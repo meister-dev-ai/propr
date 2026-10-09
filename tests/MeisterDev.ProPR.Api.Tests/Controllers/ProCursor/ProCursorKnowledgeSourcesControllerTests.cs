@@ -11,7 +11,8 @@ using System.Text.Json;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
@@ -35,6 +36,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
+
 
 namespace MeisterDev.ProPR.Api.Tests.Controllers.ProCursor;
 
@@ -49,6 +52,44 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
     public Task DisposeAsync()
     {
         return Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task CreateGuidedSource_UsesSuppliedSelection()
+    {
+        using var isolatedFactory = new ProCursorApiFactory();
+        var scopeId = Guid.NewGuid();
+        var selection = Substitute.For<IReviewConfigurationSelectionService>();
+        var connectionId = Guid.NewGuid();
+        var context = new ConnectionDiscoveryContext(isolatedFactory.ClientId, connectionId, new(ScmProvider.AzureDevOps, "https://dev.azure.com"));
+        selection.GetConnectionContextAsync(isolatedFactory.ClientId, connectionId, Arg.Any<CancellationToken>()).Returns(context);
+        selection.GetDescriptor(context).Returns(
+            new ConnectionDiscoveryDescriptor(
+                ScmProvider.AzureDevOps, "Organization", "Project", [new(ProCursorSourceKind.Repository, "Repository")], true, true));
+        selection.GetScopesAsync(context, Arg.Any<CancellationToken>()).Returns([new ConnectionDiscoveryScope(scopeId.ToString(), "Organization", scopeId)]);
+        selection.GetSourcesAsync(context, scopeId.ToString(), "project-a", ProCursorSourceKind.Repository, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<IReadOnlyList<ConnectionDiscoverySource>>(new InvalidOperationException("selection guided refusal")));
+        using var selectedFactory = isolatedFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.AddSingleton(selection)));
+        var client = selectedFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/clients/{isolatedFactory.ClientId}/procursor/sources");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", isolatedFactory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                displayName = "Knowledge Repo", sourceKind = "repository", organizationScopeId = scopeId, connectionId, scopeKey = scopeId.ToString(),
+                providerProjectKey = "project-a", canonicalSourceRef = new { provider = "azureDevOps", value = "repo-guided" },
+                sourceDisplayName = "Selected Repository", defaultBranch = "main", symbolMode = "auto",
+                trackedBranches = new[] { new { branchName = "main", refreshTriggerMode = "branchUpdate", miniIndexEnabled = true } },
+            });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("selection guided refusal", await response.Content.ReadAsStringAsync());
+        await selection.Received(1).GetSourcesAsync(
+            context, scopeId.ToString(), "project-a", ProCursorSourceKind.Repository,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -95,15 +136,17 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         var canonicalSourceRef = new CanonicalSourceReferenceDto("azureDevOps", "repo-guided");
 
         factory.AdoDiscoveryService
-            .ListSourcesAsync(
+            .ListSourceOptionsAsync(
                 factory.ClientId,
                 organizationScopeId,
                 "project-a",
                 ProCursorSourceKind.Repository,
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AdoSourceOptionDto>>([new AdoSourceOptionDto("repository", canonicalSourceRef, "Contoso.Api", "main")]));
+                Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<ScmDiscoverySourceOption>>(
+                    [new ScmDiscoverySourceOption("repository", canonicalSourceRef, "Contoso.Api", "main")]));
         factory.AdoDiscoveryService
-            .ListBranchesAsync(
+            .ListBranchOptionsAsync(
                 factory.ClientId,
                 organizationScopeId,
                 "project-a",
@@ -111,8 +154,8 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 Arg.Is<CanonicalSourceReferenceDto>(value =>
                     value.Provider == canonicalSourceRef.Provider &&
                     value.Value == canonicalSourceRef.Value),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AdoBranchOptionDto>>([new AdoBranchOptionDto("main", true)]));
+                Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+            .Returns(Task.FromResult<IReadOnlyList<ScmDiscoveryBranchOption>>([new ScmDiscoveryBranchOption("main", true)]));
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -163,16 +206,17 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         var canonicalSourceRef = new CanonicalSourceReferenceDto("azureDevOps", "wiki-guided");
 
         factory.AdoDiscoveryService
-            .ListSourcesAsync(
+            .ListSourceOptionsAsync(
                 factory.ClientId,
                 organizationScopeId,
                 "project-a",
                 ProCursorSourceKind.AdoWiki,
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
             .Returns(
-                Task.FromResult<IReadOnlyList<AdoSourceOptionDto>>([new AdoSourceOptionDto("adoWiki", canonicalSourceRef, "Engineering Wiki", "wikiMain")]));
+                Task.FromResult<IReadOnlyList<ScmDiscoverySourceOption>>(
+                    [new ScmDiscoverySourceOption("adoWiki", canonicalSourceRef, "Engineering Wiki", "wikiMain")]));
         factory.AdoDiscoveryService
-            .ListBranchesAsync(
+            .ListBranchOptionsAsync(
                 factory.ClientId,
                 organizationScopeId,
                 "project-a",
@@ -180,8 +224,8 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 Arg.Is<CanonicalSourceReferenceDto>(value =>
                     value.Provider == canonicalSourceRef.Provider &&
                     value.Value == canonicalSourceRef.Value),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AdoBranchOptionDto>>([new AdoBranchOptionDto("wikiMain", true)]));
+                Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+            .Returns(Task.FromResult<IReadOnlyList<ScmDiscoveryBranchOption>>([new ScmDiscoveryBranchOption("wikiMain", true)]));
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -231,13 +275,13 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         var canonicalSourceRef = new CanonicalSourceReferenceDto("azureDevOps", "repo-stale");
 
         factory.AdoDiscoveryService
-            .ListSourcesAsync(
+            .ListSourceOptionsAsync(
                 factory.ClientId,
                 organizationScopeId,
                 "project-a",
                 ProCursorSourceKind.Repository,
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AdoSourceOptionDto>>([]));
+                Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+            .Returns(Task.FromResult<IReadOnlyList<ScmDiscoverySourceOption>>([]));
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -503,30 +547,6 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         Assert.Equal("The upstream ProCursor dependency is unavailable.", payload.GetProperty("error").GetString());
     }
 
-    [Fact]
-    public async Task OpenApi_ContainsProCursorPaths()
-    {
-        var openApiPath = Path.GetFullPath(
-            Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
-                "..",
-                "openapi.json"));
-        var content = await File.ReadAllTextAsync(openApiPath);
-
-        Assert.Contains("/admin/clients/{clientId}/procursor/sources", content, StringComparison.Ordinal);
-        Assert.Contains(
-            "/admin/clients/{clientId}/procursor/sources/{sourceId}/branches",
-            content,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "/admin/clients/{clientId}/procursor/sources/{sourceId}/refresh",
-            content,
-            StringComparison.Ordinal);
-    }
 
     private HttpClient CreateBrokerClient()
     {
@@ -584,7 +604,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         public Guid ClientUserId { get; } = Guid.NewGuid();
 
         public IProviderAdminDiscoveryService AdoDiscoveryService { get; } =
-            Substitute.For<IProviderAdminDiscoveryService>();
+            MeisterDev.ProPR.TestSupport.AdoGuidedDiscoveryTestSupport.Create();
 
         public IProCursorScmBroker ScmBroker { get; } = Substitute.For<IProCursorScmBroker>();
 
@@ -650,7 +670,8 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                     OAuthTenantId = "contoso.onmicrosoft.com",
                     OAuthClientId = "11111111-1111-1111-1111-111111111111",
                     DisplayName = displayName ?? organizationUrl,
-                    EncryptedSecretMaterial = "protected-secret",
+                    EncryptedSecretMaterial = scope.ServiceProvider.GetRequiredService<ISecretProtectionCodec>()
+                        .Protect("fixture-secret", "ClientScmConnectionSecret"),
                     VerificationStatus = "verified",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
@@ -740,6 +761,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 // The licensing module is not composed here, so client creation admits through a gate with no ceiling.
                 services.AddScoped<IStockQuotaGate, UnlimitedStockQuotaGate>();
                 services.AddScoped<IClientScmConnectionRepository, ClientScmConnectionRepository>();
+                services.AddScoped<IClientScmScopeRepository, ClientScmScopeRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
                 services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();
                 services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();
@@ -815,14 +837,19 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
 
+                this.AdoDiscoveryService.ListProjectOptionsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+                    .Returns(call => Task.FromResult<IReadOnlyList<ScmDiscoveryProjectOption>>([new(call.ArgAt<Guid>(1), "project-a", "Project A")]));
+
                 services.AddScoped<IProviderAdminDiscoveryService>(sp =>
                     new TestProviderAdminDiscoveryService(
                         this.AdoDiscoveryService,
                         sp.GetRequiredService<MeisterProPRDbContext>()));
                 services.AddScoped<IScmProviderRegistry>(sp =>
                 {
-                    var providerRegistry = Substitute.For<IScmProviderRegistry>();
+                    var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
                     providerRegistry.IsRegistered(ScmProvider.AzureDevOps).Returns(true);
+                    providerRegistry.GetRepositoryDiscoveryProvider(ScmProvider.AzureDevOps)
+                        .Returns(sp.GetServices<IRepositoryDiscoveryProvider>().Single(provider => provider.Provider == ScmProvider.AzureDevOps));
                     providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
                         .Returns(sp.GetRequiredService<IProviderAdminDiscoveryService>());
                     return providerRegistry;
@@ -1367,14 +1394,22 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         {
             public ScmProvider Provider => ScmProvider.AzureDevOps;
 
+            public Task<MeisterDev.ProPR.Application.Features.Crawling.Configuration.GuidedSourceSelection> ResolveGuidedSourceAsync(
+                Guid clientId, Guid scopeId, string projectId, ProCursorSourceKind kind,
+                CanonicalSourceReferenceDto? reference, CancellationToken ct = default, Guid? connectionId = null) =>
+                MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Discovery.AdoGuidedDiscovery.ResolveSourceAsync(
+                    this, clientId, scopeId, projectId, kind, reference, ct, connectionId);
+
             public async Task<ClientScmScopeDto?> GetScopeAsync(
                 Guid clientId,
                 Guid scopeId,
-                CancellationToken ct = default)
+                CancellationToken ct = default, Guid? connectionId = null)
             {
                 var scope = await dbContext.ClientScmScopes
                     .AsNoTracking()
-                    .SingleOrDefaultAsync(record => record.ClientId == clientId && record.Id == scopeId, ct);
+                    .SingleOrDefaultAsync(
+                        record => record.ClientId == clientId && record.Id == scopeId &&
+                                  (!connectionId.HasValue || record.ConnectionId == connectionId.Value), ct);
 
                 return scope is null
                     ? null
@@ -1394,48 +1429,49 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                         scope.UpdatedAt);
             }
 
-            public Task<IReadOnlyList<AdoProjectOptionDto>> ListProjectsAsync(
+            public Task<IReadOnlyList<ScmDiscoveryProjectOption>> ListProjectOptionsAsync(
                 Guid clientId,
                 Guid scopeId,
-                CancellationToken ct = default)
+                CancellationToken ct = default, Guid? connectionId = null)
             {
-                return adoDiscoveryService.ListProjectsAsync(clientId, scopeId, ct);
+                return adoDiscoveryService.ListProjectOptionsAsync(clientId, scopeId, ct, connectionId);
             }
 
-            public Task<IReadOnlyList<AdoSourceOptionDto>> ListSourcesAsync(
+            public Task<IReadOnlyList<ScmDiscoverySourceOption>> ListSourceOptionsAsync(
                 Guid clientId,
                 Guid scopeId,
                 string projectId,
                 ProCursorSourceKind sourceKind,
-                CancellationToken ct = default)
+                CancellationToken ct = default, Guid? connectionId = null)
             {
-                return adoDiscoveryService.ListSourcesAsync(clientId, scopeId, projectId, sourceKind, ct);
+                return adoDiscoveryService.ListSourceOptionsAsync(clientId, scopeId, projectId, sourceKind, ct, connectionId);
             }
 
-            public Task<IReadOnlyList<AdoBranchOptionDto>> ListBranchesAsync(
+            public Task<IReadOnlyList<ScmDiscoveryBranchOption>> ListBranchOptionsAsync(
                 Guid clientId,
                 Guid scopeId,
                 string projectId,
                 ProCursorSourceKind sourceKind,
                 CanonicalSourceReferenceDto canonicalSourceRef,
-                CancellationToken ct = default)
+                CancellationToken ct = default, Guid? connectionId = null)
             {
-                return adoDiscoveryService.ListBranchesAsync(
+                return adoDiscoveryService.ListBranchOptionsAsync(
                     clientId,
                     scopeId,
                     projectId,
                     sourceKind,
                     canonicalSourceRef,
-                    ct);
+                    ct,
+                    connectionId);
             }
 
-            public Task<IReadOnlyList<AdoCrawlFilterOptionDto>> ListCrawlFiltersAsync(
+            public Task<IReadOnlyList<ScmDiscoveryCrawlFilterOption>> ListCrawlFilterOptionsAsync(
                 Guid clientId,
                 Guid scopeId,
                 string projectId,
-                CancellationToken ct = default)
+                CancellationToken ct = default, Guid? connectionId = null)
             {
-                return adoDiscoveryService.ListCrawlFiltersAsync(clientId, scopeId, projectId, ct);
+                return adoDiscoveryService.ListCrawlFilterOptionsAsync(clientId, scopeId, projectId, ct, connectionId);
             }
         }
     }

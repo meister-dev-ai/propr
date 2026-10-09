@@ -84,7 +84,7 @@ public sealed partial class AdoPrCrawlerWorker(
         finally
         {
             sw.Stop();
-            metrics.RecordCrawlDuration(ScmProvider.AzureDevOps, sw.Elapsed.TotalSeconds);
+            metrics.RecordCrawlDuration(ScmProviderVocabulary.AzureDevOpsCompatibilityDefault, sw.Elapsed.TotalSeconds);
         }
     }
 

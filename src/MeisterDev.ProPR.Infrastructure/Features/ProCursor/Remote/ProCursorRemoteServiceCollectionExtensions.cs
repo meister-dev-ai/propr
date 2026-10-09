@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Options;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -16,6 +17,7 @@ public static class ProCursorRemoteServiceCollectionExtensions
 {
     public static IServiceCollection AddProCursorRemoteMode(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddScmProviderLocalDeclarations();
         services.AddOptions<ProCursorRemoteOptions>()
             .Configure(options =>
             {

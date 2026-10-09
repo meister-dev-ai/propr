@@ -10,6 +10,8 @@ using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
@@ -25,8 +27,12 @@ public sealed partial class JobRepository(
     MeisterProPRDbContext dbContext,
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
     ILogger<JobRepository> logger,
-    IAuthorActivityRecorder? authorActivityRecorder = null) : IJobRepository
+    IAuthorActivityRecorder? authorActivityRecorder = null,
+    IEnumerable<IReviewSourcePolicy>? sourcePolicies = null) : IJobRepository
 {
+    private readonly IReadOnlyDictionary<ScmProvider, IReviewSourcePolicy> _sourcePolicies =
+        (sourcePolicies ?? ScmLocalPolicyFactory.CreateSourcePolicies()).ToDictionary(policy => policy.Provider);
+
     /// <summary>How much of a review summary the history list carries per row.</summary>
     private const int ResultSummaryExcerptLength = 200;
 
@@ -252,6 +258,7 @@ public sealed partial class JobRepository(
 
     /// <inheritdoc />
     public ReviewJob? FindActiveJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -259,6 +266,7 @@ public sealed partial class JobRepository(
         int iterationId)
     {
         return dbContext.ReviewJobs
+            .Where(j => j.ClientId == clientId)
             .AsEnumerable()
             .FirstOrDefault(j => string.Equals(j.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                                  && string.Equals(j.ProjectId, projectId, StringComparison.Ordinal)
@@ -270,6 +278,7 @@ public sealed partial class JobRepository(
 
     /// <inheritdoc />
     public ReviewJob? FindCompletedJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -277,6 +286,7 @@ public sealed partial class JobRepository(
         int iterationId)
     {
         return dbContext.ReviewJobs
+            .Where(j => j.ClientId == clientId)
             .AsEnumerable()
             .Where(j => string.Equals(j.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                         && string.Equals(j.ProjectId, projectId, StringComparison.Ordinal)
@@ -290,6 +300,7 @@ public sealed partial class JobRepository(
 
     /// <inheritdoc />
     public ReviewJob? FindFailedJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -297,6 +308,7 @@ public sealed partial class JobRepository(
         int iterationId)
     {
         return dbContext.ReviewJobs
+            .Where(j => j.ClientId == clientId)
             .AsEnumerable()
             .Where(j => string.Equals(j.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                         && string.Equals(j.ProjectId, projectId, StringComparison.Ordinal)
@@ -643,7 +655,8 @@ public sealed partial class JobRepository(
         await this.AcquireReviewJobLockAsync(job, ct);
 
         var activeJobs = await dbContext.ReviewJobs
-            .Where(candidate => candidate.OrganizationUrl == job.OrganizationUrl
+            .Where(candidate => candidate.ClientId == job.ClientId
+                                && candidate.OrganizationUrl == job.OrganizationUrl
                                 && candidate.ProjectId == job.ProjectId
                                 && candidate.PullRequestId == job.PullRequestId
                                 && ActiveJobStatuses.Contains(candidate.Status))
@@ -792,6 +805,28 @@ public sealed partial class JobRepository(
             finally
             {
                 await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+                try
+                {
+                    if (!await dbContext.ReviewJobProtocols.AnyAsync(p => p.JobId == id && p.CompletedAt == null, CancellationToken.None)
+                            .ConfigureAwait(false))
+                    {
+                        if (dbContext.Database.IsRelational())
+                        {
+                            await dbContext.ReviewJobs.Where(j => j.Id == id && j.Status == JobStatus.Completed)
+                                .ExecuteUpdateAsync(s => s.SetProperty(j => j.UsageFinalizedAt, DateTimeOffset.UtcNow), CancellationToken.None)
+                                .ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            job.UsageFinalizedAt = DateTimeOffset.UtcNow;
+                            await dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+                        }
+                    }
+                }
+                catch (Exception exception)
+                {
+                    logger.LogWarning(exception, "Failed to finalize usage for completed review job {JobId}; reconciliation will retry.", id);
+                }
             }
         }
     }
@@ -1437,12 +1472,14 @@ public sealed partial class JobRepository(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         CancellationToken ct = default)
     {
         var jobs = await dbContext.ReviewJobs
-            .Where(j => j.OrganizationUrl == organizationUrl &&
+            .Where(j => j.ClientId == clientId &&
+                        j.OrganizationUrl == organizationUrl &&
                         j.ProjectId == projectId &&
                         ActiveJobStatuses.Contains(j.Status))
             .ToListAsync(ct);
@@ -1453,6 +1490,7 @@ public sealed partial class JobRepository(
 
     /// <inheritdoc />
     public async Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -1462,7 +1500,8 @@ public sealed partial class JobRepository(
     {
         var job = await dbContext.ReviewJobs
             .Include(j => j.FileReviewResults)
-            .Where(j => j.OrganizationUrl == organizationUrl &&
+            .Where(j => j.ClientId == clientId &&
+                        j.OrganizationUrl == organizationUrl &&
                         j.ProjectId == projectId &&
                         j.RepositoryId == repositoryId &&
                         j.PullRequestId == pullRequestId &&
@@ -1481,6 +1520,7 @@ public sealed partial class JobRepository(
 
     /// <inheritdoc />
     public async Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -1490,7 +1530,8 @@ public sealed partial class JobRepository(
     {
         var matchingJobs = await dbContext.ReviewJobs
             .Include(j => j.FileReviewResults)
-            .Where(j => j.OrganizationUrl == organizationUrl &&
+            .Where(j => j.ClientId == clientId &&
+                        j.OrganizationUrl == organizationUrl &&
                         j.ProjectId == projectId &&
                         j.RepositoryId == repositoryId &&
                         j.PullRequestId == pullRequestId &&
@@ -1513,6 +1554,7 @@ public sealed partial class JobRepository(
 
     /// <inheritdoc />
     public async Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -1523,7 +1565,8 @@ public sealed partial class JobRepository(
     {
         var candidateJobs = await dbContext.ReviewJobs
             .Include(j => j.FileReviewResults)
-            .Where(j => j.OrganizationUrl == organizationUrl &&
+            .Where(j => j.ClientId == clientId &&
+                        j.OrganizationUrl == organizationUrl &&
                         j.ProjectId == projectId &&
                         j.RepositoryId == repositoryId &&
                         j.PullRequestId == pullRequestId &&
@@ -1659,6 +1702,7 @@ public sealed partial class JobRepository(
 
     /// <inheritdoc />
     public async Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -1668,7 +1712,8 @@ public sealed partial class JobRepository(
     {
         var matchingJobs = await dbContext.ReviewJobs
             .Include(j => j.FileReviewResults)
-            .Where(j => j.OrganizationUrl == organizationUrl &&
+            .Where(j => j.ClientId == clientId &&
+                        j.OrganizationUrl == organizationUrl &&
                         j.ProjectId == projectId &&
                         j.RepositoryId == repositoryId &&
                         j.PullRequestId == pullRequestId &&
@@ -1983,14 +2028,11 @@ public sealed partial class JobRepository(
     private async Task AcquireReviewJobLockAsync(ReviewJob job, CancellationToken ct)
     {
         var lockRepositoryId = GetRepositoryIdentityKey(job, job.RepositoryId, job.ProjectId);
-        var lockKey = $"{job.OrganizationUrl}\n{job.ProjectId}\n{lockRepositoryId}\n{job.PullRequestId}";
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock(hashtext({0}))",
-            new object[] { lockKey },
-            ct);
+        var lockKey = $"{job.ClientId:D}\n{job.OrganizationUrl}\n{job.ProjectId}\n{lockRepositoryId}\n{job.PullRequestId}";
+        await PostgresAdvisoryLocks.AcquireHashTextTransactionAsync(dbContext, lockKey, ct);
     }
 
-    private static bool RepositoryMatches(ReviewJob job, string repositoryId, string projectId)
+    private bool RepositoryMatches(ReviewJob job, string repositoryId, string projectId)
     {
         return string.Equals(
             GetRepositoryIdentityKey(job, job.RepositoryId, projectId),
@@ -1998,34 +2040,9 @@ public sealed partial class JobRepository(
             StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetRepositoryIdentityKey(ReviewJob job, string repositoryId, string projectId)
-    {
-        if (job.Provider == ScmProvider.AzureDevOps)
-        {
-            return repositoryId;
-        }
-
-        var projectPath = string.IsNullOrWhiteSpace(job.RepositoryProjectPath)
-            ? repositoryId
-            : job.RepositoryProjectPath;
-        if (LooksLikeRepositoryPath(repositoryId) || LooksLikeRepositoryPath(projectPath))
-        {
-            return projectPath;
-        }
-
-        var ownerOrNamespace = string.IsNullOrWhiteSpace(job.RepositoryOwnerOrNamespace)
-            ? projectId
-            : job.RepositoryOwnerOrNamespace;
-        return string.Equals(repositoryId, job.RepositoryId, StringComparison.OrdinalIgnoreCase)
-            ? $"{ownerOrNamespace}/{repositoryId}"
-            : repositoryId;
-    }
-
-    private static bool LooksLikeRepositoryPath(string value)
-    {
-        return !string.IsNullOrWhiteSpace(value)
-               && value.Contains('/', StringComparison.Ordinal);
-    }
+    private string GetRepositoryIdentityKey(ReviewJob job, string repositoryId, string projectId) =>
+        (this._sourcePolicies.TryGetValue(job.Provider, out var policy) ? policy : new UnregisteredReviewSourcePolicy(job.Provider)).GetRepositoryIdentityKey(
+            repositoryId, job.RepositoryId, projectId, job.RepositoryProjectPath, job.RepositoryOwnerOrNamespace);
 
     private async Task HydrateSourceScopeAsync(ReviewJob job, CancellationToken ct)
     {

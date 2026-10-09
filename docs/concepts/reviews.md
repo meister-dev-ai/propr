@@ -103,6 +103,9 @@ binding, and its tokens are reported against the default model.
 **Incremental reviews.** On a re-review, files with no new changes carry their previous results forward
 instead of being re-reviewed and re-billed.
 
+Review history, duplicate detection and incremental result reuse are scoped to each client.
+Manual review of an unchanged completed revision remains available.
+
 ## Why a finding did not get posted
 
 A deterministic gate runs last, before publication. Every finding ends as **published**, **summary-only**

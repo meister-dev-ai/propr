@@ -7,7 +7,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 namespace MeisterDev.ProPR.Application.DTOs;
 
 /// <summary>
-///     Carries client data across the Application/Infrastructure boundary. The secret key and ADO client secret are
+///     Carries client data across the Application/Infrastructure boundary. The secret key and SCM client secret are
 ///     never included.
 /// </summary>
 public sealed record ClientDto(

@@ -10,8 +10,8 @@ namespace MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 ///     Distinct from a malformed payload, because the two deserve opposite answers. A provider whose webhook
 ///     is configured for every event sends comment, push and pipeline deliveries alongside the pull-request
 ///     ones, and answering those with a client error tells the provider its request was wrong. Providers count
-///     those: GitLab, GitHub and Forgejo all disable a hook that keeps failing, so treating an ordinary
-///     unhandled event as a fault eventually switches off the deliveries that do matter.
+///     failed deliveries and can disable a hook after repeated errors. An ordinary unhandled event therefore
+///     does not produce a fault response.
 /// </remarks>
 public sealed class UnsupportedWebhookEventException : InvalidOperationException
 {

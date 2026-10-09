@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -121,12 +122,45 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task ResolveIdentity_PreservesScopedOperationAndGuidResponseProjection()
+    {
+        using var isolated = new IdentitiesApiFactory();
+        var http = isolated.CreateClient();
+        var id = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org");
+        isolated.ReviewerIdentityService.ResolveCandidatesAsync(
+                isolated.AssignedClientId, host,
+                "Reviewer", null, Arg.Any<CancellationToken>())
+            .Returns(
+                new[]
+                {
+                    new ReviewerIdentity(host, id.ToString(), "reviewer", "Reviewer", false),
+                    new ReviewerIdentity(host, "not-a-guid", "other", "Other", false),
+                });
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={isolated.AssignedClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", isolated.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var identity = Assert.Single(document.RootElement.EnumerateArray());
+        Assert.Equal(id, identity.GetProperty("id").GetGuid());
+        Assert.Equal("Reviewer", identity.GetProperty("displayName").GetString());
+        await isolated.ReviewerIdentityService.Received(1).ResolveCandidatesAsync(
+            isolated.AssignedClientId,
+            host, "Reviewer", null, Arg.Any<CancellationToken>());
+    }
+
     public sealed class IdentitiesApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-identities-jwt-secret-32chars";
 
         public IReviewerIdentityService ReviewerIdentityService { get; } = Substitute.For<IReviewerIdentityService>();
-        public IScmProviderRegistry ProviderRegistry { get; } = Substitute.For<IScmProviderRegistry>();
+        public IScmProviderRegistry ProviderRegistry { get; } = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
         public Guid ClientAdministratorUserId { get; } = Guid.NewGuid();
         public Guid ClientUserUserId { get; } = Guid.NewGuid();

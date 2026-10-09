@@ -20,6 +20,96 @@ vi.mock('@/composables/useSession', () => ({
 }))
 
 describe('useProviderConnectionsViewModel', () => {
+  it.each(['https://dev.azure.com', 'https://organization.visualstudio.com'])('keeps the implicit OAuth default while typing a new Azure DevOps Services host %s', async (host) => {
+    let vm!: ProviderConnectionsViewModel
+    const app = createApp(defineComponent({
+      setup() {
+        vm = useProviderConnectionsViewModel({ clientId: 'client-1', autoLoad: false })
+        return () => null
+      },
+    }))
+    app.mount(document.createElement('div'))
+    try {
+      vm.createForm.providerFamily = 'azureDevOps'
+      await flushPromises()
+      expect(vm.createForm.authenticationKind).toBe('oauthClientCredentials')
+      vm.createForm.oAuthTenantId = 'synthetic-tenant'
+      vm.createForm.oAuthClientId = 'synthetic-client'
+      vm.createForm.secret = 'synthetic-client-secret'
+
+      for (const nextHost of ['', ...Array.from(host, (_, index) => host.slice(0, index + 1))]) {
+        vm.createForm.hostBaseUrl = nextHost
+        await flushPromises()
+        expect(vm.createForm.authenticationKind).toBe('oauthClientCredentials')
+        expect(vm.createForm.oAuthTenantId).toBe('synthetic-tenant')
+        expect(vm.createForm.oAuthClientId).toBe('synthetic-client')
+        expect(vm.createForm.secret).toBe('synthetic-client-secret')
+      }
+    } finally {
+      app.unmount()
+    }
+  })
+
+  it.each([
+    ['createForm', 'https://dev.azure.com'], ['createForm', 'https://organization.visualstudio.com'],
+    ['editForm', 'https://dev.azure.com'], ['editForm', 'https://organization.visualstudio.com'],
+  ] as const)('preserves OAuth metadata while clearing and typing %s host %s', async (formName, host) => {
+    let vm!: ProviderConnectionsViewModel
+    const app = createApp(defineComponent({
+      setup() {
+        vm = useProviderConnectionsViewModel({ clientId: 'client-1', autoLoad: false })
+        return () => null
+      },
+    }))
+    app.mount(document.createElement('div'))
+    try {
+      const form = vm[formName]
+      form.providerFamily = 'azureDevOps'
+      await flushPromises()
+      form.hostBaseUrl = host
+      form.authenticationKind = 'oauthClientCredentials'
+      await flushPromises()
+      form.oAuthTenantId = 'synthetic-tenant'
+      form.oAuthClientId = 'synthetic-client'
+      for (const nextHost of ['', ...Array.from(host, (_, index) => host.slice(0, index + 1)), '', host]) {
+        form.hostBaseUrl = nextHost
+        await flushPromises()
+        expect(form.authenticationKind).toBe('oauthClientCredentials')
+        expect(form.oAuthTenantId).toBe('synthetic-tenant')
+        expect(form.oAuthClientId).toBe('synthetic-client')
+      }
+    } finally {
+      app.unmount()
+    }
+  })
+
+  it.each(['createForm', 'editForm'] as const)('retains explicit PAT through Services host typing in %s', async (formName) => {
+    let vm!: ProviderConnectionsViewModel
+    const app = createApp(defineComponent({
+      setup() {
+        vm = useProviderConnectionsViewModel({ clientId: 'client-1', autoLoad: false })
+        return () => null
+      },
+    }))
+    app.mount(document.createElement('div'))
+    try {
+      const form = vm[formName]
+      form.providerFamily = 'azureDevOps'
+      await flushPromises()
+      form.authenticationKind = 'personalAccessToken'
+      await flushPromises()
+      for (const host of ['https://dev.azure.com', 'https://organization.visualstudio.com']) {
+        for (const nextHost of ['', ...Array.from(host, (_, index) => host.slice(0, index + 1))]) {
+          form.hostBaseUrl = nextHost
+          await flushPromises()
+          expect(form.authenticationKind).toBe('personalAccessToken')
+        }
+      }
+    } finally {
+      app.unmount()
+    }
+  })
+
   beforeEach(() => {
     notifyMock.mockReset()
   })

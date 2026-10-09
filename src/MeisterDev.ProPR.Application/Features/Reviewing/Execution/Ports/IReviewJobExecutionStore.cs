@@ -102,6 +102,7 @@ public interface IReviewJobExecutionStore
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The completed review job with file results if found; otherwise <c>null</c>.</returns>
     Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -113,6 +114,7 @@ public interface IReviewJobExecutionStore
     ///     Gets the most-recent completed review job with file results for the supplied stored revision key.
     /// </summary>
     Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -126,6 +128,7 @@ public interface IReviewJobExecutionStore
     ///     <paramref name="currentRevisionKey" />, ranked by usable reviewed-result count then recency.
     /// </summary>
     Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -139,6 +142,7 @@ public interface IReviewJobExecutionStore
     ///     reusable completed file results.
     /// </summary>
     Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,

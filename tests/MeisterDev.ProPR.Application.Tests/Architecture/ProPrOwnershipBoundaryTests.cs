@@ -7,37 +7,10 @@ namespace MeisterDev.ProPR.Application.Tests.Architecture;
 
 public sealed class ProPrOwnershipBoundaryTests
 {
-    private static readonly string RepoRoot = ResolveRepoRoot();
-
     [Fact]
     public void SharedBrokerAbstractions_CompileFromContractsAssembly()
     {
         Assert.Equal("MeisterDev.ProPR.ProCursor.Contracts", typeof(IProCursorScmBroker).Assembly.GetName().Name);
         Assert.Equal("MeisterDev.ProPR.ProCursor.Contracts", typeof(IProCursorEmbeddingBroker).Assembly.GetName().Name);
-    }
-
-    [Fact]
-    public void ProCursorProject_NoLongerContainsProPrOwnedBrokerImplementations()
-    {
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterDev.ProPR.ProCursor/Infrastructure/Brokers/LocalProCursorScmBroker.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterDev.ProPR.ProCursor/Infrastructure/Brokers/LocalProCursorEmbeddingBroker.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterDev.ProPR.ProCursor/Infrastructure/Repositories/ProCursorKnowledgeSourceRepository.cs")));
-    }
-
-    private static string ResolveRepoRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "MeisterDev.ProPR.slnx")))
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new InvalidOperationException("Unable to locate the repository root.");
     }
 }

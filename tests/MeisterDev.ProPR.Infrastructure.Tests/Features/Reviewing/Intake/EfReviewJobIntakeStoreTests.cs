@@ -44,7 +44,8 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
     [Fact]
     public async Task CreatePendingJobAsync_PersistsNewPendingJob()
     {
-        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1);
+        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1)
+            { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps };
 
         var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
 
@@ -60,6 +61,7 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
         var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1)
         {
             ResolvedReviewPipelineProfileId = ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId,
+            Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps,
         };
 
         var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
@@ -72,7 +74,8 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
     [Fact]
     public async Task CreatePendingJobAsync_WithoutResolvedProfile_PersistsBalancedFallback()
     {
-        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1);
+        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1)
+            { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps };
 
         var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
 
@@ -84,7 +87,8 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
     [Fact]
     public async Task FindActiveJobAsync_CompletedJobIsNotReturned()
     {
-        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 11, 1);
+        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 11, 1)
+            { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps };
         var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
         job.Status = JobStatus.Completed;
         job.CompletedAt = DateTimeOffset.UtcNow;
@@ -98,7 +102,8 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
     [Fact]
     public async Task UpdatePrContextAsync_PersistsSnapshotAndNormalizesBranches()
     {
-        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 12, 4);
+        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 12, 4)
+            { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps };
         var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
 
         await this._store.UpdatePrContextAsync(

@@ -9,6 +9,8 @@ namespace MeisterDev.ProPR.Infrastructure.Data.Models;
 public sealed class CrawlConfigurationRecord
 {
     public bool IsActive { get; set; }
+    public ReviewTargetLifecycle ReviewTargetLifecycle { get; set; } = ReviewTargetLifecycle.Enabled;
+    public long ReviewTargetRevision { get; set; } = 1;
     public ClientRecord Client { get; set; } = null!;
     public DateTimeOffset CreatedAt { get; set; }
     public Guid ClientId { get; set; }

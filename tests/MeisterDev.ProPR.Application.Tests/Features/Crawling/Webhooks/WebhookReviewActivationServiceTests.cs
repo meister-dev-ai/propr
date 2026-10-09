@@ -4,7 +4,7 @@
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
-using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Services;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Webhooks;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
@@ -17,6 +17,40 @@ namespace MeisterDev.ProPR.Application.Tests.Features.Crawling.Webhooks;
 
 public sealed class WebhookReviewActivationServiceTests
 {
+    [Fact]
+    public async Task NativeActivationPropagatesIterationLookupCancellationBeforeIntake()
+    {
+        var configuration = CreateConfiguration();
+        var delivery = CreateDelivery();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var resolver = Substitute.For<IPullRequestIterationResolver>();
+        var failure = new OperationCanceledException(cancellation.Token);
+        resolver.GetLatestIterationIdAsync(
+                configuration.ClientId, configuration.OrganizationUrl,
+                configuration.ProjectId, delivery.RepositoryId, delivery.PullRequestId, cancellation.Token)
+            .Returns(Task.FromException<int>(failure));
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var service = new WebhookReviewActivationService(
+            resolver,
+            new SubmitReviewJobHandler(store, Substitute.For<IReviewExecutionQueue>(), NullLogger<SubmitReviewJobHandler>.Instance),
+            NullLogger<WebhookReviewActivationService>.Instance);
+
+        Assert.Same(
+            failure, await Assert.ThrowsAsync<OperationCanceledException>(() =>
+                service.ActivateAsync(configuration, delivery, new WebhookEventClassification(WebhookEventKind.PullRequestCreated), cancellation.Token)));
+        await store.DidNotReceiveWithAnyArgs().CreatePendingJobAsync(default, default!);
+    }
+
+    [Theory]
+    [InlineData(typeof(WebhookReviewActivationService))]
+    [InlineData(typeof(WebhookReviewLifecycleSyncService))]
+    public void NativeWebhookCompatibilityImplementationsBelongToInfrastructure(Type implementation)
+    {
+        Assert.Equal("MeisterDev.ProPR.Infrastructure", implementation.Assembly.GetName().Name);
+        Assert.StartsWith("MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.", implementation.Namespace);
+    }
+
     [Fact]
     public async Task ActivateAsync_CreatedEvent_SubmitsReviewJobForLatestIteration()
     {
@@ -73,7 +107,7 @@ public sealed class WebhookReviewActivationServiceTests
         var actionSummaries = await sut.ActivateAsync(
             configuration,
             delivery,
-            new AdoWebhookEventClassification(AdoWebhookEventKind.PullRequestCreated),
+            new WebhookEventClassification(WebhookEventKind.PullRequestCreated),
             CancellationToken.None);
 
         await iterationResolver.Received(1)
@@ -146,7 +180,7 @@ public sealed class WebhookReviewActivationServiceTests
         var actionSummaries = await sut.ActivateAsync(
             configuration,
             delivery,
-            new AdoWebhookEventClassification(AdoWebhookEventKind.PullRequestUpdated),
+            new WebhookEventClassification(WebhookEventKind.PullRequestUpdated),
             CancellationToken.None);
 
         await intakeStore.DidNotReceive()
@@ -210,7 +244,7 @@ public sealed class WebhookReviewActivationServiceTests
         var actionSummaries = await sut.ActivateAsync(
             configuration,
             delivery,
-            new AdoWebhookEventClassification(AdoWebhookEventKind.ReviewerAssigned),
+            new WebhookEventClassification(WebhookEventKind.ReviewerAssigned),
             CancellationToken.None);
 
         Assert.Contains(
@@ -239,9 +273,9 @@ public sealed class WebhookReviewActivationServiceTests
             ReviewTemperature: 0.25f);
     }
 
-    private static IncomingAdoWebhookDelivery CreateDelivery(IReadOnlyList<Guid>? reviewerIds = null)
+    private static IncomingWebhookDelivery CreateDelivery(IReadOnlyList<Guid>? reviewerIds = null)
     {
-        return new IncomingAdoWebhookDelivery(
+        return new IncomingWebhookDelivery(
             "path-key",
             "git.pullrequest.updated",
             WebhookEventType.PullRequestUpdated,

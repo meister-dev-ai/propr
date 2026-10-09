@@ -39,7 +39,11 @@ public sealed class ThreadResolvedProviderScopeTests
             .Returns([new AssignedCodeReviewRef(host, repository, review, 7)]);
         var service = new PrCrawlService(
             configs, discovery, harness.Jobs, Substitute.For<IPrStatusFetcher>(), NullLogger<PrCrawlService>.Instance,
-            harness.Threads, harness.Memory, harness.Scans, codeInsightDispositionService: harness.Dispositions);
+            new PullRequestSynchronizationService(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
+                harness.Jobs, NullLogger<PullRequestSynchronizationService>.Instance,
+                threadStatusFetcher: harness.Threads, threadMemoryService: harness.Memory,
+                prScanRepository: harness.Scans, codeInsightDispositionService: harness.Dispositions));
 
         await service.CrawlAsync();
 
@@ -57,6 +61,7 @@ public sealed class ThreadResolvedProviderScopeTests
     {
         var harness = new Harness();
         var service = new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             harness.Jobs, NullLogger<PullRequestSynchronizationService>.Instance,
             threadStatusFetcher: harness.Threads, threadMemoryService: harness.Memory,
             prScanRepository: harness.Scans, codeInsightDispositionService: harness.Dispositions);

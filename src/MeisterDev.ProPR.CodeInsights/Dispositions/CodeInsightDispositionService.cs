@@ -26,6 +26,7 @@ namespace MeisterDev.ProPR.CodeInsights.Dispositions;
 ///     Best-effort throughout: it never throws into the crawl.
 /// </remarks>
 public sealed partial class CodeInsightDispositionService(
+    MeisterDev.ProPR.Application.Interfaces.IScmProviderCompatibilityCodec compatibilityCodec,
     ICodeInsightFindingStore findingStore,
     ICodeInsightDispositionStore dispositionStore,
     IDisregardedFindingClassifier classifier,
@@ -101,7 +102,7 @@ public sealed partial class CodeInsightDispositionService(
             }
 
             var isOpenObservation = evt.NativeStatus is not null && !ThreadResolutionStatusInterpreter.IsResolved(
-                ThreadResolutionStatusInterpreter.InterpretIntent(evt.NativeStatus));
+                compatibilityCodec.DecodeStoredThreadResolution(evt.NativeStatus));
             var record = isOpenObservation ? null : (await this.ResolveDispositionAsync(evt, finding, ct)) with { NativeStatus = evt.NativeStatus };
             var currentChanged = performanceEvidence is not null && evt.NativeStatus is not null
                                                                  && await performanceEvidence.RecordCurrentOutcomeAsync(

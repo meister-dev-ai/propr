@@ -28,7 +28,8 @@ namespace MeisterDev.ProPR.Application.Services;
 public sealed partial class ReviewJobReuse(
     IReviewJobExecutionStore jobs,
     IReviewPrScanWatermarkStore scans,
-    ILogger logger)
+    ILogger logger,
+    IScmProviderRegistry providerRegistry)
 {
     /// <summary>
     ///     Resolves what this job may adopt: the resume candidate at its own revision, and the
@@ -96,7 +97,7 @@ public sealed partial class ReviewJobReuse(
         ArgumentNullException.ThrowIfNull(changedPathsSet);
         ArgumentNullException.ThrowIfNull(claimedPaths);
 
-        if (resumeJob is null)
+        if (resumeJob is null || resumeJob.ClientId != job.ClientId)
         {
             return 0;
         }
@@ -155,7 +156,7 @@ public sealed partial class ReviewJobReuse(
         ArgumentNullException.ThrowIfNull(claimedPaths);
 
         var carriedForwardPaths = new List<string>();
-        if (baselineJob is null)
+        if (baselineJob is null || baselineJob.ClientId != job.ClientId)
         {
             return carriedForwardPaths;
         }
@@ -218,6 +219,7 @@ public sealed partial class ReviewJobReuse(
         }
 
         var resumeJob = await jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            job.ClientId,
             job.OrganizationUrl,
             job.ProjectId,
             job.RepositoryId,
@@ -249,6 +251,7 @@ public sealed partial class ReviewJobReuse(
         // different revision, rather than from the scan. This lets a prior review that was
         // cancelled/failed/superseded mid-flight still seed the next review's unchanged files.
         var baselineJob = await jobs.GetLatestReusableTerminalJobAsync(
+            job.ClientId,
             job.OrganizationUrl,
             job.ProjectId,
             job.RepositoryId,
@@ -268,23 +271,8 @@ public sealed partial class ReviewJobReuse(
             return (baselineJob, false, null, null);
         }
 
-        // Full-coverage baseline: delta-scope against it so only files changed since the
-        // baseline are re-reviewed. The compare handle is provider-neutral. Azure DevOps
-        // reads the iteration id off the baseline job, other providers read its review revision.
-        if (job.Provider == ScmProvider.AzureDevOps)
-        {
-            var baselineIterationId = ResolveBaselineIterationId(baselineJob);
-            if (baselineIterationId is > 0 && baselineIterationId < job.IterationId)
-            {
-                return (baselineJob, true, baselineIterationId, null);
-            }
-
-            // Out-of-order or unavailable iteration id: fall back to a full fetch and treat
-            // the baseline purely as an AI-skip set rather than risk a negative delta.
-            return (baselineJob, false, null, null);
-        }
-
-        return (baselineJob, true, null, baselineJob.ReviewRevisionReference);
+        var comparison = providerRegistry.GetCodeReviewPreparationPolicy(job.Provider).SelectComparisonHandle(job, baselineJob);
+        return (baselineJob, comparison.IsDeltaScoped, comparison.CompareToIterationId, comparison.CompareToRevision);
     }
 
     /// <summary>
@@ -305,14 +293,6 @@ public sealed partial class ReviewJobReuse(
                && ReviewBaselineSelection.CountUsableReviewedResults(candidate) < candidate.InScopeChangedFileCount;
     }
 
-    // Derives the Azure DevOps iteration id to compare against from the baseline job itself: prefer the
-    // iteration id carried in its review revision (ProviderRevisionId), falling back to the stored iteration.
-    private static int? ResolveBaselineIterationId(ReviewJob baselineJob)
-    {
-        var iterationFromRevision = ReviewRevisionKeys.TryParseIterationId(ReviewRevisionKeys.TryGetStoredKey(baselineJob.ReviewRevisionReference));
-        return iterationFromRevision ?? (baselineJob.IterationId > 0 ? baselineJob.IterationId : null);
-    }
-
     [LoggerMessage(
         Level = LogLevel.Information,
         Message =
@@ -331,7 +311,7 @@ public sealed partial class ReviewJobReuse(
 /// <param name="BaselineJob">The carry-forward baseline from an earlier iteration, when one exists.</param>
 /// <param name="BaselineIsFullCoverage">Whether the baseline reviewed everything it was asked to.</param>
 /// <param name="ResumeJob">The prior attempt at this same revision whose finished files may be adopted.</param>
-/// <param name="CompareToIterationId">The Azure DevOps iteration a delta fetch compares against.</param>
+/// <param name="CompareToIterationId">The saved iteration alias a delta fetch compares against.</param>
 /// <param name="CompareToReviewRevision">The revision other providers' delta fetch compares against.</param>
 public sealed record ReviewJobReuseState(
     bool IsNewIteration,

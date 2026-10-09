@@ -10,7 +10,8 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Api.Controllers;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -24,6 +25,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
+using MeisterDev.ProPR.TestSupport;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
+using MeisterDev.ProPR.Api.Features.Crawling.Contracts.AzureDevOps;
 
 namespace MeisterDev.ProPR.Api.Tests.Controllers;
 
@@ -38,6 +42,70 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
     {
         factory.SetCrawlConfigsCapabilityAvailability(true);
         return true;
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task CreateConfiguration_UnknownProviderWithoutPathPreserves400(string? path)
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/admin/crawl-configurations");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
+            {
+                clientId = factory.TestClientId, provider = 999, organizationScopeId = Guid.NewGuid(),
+                providerScopePath = path, providerProjectKey = "project", crawlIntervalSeconds = 60,
+                enabledEvents = new[] { "pullRequestCreated" },
+            });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var errors = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("errors");
+        Assert.Equal("Select a connection and scope, or supply an explicit provider and its manual scope coordinates.", errors.GetProperty("")[0].GetString());
+        Assert.False(errors.TryGetProperty("Provider", out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateCrawlConfiguration_UsesSuppliedSelectionForScopeAndFilters(bool rejectScope)
+    {
+        var selection = Substitute.For<IReviewConfigurationSelectionService>();
+        selection.HasScopeSelection(Arg.Any<ScmProvider>(), Arg.Any<Guid?>(), Arg.Any<string?>()).Returns(true);
+        selection.ResolveScopeAsync(
+            factory.TestClientId, Arg.Any<ScmProvider>(), Arg.Any<Guid?>(), Arg.Any<string?>(),
+            Arg.Any<CancellationToken>(), "crawl").Returns(_ => rejectScope
+            ? Task.FromException<(Guid?, string)>(new InvalidOperationException("selection scope refusal"))
+            : Task.FromResult<(Guid?, string)>((null, "https://dev.azure.com/selection")));
+        selection.ResolveFiltersAsync(
+                factory.TestClientId, Arg.Any<ScmProvider>(), Arg.Any<Guid?>(), Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<CrawlRepoFilterDto>?>(), Arg.Any<CancellationToken>(), "crawl")
+            .Returns(Task.FromException<IReadOnlyList<CrawlRepoFilterDto>>(new InvalidOperationException("selection filter refusal")));
+        using var selectedFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.AddSingleton(selection)));
+        var client = selectedFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/admin/crawl-configurations");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
+            {
+                clientId = factory.TestClientId, provider = "azureDevOps", providerScopePath = "https://dev.azure.com/selection",
+                providerProjectKey = "selection-project", crawlIntervalSeconds = 60,
+            });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains(rejectScope ? "selection scope refusal" : "selection filter refusal", await response.Content.ReadAsStringAsync());
+        await selection.Received(1).ResolveScopeAsync(
+            factory.TestClientId, Arg.Any<ScmProvider>(), null,
+            "https://dev.azure.com/selection", Arg.Any<CancellationToken>(), "crawl");
+        await selection.Received(rejectScope ? 0 : 1).ResolveFiltersAsync(
+            factory.TestClientId, Arg.Any<ScmProvider>(), null,
+            "selection-project", null, Arg.Any<CancellationToken>(), "crawl");
     }
 
     // --- GET /admin/crawl-configurations ---
@@ -143,7 +211,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         request.Content = JsonContent.Create(
             new
             {
-                clientId = factory.TestClientId,
+                clientId = factory.TestClientId, provider = "azureDevOps",
                 providerScopePath = "https://dev.azure.com/myorg",
                 providerProjectKey = "MyProject",
                 crawlIntervalSeconds = 60,
@@ -165,7 +233,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         request.Content = JsonContent.Create(
             new
             {
-                clientId = factory.TestClientId,
+                clientId = factory.TestClientId, provider = "azureDevOps",
                 organizationScopeId = factory.GuidedOrganizationScopeId,
                 providerProjectKey = "GuidedProject",
                 crawlIntervalSeconds = 60,
@@ -211,7 +279,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         request.Content = JsonContent.Create(
             new
             {
-                clientId = factory.TestClientId,
+                clientId = factory.TestClientId, provider = "azureDevOps",
                 organizationScopeId = factory.GuidedOrganizationScopeId,
                 providerProjectKey = "GuidedProject",
                 crawlIntervalSeconds = 60,
@@ -240,7 +308,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         request.Content = JsonContent.Create(
             new
             {
-                clientId = factory.TestClientId,
+                clientId = factory.TestClientId, provider = "azureDevOps",
                 organizationScopeId = factory.GuidedOrganizationScopeId,
                 providerProjectKey = "GuidedProject",
                 crawlIntervalSeconds = 60,
@@ -279,7 +347,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         request.Content = JsonContent.Create(
             new
             {
-                clientId = factory.TestClientId,
+                clientId = factory.TestClientId, provider = "azureDevOps",
                 providerScopePath = "https://dev.azure.com/myorg",
                 providerProjectKey = "MyProject",
                 crawlIntervalSeconds = 60,
@@ -301,7 +369,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         request.Content = JsonContent.Create(
             new
             {
-                clientId = factory.TestClientId,
+                clientId = factory.TestClientId, provider = "azureDevOps",
                 providerScopePath = "https://dev.azure.com/myorg",
                 providerProjectKey = "MyProject",
                 crawlIntervalSeconds = 5, // below minimum of 10
@@ -325,7 +393,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         request.Content = JsonContent.Create(
             new
             {
-                clientId = unownedClientId,
+                clientId = unownedClientId, provider = "azureDevOps",
                 providerScopePath = "https://dev.azure.com/myorg",
                 providerProjectKey = "MyProject",
                 crawlIntervalSeconds = 60,
@@ -372,6 +440,71 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MixedCrawlFilters_RetainLegacyCoordinatesWhileCanonicalPatternsChange(bool replaceFilters)
+    {
+        var repository = factory.Services.GetRequiredService<ICrawlConfigurationRepository>();
+        var original = (await repository.GetByIdAsync(factory.TestConfigId))!;
+        var legacy = new CrawlRepoFilterDto(Guid.NewGuid(), "Saved Legacy Repository", ["main"]);
+        var canonical = new CrawlRepoFilterDto(Guid.NewGuid(), "Native Repository", ["main"], new("azureDevOps", "canonical-bytes"), "Native Repository");
+        var existing = original with { RepoFilters = [legacy, canonical], ProviderProjectKey = "Saved Native Project Name" };
+        repository.GetByIdAsync(existing.Id, Arg.Any<CancellationToken>()).Returns(existing);
+        repository.UpdateWithResultAsync(
+                Arg.Any<Guid>(), Arg.Any<int?>(), Arg.Any<bool?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>(), Arg.Any<float?>(), Arg.Any<bool>(),
+                Arg.Any<IReadOnlyList<CrawlRepoFilterDto>?>())
+            .Returns(CrawlConfigurationUpdateResult.Updated);
+        repository.ClearReceivedCalls();
+        var connectionId = Guid.NewGuid();
+        var selection = Substitute.For<IReviewConfigurationSelectionService>();
+        var context = new ConnectionDiscoveryContext(existing.ClientId, connectionId, new(ScmProvider.AzureDevOps, "https://dev.azure.com"));
+        selection.GetConnectionContextAsync(existing.ClientId, connectionId, Arg.Any<CancellationToken>()).Returns(context);
+        selection.ResolveConnectionFiltersAsync(
+                context, "scope", existing.ProviderProjectKey, Arg.Any<IReadOnlyList<CrawlRepoFilterDto>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<IReadOnlyList<CrawlRepoFilterDto>>(3).Any(filter => filter.CanonicalSourceRef is null)
+                ? Task.FromException<IReadOnlyList<CrawlRepoFilterDto>>(new InvalidOperationException("Legacy rows are not new canonical selections."))
+                : Task.FromResult<IReadOnlyList<CrawlRepoFilterDto>>(call.ArgAt<IReadOnlyList<CrawlRepoFilterDto>>(3)));
+        using var isolated = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<ICrawlConfigurationRepository>();
+            services.AddSingleton(repository);
+            services.AddSingleton(selection);
+        }));
+        var client = isolated.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/crawl-configurations/{existing.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
+            {
+                crawlIntervalSeconds = 120,
+                connectionId = replaceFilters ? (Guid?)connectionId : null,
+                scopeKey = replaceFilters ? "scope" : null,
+                repoFilters = replaceFilters
+                    ? new[]
+                    {
+                        new CrawlRepoFilterRequest(legacy.RepositoryName, legacy.TargetBranchPatterns, legacy.CanonicalSourceRef, legacy.DisplayName),
+                        new CrawlRepoFilterRequest(canonical.RepositoryName, ["release/*"], canonical.CanonicalSourceRef, canonical.DisplayName),
+                    }
+                    : null,
+            });
+
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(request)).StatusCode);
+        var filters = repository.ReceivedCalls().Single(call => call.GetMethodInfo().Name == nameof(ICrawlConfigurationRepository.UpdateWithResultAsync))
+            .GetArguments()[7] as IReadOnlyList<CrawlRepoFilterDto>;
+        if (replaceFilters)
+        {
+            Assert.Equal(legacy, filters!.Single(filter => filter.RepositoryName == legacy.RepositoryName));
+            Assert.Equal(canonical.CanonicalSourceRef, filters.Single(filter => filter.RepositoryName == canonical.RepositoryName).CanonicalSourceRef);
+            Assert.Equal("Saved Native Project Name", (await repository.GetByIdAsync(existing.Id))!.ProviderProjectKey);
+        }
+        else
+        {
+            Assert.Null(filters);
+            await selection.DidNotReceiveWithAnyArgs().GetConnectionContextAsync(default, default, default);
+        }
+    }
+
     [Fact]
     public async Task PatchCrawlConfig_IntervalBelowMinimum_Returns400()
     {
@@ -390,11 +523,99 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
     }
 
     [Fact]
+    public async Task PatchCrawlConfig_ConfigurationUpdateRefusedDoesNotPersistReplacementFilters()
+    {
+        var repository = factory.Services.GetRequiredService<ICrawlConfigurationRepository>();
+        repository.ClearReceivedCalls();
+        repository.UpdateWithResultAsync(
+                Arg.Any<Guid>(), Arg.Any<int?>(), Arg.Any<bool?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>(), Arg.Any<float?>(), Arg.Any<bool>())
+            .ReturnsForAnyArgs(CrawlConfigurationUpdateResult.NotFound);
+        using var isolatedFactory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<ICrawlConfigurationRepository>();
+            services.AddSingleton(repository);
+        }));
+        var client = isolatedFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/crawl-configurations/{factory.TestConfigId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
+            {
+                isActive = false,
+                repoFilters = Array.Empty<object>(),
+                proCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
+            });
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(request)).StatusCode);
+        await repository.DidNotReceiveWithAnyArgs().UpdateRepoFiltersAsync(default, default!);
+        await repository.DidNotReceiveWithAnyArgs().UpdateSourceScopeAsync(default, default, default!);
+    }
+
+    [Fact]
+    public async Task PatchCrawlConfig_NonAdminForUnownedClient_Returns403WithoutUpdate()
+    {
+        var repository = factory.Services.GetRequiredService<ICrawlConfigurationRepository>();
+        repository.ClearReceivedCalls();
+        using var isolatedFactory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<ICrawlConfigurationRepository>();
+            services.AddSingleton(repository);
+        }));
+        var client = isolatedFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/crawl-configurations/{factory.UnownedConfigId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(factory.TestUserId));
+        request.Content = JsonContent.Create(new { isActive = true });
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(request)).StatusCode);
+        await repository.DidNotReceiveWithAnyArgs().UpdateWithResultAsync(default, default, default, default);
+    }
+
+    [Theory]
+    [InlineData("disabledActivation")]
+    [InlineData("removedActivation")]
+    [InlineData("removedFilters")]
+    public async Task PatchCrawlConfig_CurrentStateConflict_Returns409WithoutSourceScopeWrite(string conflict)
+    {
+        var repository = factory.Services.GetRequiredService<ICrawlConfigurationRepository>();
+        Assert.Equal(ReviewTargetLifecycle.Enabled, (await repository.GetByIdAsync(factory.TestConfigId))!.ReviewTargetLifecycle);
+        repository.ClearReceivedCalls();
+        repository.UpdateWithResultAsync(
+                Arg.Any<Guid>(), Arg.Any<int?>(), Arg.Any<bool?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>(),
+                Arg.Any<float?>(), Arg.Any<bool>(), Arg.Any<IReadOnlyList<CrawlRepoFilterDto>?>())
+            .ReturnsForAnyArgs(CrawlConfigurationUpdateResult.Conflict);
+        using var isolatedFactory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<ICrawlConfigurationRepository>();
+            services.AddSingleton(repository);
+        }));
+        var client = isolatedFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/crawl-configurations/{factory.TestConfigId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
+            {
+                isActive = conflict == "removedFilters" ? (bool?)null : true,
+                repoFilters = conflict == "removedFilters" ? Array.Empty<object>() : null,
+                proCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
+            });
+
+        Assert.Equal(HttpStatusCode.Conflict, (await client.SendAsync(request)).StatusCode);
+        await repository.DidNotReceiveWithAnyArgs().UpdateSourceScopeAsync(default, default, default!);
+    }
+
+    [Fact]
     public async Task PatchCrawlConfig_GuidedFilterThatNoLongerExists_Returns409()
     {
         var configId = factory.TestConfigId;
 
-        var client = factory.CreateClient();
+        var repository = factory.Services.GetRequiredService<ICrawlConfigurationRepository>();
+        var original = await repository.GetByIdAsync(configId);
+        using var isolatedFactory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<ICrawlConfigurationRepository>();
+            services.AddSingleton(repository);
+        }));
+        var client = isolatedFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/crawl-configurations/{configId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
@@ -402,6 +623,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         request.Content = JsonContent.Create(
             new
             {
+                isActive = !original!.IsActive,
                 repoFilters = new[]
                 {
                     new
@@ -425,6 +647,7 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
             "no longer available",
             body.GetProperty("error").GetString(),
             StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original!.IsActive, (await repository.GetByIdAsync(configId))!.IsActive);
     }
 
     [Fact]
@@ -511,6 +734,45 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
     // --- DELETE /admin/crawl-configurations/{configId} ---
 
     [Fact]
+    public void DeleteCrawlConfig_ConflictResponseDescribesItsStringRefusal()
+    {
+        var action = typeof(MeisterDev.ProPR.Api.Controllers.AdminCrawlConfigsController).GetMethod("DeleteCrawlConfiguration")!;
+        var response = action.GetCustomAttributes(typeof(Microsoft.AspNetCore.Mvc.ProducesResponseTypeAttribute), true)
+            .Cast<Microsoft.AspNetCore.Mvc.ProducesResponseTypeAttribute>().Single(attribute => attribute.StatusCode == 409);
+        Assert.Equal(typeof(string), response.Type);
+    }
+
+    [Fact]
+    public async Task DeleteCrawlConfig_RepositoryRejectsDeletion_Returns409WithoutSuccessLog()
+    {
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<MeisterDev.ProPR.Api.Controllers.AdminCrawlConfigsController>>();
+        logger.IsEnabled(Arg.Any<Microsoft.Extensions.Logging.LogLevel>()).Returns(true);
+        var repository = Substitute.For<ICrawlConfigurationRepository>();
+        repository.GetByIdAsync(factory.TestConfigId, Arg.Any<CancellationToken>()).Returns(
+            new CrawlConfigurationDto(
+                factory.TestConfigId, factory.TestClientId, ScmProvider.AzureDevOps, "https://dev.azure.com/testorg", "TestProject", 60, false,
+                DateTimeOffset.UtcNow, []));
+        repository.DeleteAsync(factory.TestConfigId, factory.TestClientId, Arg.Any<CancellationToken>()).Returns(false);
+        using var rejecting = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.AddSingleton(logger);
+            services.RemoveAll<ICrawlConfigurationRepository>();
+            services.AddSingleton(repository);
+        }));
+        using var client = rejecting.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/admin/crawl-configurations/{factory.TestConfigId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.DoesNotContain(
+            logger.ReceivedCalls(), call => call.GetMethodInfo().Name == "Log" &&
+                                            call.GetArguments()[0] is Microsoft.Extensions.Logging.LogLevel.Information &&
+                                            call.GetArguments()[1] is Microsoft.Extensions.Logging.EventId { Name: "LogCrawlConfigDeleted" });
+    }
+
+    [Fact]
     public async Task DeleteCrawlConfig_AdminDeletesExisting_Returns204()
     {
         var configId = factory.TestConfigId;
@@ -581,9 +843,9 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         public Guid GuidedProCursorSourceId { get; } = Guid.NewGuid();
 
         public IProviderAdminDiscoveryService AdoDiscoveryService { get; } =
-            Substitute.For<IProviderAdminDiscoveryService>();
+            MeisterDev.ProPR.TestSupport.AdoGuidedDiscoveryTestSupport.Create();
 
-        public IScmProviderRegistry ProviderRegistry { get; } = Substitute.For<IScmProviderRegistry>();
+        public IScmProviderRegistry ProviderRegistry { get; } = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
         public IProCursorKnowledgeSourceRepository ProCursorKnowledgeSourceRepository { get; } =
             Substitute.For<IProCursorKnowledgeSourceRepository>();
@@ -725,25 +987,26 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                         Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<ClientScmScopeDto?>(null));
 
-                this.AdoDiscoveryService.ListCrawlFiltersAsync(
+                this.AdoDiscoveryService.ListCrawlFilterOptionsAsync(
                         testClientId,
                         guidedOrganizationScopeId,
                         Arg.Any<string>(),
                         Arg.Any<CancellationToken>())
-                    .Returns(callInfo => Task.FromResult<IReadOnlyList<AdoCrawlFilterOptionDto>>(
+                    .Returns(callInfo => Task.FromResult<IReadOnlyList<ScmDiscoveryCrawlFilterOption>>(
                     [
-                        new AdoCrawlFilterOptionDto(
+                        new ScmDiscoveryCrawlFilterOption(
                             new CanonicalSourceReferenceDto("azureDevOps", "repo-1"),
                             "Repository One",
-                            [new AdoBranchOptionDto("main", true)]),
-                        new AdoCrawlFilterOptionDto(
+                            [new ScmDiscoveryBranchOption("main", true)]),
+                        new ScmDiscoveryCrawlFilterOption(
                             new CanonicalSourceReferenceDto("azureDevOps", "repo-2"),
                             "Repository Two",
-                            [new AdoBranchOptionDto("develop", true)]),
+                            [new ScmDiscoveryBranchOption("develop", true)]),
                     ]));
                 this.ProviderRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
                     .Returns(this.AdoDiscoveryService);
                 services.AddSingleton(this.AdoDiscoveryService);
+                this.ProviderRegistry.GetReviewSourcePolicy(Arg.Any<ScmProvider>()).Returns(call => ReviewSourcePolicies.Get(call.Arg<ScmProvider>()));
                 services.AddSingleton(this.ProviderRegistry);
 
                 var guidedSource = new ProCursorKnowledgeSource(
@@ -859,21 +1122,22 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                             : null);
                 });
 
-            // UpdateAsync: returns true for testConfig, false for unknown
-            crawlRepo.UpdateAsync(
+            // Apply updates to existing configurations and report unknown identities.
+            crawlRepo.UpdateWithResultAsync(
                     Arg.Any<Guid>(),
                     Arg.Any<int?>(),
                     Arg.Any<bool?>(),
                     Arg.Any<Guid?>(),
                     Arg.Any<CancellationToken>(),
                     Arg.Any<float?>(),
-                    Arg.Any<bool>())
+                    Arg.Any<bool>(),
+                    Arg.Any<IReadOnlyList<CrawlRepoFilterDto>?>())
                 .Returns(callInfo =>
                 {
                     var configId = callInfo.ArgAt<Guid>(0);
                     if (!configsById.TryGetValue(configId, out var existingConfig))
                     {
-                        return Task.FromResult(false);
+                        return Task.FromResult(CrawlConfigurationUpdateResult.NotFound);
                     }
 
                     var shouldUpdateReviewTemperature = callInfo.ArgAt<bool>(6);
@@ -884,9 +1148,10 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                         CrawlIntervalSeconds = callInfo.ArgAt<int?>(1) ?? existingConfig.CrawlIntervalSeconds,
                         IsActive = callInfo.ArgAt<bool?>(2) ?? existingConfig.IsActive,
                         ReviewTemperature = shouldUpdateReviewTemperature ? reviewTemperature : existingConfig.ReviewTemperature,
+                        RepoFilters = callInfo.ArgAt<IReadOnlyList<CrawlRepoFilterDto>?>(7) ?? existingConfig.RepoFilters,
                     };
                     configsById[configId] = updatedConfig;
-                    return Task.FromResult(true);
+                    return Task.FromResult(CrawlConfigurationUpdateResult.Updated);
                 });
 
             // DeleteAsync: returns true for testConfig or unownedConfig (ownership checked in controller)

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Features.Clients.Support;
+using MeisterDev.ProPR.Application.Features.Clients.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -60,8 +61,8 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             ct: CancellationToken.None);
 
         Assert.NotNull(created);
-        Assert.Equal(123456, created!.GitHubAppId);
-        Assert.Equal(789012, created.GitHubAppInstallationId);
+        Assert.Equal(123456, created!.AppId);
+        Assert.Equal(789012, created.InstallationId);
 
         var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
         Assert.Equal(123456, record.GitHubAppId);
@@ -174,6 +175,68 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
         Assert.Null(record.RetentionDays);
     }
 
+
+    [Theory]
+    [InlineData(false, true, null)]
+    [InlineData(false, true, 0L)]
+    [InlineData(false, true, -1L)]
+    [InlineData(false, false, null)]
+    [InlineData(false, false, 0L)]
+    [InlineData(false, false, -1L)]
+    [InlineData(true, true, null)]
+    [InlineData(true, true, 0L)]
+    [InlineData(true, true, -1L)]
+    [InlineData(true, false, null)]
+    [InlineData(true, false, 0L)]
+    [InlineData(true, false, -1L)]
+    public async Task UpdateAsync_InvalidIdentifiersPreserveNativeFailureLabels(bool changeHost, bool invalidApplication, long? invalidIdentifier)
+    {
+        var client = await this.SeedClientAsync();
+        var created = await this._repository.AddAsync(
+            client.Id, ScmProvider.GitHub, "https://github.com",
+            ScmAuthenticationKind.AppInstallation, null, null, "Connection", "fixture-secret", true, 123, 456);
+        Assert.NotNull(created);
+        var applicationValue = invalidApplication ? invalidIdentifier : 123;
+        var installationValue = invalidApplication ? 456 : invalidIdentifier;
+        ScmApplicationId? appId = applicationValue.HasValue ? new(applicationValue.Value) : null;
+        ScmInstallationId? installationId = installationValue.HasValue ? new(installationValue.Value) : null;
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => this._repository.UpdateAsync(
+            client.Id, created.Id, changeHost ? "https://github.enterprise.example" : "https://github.com",
+            ScmAuthenticationKind.AppInstallation, null, null, "Connection", null, true, appId, installationId));
+
+        Assert.Equal(
+            (invalidApplication ? "gitHubAppId" : "gitHubAppInstallationId") + " must be a positive numeric identifier.",
+            error.Message);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_MissingConnectionDoesNotValidateIdentifiers()
+    {
+        Assert.Null(
+            await this._repository.UpdateAsync(
+                Guid.NewGuid(), Guid.NewGuid(), "https://github.com", ScmAuthenticationKind.AppInstallation,
+                null, null, "Connection", null, true, new ScmApplicationId(0), new ScmInstallationId(0)));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_DuplicateHostErrorPrecedesIdentifierValidation()
+    {
+        var client = await this.SeedClientAsync();
+        var created = await this._repository.AddAsync(
+            client.Id, ScmProvider.GitHub, "https://github.com",
+            ScmAuthenticationKind.AppInstallation, null, null, "Connection", "fixture-secret", true, 123, 456);
+        await this._repository.AddAsync(
+            client.Id, ScmProvider.GitHub, "https://github.enterprise.example",
+            ScmAuthenticationKind.AppInstallation, null, null, "Other", "fixture-secret", true, 123, 456);
+        Assert.NotNull(created);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => this._repository.UpdateAsync(
+            client.Id, created.Id, "https://github.enterprise.example", ScmAuthenticationKind.AppInstallation,
+            null, null, "Connection", null, true, new ScmApplicationId(0), new ScmInstallationId(0)));
+        Assert.Equal("A provider connection for this provider family and host already exists.", error.Message);
+    }
+
     [Fact]
     public async Task UpdateAsync_GitHubAppRotation_ReprotectsSecretAndResetsVerification()
     {
@@ -220,8 +283,8 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
         Assert.NotNull(updated);
         Assert.Equal("unknown", updated!.VerificationStatus);
         Assert.Null(updated.LastVerifiedAt);
-        Assert.Equal(456123, updated.GitHubAppId);
-        Assert.Equal(654321, updated.GitHubAppInstallationId);
+        Assert.Equal(456123, updated.AppId);
+        Assert.Equal(654321, updated.InstallationId);
 
         var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
         Assert.Equal(456123, record.GitHubAppId);
@@ -263,8 +326,8 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             ct: CancellationToken.None);
 
         Assert.NotNull(updated);
-        Assert.Null(updated!.GitHubAppId);
-        Assert.Null(updated.GitHubAppInstallationId);
+        Assert.Null(updated!.AppId);
+        Assert.Null(updated.InstallationId);
 
         var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
         Assert.Null(record.GitHubAppId);
@@ -584,7 +647,7 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             new MeisterProPRDbContext(options),
             provider.GetRequiredService<IDbContextFactory<MeisterProPRDbContext>>(),
             provider,
-            new StaticProviderReadinessProfileCatalog());
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies));
     }
 
     private static ISecretProtectionCodec CreateCodec()
@@ -603,6 +666,13 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
 
     private sealed class TestScmProviderRegistry : IScmProviderRegistry
     {
+        public IScmProviderCompatibilityCodec CompatibilityCodec => throw new NotSupportedException();
+        public IScmIdentityPolicy GetIdentityPolicy(ScmProvider provider) => throw new NotSupportedException();
+        public IWebhookIngressPolicy GetWebhookIngressPolicy(ScmProvider provider) => throw new NotSupportedException();
+        public ICodeReviewPreparationPolicy GetCodeReviewPreparationPolicy(ScmProvider provider) => throw new NotSupportedException();
+        public IReviewSourcePolicy GetSourceIdentityPolicy(ScmProvider provider) => throw new NotSupportedException();
+        public IScmConnectionConfigurationPolicy GetConnectionConfigurationPolicy(ScmProvider provider) => throw new NotSupportedException();
+
         public bool IsRegistered(ScmProvider provider)
         {
             return true;
@@ -645,6 +715,14 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
         }
 
         public IReviewDiscoveryProvider GetReviewDiscoveryProvider(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IReviewSourcePolicy GetReviewSourcePolicy(ScmProvider provider) => throw new InvalidOperationException();
+
+
+        public IReviewOverviewProvider GetReviewOverviewProvider(ScmProvider provider)
         {
             throw new NotSupportedException();
         }

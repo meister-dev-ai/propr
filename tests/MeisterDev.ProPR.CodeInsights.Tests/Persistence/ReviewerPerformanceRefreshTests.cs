@@ -48,6 +48,7 @@ public sealed class ReviewerPerformanceRefreshTests
             return Task.FromResult<HumanMissJudgement?>(new(true, true, true, .9, "settled"));
         });
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread();
         await harvester.HandleThreadObservedAsync(evt);
@@ -109,6 +110,7 @@ public sealed class ReviewerPerformanceRefreshTests
         human.ClassifierVersion.Returns("human-v1");
         human.JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>()).Returns(new HumanMissJudgement(true, true, true, .9, "accepted"));
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var now = DateTimeOffset.UtcNow;
         var evt = HumanThread() with { ObservedAt = now };
@@ -138,6 +140,7 @@ public sealed class ReviewerPerformanceRefreshTests
         var gate = Substitute.For<ICodeInsightsCollectionGate>();
         gate.IsCollectionEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, Substitute.For<IHumanMissClassifier>(), gate, TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         Assert.False(await harvester.HandleThreadObservedAsync(HumanThread()));
         Assert.True(
@@ -153,6 +156,7 @@ public sealed class ReviewerPerformanceRefreshTests
         human.ClassifierVersion.Returns("human-v1");
         human.JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>()).Returns(new HumanMissJudgement(true, true, true, .9, "accepted"));
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread();
         Assert.True(await harvester.HandleThreadObservedAsync(evt));
@@ -200,6 +204,7 @@ public sealed class ReviewerPerformanceRefreshTests
         classifier.JudgeAsync(Arg.Any<DisregardedFindingJudgementRequest>(), Arg.Any<CancellationToken>())
             .Returns(new DisregardedFindingJudgement(false, .9, "accepted"));
         var service = new CodeInsightDispositionService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, classifier, OpenGate(), NullLogger<CodeInsightDispositionService>.Instance,
             performanceEvidence: new CodeInsightPerformanceEvidenceStore(db));
         var now = DateTimeOffset.UtcNow;
@@ -236,6 +241,7 @@ public sealed class ReviewerPerformanceRefreshTests
             FindingClassificationResult.Classified(new(["concurrency"], [], CodeInsightFindingLevel.File, CodeInsightFindingQualifier.Missing, .9)));
         var taxonomy = Substitute.For<ICodeInsightTaxonomyService>();
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, gate, TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance, types, taxonomy);
         var evt = HumanThread();
         await harvester.HandleThreadObservedAsync(evt);
@@ -264,6 +270,7 @@ public sealed class ReviewerPerformanceRefreshTests
         types.ClassifierVersion.Returns("dimension-v1");
         types.ClassifyAsync(Arg.Any<FindingClassificationRequest>(), Arg.Any<CancellationToken>()).Returns(FindingClassificationResult.Unusable());
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance, types,
             Substitute.For<ICodeInsightTaxonomyService>());
         var evt = HumanThread();
@@ -321,6 +328,7 @@ public sealed class ReviewerPerformanceRefreshTests
         classifier.ClassifierVersion.Returns("judge-v1");
         classifier.JudgeAsync(Arg.Any<DisregardedFindingJudgementRequest>(), Arg.Any<CancellationToken>()).Returns((DisregardedFindingJudgement?)null);
         var service = new CodeInsightDispositionService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, classifier, OpenGate(), NullLogger<CodeInsightDispositionService>.Instance,
             performanceEvidence: new CodeInsightPerformanceEvidenceStore(db));
         var now = DateTimeOffset.UtcNow;
@@ -385,6 +393,7 @@ public sealed class ReviewerPerformanceRefreshTests
         classifier.JudgeAsync(Arg.Any<DisregardedFindingJudgementRequest>(), Arg.Any<CancellationToken>()).Returns(
             new DisregardedFindingJudgement(false, .9, "accepted"), new DisregardedFindingJudgement(true, .9, "wrong"));
         var service = new CodeInsightDispositionService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, classifier, OpenGate(), NullLogger<CodeInsightDispositionService>.Instance,
             performanceEvidence: new CodeInsightPerformanceEvidenceStore(db));
         var now = DateTimeOffset.UtcNow;
@@ -419,6 +428,7 @@ public sealed class ReviewerPerformanceRefreshTests
         taxonomy.GetAssignableTaxonomyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(call =>
             unavailable ? throw new InvalidOperationException("Taxonomy unavailable") : Task.FromResult(new CodeInsightTaxonomyDto(1, [], [])));
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance, types, taxonomy);
         var evt = HumanThread();
         for (var attempt = 0; attempt < 3; attempt++)
@@ -448,6 +458,7 @@ public sealed class ReviewerPerformanceRefreshTests
         human.ClassifierVersion.Returns("human-v1");
         human.JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>()).Returns(new HumanMissJudgement(true, true, true, .9, "accepted"));
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             findings, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread();
         for (var attempt = 0; attempt < 3; attempt++)
@@ -482,6 +493,7 @@ public sealed class ReviewerPerformanceRefreshTests
         var taxonomy = Substitute.For<ICodeInsightTaxonomyService>();
         taxonomy.GetAssignableTaxonomyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new CodeInsightTaxonomyDto(1, [], []));
         var normal = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, gate, TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance,
             classifyDimensions ? types : null, classifyDimensions ? taxonomy : null, projector);
         var evt = HumanThread() with
@@ -507,6 +519,7 @@ public sealed class ReviewerPerformanceRefreshTests
         unavailable.GetFindingsForPullRequestAsync(Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<CodeInsightFindingView>>>(_ => throw new InvalidOperationException("Finding read failed"));
         var failed = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             unavailable, store, human, gate, TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance,
             classifyDimensions ? types : null, classifyDimensions ? taxonomy : null, projector);
 
@@ -599,6 +612,7 @@ public sealed class ReviewerPerformanceRefreshTests
                 CodeInsightCoreTaxonomy.All.Select(tag => new CodeInsightCoreTagDto(
                     tag.Slug, tag.DisplayName, tag.Definition, tag.Characteristic, tag.BehaviourChanging)).ToList(), []));
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance, types, taxonomy);
         var evt = HumanThread() with { ObservedAt = DateTimeOffset.UtcNow };
 
@@ -656,6 +670,7 @@ public sealed class ReviewerPerformanceRefreshTests
         });
         var classifier = new AiHumanMissClassifier(resolver, Substitute.For<IModelUsageRecorder>(), NullLogger<AiHumanMissClassifier>.Instance);
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, classifier, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread() with { ObservedAt = DateTimeOffset.UtcNow };
 
@@ -717,6 +732,7 @@ public sealed class ReviewerPerformanceRefreshTests
 
         var classifier = new AiHumanMissClassifier(resolver, usage, NullLogger<AiHumanMissClassifier>.Instance);
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, classifier, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread() with { ObservedAt = DateTimeOffset.UtcNow };
 
@@ -743,6 +759,7 @@ public sealed class ReviewerPerformanceRefreshTests
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         human.JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>()).Returns(new HumanMissJudgement(true, true, true, .9, "accepted"));
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread() with { ObservedAt = DateTimeOffset.UtcNow.AddSeconds(-2) };
         Assert.True(await harvester.HandleThreadObservedAsync(evt));
@@ -779,6 +796,7 @@ public sealed class ReviewerPerformanceRefreshTests
         human.ClassifierVersion.Returns("human-v1");
         human.JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>()).Returns(new HumanMissJudgement(true, true, true, .9, "accepted"));
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread();
         Assert.True(await harvester.HandleThreadObservedAsync(evt));
@@ -818,6 +836,7 @@ public sealed class ReviewerPerformanceRefreshTests
             return release.Task;
         });
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var observation = harvester.HandleThreadObservedAsync(evt);
         await started.Task;
@@ -877,6 +896,7 @@ public sealed class ReviewerPerformanceRefreshTests
         types.ClassifyAsync(Arg.Any<FindingClassificationRequest>(), Arg.Any<CancellationToken>()).Returns(FindingClassificationResult.Unusable());
         var taxonomy = Substitute.For<ICodeInsightTaxonomyService>();
         var normal = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, gate, TestPostedCommentComposer.Default,
             NullLogger<CodeInsightMissHarvester>.Instance, types, taxonomy, projector);
         var evt = HumanThread() with { ObservedAt = DateTimeOffset.UtcNow };
@@ -890,6 +910,7 @@ public sealed class ReviewerPerformanceRefreshTests
         unavailable.GetFindingsForPullRequestAsync(Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<CodeInsightFindingView>>>(_ => throw new InvalidOperationException("Finding read failed"));
         var failed = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             unavailable, store, human, gate, TestPostedCommentComposer.Default,
             NullLogger<CodeInsightMissHarvester>.Instance, types, taxonomy, projector);
         Assert.False(await failed.HandleThreadObservedAsync(evt with { ObservedAt = evt.ObservedAt.Value.AddSeconds(1) }));
@@ -918,6 +939,7 @@ public sealed class ReviewerPerformanceRefreshTests
                 Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<string?>())
             .Returns<Task<CodeInsightMissAcknowledgment>>(_ => throw new InvalidOperationException("Eligibility write failed"));
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             Substitute.For<ICodeInsightFindingStore>(), misses, Substitute.For<IHumanMissClassifier>(),
             OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread() with { Comments = [new("1", "Bot", true, DateTimeOffset.UtcNow, "Reviewer reply")] };
@@ -941,6 +963,7 @@ public sealed class ReviewerPerformanceRefreshTests
             return release.Task;
         });
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, gate, TestPostedCommentComposer.Default,
             NullLogger<CodeInsightMissHarvester>.Instance, performanceProjector: projector);
         var evt = HumanThread() with
@@ -989,6 +1012,7 @@ public sealed class ReviewerPerformanceRefreshTests
             return releases[current].Task;
         });
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, OpenGate(), TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         var evt = HumanThread() with { ObservedAt = DateTimeOffset.UtcNow };
         var older = harvester.HandleThreadObservedAsync(evt);
@@ -1025,8 +1049,12 @@ public sealed class ReviewerPerformanceRefreshTests
             });
         await db.SaveChangesAsync();
         var scope = ProviderSourceIdentity.FromReviewJob(
-            new ReviewJob(Guid.NewGuid(), evt.ClientId, collection, "project", evt.RepositoryId, (int)evt.PullRequestId, 1)).Value;
-        Assert.Equal(scope, ProviderSourceIdentity.FromReviewSource(ScmProvider.AzureDevOps, collection).Value);
+            new ReviewJob(Guid.NewGuid(), evt.ClientId, collection, "project", evt.RepositoryId, (int)evt.PullRequestId, 1),
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetReviewSourcePolicy(ScmProvider.AzureDevOps)).Value;
+        Assert.Equal(
+            scope, ProviderSourceIdentity.FromReviewSource(
+                ScmProvider.AzureDevOps, collection,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetReviewSourcePolicy(ScmProvider.AzureDevOps)).Value);
         var store = new CodeInsightFindingStore(db, Codec());
         var key = new CodeInsightPullRequestKey(evt.ClientId, evt.RepositoryId, evt.PullRequestId);
         await store.MaterialiseFindingsAsync(
@@ -1039,11 +1067,13 @@ public sealed class ReviewerPerformanceRefreshTests
         var human = Substitute.For<IHumanMissClassifier>();
         var gate = OpenGate();
         var harvester = new CodeInsightMissHarvester(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, human, gate, TestPostedCommentComposer.Default, NullLogger<CodeInsightMissHarvester>.Instance);
         Assert.True(await harvester.HandleThreadObservedAsync(evt with { ProviderScope = scope }));
         Assert.Empty(await store.GetMissesForPullRequestAsync(key));
         await human.DidNotReceive().JudgeAsync(Arg.Any<HumanMissJudgementRequest>(), Arg.Any<CancellationToken>());
         var dispositions = new CodeInsightDispositionService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
             store, store, Substitute.For<IDisregardedFindingClassifier>(), gate,
             NullLogger<CodeInsightDispositionService>.Instance, performanceEvidence: new CodeInsightPerformanceEvidenceStore(db));
         await dispositions.HandleThreadResolvedAsync(
@@ -1096,6 +1126,7 @@ public sealed class ReviewerPerformanceRefreshTests
         var key = new CodeInsightPullRequestKey(evt.ClientId, evt.RepositoryId, evt.PullRequestId);
         Assert.True(
             await new CodeInsightMissHarvester(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                 store, store, human, gate, TestPostedCommentComposer.Default,
                 NullLogger<CodeInsightMissHarvester>.Instance, types, taxonomy, projector).HandleThreadObservedAsync(evt));
         var findings = Substitute.For<ICodeInsightFindingStore>();
@@ -1107,6 +1138,7 @@ public sealed class ReviewerPerformanceRefreshTests
             });
         Assert.True(
             await new CodeInsightMissHarvester(
+                    MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                     findings, store, human, gate, TestPostedCommentComposer.Default,
                     NullLogger<CodeInsightMissHarvester>.Instance, types, taxonomy, projector)
                 .HandleThreadObservedAsync(evt with { ObservedAt = evt.ObservedAt.Value.AddSeconds(1) }));

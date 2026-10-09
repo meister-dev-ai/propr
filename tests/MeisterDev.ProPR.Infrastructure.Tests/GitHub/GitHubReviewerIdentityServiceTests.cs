@@ -16,6 +16,36 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.GitHub;
 public sealed class GitHubReviewerIdentityServiceTests
 {
     [Fact]
+    public async Task AutomaticIdentityUsesTheSuppliedConnectionWithoutAnAdditionalCredentialLookup()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connection = new ClientScmConnectionCredentialDto(
+            Guid.NewGuid(), Guid.NewGuid(), ScmProvider.GitHub, host.HostBaseUrl,
+            ScmAuthenticationKind.AppInstallation, null, null, "app", GitHubAppTestHelpers.CreatePrivateKeyPem(true), true,
+            AppId: 123456, InstallationId: 789012);
+        var repository = Substitute.For<IClientScmConnectionRepository>();
+        var requests = new List<string>();
+        var clients = Substitute.For<IHttpClientFactory>();
+        clients.CreateClient("GitHubProvider").Returns(
+            new HttpClient(
+                new StubHttpMessageHandler(request =>
+                {
+                    requests.Add(request.RequestUri!.AbsoluteUri);
+                    return CreateJsonResponse(new { slug = "propr-review", name = "ProPR Review" });
+                })));
+        var service = new GitHubReviewerIdentityService(new GitHubConnectionVerifier(repository, clients), clients);
+        var identity = await service.GetAutomaticReviewerIdentityAsync(host, connection, CancellationToken.None);
+
+        Assert.NotNull(identity);
+        Assert.Equal("propr-review[bot]", identity.Login);
+        Assert.Equal("propr-review[bot]", identity.ExternalUserId);
+        Assert.Equal("ProPR Review", identity.DisplayName);
+        Assert.True(identity.IsBot);
+        Assert.Equal(["https://api.github.com/app"], requests);
+        await repository.DidNotReceiveWithAnyArgs().GetOperationalConnectionAsync(default, default!);
+    }
+
+    [Fact]
     public async Task ResolveCandidatesAsync_ReturnsSortedReviewerIdentities()
     {
         var clientId = Guid.NewGuid();

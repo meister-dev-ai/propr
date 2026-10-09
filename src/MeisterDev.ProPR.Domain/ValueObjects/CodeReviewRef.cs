@@ -5,7 +5,8 @@ using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Domain.ValueObjects;
 
-/// <summary>Stable provider-neutral code-review identity.</summary>
+/// <summary>Provider-neutral code-review identity with an external identifier and a native review number.</summary>
+/// <remarks>Installed provider adapters require a positive native pull request or merge request number. The external identifier does not enable opaque-only review operations.</remarks>
 public sealed record CodeReviewRef
 {
     /// <summary>
@@ -14,7 +15,7 @@ public sealed record CodeReviewRef
     /// <param name="repository">The repository reference.</param>
     /// <param name="platform">The code review platform kind.</param>
     /// <param name="externalReviewId">The external review identifier.</param>
-    /// <param name="number">The review number.</param>
+    /// <param name="number">The positive provider-native pull request or merge request number.</param>
     public CodeReviewRef(RepositoryRef repository, CodeReviewPlatformKind platform, string externalReviewId, int number)
     {
         this.Repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -35,6 +36,6 @@ public sealed record CodeReviewRef
     /// <summary>Gets the external review identifier.</summary>
     public string ExternalReviewId { get; }
 
-    /// <summary>Gets the review number.</summary>
+    /// <summary>Gets the positive provider-native pull request or merge request number.</summary>
     public int Number { get; }
 }

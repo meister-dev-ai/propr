@@ -42,7 +42,8 @@ public sealed class ManagedRemoteProCursorGatewayTests
         };
         var remoteGateway = new HttpProCursorGateway(httpClient, NullLogger<HttpProCursorGateway>.Instance);
 
-        var gateway = new ManagedRemoteProCursorGateway(knowledgeSourceRepository, remoteGateway);
+        var gateway = new ManagedRemoteProCursorGateway(
+            knowledgeSourceRepository, remoteGateway, MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec);
 
         await gateway.CreateSourceAsync(
             clientId,

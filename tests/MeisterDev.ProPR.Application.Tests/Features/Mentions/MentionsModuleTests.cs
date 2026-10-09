@@ -49,6 +49,7 @@ public sealed class MentionsModuleTests
         var clientRegistry = Substitute.For<IClientRegistry>();
         var channel = Channel.CreateUnbounded<MentionReplyJob>();
         var sut = new MentionScanService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             mentionConfigs,
             activePrFetcher,
             pullRequestFetcher,
@@ -140,7 +141,7 @@ public sealed class MentionsModuleTests
         var jobRepository = Substitute.For<IMentionReplyJobRepository>();
         var answerService = Substitute.For<IMentionAnswerService>();
         var threadReplier = Substitute.For<IReviewThreadReplyPublisher>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         threadReplier.Provider.Returns(ScmProvider.AzureDevOps);
         threadReplier.ReplyAsync(
                 Arg.Any<Guid>(),

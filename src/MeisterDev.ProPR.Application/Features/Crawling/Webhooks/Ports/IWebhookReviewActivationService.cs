@@ -12,7 +12,7 @@ public interface IWebhookReviewActivationService
     /// <summary>Submits or deduplicates review intake for one classified webhook delivery.</summary>
     Task<IReadOnlyList<string>> ActivateAsync(
         WebhookConfigurationDto configuration,
-        IncomingAdoWebhookDelivery delivery,
-        AdoWebhookEventClassification classification,
+        IncomingWebhookDelivery delivery,
+        WebhookEventClassification classification,
         CancellationToken ct = default);
 }

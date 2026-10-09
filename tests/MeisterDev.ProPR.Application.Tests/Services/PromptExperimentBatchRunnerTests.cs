@@ -596,7 +596,7 @@ public sealed class PromptExperimentBatchRunnerTests
                     "summary",
                     "ai-call",
                     null),
-            ]);
+            ]) { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps };
     }
 
     private static ReviewJobProtocolDto CreateProtocolWithPromptEvidence(
@@ -648,6 +648,6 @@ public sealed class PromptExperimentBatchRunnerTests
                     $"{{\"stageKey\":\"{stageKey}\",\"variantName\":\"{variantName}\",\"compositionMode\":\"{compositionMode.ToString().ToLowerInvariant()}\",\"usedDefaultConstruction\":false}}",
                     "review-strategy",
                     null),
-            ]);
+            ]) { Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps };
     }
 }

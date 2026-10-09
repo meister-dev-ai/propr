@@ -100,7 +100,7 @@ public sealed partial class ReviewerPerformanceCountProjector(
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct) : null;
         if (db.Database.IsNpgsql())
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({BitConverter.ToInt64(aggregateId.ToByteArray(), 0)})", ct);
+            await PostgresAdvisoryLocks.AcquireTransactionAsync(db, BitConverter.ToInt64(aggregateId.ToByteArray(), 0), ct);
         }
 
         if (db.Database.IsRelational())

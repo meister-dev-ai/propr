@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using Azure.Identity;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Security;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
 using MeisterDev.Tests.Shared;
 using Microsoft.Extensions.Configuration;
@@ -15,9 +16,17 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.DependencyInjection;
 public sealed class AzureCredentialResolutionTests
 {
     [Fact]
+    public void NativeCredentialCompositionHasItsOwnProviderOwner()
+    {
+        Assert.NotNull(
+            typeof(InfrastructureServiceExtensions).Assembly.GetType(
+                "MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Security.AdoCredentialResolver"));
+    }
+
+    [Fact]
     public void TheServicePrincipalVariablesSelectTheClientSecretCredential()
     {
-        var credential = InfrastructureServiceExtensions.ResolveAzureDevOpsCredential(
+        var credential = AdoCredentialResolver.Resolve(
             Configuration(
                 new Dictionary<string, string?>
                 {
@@ -32,7 +41,7 @@ public sealed class AzureCredentialResolutionTests
     [Fact]
     public void NoServicePrincipalVariablesSelectTheDefaultCredentialChain()
     {
-        Assert.IsType<DefaultAzureCredential>(InfrastructureServiceExtensions.ResolveAzureDevOpsCredential(Configuration(new Dictionary<string, string?>())));
+        Assert.IsType<DefaultAzureCredential>(AdoCredentialResolver.Resolve(Configuration(new Dictionary<string, string?>())));
     }
 
     // A secret is usable only as part of a service principal, so a secret missing one of its ids would leave
@@ -51,7 +60,7 @@ public sealed class AzureCredentialResolutionTests
         };
         settings.Remove(missing);
 
-        var failure = Assert.Throws<InvalidOperationException>(() => InfrastructureServiceExtensions.ResolveAzureDevOpsCredential(Configuration(settings)));
+        var failure = Assert.Throws<InvalidOperationException>(() => AdoCredentialResolver.Resolve(Configuration(settings)));
 
         Assert.Contains(missing, failure.Message, StringComparison.Ordinal);
     }
@@ -61,7 +70,7 @@ public sealed class AzureCredentialResolutionTests
     [Fact]
     public void AClientIdWithoutASecretSelectsTheDefaultCredentialChain()
     {
-        var credential = InfrastructureServiceExtensions.ResolveAzureDevOpsCredential(
+        var credential = AdoCredentialResolver.Resolve(
             Configuration(
                 new Dictionary<string, string?>
                 {
@@ -75,7 +84,7 @@ public sealed class AzureCredentialResolutionTests
     [Fact]
     public void BothIdsWithoutASecretSelectTheDefaultCredentialChain()
     {
-        var credential = InfrastructureServiceExtensions.ResolveAzureDevOpsCredential(
+        var credential = AdoCredentialResolver.Resolve(
             Configuration(
                 new Dictionary<string, string?>
                 {
@@ -92,7 +101,7 @@ public sealed class AzureCredentialResolutionTests
     [Fact]
     public void TheResolverHoldsTheInstallationWideCredentialContract()
     {
-        AzureCredentialResolutionContract.AssertHolds(InfrastructureServiceExtensions.ResolveAzureDevOpsCredential);
+        AzureCredentialResolutionContract.AssertHolds(AdoCredentialResolver.Resolve);
     }
 
     private static IConfiguration Configuration(IDictionary<string, string?> settings)

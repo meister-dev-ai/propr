@@ -84,7 +84,7 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
                 CreateRejectedDecision(NotFoundStatusCode, null));
         }
 
-        if (MapProviderType(configuration.ProviderType) != command.Provider)
+        if (this.MapProviderType(configuration.ProviderType) != command.Provider)
         {
             var rejected = CreateRejectedDecision(NotFoundStatusCode, null);
             await this.PersistLogAsync(configuration.Id, "unknown", null, null, null, null, rejected, ct);
@@ -383,7 +383,7 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
             .GetCodeReviewQueryService(provider)
             .GetReviewAsync(clientId, review, ct);
 
-        if (ReviewerMatches(reviewQuery?.RequestedReviewerIdentity, reviewer))
+        if (providerRegistry.GetIdentityPolicy(provider).MatchesReviewerIdentity(reviewQuery?.RequestedReviewerIdentity, reviewer))
         {
             return true;
         }
@@ -393,13 +393,6 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
             .ListOpenReviewsAsync(clientId, review.Repository, reviewer, ct);
 
         return matchingReviews.Any(item => item.CodeReview.Number == review.Number);
-    }
-
-    private static bool ReviewerMatches(ReviewerIdentity? actual, ReviewerIdentity expected)
-    {
-        return actual is not null
-               && (string.Equals(actual.Login, expected.Login, StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(actual.ExternalUserId, expected.ExternalUserId, StringComparison.Ordinal));
     }
 
     private async Task PersistLogAsync(
@@ -526,53 +519,15 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
         };
     }
 
-    private static RepositoryRef ResolveEffectiveRepository(
-        WebhookConfigurationDto configuration,
-        RepositoryRef repository,
-        WebhookRepoFilterDto matchedFilter)
+    private RepositoryRef ResolveEffectiveRepository(WebhookConfigurationDto configuration, RepositoryRef repository, WebhookRepoFilterDto matchedFilter)
     {
-        var canonicalRepositoryId = matchedFilter.CanonicalSourceRef?.Provider is not null
-                                    && string.Equals(
-                                        matchedFilter.CanonicalSourceRef.Provider,
-                                        "azureDevOps",
-                                        StringComparison.OrdinalIgnoreCase)
-                                    && !string.IsNullOrWhiteSpace(matchedFilter.CanonicalSourceRef.Value)
-            ? matchedFilter.CanonicalSourceRef.Value
-            : null;
-
-        if (string.IsNullOrWhiteSpace(canonicalRepositoryId))
-        {
-            return repository;
-        }
-
-        var carriesExplicitProjectIdentity =
-            !string.Equals(
-                repository.OwnerOrNamespace,
-                repository.ExternalRepositoryId,
-                StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(
-                repository.ProjectPath,
-                repository.ExternalRepositoryId,
-                StringComparison.OrdinalIgnoreCase);
-
-        var ownerOrNamespace = carriesExplicitProjectIdentity
-            ? repository.OwnerOrNamespace
-            : configuration.ProjectId;
-        var projectPath = carriesExplicitProjectIdentity
-            ? repository.ProjectPath
-            : configuration.ProjectId;
-
-        if (string.Equals(repository.ExternalRepositoryId, canonicalRepositoryId, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(repository.OwnerOrNamespace, ownerOrNamespace, StringComparison.Ordinal)
-            && string.Equals(repository.ProjectPath, projectPath, StringComparison.Ordinal))
-        {
-            return repository;
-        }
-
-        return new RepositoryRef(repository.Host, canonicalRepositoryId, ownerOrNamespace, projectPath);
+        return providerRegistry.CompatibilityCodec.TryParseRecordedCanonicalProvider(matchedFilter.CanonicalSourceRef?.Provider, out var recordedProvider)
+            ? providerRegistry.GetSourceIdentityPolicy(recordedProvider).ProjectRecordedCanonicalRepository(
+                repository, matchedFilter.CanonicalSourceRef?.Value, configuration.ProjectId)
+            : repository;
     }
 
-    private static WebhookRepoFilterDto? ResolveMatchingFilter(
+    private WebhookRepoFilterDto? ResolveMatchingFilter(
         IReadOnlyList<WebhookRepoFilterDto> filters,
         RepositoryRef? repository,
         string? targetBranch)
@@ -588,15 +543,8 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
         }
 
         var normalizedTargetBranch = StripRefsHeads(targetBranch);
-        var repositoryCandidates = new[]
-            {
-                repository.ExternalRepositoryId,
-                repository.ProjectPath,
-                repository.ProjectPath.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault(),
-            }
-            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var repositoryCandidates = providerRegistry.GetSourceIdentityPolicy(repository.Host.Provider)
+            .GetWebhookRepositoryAliases(repository);
 
         foreach (var filter in filters)
         {
@@ -655,51 +603,16 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
             : branchName.Trim();
     }
 
-    private static ScmProvider MapProviderType(WebhookProviderType providerType)
-    {
-        return providerType switch
-        {
-            WebhookProviderType.AzureDevOps => ScmProvider.AzureDevOps,
-            WebhookProviderType.GitHub => ScmProvider.GitHub,
-            WebhookProviderType.GitLab => ScmProvider.GitLab,
-            WebhookProviderType.Forgejo => ScmProvider.Forgejo,
-            _ => throw new InvalidOperationException($"Webhook provider {providerType} is not supported."),
-        };
-    }
+    private ScmProvider MapProviderType(WebhookProviderType providerType) =>
+        providerRegistry.CompatibilityCodec.TryFromWebhook(providerType, out var provider)
+            ? provider
+            : throw new InvalidOperationException($"Webhook provider {providerType} is not supported.");
 
-    private static string? TryReadHeader(IReadOnlyDictionary<string, string> headers, string headerName)
-    {
-        foreach (var header in headers)
-        {
-            if (string.Equals(header.Key, headerName, StringComparison.OrdinalIgnoreCase))
-            {
-                return header.Value;
-            }
-        }
 
-        return null;
-    }
+    private string? TryReadEventHeader(ScmProvider provider, IReadOnlyDictionary<string, string> headers) =>
+        providerRegistry.GetWebhookIngressPolicy(provider).ReadEventType(headers);
 
-    private static string? TryReadEventHeader(ScmProvider provider, IReadOnlyDictionary<string, string> headers)
-    {
-        return provider switch
-        {
-            ScmProvider.GitHub => TryReadHeader(headers, "X-GitHub-Event"),
-            ScmProvider.GitLab => TryReadHeader(headers, "X-Gitlab-Event"),
-            ScmProvider.Forgejo => TryReadHeader(headers, "X-Gitea-Event"),
-            _ => null,
-        };
-    }
-
-    /// <summary>
-    ///     The provider's own identifier for this delivery, when it sends one. It is what makes a retried
-    ///     delivery recognisable as the same delivery rather than a second pull request event.
-    /// </summary>
-    /// <summary>
-    ///     What the provider is told when a delivery is accepted for processing. Deliberately the same
-    ///     "accepted" it was told before: from the provider's side nothing has changed, and only the
-    ///     summary says the work now happens behind the answer.
-    /// </summary>
+    /// <summary>Represents whether a validated delivery was added to the processing queue.</summary>
     private sealed record WebhookDeliveryQueueOutcome(bool Queued)
     {
         public WebhookRoutingDecision ToDecision(int statusCode)
@@ -717,21 +630,8 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
         }
     }
 
-    private static string? TryReadDeliveryKey(ScmProvider provider, IReadOnlyDictionary<string, string> headers)
-    {
-        return provider switch
-        {
-            ScmProvider.GitHub => TryReadHeader(headers, "X-GitHub-Delivery"),
-            ScmProvider.GitLab => TryReadHeader(headers, "X-Gitlab-Event-UUID"),
-            ScmProvider.Forgejo => TryReadHeader(headers, "X-Gitea-Delivery"),
-
-            // Azure DevOps sends no delivery header. Its service hooks carry a notification id in the body
-            // instead, and reading it here would mean parsing the payload a second way; without a key the
-            // queue simply accepts a retry as a new entry, which the synchronisation step already handles
-            // by recognising the revision it has seen.
-            _ => null,
-        };
-    }
+    private string? TryReadDeliveryKey(ScmProvider provider, IReadOnlyDictionary<string, string> headers) =>
+        providerRegistry.GetWebhookIngressPolicy(provider).ReadDeliveryKey(headers);
 
     private static WebhookRoutingDecision CompleteDecision(
         Activity? activity,

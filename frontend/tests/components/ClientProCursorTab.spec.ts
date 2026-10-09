@@ -28,11 +28,35 @@ vi.mock('@/services/proCursorService', () => ({
   queueProCursorRefresh: vi.fn(),
 }))
 
-vi.mock('@/services/adoDiscoveryService', () => ({
-  listAdoOrganizationScopes: listOrganizationScopesMock,
-  listAdoProjects: listProjectsMock,
-  listAdoSources: listSourceOptionsMock,
-  listAdoBranches: listBranchOptionsMock,
+vi.mock('@/services/providerConnectionsService', () => ({
+  listProviderConnections: vi.fn(async () => [{
+    id: 'connection-1', clientId: 'client-1', providerFamily: 'azureDevOps', hostBaseUrl: 'https://dev.azure.com',
+    displayName: 'Example connection', isActive: true,
+  }]),
+  listProviderScopes: vi.fn(async () => [{ id: 'scope-1', scopePath: 'https://dev.azure.com/example' }]),
+}))
+
+vi.mock('@/services/providerDiscoveryService', () => ({
+  listConnectionDescriptor: vi.fn(async () => ({
+    provider: 'azureDevOps', scopeLabel: 'Organization', projectLabel: 'Project',
+    sourceKinds: [{ kind: 'repository', label: 'Repository' }, { kind: 'adoWiki', label: 'Wiki' }],
+    supportsBranches: true, supportsKnowledgeSources: true,
+  })),
+  listConnectionScopes: async (...args: unknown[]) => (await listOrganizationScopesMock(...args)).map((scope: { id: string; organizationUrl: string; displayName: string }) => ({
+    scopeKey: scope.organizationUrl, displayName: scope.displayName, savedScopeId: scope.id,
+  })),
+  listConnectionProjects: (...args: unknown[]) => listProjectsMock(...args),
+  listConnectionSources: async (...args: unknown[]) => (await listSourceOptionsMock(...args)).map((source: { canonicalSourceRef: { provider: string; value: string }; displayName: string; defaultBranch?: string }) => ({
+    organizationScopeId: 'scope-1', providerScopePath: args[3], providerProjectKey: args[4],
+    repositoryId: source.canonicalSourceRef.value, sourceKind: args[5], canonicalSourceRef: source.canonicalSourceRef,
+    displayName: source.displayName, defaultBranch: source.defaultBranch ?? 'main',
+  })),
+  resolveConnectionSelection: async (...args: unknown[]) => ({
+    provider: 'azureDevOps', connectionId: args[1], scopeKey: args[3], organizationScopeId: 'scope-1',
+    providerScopePath: args[3], providerProjectKey: args[4],
+  }),
+  listConnectionFilters: vi.fn(async () => []),
+  listConnectionBranches: (...args: unknown[]) => listBranchOptionsMock(...args),
 }))
 
 vi.mock('@/composables/useNotification', () => ({
@@ -269,12 +293,14 @@ describe('ClientProCursorTab', () => {
     await findButtonByText(wrapper, 'Create Source').trigger('click')
     await flushPromises()
 
+    await wrapper.get('#procursor-connection').setValue('connection-1')
+    await flushPromises()
     await wrapper.get('#procursorDisplayName').setValue('Platform Docs')
-    await wrapper.get('#procursorOrganizationScope').setValue('scope-1')
+    await wrapper.get('#procursor-scope').setValue('https://dev.azure.com/example')
     await flushPromises()
-    await wrapper.get('#procursorProjectId').setValue('project-1')
+    await wrapper.get('#procursor-project').setValue('project-1')
     await flushPromises()
-    await wrapper.get('#procursorSourceSelection').setValue('azureDevOps::repo-1')
+    await wrapper.get('#procursor-source').setValue('azureDevOps::repo-1')
     await flushPromises()
     await wrapper.get('#procursorInitialBranch').setValue('develop')
     await wrapper.get('#procursorRootPath').setValue('/docs')
@@ -282,10 +308,10 @@ describe('ClientProCursorTab', () => {
     await findButtonByText(wrapper, 'Create Source').trigger('click')
     await flushPromises()
 
-    expect(listOrganizationScopesMock).toHaveBeenCalledWith('client-1')
-    expect(listProjectsMock).toHaveBeenCalledWith('client-1', 'scope-1')
-    expect(listSourceOptionsMock).toHaveBeenCalledWith('client-1', 'scope-1', 'project-1', 'repository')
-    expect(listBranchOptionsMock).toHaveBeenCalledWith('client-1', 'scope-1', 'project-1', 'repository', {
+    expect(listOrganizationScopesMock).toHaveBeenCalledWith('client-1', 'connection-1', 'procursor')
+    expect(listProjectsMock).toHaveBeenCalledWith('client-1', 'connection-1', 'procursor', 'https://dev.azure.com/example')
+    expect(listSourceOptionsMock).toHaveBeenCalledWith('client-1', 'connection-1', 'procursor', 'https://dev.azure.com/example', 'project-1', 'repository')
+    expect(listBranchOptionsMock).toHaveBeenCalledWith('client-1', 'connection-1', 'procursor', 'https://dev.azure.com/example', 'project-1', 'repository', {
       provider: 'azureDevOps',
       value: 'repo-1',
     })
@@ -351,17 +377,37 @@ describe('ClientProCursorTab', () => {
     await findButtonByText(wrapper, 'Create Source').trigger('click')
     await flushPromises()
 
+    await wrapper.get('#procursor-connection').setValue('connection-1')
+    await flushPromises()
     await wrapper.get('#procursorDisplayName').setValue('Platform Docs')
-    await wrapper.get('#procursorOrganizationScope').setValue('scope-1')
+    await wrapper.get('#procursor-scope').setValue('https://dev.azure.com/example')
     await flushPromises()
-    await wrapper.get('#procursorProjectId').setValue('project-1')
+    await wrapper.get('#procursor-project').setValue('project-1')
     await flushPromises()
-    await wrapper.get('#procursorSourceSelection').setValue('azureDevOps::repo-1')
+    await wrapper.get('#procursor-source').setValue('azureDevOps::repo-1')
     await flushPromises()
     await findButtonByText(wrapper, 'Create Source').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('The selected source is no longer available in Azure DevOps.')
+  })
+
+  it('does not apply a pending scope listing after the source modal closes and reopens', async () => {
+    let release: (value: unknown[]) => void = () => {}
+    listOrganizationScopesMock.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const wrapper = await mountTab()
+    await flushPromises()
+    await findButtonByText(wrapper, 'Create Source').trigger('click')
+    await flushPromises()
+    void wrapper.get('#procursor-connection').setValue('connection-1')
+    await flushPromises()
+    await findButtonByText(wrapper, 'Cancel').trigger('click')
+    await findButtonByText(wrapper, 'Create Source').trigger('click')
+    await flushPromises()
+    release([{ id: 'old-scope', organizationUrl: 'https://dev.azure.com/old', displayName: 'Abandoned scope' }])
+    await flushPromises()
+    expect((wrapper.get('#procursor-connection').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.text()).not.toContain('Abandoned scope')
   })
 
   it('loads source-level usage and recent events for administrators', async () => {

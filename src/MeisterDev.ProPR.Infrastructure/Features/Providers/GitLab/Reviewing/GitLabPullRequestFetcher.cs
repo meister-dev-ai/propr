@@ -10,6 +10,7 @@ using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
@@ -611,7 +612,7 @@ internal sealed class GitLabPullRequestFetcher(
 
         return new ProviderRestPager.RestPage<GitLabDiscussionResponse>(
             discussions,
-            ProviderPaginationHeaders.ReadGitLabHasMore(response));
+            GitLabPaginationHeaders.ReadGitLabHasMore(response));
     }
 
     // The first page asks for a size and no page number, which is the request a single-page collection made

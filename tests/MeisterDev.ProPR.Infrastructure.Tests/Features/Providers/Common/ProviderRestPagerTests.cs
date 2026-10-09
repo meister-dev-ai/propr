@@ -190,6 +190,17 @@ public sealed class ProviderRestPagerTests
         Assert.Equal(["a"], items!);
     }
 
+    [Fact]
+    public async Task TryLoadAllAsync_PropagatesTypedProviderThrottles()
+    {
+        var failure = new ProviderThrottledException("Fixture throttle.");
+        var observed = await Assert.ThrowsAsync<ProviderThrottledException>(() => ProviderRestPager.TryLoadAllAsync(
+            (_, _, _) => Task.FromException<ProviderRestPager.RestPage<string>>(failure),
+            item => item, "fixture collection", CancellationToken.None));
+        Assert.Same(failure, observed);
+        Assert.True(ProviderThrottleSignal.IsThrottled(observed));
+    }
+
     private static IReadOnlyList<string> Fill(string prefix, int count)
     {
         return Enumerable.Range(1, count).Select(index => $"{prefix}{index}").ToList();

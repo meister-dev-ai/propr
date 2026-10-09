@@ -45,6 +45,9 @@ internal sealed partial class GitHubReviewThreadStatusWriter(
 
     public ScmProvider Provider => ScmProvider.GitHub;
 
+    public Task ResolveThreadAsync(Guid clientId, ReviewThreadRef thread, CancellationToken ct = default) =>
+        ((IReviewThreadStatusWriter)this).UpdateThreadStatusAsync(clientId, thread, "fixed", ct);
+
     public async Task UpdateThreadStatusAsync(
         Guid clientId,
         ReviewThreadRef thread,

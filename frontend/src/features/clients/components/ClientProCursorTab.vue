@@ -38,7 +38,7 @@
     <div v-else-if="!sources.length" class="empty-state">
       <i class="fi fi-rr-books empty-icon"></i>
       <h3>No knowledge sources yet</h3>
-      <p>Create the first ProCursor source to index repositories or Azure DevOps wikis for this client.</p>
+      <p>Add a source to index documentation for this client.</p>
       <button v-if="canManage" class="btn-primary" @click="openCreateSourceModal">
         <i class="fi fi-rr-plus"></i> Create Source
       </button>
@@ -64,7 +64,7 @@
               </span>
             </div>
             <p class="source-card-subtitle">
-              {{ source.providerScopePath || 'No organization URL' }} / {{ source.providerProjectKey || 'No project' }} / {{ source.sourceDisplayName || source.repositoryId || 'No source selected' }}
+              {{ source.providerScopePath || 'No scope path' }} / {{ source.providerProjectKey || 'No project coordinate' }} / {{ source.sourceDisplayName || source.repositoryId || 'No source selected' }}
             </p>
           </div>
 
@@ -373,108 +373,28 @@
           <input id="procursorDisplayName" v-model="createSourceModal.displayName" type="text" placeholder="Platform docs" />
         </div>
 
-        <div class="form-field">
-          <label for="procursorSourceKind">Source Kind</label>
-          <select id="procursorSourceKind" v-model="createSourceModal.sourceKind" @change="handleCreateSourceKindChange">
-            <option value="repository">Repository</option>
-            <option value="adoWiki">ADO Wiki</option>
-          </select>
-        </div>
-
-        <div class="form-field modal-form-grid-full">
-          <label for="procursorOrganizationScope">Organization</label>
-          <select
-            id="procursorOrganizationScope"
-            v-model="createSourceModal.organizationScopeId"
-            :disabled="createSourceModal.loadingScopes"
-            @change="handleCreateSourceOrganizationScopeChange"
-          >
-            <option value="">Select an organization</option>
-            <option
-              v-for="scope in createSourceModal.organizationScopes"
-              :key="scope.id ?? scope.organizationUrl ?? 'scope'"
-              :value="scope.id ?? ''"
-            >
-              {{ formatOrganizationScopeLabel(scope) }}
-            </option>
-          </select>
-          <p v-if="createSourceModal.loadingScopes" class="field-help">Loading allowed organizations...</p>
-          <p v-else-if="createSourceModal.scopeError" class="error">{{ createSourceModal.scopeError }}</p>
-          <p v-else-if="!createSourceModal.organizationScopes.length" class="field-help">
-            Add and enable an Azure DevOps organization in the credentials section before creating guided sources.
-          </p>
-        </div>
-
-        <div class="form-field">
-          <label for="procursorProjectId">Project</label>
-          <select
-            id="procursorProjectId"
-            v-model="createSourceModal.projectId"
-            :disabled="!createSourceModal.organizationScopeId || createSourceModal.loadingProjects"
-            @change="handleCreateSourceProjectChange"
-          >
-            <option value="">Select a project</option>
-            <option
-              v-for="project in createSourceModal.projects"
-              :key="project.projectId ?? 'project'"
-              :value="project.projectId ?? ''"
-            >
-              {{ project.projectName || project.projectId }}
-            </option>
-          </select>
-          <p v-if="createSourceModal.loadingProjects" class="field-help">Loading Azure DevOps projects...</p>
-          <p v-else-if="createSourceModal.projectError" class="error">{{ createSourceModal.projectError }}</p>
-          <p v-else-if="createSourceModal.organizationScopeId && !createSourceModal.projects.length" class="field-help">
-            No projects are currently available for this organization.
-          </p>
-        </div>
-
-        <div class="form-field">
-          <label for="procursorSourceSelection">{{ createSourceModal.sourceKind === 'adoWiki' ? 'Wiki' : 'Repository' }}</label>
-          <select
-            id="procursorSourceSelection"
-            v-model="createSourceModal.selectedSourceKey"
-            :disabled="!createSourceModal.projectId || createSourceModal.loadingSourceOptions"
-            @change="handleCreateSourceSelectionChange"
-          >
-            <option value="">Select a {{ createSourceModal.sourceKind === 'adoWiki' ? 'wiki' : 'repository' }}</option>
-            <option
-              v-for="sourceOption in createSourceModal.sourceOptions"
-              :key="sourceOptionKey(sourceOption)"
-              :value="sourceOptionKey(sourceOption)"
-            >
-              {{ sourceOption.displayName || sourceOption.canonicalSourceRef?.value }}
-            </option>
-          </select>
-          <p v-if="createSourceModal.loadingSourceOptions" class="field-help">
-            Loading {{ createSourceModal.sourceKind === 'adoWiki' ? 'wikis' : 'repositories' }}...
-          </p>
-          <p v-else-if="createSourceModal.sourceError" class="error">{{ createSourceModal.sourceError }}</p>
-          <p v-else-if="createSourceModal.projectId && !createSourceModal.sourceOptions.length" class="field-help">
-            No {{ createSourceModal.sourceKind === 'adoWiki' ? 'wikis' : 'repositories' }} are currently available for this project.
-          </p>
-        </div>
+        <ConnectionDiscoveryFields :discovery="discovery" id-prefix="procursor" show-source knowledge :disabled="createSourceModal.saving" />
 
         <div class="form-field">
           <label for="procursorDefaultBranch">Default Branch</label>
           <select
             id="procursorDefaultBranch"
             v-model="createSourceModal.defaultBranch"
-            :disabled="!createSourceModal.selectedSourceKey || createSourceModal.loadingBranches"
+            :disabled="!discovery.state.sourceKey || discovery.state.loading.branches"
             @change="handleDefaultBranchChange"
           >
             <option value="">Select a branch</option>
             <option
-              v-for="branch in createSourceModal.branchOptions"
+              v-for="branch in discovery.state.branches"
               :key="branch.branchName ?? 'branch'"
               :value="branch.branchName ?? ''"
             >
               {{ formatBranchOptionLabel(branch) }}
             </option>
           </select>
-          <p v-if="createSourceModal.loadingBranches" class="field-help">Loading Azure DevOps branches...</p>
-          <p v-else-if="createSourceModal.branchError" class="error">{{ createSourceModal.branchError }}</p>
-          <p v-else-if="createSourceModal.selectedSourceKey && !createSourceModal.branchOptions.length" class="field-help">
+          <p v-if="discovery.state.loading.branches" class="field-help">Loading branches...</p>
+          <p v-else-if="discovery.state.errors.branches" class="error">{{ discovery.state.errors.branches }}</p>
+          <p v-else-if="discovery.state.sourceKey && !discovery.state.branches.length" class="field-help">
             No branches are currently available for this source.
           </p>
         </div>
@@ -497,11 +417,11 @@
           <select
             id="procursorInitialBranch"
             v-model="createSourceModal.initialBranchName"
-            :disabled="!createSourceModal.selectedSourceKey || createSourceModal.loadingBranches"
+            :disabled="!discovery.state.sourceKey || discovery.state.loading.branches"
           >
             <option value="">Select the initial tracked branch</option>
             <option
-              v-for="branch in createSourceModal.branchOptions"
+              v-for="branch in discovery.state.branches"
               :key="`initial-${branch.branchName ?? 'branch'}`"
               :value="branch.branchName ?? ''"
             >
@@ -532,7 +452,7 @@
 
       <template #footer>
         <button class="btn-secondary" @click="createSourceModal.open = false">Cancel</button>
-        <button class="btn-primary" :disabled="createSourceModal.saving" @click="handleCreateSource">
+        <button class="btn-primary" :disabled="createSourceModal.saving || !discovery.ready.value || !discovery.state.descriptor?.supportsKnowledgeSources" @click="handleCreateSource">
           {{ createSourceModal.saving ? 'Creating...' : 'Create Source' }}
         </button>
       </template>
@@ -615,6 +535,7 @@
 </template>
 
 <script setup lang="ts">
+import ConnectionDiscoveryFields from '@/components/ConnectionDiscoveryFields.vue'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
@@ -623,7 +544,6 @@ import {
   formatBucketDate,
   formatDate,
   formatNumber,
-  formatOrganizationScopeLabel,
   formatSha,
   formatSourceKind,
   formatStatus,
@@ -632,7 +552,6 @@ import {
   formatUsd,
   refreshKeyForBranch,
   refreshKeyForSource,
-  sourceOptionKey,
   statusChipClass,
 } from './clientProCursorFormatters'
 import { useClientProCursorTab } from './useClientProCursorTab'
@@ -650,7 +569,7 @@ const {
   sourceUsagePeriod,
   canManage,
   createSourceModal,
-  selectedOrganizationScope,
+  discovery,
   selectedSourceOption,
   createBranchModal,
   editBranchModal,
@@ -670,10 +589,6 @@ const {
   reloadSourceUsage,
   reloadSourceDrilldown,
   openCreateSourceModal,
-  handleCreateSourceOrganizationScopeChange,
-  handleCreateSourceProjectChange,
-  handleCreateSourceKindChange,
-  handleCreateSourceSelectionChange,
   handleDefaultBranchChange,
   handleCreateSource,
   openCreateBranchModal,

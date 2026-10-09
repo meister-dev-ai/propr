@@ -47,14 +47,7 @@ public static class ReviewJobTelemetry
     /// <summary>Formats a provider enum into a stable telemetry tag value.</summary>
     public static string ToProviderTag(ScmProvider provider)
     {
-        return provider switch
-        {
-            ScmProvider.AzureDevOps => "azuredevops",
-            ScmProvider.GitHub => "github",
-            ScmProvider.GitLab => "gitlab",
-            ScmProvider.Forgejo => "forgejo",
-            _ => provider.ToString().ToLowerInvariant(),
-        };
+        return ScmProviderVocabulary.ToTelemetryTag(provider);
     }
 
     /// <summary>Normalizes a provider set into a single telemetry scope value.</summary>

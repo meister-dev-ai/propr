@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Commands.HandleProviderWebhookDelivery;
@@ -14,6 +13,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Application.Tests.Features.Crawling.Webhooks;
 
@@ -35,7 +35,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -185,7 +185,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -323,7 +323,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -471,7 +471,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
     {
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -506,15 +506,18 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         await synchronizationService.DidNotReceiveWithAnyArgs().SynchronizeAsync(default!);
     }
 
-    [Fact]
-    public async Task HandleAsync_AzureDevOpsSparseRepositoryPayload_UsesCanonicalFilterRepositoryIdentity()
+    [Theory]
+    [InlineData(ScmProvider.AzureDevOps, WebhookProviderType.AzureDevOps, "https://dev.azure.com/org")]
+    [InlineData(ScmProvider.GitHub, WebhookProviderType.GitHub, "https://github.com/org")]
+    public async Task HandleAsync_RecordedAzureCanonicalReferenceRepairsSparsePayloadAcrossCurrentFamilies(
+        ScmProvider provider, WebhookProviderType providerType, string sourceScope)
     {
         var configuration = new WebhookConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
-            WebhookProviderType.AzureDevOps,
+            providerType,
             "path-key",
-            "https://dev.azure.com/org",
+            sourceScope,
             "project-guid",
             true,
             DateTimeOffset.UtcNow,
@@ -528,7 +531,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                     "Meister ProPR"),
             ],
             SecretCiphertext: "ciphertext");
-        var host = new ProviderHostRef(ScmProvider.AzureDevOps, configuration.OrganizationUrl);
+        var host = new ProviderHostRef(provider, configuration.OrganizationUrl);
         var sparseRepository = new RepositoryRef(host, "meister-propr", "meister-propr", "meister-propr");
         var sparseReview = new CodeReviewRef(sparseRepository, CodeReviewPlatformKind.PullRequest, "26", 26);
         var canonicalRepository = new RepositoryRef(host, "repo-guid", "project-guid", "project-guid");
@@ -537,14 +540,14 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var queryService = Substitute.For<ICodeReviewQueryService>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
 
         configurationRepository.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>())
             .Returns(configuration);
-        providerRegistry.GetWebhookIngressService(ScmProvider.AzureDevOps).Returns(ingressService);
+        providerRegistry.GetWebhookIngressService(provider).Returns(ingressService);
         secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
         ingressService.VerifyAsync(
                 configuration.ClientId,
@@ -572,7 +575,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                     "refs/heads/feature/test",
                     "refs/heads/main",
                     null));
-        providerRegistry.GetCodeReviewQueryService(ScmProvider.AzureDevOps).Returns(queryService);
+        providerRegistry.GetCodeReviewQueryService(provider).Returns(queryService);
         queryService.GetLatestRevisionAsync(configuration.ClientId, canonicalReview, Arg.Any<CancellationToken>())
             .Returns(new ReviewRevision("head-sha", "base-sha", null, "26", "base-sha...head-sha"));
         synchronizationService.SynchronizeAsync(
@@ -609,7 +612,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
 
         var result = await sut.HandleAsync(
             new HandleProviderWebhookDeliveryCommand(
-                ScmProvider.AzureDevOps, "path-key", CreateHeaders(), "{}",
+                provider, "path-key", CreateHeaders(), "{}",
                 WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
@@ -637,7 +640,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
     {
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -688,7 +691,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var configuration = CreateConfiguration([WebhookEventType.PullRequestCommented]);
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -759,7 +762,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var ingressService = Substitute.For<IWebhookIngressService>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
 
@@ -809,15 +812,24 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         await synchronizationService.DidNotReceiveWithAnyArgs().SynchronizeAsync(default!);
     }
 
-    [Fact]
-    public async Task HandleAsync_InvalidWebhookSignature_ReturnsUnauthorizedWithoutParsingPayload()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HandleAsync_InvalidWebhookSignature_ReturnsUnauthorizedWithoutParsingPayload(bool useDeclaredDiagnostic)
     {
         var configuration = CreateConfiguration([WebhookEventType.PullRequestCommented]);
         var host = new ProviderHostRef(ScmProvider.AzureDevOps, configuration.OrganizationUrl);
         var ingressService = Substitute.For<IWebhookIngressService>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+        var metadata = Substitute.For<IWebhookIngressPolicy>();
+        if (useDeclaredDiagnostic)
+        {
+            metadata.ReadEventType(Arg.Any<IReadOnlyDictionary<string, string>>()).Returns("native-diagnostic");
+            providerRegistry.GetWebhookIngressPolicy(ScmProvider.AzureDevOps).Returns(metadata);
+        }
+
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -875,7 +887,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             .AddAsync(
                 configuration.Id,
                 Arg.Any<DateTimeOffset>(),
-                "unknown",
+                useDeclaredDiagnostic ? "native-diagnostic" : "unknown",
                 WebhookDeliveryOutcome.Rejected,
                 401,
                 null,
@@ -885,6 +897,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                 Arg.Is<IReadOnlyList<string>>(summaries => summaries.Count == 0),
                 "Webhook signature or authorization header was missing or invalid.",
                 Arg.Any<CancellationToken>());
+        metadata.DidNotReceiveWithAnyArgs().ReadDeliveryKey(default!);
     }
 
     [Fact]
@@ -924,7 +937,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -1073,7 +1086,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -1210,7 +1223,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
@@ -1337,7 +1350,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();

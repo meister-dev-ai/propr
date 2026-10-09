@@ -91,7 +91,7 @@ public sealed class ProviderReadinessSummaryTests
                                 "Self-hosted GitHub remains onboarding-ready."),
                         ])));
 
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         providerRegistry.IsRegistered(ScmProvider.GitHub).Returns(true);
 
         var sut = new ProviderOperationalStatusService(connectionRepository, readinessEvaluator, providerRegistry);
@@ -132,8 +132,8 @@ public sealed class ProviderReadinessSummaryTests
                         null,
                         DateTimeOffset.UtcNow,
                         DateTimeOffset.UtcNow,
-                        GitHubAppId: 123456,
-                        GitHubAppInstallationId: 789012),
+                        AppId: 123456,
+                        InstallationId: 789012),
                     new ClientScmConnectionDto(
                         patConnectionId,
                         clientId,
@@ -182,7 +182,7 @@ public sealed class ProviderReadinessSummaryTests
                         [],
                         [new ProviderReadinessCriterionResult("workflow", "connection", "satisfied", "ready")])));
 
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         providerRegistry.IsRegistered(ScmProvider.GitHub).Returns(true);
 
         var sut = new ProviderOperationalStatusService(connectionRepository, readinessEvaluator, providerRegistry);

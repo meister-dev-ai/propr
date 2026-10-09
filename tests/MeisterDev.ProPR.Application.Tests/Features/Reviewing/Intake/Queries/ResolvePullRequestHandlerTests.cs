@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.ResolvePullRequest;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -10,6 +9,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Application.Tests.Features.Reviewing.Intake.Queries;
 
@@ -369,7 +369,7 @@ public sealed class ResolvePullRequestHandlerTests
         // Discovery reaches the provider over the network with the client's credential, so it can fail for
         // reasons unrelated to this request. Losing the whole answer would be a worse outcome than losing
         // the one value it supplies.
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.IsRegistered(Arg.Any<ScmProvider>()).Returns(true);
         var discovery = Substitute.For<IRepositoryDiscoveryProvider>();
         discovery
@@ -567,7 +567,7 @@ public sealed class ResolvePullRequestHandlerTests
     /// <summary>A registry whose discovery returns the given repositories, or one that is not registered.</summary>
     private static IScmProviderRegistry SubstituteRegistry(IReadOnlyList<RepositoryRef>? repositories)
     {
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
         if (repositories is null)
         {

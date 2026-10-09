@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.Extensions.Time.Testing;
 using MeisterDev.ProPR.Runner.Execution;
@@ -418,12 +419,13 @@ public sealed class RunnerWorkLoopTests
                     "Distributed review execution is not licensed for this installation.")),
         };
         handler.AlwaysNoWork();
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 8, 8, 9, 0, 0, TimeSpan.Zero));
+        var time = new TimerTrackingFakeTimeProvider();
         var health = new RunnerHealthState();
         using var loop = CreateLoop(handler, new NoopExecutor(), capacity: 1, health: health, time: time, credential: null, registrationToken: "unlicensed");
 
         await loop.StartAsync(CancellationToken.None);
         await WaitUntilAsync(() => handler.Enrollments.Count == 1, "The runner never tried to enrol.");
+        Assert.Equal(TimeSpan.FromSeconds(10), await time.WaitForTimerAsync());
 
         // Nine seconds is not the ten the first retry waits, so the count stays where it is.
         time.Advance(TimeSpan.FromSeconds(9));
@@ -432,6 +434,7 @@ public sealed class RunnerWorkLoopTests
 
         time.Advance(TimeSpan.FromSeconds(1));
         await WaitUntilAsync(() => handler.Enrollments.Count == 2, "The runner did not retry after ten seconds.");
+        Assert.Equal(TimeSpan.FromSeconds(20), await time.WaitForTimerAsync());
 
         // The second wait is twice the first, so ten seconds is no longer enough.
         time.Advance(TimeSpan.FromSeconds(10));
@@ -444,6 +447,8 @@ public sealed class RunnerWorkLoopTests
         // However long the refusal lasts, the wait stops widening at five minutes.
         for (var attempt = 3; attempt < 12; attempt++)
         {
+            var expectedDelay = TimeSpan.FromSeconds(Math.Min(10 * (1 << (attempt - 1)), 300));
+            Assert.Equal(expectedDelay, await time.WaitForTimerAsync());
             var reached = attempt;
             time.Advance(TimeSpan.FromMinutes(5));
             await WaitUntilAsync(() => handler.Enrollments.Count == reached + 1, "The runner stopped retrying enrolment.");
@@ -454,6 +459,39 @@ public sealed class RunnerWorkLoopTests
         Assert.Empty(handler.LeaseRequests);
 
         await loop.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task TimerReadiness_WaitsForRegistrationBeforeAdvancingTime()
+    {
+        var creationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var allowRegistration = new ManualResetEventSlim();
+        var time = new TimerTrackingFakeTimeProvider(createTimer =>
+        {
+            creationStarted.SetResult();
+            allowRegistration.Wait();
+            return createTimer();
+        });
+        var readiness = time.WaitForTimerAsync();
+        var fired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var creation = Task.Run(() => time.CreateTimer(_ => fired.SetResult(), null, TimeSpan.FromSeconds(10), Timeout.InfiniteTimeSpan));
+
+        try
+        {
+            await creationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(readiness.IsCompleted);
+            allowRegistration.Set();
+            Assert.Equal(TimeSpan.FromSeconds(10), await readiness);
+            time.Advance(TimeSpan.FromSeconds(9));
+            Assert.False(fired.Task.IsCompleted);
+            time.Advance(TimeSpan.FromSeconds(1));
+            await fired.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            allowRegistration.Set();
+            (await creation.WaitAsync(TimeSpan.FromSeconds(5))).Dispose();
+        }
     }
 
     // A failure spends one of the job's reclaim attempts; a drain costs it nothing. The release has to
@@ -563,6 +601,25 @@ public sealed class RunnerWorkLoopTests
         }
 
         Assert.Fail(because);
+    }
+
+    private sealed class TimerTrackingFakeTimeProvider(Func<Func<ITimer>, ITimer>? timerFactory = null)
+        : FakeTimeProvider(new DateTimeOffset(2026, 8, 8, 9, 0, 0, TimeSpan.Zero))
+    {
+        private readonly Channel<TimeSpan> _registeredTimers = Channel.CreateUnbounded<TimeSpan>();
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = timerFactory is null
+                ? base.CreateTimer(callback, state, dueTime, period)
+                : timerFactory(() => base.CreateTimer(callback, state, dueTime, period));
+            // Advancing fake time is safe only after the timer has been registered.
+            this._registeredTimers.Writer.TryWrite(dueTime);
+            return timer;
+        }
+
+        public Task<TimeSpan> WaitForTimerAsync() =>
+            this._registeredTimers.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     private sealed record LeaseAsk(int FreeSlots, int ContractVersion);

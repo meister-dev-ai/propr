@@ -9,7 +9,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
 internal sealed class ProviderRepositoryInstructionFetcher(
     IEnumerable<IProviderRepositoryInstructionFetcher> providerFetchers,
-    IClientScmConnectionRepository? connectionRepository = null) : IRepositoryInstructionFetcher
+    IClientScmConnectionRepository? connectionRepository = null,
+    IEnumerable<IScmConnectionConfigurationPolicy>? configurationPolicies = null) : IRepositoryInstructionFetcher
 {
     private readonly IReadOnlyDictionary<ScmProvider, IProviderRepositoryInstructionFetcher>
         _providerFetchersByProvider =
@@ -27,7 +28,8 @@ internal sealed class ProviderRepositoryInstructionFetcher(
             organizationUrl,
             clientId,
             connectionRepository,
-            cancellationToken);
+            cancellationToken,
+            configurationPolicies);
 
         return this._providerFetchersByProvider.TryGetValue(provider, out var fetcher)
             ? await fetcher.FetchAsync(

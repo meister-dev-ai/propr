@@ -3,18 +3,10 @@
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
-/// <summary>
-///     Translates the thread status vocabulary the review thread status writer receives into the two states a
-///     provider that models a thread as resolved or unresolved is able to represent.
-/// </summary>
+/// <summary>Decodes the stable public mutation vocabulary into a neutral resolved/unresolved command.</summary>
 internal static class ReviewThreadStatusVocabulary
 {
-    // The vocabulary is Azure DevOps' thread status names, because Azure DevOps was the only writer when the
-    // interface was published and its callers still speak in those terms. Every name that closes a thread there
-    // means resolved here, which is the same grouping the Azure DevOps read path applies when it decides a
-    // thread no longer needs attention. A provider carrying only a boolean cannot tell "fixed" from "won't fix"
-    // or "by design": resolving is the closest honest translation, and the distinction survives in the reply
-    // text on the thread rather than in the flag.
+    // These public command names are retained independently of native read-status grammars.
     private static readonly HashSet<string> ResolvingStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         "fixed",
@@ -23,8 +15,6 @@ internal static class ReviewThreadStatusVocabulary
         "bydesign",
     };
 
-    // Azure DevOps' "pending" means raised and awaiting the author, so like "active" it describes a thread that
-    // is still open and maps to unresolved.
     private static readonly HashSet<string> ReopeningStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         "active",
@@ -50,10 +40,7 @@ internal static class ReviewThreadStatusVocabulary
             return false;
         }
 
-        // Azure DevOps' "unknown" clears a thread's status, which has no counterpart on a provider that knows
-        // only resolved and unresolved. Either guess is wrong in a way nobody can see afterwards, closing a
-        // thread nobody asked to close or reopening one that was settled, so the write is refused with the
-        // accepted names spelled out instead.
+        // Refuse values outside the public command vocabulary before resolving live credentials.
         throw new InvalidOperationException(
             $"{providerName} review threads are either resolved or unresolved, and thread status '{trimmed}' has no equivalent. " +
             $"Use one of: {string.Join(", ", ResolvingStatuses.Concat(ReopeningStatuses).Order(StringComparer.Ordinal))}.");

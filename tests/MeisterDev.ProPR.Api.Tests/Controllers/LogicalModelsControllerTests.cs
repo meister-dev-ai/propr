@@ -209,11 +209,18 @@ public sealed class LogicalModelsControllerTests
             TenantId = state == "client" ? null : state == "foreign" ? Guid.NewGuid() : TenantId,
         };
         if (state == "unavailable")
+        {
             connection = connection with
             {
                 Availability = new(AiConnectionAvailabilityState.Unavailable, AiConnectionUnavailableReason.ProviderFamilyAbsent, "hidden", [])
             };
-        if (state == "missing-model") connection = connection with { ConfiguredModels = [] };
+        }
+
+        if (state == "missing-model")
+        {
+            connection = connection with { ConfiguredModels = [] };
+        }
+
         connections.GetByIdsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>()).Returns(state == "missing" ? [] : new[] { connection });
         var guard = Substitute.For<IAiConnectionScopeGuard>();
         guard.ValidateAsync(Arg.Any<AiConnectionDto>(), TenantId, Arg.Any<CancellationToken>())

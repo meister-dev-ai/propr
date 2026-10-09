@@ -25,6 +25,78 @@ public sealed class ProviderRepositoryDiscoveryPaginationTests
 {
     private static readonly Guid ClientId = Guid.NewGuid();
 
+    [Theory]
+    [InlineData(ScmProvider.GitHub)]
+    [InlineData(ScmProvider.GitLab)]
+    [InlineData(ScmProvider.Forgejo)]
+    public async Task ConnectionDiscovery_UsesSelectedCredentialWithoutHostFallback(ScmProvider provider)
+    {
+        var host = new ProviderHostRef(provider, "https://scm.example.com");
+        var connectionId = Guid.NewGuid();
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetOperationalConnectionByIdAsync(ClientId, connectionId, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    connectionId, ClientId, provider, host.HostBaseUrl,
+                    ScmAuthenticationKind.PersonalAccessToken, "Selected", "selected-fixture-token", true));
+        var requests = new List<HttpRequestMessage>();
+        var factory = CreateFactory(
+            provider.ToString() + "Provider", request =>
+            {
+                requests.Add(request);
+                return request.RequestUri!.AbsolutePath.EndsWith("/user", StringComparison.Ordinal)
+                    ? Json(new { login = "selected-owner", username = "selected-owner" })
+                    : Json(Array.Empty<object>());
+            });
+        IRepositoryDiscoveryProvider adapter = provider switch
+        {
+            ScmProvider.GitHub => new GitHubDiscoveryService(new GitHubConnectionVerifier(connections, factory), factory),
+            ScmProvider.GitLab => new GitLabDiscoveryService(new GitLabConnectionVerifier(connections, factory), factory),
+            _ => new ForgejoDiscoveryService(new ForgejoConnectionVerifier(connections, factory), factory),
+        };
+
+        var result = await adapter.ListScopesAsync(new ConnectionDiscoveryContext(ClientId, connectionId, host));
+
+        Assert.Equal("selected-owner", Assert.Single(result).ScopeKey);
+        Assert.All(
+            requests, request =>
+                Assert.Contains("selected-fixture-token", string.Join(" ", request.Headers.SelectMany(header => header.Value))));
+        await connections.DidNotReceiveWithAnyArgs().GetOperationalConnectionAsync(default, null!, default);
+    }
+
+    [Theory]
+    [InlineData(ScmProvider.GitHub)]
+    [InlineData(ScmProvider.GitLab)]
+    [InlineData(ScmProvider.Forgejo)]
+    public async Task ConnectionDiscovery_RefusesWrongClientBeforeNativeTransport(ScmProvider provider)
+    {
+        var host = new ProviderHostRef(provider, "https://scm.example.com");
+        var connectionId = Guid.NewGuid();
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetOperationalConnectionByIdAsync(ClientId, connectionId, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    connectionId, Guid.NewGuid(), provider, host.HostBaseUrl,
+                    ScmAuthenticationKind.PersonalAccessToken, "Other client", "fixture-token", true));
+        var requestCount = 0;
+        var factory = CreateFactory(
+            provider.ToString() + "Provider", _ =>
+            {
+                requestCount++;
+                return Json(new { login = "owner", username = "owner" });
+            });
+        IRepositoryDiscoveryProvider adapter = provider switch
+        {
+            ScmProvider.GitHub => new GitHubDiscoveryService(new GitHubConnectionVerifier(connections, factory), factory),
+            ScmProvider.GitLab => new GitLabDiscoveryService(new GitLabConnectionVerifier(connections, factory), factory),
+            _ => new ForgejoDiscoveryService(new ForgejoConnectionVerifier(connections, factory), factory),
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.ListScopesAsync(new ConnectionDiscoveryContext(ClientId, connectionId, host)));
+        Assert.Equal(0, requestCount);
+        await connections.DidNotReceiveWithAnyArgs().GetOperationalConnectionAsync(default, null!, default);
+    }
+
     [Fact]
     public async Task GitHubOwners_SpanMoreThanOnePage_EveryOwnerIsOffered()
     {

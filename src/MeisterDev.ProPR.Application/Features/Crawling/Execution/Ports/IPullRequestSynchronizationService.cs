@@ -8,6 +8,14 @@ namespace MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 /// <summary>Coordinates source-neutral pull-request synchronization for crawl and webhook activations.</summary>
 public interface IPullRequestSynchronizationService
 {
+    /// <summary>
+    ///     Performs provider-backed preparation and accepted-job maintenance before protected review admission.
+    ///     The returned pass completes review intake without additional provider requests.
+    /// </summary>
+    Task<PreparedPullRequestSynchronization> PrepareAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct = default);
+
     /// <summary>Synchronizes lifecycle, thread-memory, and review-intake decisions for one pull request activation.</summary>
     Task<PullRequestSynchronizationOutcome> SynchronizeAsync(
         PullRequestSynchronizationRequest request,

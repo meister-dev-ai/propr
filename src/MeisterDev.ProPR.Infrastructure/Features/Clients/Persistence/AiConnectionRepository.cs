@@ -131,6 +131,7 @@ public sealed partial class AiConnectionRepository(
         {
             Id = profileId,
             ClientId = clientId,
+            CreationRequestId = request.CreationRequestId,
             DisplayName = request.DisplayName,
             ProviderKind = this.IdentityToStore(null, request.ProviderKind),
             BaseUrl = request.BaseUrl,
@@ -1405,6 +1406,7 @@ public sealed partial class AiConnectionRepository(
             record.TenantId)
         {
             ConfigurationStamp = SnapshotStamp(record),
+            CreationRequestId = record.CreationRequestId,
             Availability = this.DescribeAvailability(identity, policy, record.BaseUrl, unresolvedValues),
             ProviderSettings = EffectiveDeclaredValues(record.ProviderSettings, this.StoredDeclaredFields(providerKind)),
             DeclaredSecrets = this.ReadDeclaredSecrets(storedSecret, providerKind),

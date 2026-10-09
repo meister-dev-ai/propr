@@ -8,6 +8,8 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Security;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Support;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
 
@@ -21,17 +23,21 @@ internal sealed class GitLabReviewDiscoveryProvider(
         Guid clientId,
         RepositoryRef repository,
         ReviewerIdentity? reviewer,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewDiscoveryContext? context = null)
     {
-        var context = await connectionVerifier.VerifyAsync(clientId, repository.Host, ct);
+        var authentication = context is null
+            ? await connectionVerifier.VerifyAsync(clientId, repository.Host, ct).ConfigureAwait(false)
+            : await connectionVerifier.VerifyAsync(clientId, repository.Host, context, ct).ConfigureAwait(false);
         using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
             GitLabConnectionVerifier.BuildApiUri(
                 repository.Host,
                 $"/projects/{Uri.EscapeDataString(repository.ExternalRepositoryId)}/merge_requests",
                 "state=opened&per_page=100"),
-            context.Connection.Secret);
+            authentication.Connection.Secret);
         using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
 
+        MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Support.GitLabReadFailures.ThrowIfDeniedOrThrottled(response);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException($"GitLab review discovery failed with status {(int)response.StatusCode}.");
@@ -101,12 +107,13 @@ internal sealed class GitLabReviewDiscoveryProvider(
             ScmProvider.GitLab,
             repository,
             review,
-            GitLabCodeReviewQueryService.MapState(payload.State),
+            payload.Draft ? CodeReviewState.Draft : GitLabCodeReviewQueryService.MapState(payload.State),
             GitLabCodeReviewQueryService.BuildRevision(payload),
             mappedReviewer,
             payload.Title ?? $"Merge Request !{payload.Iid}",
             payload.WebUrl,
             payload.SourceBranch,
-            payload.TargetBranch);
+            payload.TargetBranch,
+            ReviewOverviewPresentation.AuthorName(payload.Author?.Name, payload.Author?.Username));
     }
 }

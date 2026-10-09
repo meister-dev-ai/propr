@@ -7,10 +7,10 @@ namespace MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 ///     Matches a stored SCM connection to the host a pull request lives on.
 /// </summary>
 /// <remarks>
-///     A connection's stored host base URL may carry a path, such as an Azure DevOps organization URL, while a
+///     A connection's stored host base URL may carry a deployment path, while a
 ///     request carries an authority. Both sides are reduced to scheme, host and port before they are compared.
 /// </remarks>
-internal static class ScmConnectionHostMatch
+public static class ScmConnectionHostMatch
 {
     /// <summary>
     ///     Reduces a provider scope path to <c>scheme://host[:port]</c>, or returns <see langword="null" /> when

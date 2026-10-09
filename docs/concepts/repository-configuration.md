@@ -1,8 +1,7 @@
 # Configuring ProPR from your repository
 
-Two settings live in the repository rather than in ProPR, in a `.meister-propr/` folder. Both are read
-from the **target branch** of the pull request. Files on the source branch are never read, so a
-contributor cannot change how their own pull request is reviewed.
+ProPR reads exclusions and reviewer instructions from `.meister-propr/` on the pull request's
+**target branch**. Source-branch files do not control their own review.
 
 Everything else about a review is set in ProPR - see [what you can tune](reviews.md#what-you-can-tune).
 
@@ -46,8 +45,8 @@ when-to-use: When the diff touches anything under Migrations/
 Migrations are append-only. Never edit a migration that has shipped …
 ```
 
-Instruction files are read on Azure DevOps and GitLab. On GitHub and Forgejo they are ignored today;
-exclusions still work everywhere.
+ProPR reads instruction files on Azure DevOps and GitLab. GitHub and Forgejo support exclusions but
+do not read instruction files.
 
 If a file you expected to be skipped was reviewed anyway, or an instruction had no effect, start from
 [troubleshooting](../operate/troubleshooting.md).

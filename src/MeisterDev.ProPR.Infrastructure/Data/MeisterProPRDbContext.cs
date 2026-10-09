@@ -14,6 +14,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Registered clients table.</summary>
     public DbSet<ClientRecord> Clients => this.Set<ClientRecord>();
 
+    /// <summary>Bounded discovery observations and client-scoped page generations.</summary>
+    public DbSet<ClientPullRequestOverviewCacheRecord> ClientPullRequestOverviewCache => this.Set<ClientPullRequestOverviewCacheRecord>();
+
     /// <summary>Tenant boundaries for sign-in policy and tenant administration.</summary>
     public DbSet<TenantRecord> Tenants => this.Set<TenantRecord>();
 
@@ -37,6 +40,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
 
     /// <summary>Review jobs table.</summary>
     public DbSet<ReviewJob> ReviewJobs => this.Set<ReviewJob>();
+
+    /// <summary>Immutable completed-review usage facts for tenant machine export.</summary>
+    public DbSet<CompletedReviewUsageSnapshot> CompletedReviewUsageSnapshots => this.Set<CompletedReviewUsageSnapshot>();
 
     /// <summary>Per-file results of a review job.</summary>
     public DbSet<ReviewFileResult> ReviewFileResults => this.Set<ReviewFileResult>();

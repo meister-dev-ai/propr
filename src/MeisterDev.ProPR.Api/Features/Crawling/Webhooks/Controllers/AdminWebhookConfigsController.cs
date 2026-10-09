@@ -5,13 +5,14 @@ using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterDev.ProPR.Api.Extensions;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using MeisterDev.ProPR.Web;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 
@@ -24,6 +25,7 @@ public sealed partial class AdminWebhookConfigsController(
     IUserRepository userRepository,
     IClientAdminService clientAdminService,
     IScmProviderRegistry providerRegistry,
+    IReviewConfigurationSelectionService selections,
     IWebhookSecretGenerator webhookSecretGenerator,
     ISecretProtectionCodec secretProtectionCodec,
     IConfiguration configuration,
@@ -72,14 +74,7 @@ public sealed partial class AdminWebhookConfigsController(
             return true;
         }
 
-        var scmProvider = provider switch
-        {
-            WebhookProviderType.AzureDevOps => ScmProvider.AzureDevOps,
-            WebhookProviderType.GitHub => ScmProvider.GitHub,
-            WebhookProviderType.GitLab => ScmProvider.GitLab,
-            WebhookProviderType.Forgejo => ScmProvider.Forgejo,
-            _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, null),
-        };
+        var scmProvider = ScmProviderVocabulary.FromWebhook(provider);
 
         return await providerActivationService.IsEnabledAsync(scmProvider, ct);
     }
@@ -104,6 +99,21 @@ public sealed partial class AdminWebhookConfigsController(
                ?? throw new InvalidOperationException("Unable to resolve a repository identifier from the provided filter properties.");
     }
 
+    private async Task<IReadOnlyList<WebhookRepoFilterDto>> ResolveConnectionPatchFiltersAsync(
+        WebhookConfigurationDto existing, PatchAdminWebhookConfigRequest request, CancellationToken ct)
+    {
+        var scopeKey = request.ScopeKey ?? throw new InvalidOperationException("ScopeKey is required for guided filter replacement.");
+        await selections.ResolveConnectionSelectionAsync(
+            existing.ClientId, request.ConnectionId!.Value, scopeKey,
+            existing.ProjectId, ScmProviderVocabulary.FromWebhook(existing.ProviderType), existing.OrganizationScopeId, existing.OrganizationUrl, ct);
+        var context = await selections.GetConnectionContextAsync(existing.ClientId, request.ConnectionId.Value, ct);
+        return await this.ResolveConnectionRepoFiltersAsync(
+            context, scopeKey, existing.ProjectId,
+            request.RepoFilters?.Select(filter => new CrawlRepoFilterDto(
+                Guid.Empty, filter.RepositoryName!,
+                filter.TargetBranchPatterns ?? [], filter.CanonicalSourceRef, filter.DisplayName)).ToList(), ct);
+    }
+
     private static WebhookRepoFilterResponse ToWebhookRepoFilterResponse(WebhookRepoFilterDto filter)
     {
         return new WebhookRepoFilterResponse(
@@ -112,6 +122,16 @@ public sealed partial class AdminWebhookConfigsController(
             filter.TargetBranchPatterns,
             filter.CanonicalSourceRef,
             filter.DisplayName);
+    }
+
+    private async Task<IReadOnlyList<WebhookRepoFilterDto>> ResolveConnectionRepoFiltersAsync(
+        ConnectionDiscoveryContext context, string scopeKey, string projectKey,
+        IReadOnlyList<CrawlRepoFilterDto>? filters, CancellationToken ct)
+    {
+        var resolved = await selections.ResolveConnectionFiltersAsync(context, scopeKey, projectKey, filters, ct);
+        return resolved.Select(filter => new WebhookRepoFilterDto(
+            filter.Id, filter.RepositoryName,
+            filter.TargetBranchPatterns, filter.CanonicalSourceRef, filter.DisplayName)).ToList();
     }
 
     private WebhookConfigurationResponse ToWebhookConfigurationResponse(
@@ -176,126 +196,23 @@ public sealed partial class AdminWebhookConfigsController(
         return $"{this.Request.Scheme}://{this.Request.Host}{pathBase}{listenerPath}";
     }
 
-    private async Task<(Guid? OrganizationScopeId, string OrganizationUrl)> ResolveOrganizationSelectionAsync(
-        Guid clientId,
-        WebhookProviderType provider,
-        Guid? organizationScopeId,
-        string? organizationUrl,
-        CancellationToken ct)
-    {
-        if (provider != WebhookProviderType.AzureDevOps)
-        {
-            var normalizedProviderOrganizationUrl = NormalizeOptional(organizationUrl)
-                                                    ?? throw new InvalidOperationException(
-                                                        "ProviderScopePath is required for non-Azure DevOps webhook configurations.");
-
-            return (null, normalizedProviderOrganizationUrl);
-        }
-
-        if (organizationScopeId.HasValue)
-        {
-            var scope = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
-                            .GetScopeAsync(clientId, organizationScopeId.Value, ct)
-                        ?? throw new InvalidOperationException("The selected Azure DevOps organization is no longer available for this client.");
-
-            if (!scope.IsEnabled)
-            {
-                throw new InvalidOperationException("The selected Azure DevOps organization is disabled.");
-            }
-
-            return (scope.Id, scope.ScopePath);
-        }
-
-        var normalizedOrganizationUrl = NormalizeOptional(organizationUrl)
-                                        ?? throw new InvalidOperationException("ProviderScopePath is required when OrganizationScopeId is not provided.");
-
-        return (null, normalizedOrganizationUrl);
-    }
+    private Task<(Guid? OrganizationScopeId, string OrganizationUrl)> ResolveOrganizationSelectionAsync(
+        Guid clientId, WebhookProviderType provider, Guid? organizationScopeId, string? organizationUrl, CancellationToken ct) =>
+        selections.ResolveScopeAsync(clientId, provider, organizationScopeId, organizationUrl, ct, "webhook");
 
     private async Task<IReadOnlyList<WebhookRepoFilterDto>> ResolveRepoFiltersAsync(
-        Guid clientId,
-        WebhookProviderType provider,
-        Guid? organizationScopeId,
-        string projectId,
-        IReadOnlyList<WebhookRepoFilterRequest>? repoFilters,
-        CancellationToken ct)
+        Guid clientId, WebhookProviderType provider,
+        Guid? organizationScopeId, string projectId, IReadOnlyList<WebhookRepoFilterRequest>? repoFilters, CancellationToken ct)
     {
-        if (repoFilters is null)
-        {
-            return [];
-        }
-
-        var filterDtos = new List<WebhookRepoFilterDto>(repoFilters.Count);
-        IReadOnlyList<AdoCrawlFilterOptionDto> availableFilters = [];
-
-        if (provider == WebhookProviderType.AzureDevOps && organizationScopeId.HasValue)
-        {
-            availableFilters = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
-                .ListCrawlFiltersAsync(clientId, organizationScopeId.Value, projectId, ct);
-        }
-
-        foreach (var filter in repoFilters)
-        {
-            var normalizedProvider = NormalizeOptional(filter.CanonicalSourceRef?.Provider);
-            var normalizedValue = NormalizeOptional(filter.CanonicalSourceRef?.Value);
-            var normalizedDisplayName = NormalizeOptional(filter.DisplayName);
-            var repositoryName = ResolveRepositoryName(filter);
-            var targetBranchPatterns = NormalizeBranchPatterns(filter.TargetBranchPatterns);
-
-            if (provider == WebhookProviderType.AzureDevOps && organizationScopeId.HasValue &&
-                normalizedProvider is not null && normalizedValue is not null)
-            {
-                var matchedFilter = availableFilters.FirstOrDefault(option =>
-                    string.Equals(
-                        option.CanonicalSourceRef.Provider,
-                        normalizedProvider,
-                        StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(
-                        option.CanonicalSourceRef.Value,
-                        normalizedValue,
-                        StringComparison.OrdinalIgnoreCase));
-
-                if (matchedFilter is null)
-                {
-                    throw new InvalidOperationException(
-                        $"The selected webhook filter '{normalizedDisplayName ?? repositoryName}' is no longer available in Azure DevOps.");
-                }
-
-                filterDtos.Add(
-                    new WebhookRepoFilterDto(
-                        Guid.Empty,
-                        repositoryName,
-                        targetBranchPatterns,
-                        new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue),
-                        normalizedDisplayName ?? matchedFilter.DisplayName));
-                continue;
-            }
-
-            filterDtos.Add(
-                new WebhookRepoFilterDto(
-                    Guid.Empty,
-                    repositoryName,
-                    targetBranchPatterns,
-                    normalizedProvider is not null && normalizedValue is not null
-                        ? new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue)
-                        : null,
-                    normalizedDisplayName));
-        }
-
-        return filterDtos.AsReadOnly();
+        var filters = await selections.ResolveFiltersAsync(
+            clientId, provider, organizationScopeId, projectId,
+            repoFilters?.Select(filter => new CrawlRepoFilterDto(
+                Guid.Empty, filter.RepositoryName!, filter.TargetBranchPatterns ?? [], filter.CanonicalSourceRef, filter.DisplayName)).ToList(), ct, "webhook");
+        return filters.Select(filter => new WebhookRepoFilterDto(
+            filter.Id, filter.RepositoryName, filter.TargetBranchPatterns, filter.CanonicalSourceRef, filter.DisplayName)).ToList();
     }
 
-    private static string GetProviderPathSegment(WebhookProviderType provider)
-    {
-        return provider switch
-        {
-            WebhookProviderType.AzureDevOps => "ado",
-            WebhookProviderType.GitHub => "github",
-            WebhookProviderType.GitLab => "gitlab",
-            WebhookProviderType.Forgejo => "forgejo",
-            _ => provider.ToString().ToLowerInvariant(),
-        };
-    }
+    private static string GetProviderPathSegment(WebhookProviderType provider) => ScmProviderVocabulary.ToWebhookSegment(provider);
 
     /// <summary>Lists all webhook configurations visible to the caller.</summary>
     /// <param name="ct">Cancellation token.</param>
@@ -426,26 +343,39 @@ public sealed partial class AdminWebhookConfigsController(
             return this.NotFound();
         }
 
-        if (!await this.IsProviderEnabledAsync(request.Provider, ct))
-        {
-            return this.Conflict(new { error = DisabledProviderMessage });
-        }
-
         try
         {
-            var resolvedOrganization = await this.ResolveOrganizationSelectionAsync(
-                request.ClientId,
-                request.Provider,
-                request.OrganizationScopeId,
-                request.ProviderScopePath,
-                ct);
-            var repoFilters = await this.ResolveRepoFiltersAsync(
-                request.ClientId,
-                request.Provider,
-                resolvedOrganization.OrganizationScopeId,
-                request.ProviderProjectKey.Trim(),
-                request.RepoFilters,
-                ct);
+            var selected = request.ConnectionId.HasValue
+                ? await selections.ResolveConnectionSelectionAsync(
+                    request.ClientId, request.ConnectionId.Value,
+                    request.ScopeKey ?? throw new InvalidOperationException("ScopeKey is required for connection selection."),
+                    request.ProviderProjectKey, request.Provider.HasValue ? ScmProviderVocabulary.FromWebhook(request.Provider.Value) : (ScmProvider?)null,
+                    request.OrganizationScopeId, request.ProviderScopePath, ct)
+                : ((ScmProvider Provider, Guid? OrganizationScopeId, string ProviderScopePath, string ProviderProjectKey)?)null;
+            var provider = (selected.HasValue ? ScmProviderVocabulary.ToWebhook(selected.Value.Provider) : request.Provider)
+                           ?? throw new InvalidOperationException("Specify a connection or an explicit manual provider.");
+            if (!await this.IsProviderEnabledAsync(provider, ct))
+            {
+                return this.Conflict(new { error = DisabledProviderMessage });
+            }
+
+            var projectKey = selected?.ProviderProjectKey ?? request.ProviderProjectKey.Trim();
+            var resolvedOrganization = selected.HasValue
+                ? (OrganizationScopeId: selected.Value.OrganizationScopeId, OrganizationUrl: selected.Value.ProviderScopePath)
+                : await this.ResolveOrganizationSelectionAsync(request.ClientId, provider, request.OrganizationScopeId, request.ProviderScopePath, ct);
+            var repoFilters = request.ConnectionId.HasValue
+                ? await this.ResolveConnectionRepoFiltersAsync(
+                    await selections.GetConnectionContextAsync(request.ClientId, request.ConnectionId.Value, ct),
+                    request.ScopeKey!, projectKey,
+                    request.RepoFilters?.Select(filter => new CrawlRepoFilterDto(
+                        Guid.Empty, filter.RepositoryName!, filter.TargetBranchPatterns ?? [], filter.CanonicalSourceRef, filter.DisplayName)).ToList(), ct)
+                : await this.ResolveRepoFiltersAsync(
+                    request.ClientId,
+                    provider,
+                    resolvedOrganization.OrganizationScopeId,
+                    projectKey,
+                    request.RepoFilters,
+                    ct);
 
             var generatedSecret = webhookSecretGenerator.GenerateSecret();
             var protectedSecret = secretProtectionCodec.Protect(generatedSecret, "WebhookSecret");
@@ -453,10 +383,10 @@ public sealed partial class AdminWebhookConfigsController(
 
             var created = await webhookConfigurationRepository.AddAsync(
                 request.ClientId,
-                request.Provider,
+                provider,
                 pathKey,
                 resolvedOrganization.OrganizationUrl,
-                request.ProviderProjectKey.Trim(),
+                projectKey,
                 protectedSecret,
                 request.EnabledEvents ?? [],
                 resolvedOrganization.OrganizationScopeId,
@@ -549,6 +479,13 @@ public sealed partial class AdminWebhookConfigsController(
 
         try
         {
+            var replacementFilters = request.RepoFilters is null
+                ? null
+                : request.ConnectionId.HasValue
+                    ? await this.ResolveConnectionPatchFiltersAsync(existing, request, ct)
+                    : await this.ResolveRepoFiltersAsync(
+                        existing.ClientId, existing.ProviderType, existing.OrganizationScopeId,
+                        existing.ProjectId, request.RepoFilters, ct);
             var updated = await webhookConfigurationRepository.UpdateAsync(
                 configId,
                 request.IsActive,
@@ -563,16 +500,9 @@ public sealed partial class AdminWebhookConfigsController(
                 return this.NotFound();
             }
 
-            if (request.RepoFilters is not null)
+            if (replacementFilters is not null)
             {
-                var repoFilters = await this.ResolveRepoFiltersAsync(
-                    existing.ClientId,
-                    existing.ProviderType,
-                    existing.OrganizationScopeId,
-                    existing.ProjectId,
-                    request.RepoFilters,
-                    ct);
-                await webhookConfigurationRepository.UpdateRepoFiltersAsync(configId, repoFilters, ct);
+                await webhookConfigurationRepository.UpdateRepoFiltersAsync(configId, replacementFilters, ct);
             }
 
             var refreshed = await webhookConfigurationRepository.GetByIdAsync(configId, ct);
@@ -670,13 +600,15 @@ public sealed partial class AdminWebhookConfigsController(
 /// <summary>Request body for creating an admin-managed webhook configuration.</summary>
 public sealed record CreateAdminWebhookConfigRequest(
     [property: JsonRequired] Guid ClientId,
-    WebhookProviderType Provider = WebhookProviderType.AzureDevOps,
+    WebhookProviderType? Provider = null,
     Guid? OrganizationScopeId = null,
     string? ProviderScopePath = null,
     string ProviderProjectKey = "",
     IReadOnlyList<WebhookEventType>? EnabledEvents = null,
     IReadOnlyList<WebhookRepoFilterRequest>? RepoFilters = null,
-    float? ReviewTemperature = null);
+    float? ReviewTemperature = null,
+    Guid? ConnectionId = null,
+    string? ScopeKey = null);
 
 /// <summary>
 ///     Request body for patching an admin-managed webhook configuration.
@@ -694,6 +626,12 @@ public sealed record PatchAdminWebhookConfigRequest
 
     /// <summary>Optional full-replacement repository filter set.</summary>
     public IReadOnlyList<WebhookRepoFilterRequest>? RepoFilters { get; init; }
+
+    /// <summary>Selected connection used to validate a guided filter replacement.</summary>
+    public Guid? ConnectionId { get; init; }
+
+    /// <summary>Native scope key used to validate a guided filter replacement.</summary>
+    public string? ScopeKey { get; init; }
 
     /// <summary>
     ///     Optional review temperature override. Set this property explicitly to <see langword="null" /> to clear the

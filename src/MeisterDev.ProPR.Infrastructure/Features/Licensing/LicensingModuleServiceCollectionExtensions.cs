@@ -17,6 +17,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Licensing.Support;
 using MeisterDev.ProPR.Licensing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
@@ -31,6 +32,7 @@ public static class LicensingModuleServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
+        services.AddScmProviderLocalDeclarations();
         if (!configuration.HasDatabaseConnectionString())
         {
             return services;

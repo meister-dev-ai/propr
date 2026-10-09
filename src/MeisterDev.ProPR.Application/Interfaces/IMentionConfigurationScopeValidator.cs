@@ -12,8 +12,8 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 /// <remarks>
 ///     Checks three things: that this deployment has active pull-request discovery for the provider, that it
 ///     has a reply publisher for the provider, and that the scope path matches something the client has
-///     already configured. On Azure DevOps that is an enabled organization scope; on the other providers it is
-///     the host base URL of an active connection.
+///     already configured. The provider policy defines whether a saved enabled scope or an active connection
+///     satisfies that selection.
 /// </remarks>
 public interface IMentionConfigurationScopeValidator
 {

@@ -4,17 +4,32 @@
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Application.Interfaces;
+using NSubstitute;
 
 namespace MeisterDev.ProPR.Application.Tests.Services;
 
 public sealed class MentionDetectorProviderTests
 {
     [Fact]
+    public void IsMentioned_UsesTheSuppliedNativePolicyAfterQuoteFiltering()
+    {
+        var reviewer = new ReviewerIdentity(new((ScmProvider)99, "https://host.test"), "user", "reviewer", "Reviewer", false);
+        var policy = Substitute.For<IScmIdentityPolicy>();
+        policy.IsMentioned("question", reviewer).Returns(true);
+        Assert.True(MentionDetector.IsMentioned("> quoted mention\nquestion", reviewer, policy));
+        policy.Received(1).IsMentioned("question", reviewer);
+    }
+
+    [Fact]
     public void IsMentioned_WithGitHubLoginMention_ReturnsTrue()
     {
         var reviewer = CreateReviewer(ScmProvider.GitHub, "github-user-1", "meister-dev-bot");
 
-        Assert.True(MentionDetector.IsMentioned("Please check this again, @Meister-Dev-Bot.", reviewer));
+        Assert.True(
+            MentionDetector.IsMentioned(
+                "Please check this again, @Meister-Dev-Bot.", reviewer,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(reviewer.Host.Provider)));
     }
 
     [Fact]
@@ -22,7 +37,10 @@ public sealed class MentionDetectorProviderTests
     {
         var reviewer = CreateReviewer(ScmProvider.GitLab, "gitlab-user-1", "meister_dev_bot");
 
-        Assert.True(MentionDetector.IsMentioned("/cc @meister_dev_bot for follow-up", reviewer));
+        Assert.True(
+            MentionDetector.IsMentioned(
+                "/cc @meister_dev_bot for follow-up", reviewer,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(reviewer.Host.Provider)));
     }
 
     [Fact]
@@ -30,7 +48,10 @@ public sealed class MentionDetectorProviderTests
     {
         var reviewer = CreateReviewer(ScmProvider.Forgejo, "forgejo-user-1", "meister-dev-bot");
 
-        Assert.False(MentionDetector.IsMentioned("notify meister@meister-dev-bot.example when this lands", reviewer));
+        Assert.False(
+            MentionDetector.IsMentioned(
+                "notify meister@meister-dev-bot.example when this lands", reviewer,
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(reviewer.Host.Provider)));
     }
 
     [Fact]
@@ -42,7 +63,7 @@ public sealed class MentionDetectorProviderTests
         Assert.True(
             MentionDetector.IsMentioned(
                 $"@<{reviewerGuid.ToString().ToUpperInvariant()}> What do you think?",
-                reviewer));
+                reviewer, MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(reviewer.Host.Provider)));
     }
 
     [Fact]
@@ -50,7 +71,9 @@ public sealed class MentionDetectorProviderTests
     {
         var reviewer = CreateReviewer(ScmProvider.GitHub, "github-user-1", "meister-dev-bot");
 
-        Assert.False(MentionDetector.IsMentioned(string.Empty, reviewer));
+        Assert.False(
+            MentionDetector.IsMentioned(
+                string.Empty, reviewer, MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(reviewer.Host.Provider)));
     }
 
     /// <summary>
@@ -66,7 +89,9 @@ public sealed class MentionDetectorProviderTests
         var reviewer = CreateReviewer(provider, "user-1", "meister-dev-bot");
         var quotedAnswer = "> @meister-dev-bot what does this do?\n\nIt sorts ascending and then takes three.";
 
-        Assert.False(MentionDetector.IsMentioned(quotedAnswer, reviewer));
+        Assert.False(
+            MentionDetector.IsMentioned(
+                quotedAnswer, reviewer, MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(reviewer.Host.Provider)));
     }
 
     [Theory]
@@ -78,7 +103,8 @@ public sealed class MentionDetectorProviderTests
         var reviewer = CreateReviewer(provider, "user-1", "meister-dev-bot");
         var followUp = "> It sorts ascending and then takes three.\n\n@meister-dev-bot then why the label?";
 
-        Assert.True(MentionDetector.IsMentioned(followUp, reviewer));
+        Assert.True(
+            MentionDetector.IsMentioned(followUp, reviewer, MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(reviewer.Host.Provider)));
     }
 
     private static ReviewerIdentity CreateReviewer(ScmProvider provider, string externalUserId, string login)

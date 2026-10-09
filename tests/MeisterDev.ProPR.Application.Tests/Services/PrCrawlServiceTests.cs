@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -13,6 +14,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Application.Tests.Services;
 
@@ -51,14 +53,21 @@ public sealed class PrCrawlServiceTests
 
     public PrCrawlServiceTests()
     {
+        this._jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
         this._sut = new PrCrawlService(
             this._crawlConfigs,
             this._prFetcher,
             this._jobs,
             this._statusFetcher,
             NullLogger<PrCrawlService>.Instance,
+            new PullRequestSynchronizationService(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
+                this._jobs, NullLogger<PullRequestSynchronizationService>.Instance,
+                clientRegistry: this._clientRegistry),
             providerActivationService: this._providerActivationService,
-            clientRegistry: this._clientRegistry);
+            clientRegistry: this._clientRegistry,
+            providerRegistry: SourcePolicyRegistry());
 
         this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -138,15 +147,22 @@ public sealed class PrCrawlServiceTests
             this._jobs,
             this._statusFetcher,
             NullLogger<PrCrawlService>.Instance,
-            this._threadStatusFetcher,
-            this._threadMemoryService,
-            this._prScanRepository,
+            new PullRequestSynchronizationService(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
+                this._jobs, NullLogger<PullRequestSynchronizationService>.Instance,
+                threadStatusFetcher: this._threadStatusFetcher, threadMemoryService: this._threadMemoryService,
+                prScanRepository: this._prScanRepository, clientRegistry: this._clientRegistry),
             providerActivationService: this._providerActivationService,
-            clientRegistry: this._clientRegistry);
+            clientRegistry: this._clientRegistry,
+            providerRegistry: SourcePolicyRegistry());
     }
 
     private PrCrawlService CreateSutWithSharedSynchronizationService(IPullRequestSynchronizationService synchronizationService)
     {
+        synchronizationService.PrepareAsync(Arg.Any<PullRequestSynchronizationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call => new PreparedPullRequestSynchronization(
+                call.Arg<PullRequestSynchronizationRequest>(),
+                (authorized, ct) => synchronizationService.SynchronizeAsync(authorized, ct)));
         return new PrCrawlService(
             this._crawlConfigs,
             this._prFetcher,
@@ -155,7 +171,8 @@ public sealed class PrCrawlServiceTests
             NullLogger<PrCrawlService>.Instance,
             pullRequestSynchronizationService: synchronizationService,
             providerActivationService: this._providerActivationService,
-            clientRegistry: this._clientRegistry);
+            clientRegistry: this._clientRegistry,
+            providerRegistry: SourcePolicyRegistry());
     }
 
     [Fact]
@@ -169,7 +186,7 @@ public sealed class PrCrawlServiceTests
 
         await this._prFetcher.DidNotReceive()
             .ListAssignedOpenReviewsAsync(Arg.Any<CrawlConfigurationDto>(), Arg.Any<CancellationToken>());
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -190,6 +207,7 @@ public sealed class PrCrawlServiceTests
             pr.CodeReview.Number,
             pr.RevisionId);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -201,7 +219,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: Add was NOT called
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -213,6 +231,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(77);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -220,6 +239,7 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<int>())
             .Returns((ReviewJob?)null);
         this._jobs.FindFailedJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -242,7 +262,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: no new job is queued for the already-failed revision.
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -253,6 +273,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(42);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -265,7 +286,7 @@ public sealed class PrCrawlServiceTests
 
         // Assert: Add was called exactly once with the config's ClientId
         await this._jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(j =>
                     j.PullRequestId == 42 &&
                     j.IterationId == 1 &&
@@ -280,6 +301,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(42);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -292,7 +314,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         await this._jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(j =>
                     j.ClientId == DefaultConfig.ClientId
                     && j.ReviewPipelineProfileId == ReviewPipelineProfileCatalog.FileByFileCalmProfileId));
@@ -314,6 +336,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(48);
         this._prFetcher.ListAssignedOpenReviewsAsync(config).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -324,7 +347,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         await this._jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(job =>
                     job.PullRequestId == pr.CodeReview.Number &&
                     job.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources &&
@@ -345,6 +368,7 @@ public sealed class PrCrawlServiceTests
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
         this._prFetcher.ListAssignedOpenReviewsAsync(config).ReturnsForAnyArgs([MakePr(49)]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -354,7 +378,7 @@ public sealed class PrCrawlServiceTests
 
         await this._sut.CrawlAsync();
 
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -366,6 +390,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(42, 3);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -403,7 +428,7 @@ public sealed class PrCrawlServiceTests
         await sut.CrawlAsync();
 
         // Assert
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -431,6 +456,7 @@ public sealed class PrCrawlServiceTests
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
         this._prFetcher.ListAssignedOpenReviewsAsync(config).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -466,8 +492,8 @@ public sealed class PrCrawlServiceTests
 
         await sut.CrawlAsync();
 
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
-        await this._threadStatusFetcher.Received(2)
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
+        await this._threadStatusFetcher.Received(1)
             .GetReviewerThreadStatusesAsync(
                 config.ProviderScopePath,
                 pr.Repository.ProjectPath,
@@ -490,6 +516,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(42, 3);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -548,6 +575,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(42, 3, reviewRevision: reviewRevision);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -578,7 +606,7 @@ public sealed class PrCrawlServiceTests
 
         await sut.CrawlAsync();
 
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -589,6 +617,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(42, 3, reviewRevision: reviewRevision);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -599,7 +628,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         await this._jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(job =>
                     job.ProviderRevisionId == "revision-1" &&
                     job.ReviewPatchIdentity == "patch-1" &&
@@ -616,6 +645,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(43, 5);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -654,18 +684,22 @@ public sealed class PrCrawlServiceTests
 
         // Assert
         await this._jobs.Received(1)
-            .AddAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.CodeReview.Number && j.IterationId == pr.RevisionId));
+            .TryAddIfNoActiveDuplicateAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.CodeReview.Number && j.IterationId == pr.RevisionId));
     }
 
-    [Fact]
-    public async Task CrawlAsync_NewIterationStillAddsJob_WhenScanExists()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CrawlAsync_NewIterationRespectsClientIncrementSetting_WhenScanExists(bool reviewEveryIncrement)
     {
+        this._clientRegistry.GetReviewEveryIncrementEnabledAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>()).Returns(reviewEveryIncrement);
         // Arrange
         var sut = this.CreateSutWithScanDependencies();
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
         var pr = MakePr(44, 6);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -685,8 +719,8 @@ public sealed class PrCrawlServiceTests
         await sut.CrawlAsync();
 
         // Assert
-        await this._jobs.Received(1)
-            .AddAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.CodeReview.Number && j.IterationId == pr.RevisionId));
+        await this._jobs.Received(reviewEveryIncrement ? 1 : 0)
+            .TryAddIfNoActiveDuplicateAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.CodeReview.Number && j.IterationId == pr.RevisionId));
     }
 
     [Fact]
@@ -698,6 +732,7 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(45, 2);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -718,7 +753,7 @@ public sealed class PrCrawlServiceTests
 
         // Assert
         await this._jobs.Received(1)
-            .AddAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.CodeReview.Number && j.IterationId == pr.RevisionId));
+            .TryAddIfNoActiveDuplicateAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.CodeReview.Number && j.IterationId == pr.RevisionId));
     }
 
     [Fact]
@@ -743,6 +778,7 @@ public sealed class PrCrawlServiceTests
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -750,6 +786,7 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<int>())
             .Returns((ReviewJob?)null);
         this._jobs.FindCompletedJob(
+                DefaultConfig.ClientId,
                 DefaultConfig.ProviderScopePath,
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
@@ -769,7 +806,7 @@ public sealed class PrCrawlServiceTests
         await sut.CrawlAsync();
 
         // Assert
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -794,6 +831,7 @@ public sealed class PrCrawlServiceTests
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -801,6 +839,7 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<int>())
             .Returns((ReviewJob?)null);
         this._jobs.FindCompletedJob(
+                DefaultConfig.ClientId,
                 DefaultConfig.ProviderScopePath,
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
@@ -839,7 +878,7 @@ public sealed class PrCrawlServiceTests
 
         // Assert
         await this._jobs.Received(1)
-            .AddAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.CodeReview.Number && j.IterationId == pr.RevisionId));
+            .TryAddIfNoActiveDuplicateAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.CodeReview.Number && j.IterationId == pr.RevisionId));
     }
 
     [Fact]
@@ -862,6 +901,7 @@ public sealed class PrCrawlServiceTests
             .Returns(Task.FromResult<IReadOnlyList<AssignedCodeReviewRef>>([MakePr(55)]));
 
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -873,7 +913,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: job created for the successful config only
-        await this._jobs.Received(1).AddAsync(Arg.Any<ReviewJob>());
+        await this._jobs.Received(1).TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -887,6 +927,7 @@ public sealed class PrCrawlServiceTests
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr1]);
         this._prFetcher.ListAssignedOpenReviewsAsync(config2).ReturnsForAnyArgs([pr2]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -898,7 +939,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: a job created for each discovered PR
-        await this._jobs.Received(2).AddAsync(Arg.Any<ReviewJob>());
+        await this._jobs.Received(2).TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -928,6 +969,7 @@ public sealed class PrCrawlServiceTests
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([MakePr(), MakePr(2)]);
         this._jobs.GetActiveJobsForConfigAsync(
+                DefaultConfig.ClientId,
                 DefaultConfig.ProviderScopePath,
                 DefaultConfig.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -939,7 +981,197 @@ public sealed class PrCrawlServiceTests
             .SynchronizeAsync(Arg.Any<PullRequestSynchronizationRequest>(), Arg.Any<CancellationToken>());
     }
 
-    // --- T011: Abandonment detection tests (failing until T018 is implemented) ---
+    [Fact]
+    public async Task CrawlAsync_RepositoryTargetDoesNotCheckOtherRepositoryOrClientJobs()
+    {
+        var config = DefaultConfig with
+        {
+            RepoFilters =
+            [
+                new CrawlRepoFilterDto(
+                    Guid.NewGuid(), "repo", [], new MeisterDev.ProPR.ProCursor.Contracts.Sources.CanonicalSourceReferenceDto("AzureDevOps", "repo-1"))
+            ]
+        };
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        this._crawlConfigs.AcquireReviewTargetAdmissionAsync(config.ClientId, Arg.Any<CancellationToken>()).Returns(Substitute.For<IAsyncDisposable>());
+        this._crawlConfigs.GetReviewTargetPolicySnapshotAsync(config.Id, config.ClientId, Arg.Any<CancellationToken>()).Returns(config);
+        this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>()).Returns(Array.Empty<AssignedCodeReviewRef>());
+        var own = new ReviewJob(Guid.NewGuid(), config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, "repo-1", 99, 1);
+        var otherRepository = new ReviewJob(Guid.NewGuid(), config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, "repo-2", 99, 1);
+        var otherClient = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), config.ProviderScopePath, config.ProviderProjectKey, "repo-1", 99, 1);
+        this._jobs.GetActiveJobsForConfigAsync(config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, Arg.Any<CancellationToken>())
+            .Returns([own, otherRepository, otherClient]);
+
+        await this._sut.CrawlAsync();
+
+        await this._statusFetcher.Received(1).GetStatusAsync(
+            config.ProviderScopePath, config.ProviderProjectKey, "repo-1", 99, config.ClientId, Arg.Any<CancellationToken>());
+        await this._statusFetcher.DidNotReceive().GetStatusAsync(
+            config.ProviderScopePath, config.ProviderProjectKey, "repo-2", 99, config.ClientId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CrawlAsync_TargetPolicyChangesDuringFetch_DoesNotAdmitUnderOldRevisionAndStillMaintainsAcceptedJobs()
+    {
+        var config = DefaultConfig with { RepoFilters = [new CrawlRepoFilterDto(Guid.NewGuid(), "repo", [], new("AzureDevOps", "repo-1"))] };
+        var synchronization = Substitute.For<IPullRequestSynchronizationService>();
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        this._crawlConfigs.AcquireReviewTargetAdmissionAsync(config.ClientId, Arg.Any<CancellationToken>()).Returns(Substitute.For<IAsyncDisposable>());
+        this._crawlConfigs.GetReviewTargetPolicySnapshotAsync(config.Id, config.ClientId, Arg.Any<CancellationToken>())
+            .Returns(config with { ReviewTargetRevision = config.ReviewTargetRevision + 1 });
+        this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>()).Returns([MakePr(config: config, targetBranch: "main")]);
+        await this.CreateSutWithSharedSynchronizationService(synchronization).CrawlAsync();
+        await synchronization.DidNotReceive().SynchronizeAsync(Arg.Any<PullRequestSynchronizationRequest>(), Arg.Any<CancellationToken>());
+        await this._jobs.Received().GetActiveJobsForConfigAsync(
+            config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CrawlAsync_TargetAdmissionTimeoutOrReadError_DoesNotStopUnrelatedConfiguration(bool readFailure)
+    {
+        var config = DefaultConfig with { RepoFilters = [new CrawlRepoFilterDto(Guid.NewGuid(), "repo", [], new("AzureDevOps", "repo-1"))] };
+        var second = DefaultConfig with { Id = Guid.NewGuid(), ProviderProjectKey = "other-project" };
+        var synchronization = Substitute.For<IPullRequestSynchronizationService>();
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config, second]);
+        this._prFetcher.ListAssignedOpenReviewsAsync(Arg.Any<CrawlConfigurationDto>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { MakePr(config: call.ArgAt<CrawlConfigurationDto>(0)) });
+        this._crawlConfigs.AcquireReviewTargetAdmissionAsync(config.ClientId, Arg.Any<CancellationToken>())
+            .Returns(
+                readFailure
+                    ? Task.FromResult(Substitute.For<IAsyncDisposable>())
+                    : Task.FromException<IAsyncDisposable>(new TimeoutException("Admission timed out")));
+        this._crawlConfigs.GetReviewTargetPolicySnapshotAsync(config.Id, config.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CrawlConfigurationDto?>(new InvalidOperationException("Read failed")));
+        await this.CreateSutWithSharedSynchronizationService(synchronization).CrawlAsync();
+        await synchronization.Received(1).SynchronizeAsync(
+            Arg.Is<PullRequestSynchronizationRequest>(request => request.ProviderProjectKey == second.ProviderProjectKey), Arg.Any<CancellationToken>());
+        await this._jobs.Received().GetActiveJobsForConfigAsync(
+            config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CrawlAsync_FetchOrAdmissionCancellation_PropagatesWithoutProcessingNextConfiguration(bool duringAdmission)
+    {
+        var config = DefaultConfig with { RepoFilters = [new CrawlRepoFilterDto(Guid.NewGuid(), "repo", [], new("AzureDevOps", "repo-1"))] };
+        var second = DefaultConfig with { Id = Guid.NewGuid(), ProviderProjectKey = "other-project" };
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config, second]);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>())
+            .Returns(
+                duringAdmission
+                    ? Task.FromResult<IReadOnlyList<AssignedCodeReviewRef>>([])
+                    : Task.FromCanceled<IReadOnlyList<AssignedCodeReviewRef>>(cancellation.Token));
+        this._crawlConfigs.AcquireReviewTargetAdmissionAsync(config.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromCanceled<IAsyncDisposable>(cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => this._sut.CrawlAsync(cancellation.Token));
+        await this._prFetcher.DidNotReceive().ListAssignedOpenReviewsAsync(second, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CrawlAsync_GenericConfigurationComparesRepositoryAndPullRequestIdentity()
+    {
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig, Arg.Any<CancellationToken>()).Returns([MakePr(99, repositoryId: "repo-1")]);
+        var orphan = new ReviewJob(Guid.NewGuid(), DefaultConfig.ClientId, DefaultConfig.ProviderScopePath, DefaultConfig.ProviderProjectKey, "repo-2", 99, 1);
+        this._jobs.GetActiveJobsForConfigAsync(
+                DefaultConfig.ClientId, DefaultConfig.ProviderScopePath, DefaultConfig.ProviderProjectKey, Arg.Any<CancellationToken>())
+            .Returns([orphan]);
+
+        await this._sut.CrawlAsync();
+
+        await this._statusFetcher.Received(1).GetStatusAsync(
+            DefaultConfig.ProviderScopePath, DefaultConfig.ProviderProjectKey, "repo-2", 99, DefaultConfig.ClientId, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CrawlAsync_CanonicalFiltersCheckOnlySelectedRepositoryAndClientJobs(bool synchronize)
+    {
+        var config = DefaultConfig with
+        {
+            RepoFilters =
+            [
+                new CrawlRepoFilterDto(Guid.NewGuid(), "A", [], new("AzureDevOps", "repo-a")),
+                new CrawlRepoFilterDto(Guid.NewGuid(), "B", [], new("AzureDevOps", "REPO-B")),
+            ],
+        };
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>())
+            .Returns([MakePr(99, config: config, repositoryId: "repo-a")]);
+        var discovered = new ReviewJob(Guid.NewGuid(), config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, "repo-a", 99, 1);
+        var vanished = new ReviewJob(Guid.NewGuid(), config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, "repo-b", 99, 1);
+        var outside = new ReviewJob(Guid.NewGuid(), config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, "repo-c", 99, 1);
+        var foreign = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), config.ProviderScopePath, config.ProviderProjectKey, "repo-b", 99, 1);
+        this._jobs.GetActiveJobsForConfigAsync(config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, Arg.Any<CancellationToken>())
+            .Returns([discovered, vanished, outside, foreign]);
+        this._statusFetcher.GetStatusAsync(default!, default!, default!, default, default, default)
+            .ReturnsForAnyArgs(PrStatus.Abandoned);
+        var synchronization = Substitute.For<IPullRequestSynchronizationService>();
+        var sut = synchronize ? this.CreateSutWithSharedSynchronizationService(synchronization) : this._sut;
+
+        await sut.CrawlAsync();
+
+        await this._statusFetcher.Received(1).GetStatusAsync(
+            config.ProviderScopePath, config.ProviderProjectKey, "repo-b", 99, config.ClientId, Arg.Any<CancellationToken>());
+        await this._statusFetcher.DidNotReceive().GetStatusAsync(
+            config.ProviderScopePath, config.ProviderProjectKey, "repo-a", 99, config.ClientId, Arg.Any<CancellationToken>());
+        await this._statusFetcher.DidNotReceive().GetStatusAsync(
+            config.ProviderScopePath, config.ProviderProjectKey, "repo-c", 99, config.ClientId, Arg.Any<CancellationToken>());
+        await this._jobs.DidNotReceive().SetCancelledAsync(outside.Id, Arg.Any<CancellationToken>());
+        await this._jobs.DidNotReceive().SetCancelledAsync(foreign.Id, Arg.Any<CancellationToken>());
+        if (synchronize)
+        {
+            await synchronization.Received(1).SynchronizeAsync(
+                Arg.Is<PullRequestSynchronizationRequest>(request => request.RepositoryId == "repo-b" && request.ClientId == config.ClientId &&
+                                                                     request.ActivationSource == PullRequestActivationSource.Crawl &&
+                                                                     !request.AllowReviewSubmission),
+                Arg.Any<CancellationToken>());
+            await synchronization.DidNotReceive().SynchronizeAsync(
+                Arg.Is<PullRequestSynchronizationRequest>(request => request.RepositoryId == "repo-c" || request.ClientId != config.ClientId),
+                Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            await this._jobs.Received(1).SetCancelledAsync(vanished.Id, Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("legacy")]
+    [InlineData("mixed")]
+    public async Task CrawlAsync_UnresolvedOrEmptyFiltersPreserveGenericDisappearanceChecks(string filters)
+    {
+        var config = DefaultConfig with
+        {
+            RepoFilters = filters switch
+            {
+                "legacy" => [new CrawlRepoFilterDto(Guid.NewGuid(), "A", [])],
+                "mixed" => [new CrawlRepoFilterDto(Guid.NewGuid(), "A", [], new("AzureDevOps", "repo-a")), new(Guid.NewGuid(), "B", [])],
+                _ => [],
+            },
+        };
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>())
+            .Returns([MakePr(99, config: config, repositoryId: "repo-a")]);
+        var job = new ReviewJob(Guid.NewGuid(), config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, "repo-c", 99, 1);
+        this._jobs.GetActiveJobsForConfigAsync(config.ClientId, config.ProviderScopePath, config.ProviderProjectKey, Arg.Any<CancellationToken>())
+            .Returns([job]);
+        this._statusFetcher.GetStatusAsync(config.ProviderScopePath, config.ProviderProjectKey, "repo-c", 99, config.ClientId, Arg.Any<CancellationToken>())
+            .Returns(PrStatus.Abandoned);
+
+        await this._sut.CrawlAsync();
+
+        await this._statusFetcher.Received(1).GetStatusAsync(
+            config.ProviderScopePath, config.ProviderProjectKey, "repo-c", 99, config.ClientId, Arg.Any<CancellationToken>());
+        await this._jobs.Received(1).SetCancelledAsync(job.Id, Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task CrawlAsync_OrphanJobForAbandonedPr_CallsSetCancelledAsync()
@@ -958,6 +1190,7 @@ public sealed class PrCrawlServiceTests
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<AssignedCodeReviewRef>>([MakePr(101)]));
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -966,6 +1199,7 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         // active jobs for the config include the orphan
         this._jobs.GetActiveJobsForConfigAsync(
+                DefaultConfig.ClientId,
                 DefaultConfig.ProviderScopePath,
                 DefaultConfig.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -1003,6 +1237,7 @@ public sealed class PrCrawlServiceTests
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<AssignedCodeReviewRef>>([MakePr(101)]));
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -1010,6 +1245,7 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<int>())
             .Returns((ReviewJob?)null);
         this._jobs.GetActiveJobsForConfigAsync(
+                DefaultConfig.ClientId,
                 DefaultConfig.ProviderScopePath,
                 DefaultConfig.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -1039,6 +1275,7 @@ public sealed class PrCrawlServiceTests
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<AssignedCodeReviewRef>>([]));
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -1047,6 +1284,7 @@ public sealed class PrCrawlServiceTests
             .Returns((ReviewJob?)null);
         // GetActiveJobsForConfigAsync returns empty (Completed jobs are not "active")
         this._jobs.GetActiveJobsForConfigAsync(
+                DefaultConfig.ClientId,
                 DefaultConfig.ProviderScopePath,
                 DefaultConfig.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -1083,6 +1321,7 @@ public sealed class PrCrawlServiceTests
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<AssignedCodeReviewRef>>([MakePr(42)]));
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -1090,6 +1329,7 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<int>())
             .Returns((ReviewJob?)null);
         this._jobs.GetActiveJobsForConfigAsync(
+                DefaultConfig.ClientId,
                 DefaultConfig.ProviderScopePath,
                 DefaultConfig.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -1126,6 +1366,7 @@ public sealed class PrCrawlServiceTests
         // Fetcher returns only the filtered PR (non-matching ones are excluded by the fetcher)
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([filteredPr]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -1138,7 +1379,7 @@ public sealed class PrCrawlServiceTests
 
         // Assert: exactly one job created, for the filtered PR
         await this._jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(j =>
                     j.PullRequestId == 100 &&
                     j.ClientId == DefaultConfig.ClientId));
@@ -1163,6 +1404,7 @@ public sealed class PrCrawlServiceTests
 
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([prWithContext]);
         this._jobs.FindActiveJob(
+                DefaultConfig.ClientId,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -1210,6 +1452,7 @@ public sealed class PrCrawlServiceTests
         this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>())
             .Returns([pr]);
         this._jobs.GetActiveJobsForConfigAsync(
+                config.ClientId,
                 config.ProviderScopePath,
                 config.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -1246,7 +1489,7 @@ public sealed class PrCrawlServiceTests
                     request.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources &&
                     request.ProCursorSourceIds.SequenceEqual(new[] { sourceId })),
                 Arg.Any<CancellationToken>());
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        await this._jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1281,6 +1524,7 @@ public sealed class PrCrawlServiceTests
         this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>())
             .Returns([pr]);
         this._jobs.GetActiveJobsForConfigAsync(
+                config.ClientId,
                 config.ProviderScopePath,
                 config.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -1322,6 +1566,7 @@ public sealed class PrCrawlServiceTests
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig, Arg.Any<CancellationToken>())
             .Returns([MakePr(42)]);
         this._jobs.GetActiveJobsForConfigAsync(
+                DefaultConfig.ClientId,
                 DefaultConfig.ProviderScopePath,
                 DefaultConfig.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -1388,6 +1633,7 @@ public sealed class PrCrawlServiceTests
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
         this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>()).Returns([]);
         this._jobs.GetActiveJobsForConfigAsync(
+                config.ClientId,
                 config.ProviderScopePath,
                 config.ProviderProjectKey,
                 Arg.Any<CancellationToken>())
@@ -1414,5 +1660,13 @@ public sealed class PrCrawlServiceTests
                     && request.RepositoryId == orphanJob.RepositoryId
                     && request.PullRequestId == orphanJob.PullRequestId),
                 Arg.Any<CancellationToken>());
+    }
+
+    private static IScmProviderRegistry SourcePolicyRegistry()
+    {
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+        registry.GetReviewSourcePolicy(Arg.Any<ScmProvider>()).Returns(call =>
+            MeisterDev.ProPR.TestSupport.ReviewSourcePolicies.Get(call.Arg<ScmProvider>()));
+        return registry;
     }
 }

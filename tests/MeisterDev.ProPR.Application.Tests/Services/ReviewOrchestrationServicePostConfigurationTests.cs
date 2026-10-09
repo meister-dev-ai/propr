@@ -109,17 +109,15 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-warning"),
             Arg.Is<string>(note => note.Contains("Auto-resolved", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
-        await statusWriter.Received(1).UpdateThreadStatusAsync(
+        await statusWriter.Received(1).ResolveThreadAsync(
             job.ClientId,
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-warning"),
-            "fixed",
             Arg.Any<CancellationToken>());
 
         // The Suggestion thread (not in the auto-resolve set) is left untouched.
-        await statusWriter.DidNotReceive().UpdateThreadStatusAsync(
+        await statusWriter.DidNotReceive().ResolveThreadAsync(
             Arg.Any<Guid>(),
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-suggestion"),
-            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -239,8 +237,7 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
         // Nothing is auto-resolved.
         var statusWriter = providerRegistry.GetReviewThreadStatusWriter(ScmProvider.AzureDevOps);
         var replyPublisher = providerRegistry.GetReviewThreadReplyPublisher(ScmProvider.AzureDevOps);
-        await statusWriter.DidNotReceive().UpdateThreadStatusAsync(
-            Arg.Any<Guid>(), Arg.Any<ReviewThreadRef>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await statusWriter.DidNotReceive().ResolveThreadAsync(Arg.Any<Guid>(), Arg.Any<ReviewThreadRef>(), Arg.Any<CancellationToken>());
         await replyPublisher.DidNotReceive().ReplyAsync(Arg.Any<Guid>(), Arg.Any<ReviewThreadRef>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
@@ -277,8 +274,7 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
 
         // Neither thread is resolved: the Error finding sharing the anchor blocks auto-resolving the Suggestion.
         var statusWriter = providerRegistry.GetReviewThreadStatusWriter(ScmProvider.AzureDevOps);
-        await statusWriter.DidNotReceive().UpdateThreadStatusAsync(
-            Arg.Any<Guid>(), Arg.Any<ReviewThreadRef>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await statusWriter.DidNotReceive().ResolveThreadAsync(Arg.Any<Guid>(), Arg.Any<ReviewThreadRef>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -301,13 +297,15 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
 
         var (service, providerRegistry) = CreateService(jobs, clientRegistry, orchestratorResult, commentPoster);
         var statusWriter = providerRegistry.GetReviewThreadStatusWriter(ScmProvider.AzureDevOps);
-        statusWriter.UpdateThreadStatusAsync(Arg.Any<Guid>(), Arg.Any<ReviewThreadRef>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        statusWriter.ResolveThreadAsync(Arg.Any<Guid>(), Arg.Any<ReviewThreadRef>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new InvalidOperationException("transient")));
 
         // The failing resolve must be swallowed — ProcessAsync completes and the result is still persisted.
         await service.ProcessAsync(job, CancellationToken.None);
 
         await jobs.Received(1).SetResultAsync(job.Id, Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
+        await providerRegistry.GetReviewThreadReplyPublisher(job.Provider).DidNotReceiveWithAnyArgs()
+            .ReplyAsync(default, default!, default!, default);
     }
 
     [Fact]
@@ -367,8 +365,8 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
         // The thread is resolved and noted exactly once, not once per comment ref.
         var statusWriter = providerRegistry.GetReviewThreadStatusWriter(ScmProvider.AzureDevOps);
         var replyPublisher = providerRegistry.GetReviewThreadReplyPublisher(ScmProvider.AzureDevOps);
-        await statusWriter.Received(1).UpdateThreadStatusAsync(
-            job.ClientId, Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-warning"), "fixed", Arg.Any<CancellationToken>());
+        await statusWriter.Received(1).ResolveThreadAsync(
+            job.ClientId, Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-warning"), Arg.Any<CancellationToken>());
         await replyPublisher.Received(1).ReplyAsync(
             job.ClientId, Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-warning"), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -519,16 +517,15 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
         // Build every substitute the registry hands out BEFORE wiring the .Returns() calls: creating a substitute
         // (which itself configures members) inside a .Returns() argument corrupts NSubstitute's last-call context.
         var reviewerManager = CreateReviewerManager();
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(commentPoster);
         registry.GetReviewAssignmentService(Arg.Any<ScmProvider>()).Returns(reviewerManager);
 
         var threadStatusWriter = Substitute.For<IReviewThreadStatusWriter>();
         threadStatusWriter.Provider.Returns(ScmProvider.AzureDevOps);
-        threadStatusWriter.UpdateThreadStatusAsync(
+        threadStatusWriter.ResolveThreadAsync(
                 Arg.Any<Guid>(),
                 Arg.Any<ReviewThreadRef>(),
-                Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 

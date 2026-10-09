@@ -46,6 +46,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Licensing;
 using MeisterDev.ProPR.Infrastructure.Features.Mentions;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Broker;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.PromptCustomization;
 using MeisterDev.ProPR.Infrastructure.Features.ReviewArchive;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing;
@@ -163,7 +164,7 @@ try
 
     builder.Services.AddScoped<ProCursorRuntimeConfigurationProjectionService>();
     builder.Services.AddScoped<ManagedRemoteProCursorGateway>();
-    builder.Services.AddScoped<LocalProPrScmBroker>();
+    builder.Services.AddAzureDevOpsProCursorBroker();
     builder.Services.AddScoped<LocalProPrEmbeddingBroker>();
     builder.Services.AddSingleton(
         new TenantMachineAuthenticationThrottle(
@@ -229,7 +230,7 @@ try
     builder.Services.AddSingleton<IValidator<CreateClientRequest>, CreateClientRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchClientRequest>, PatchClientRequestValidator>();
     builder.Services
-        .AddSingleton<IValidator<CreateClientProviderConnectionRequest>,
+        .AddScoped<IValidator<CreateClientProviderConnectionRequest>,
             CreateClientProviderConnectionRequestValidator>();
     builder.Services
         .AddSingleton<IValidator<PatchClientProviderConnectionRequest>,
@@ -248,12 +249,12 @@ try
         .AddSingleton<IValidator<CreateTenantSsoProviderRequest>, CreateTenantSsoProviderRequestValidator>();
     builder.Services
         .AddSingleton<IValidator<UpdateTenantSsoProviderRequest>, UpdateTenantSsoProviderRequestValidator>();
-    builder.Services.AddSingleton<IValidator<CreateAdminCrawlConfigRequest>, CreateAdminCrawlConfigRequestValidator>();
+    builder.Services.AddScoped<IValidator<CreateAdminCrawlConfigRequest>, CreateAdminCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchAdminCrawlConfigRequest>, PatchAdminCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<CreateMentionConfigRequest>, CreateMentionConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchMentionConfigRequest>, PatchMentionConfigRequestValidator>();
     builder.Services
-        .AddSingleton<IValidator<CreateAdminWebhookConfigRequest>, CreateAdminWebhookConfigRequestValidator>();
+        .AddScoped<IValidator<CreateAdminWebhookConfigRequest>, CreateAdminWebhookConfigRequestValidator>();
     builder.Services
         .AddSingleton<IValidator<PatchAdminWebhookConfigRequest>, PatchAdminWebhookConfigRequestValidator>();
 
@@ -476,22 +477,7 @@ try
         .ValidateDataAnnotations()
         .ValidateOnStart();
 
-    var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(builder.Configuration);
-
-    builder.Services.AddCors(options =>
-    {
-        options.AddDefaultPolicy(policy =>
-        {
-            policy
-                .WithOrigins(allowedOrigins)
-                // NOSONAR: a predicate is needed because *.visualstudio.com cannot be expressed as a
-                // static origin string, so any subdomain is matched here instead.
-                .SetIsOriginAllowed(origin => BrowserOriginPolicy.IsAllowedOrigin(origin, allowedOrigins))
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
-        });
-    });
+    builder.Services.AddBrowserCorsPolicies(builder.Configuration);
 
     // Extension callers get a policy of their own, without credentials. Their origin cannot be
     // enumerated, because Firefox randomises it per installation, so it is matched by scheme, and a scheme
@@ -597,6 +583,8 @@ try
         {
             options.IncludeXmlComments(xmlFile);
         }
+
+        options.SchemaFilter<ScmContractDescriptionSchemaFilter>();
     });
 
     var healthChecksBuilder = builder.Services.AddHealthChecks()

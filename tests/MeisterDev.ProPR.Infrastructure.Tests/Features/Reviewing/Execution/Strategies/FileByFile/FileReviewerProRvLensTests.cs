@@ -81,6 +81,7 @@ public sealed class FileReviewerProRvLensTests
             });
 
         return new FileReviewer(
+            null,
             this._aiCore,
             this._recorder,
             this._jobRepository,

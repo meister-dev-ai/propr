@@ -4,6 +4,8 @@
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
+using MeisterDev.ProPR.Application.Interfaces;
+using NSubstitute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Offline;
 
@@ -14,6 +16,22 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Offline;
 /// </summary>
 public sealed class InMemoryReviewJobRepositorySubmissionWindowTests
 {
+    [Fact]
+    public async Task DuplicateMatchingUsesTheSuppliedSourceIdentityPolicy()
+    {
+        var policy = Substitute.For<IReviewSourcePolicy>();
+        policy.GetRepositoryIdentityKey(default!, default!, default!, default, default).ReturnsForAnyArgs("same-repository");
+        policy.Provider.Returns(ScmProvider.AzureDevOps);
+        var repository = new InMemoryReviewJobRepository([policy]);
+        var clientId = Guid.NewGuid();
+        var first = new ReviewJob(Guid.NewGuid(), clientId, OrganizationUrl, "project", "native", 42, 1);
+        var alias = new ReviewJob(Guid.NewGuid(), clientId, OrganizationUrl, "project", "alias", 42, 1);
+        await repository.AddAsync(first);
+        var result = await repository.TryAddIfNoActiveDuplicateAsync(alias);
+        Assert.False(result.WasAdded);
+        Assert.Same(first, result.DuplicateJob);
+    }
+
     private const string OrganizationUrl = "https://dev.azure.com/org";
 
     private readonly InMemoryReviewJobRepository _jobs = new();

@@ -57,7 +57,10 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
         Assert.Equal(2, body.RootElement.GetProperty("totalCount").GetInt64());
         Assert.Single(body.RootElement.GetProperty("items").EnumerateArray());
         foreach (var query in new[] { "page=0", "pageSize=101", "pageSize=0", "status=unknown", "status=999" })
+        {
             Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/clients/{factory.ClientAId}/reviewing/history?{query}")).StatusCode);
+        }
+
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/clients/{factory.ClientBId}/reviewing/history")).StatusCode);
     }
 

@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
@@ -22,6 +23,34 @@ namespace MeisterDev.ProPR.Api.Tests.Controllers;
 public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.ClientsApiFactory factory)
     : IClassFixture<ClientsControllerTests.ClientsApiFactory>
 {
+    [Fact]
+    public async Task CreationRequestIdIdentifiesOnlyTheNewProfileAndCannotBeReused()
+    {
+        var client = this.CreateAuthorizedClient();
+        var requestId = Guid.NewGuid();
+        var payload = JsonNode.Parse(JsonSerializer.Serialize(BuildCreatePayload("Correlated profile")))!.AsObject();
+        payload["creationRequestId"] = requestId.ToString("D");
+
+        var createdResponse = await client.PostAsync(
+            $"/clients/{ClientId}/ai-connections",
+            new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(created);
+        Assert.Equal(requestId, created.CreationRequestId);
+
+        var listed = await client.GetFromJsonAsync<List<AiConnectionDto>>($"/clients/{ClientId}/ai-connections", ApiJsonOptions);
+        Assert.Equal(requestId, Assert.Single(listed!, item => item.Id == created.Id).CreationRequestId);
+
+        payload["displayName"] = "Different duplicate";
+        var duplicate = await client.PostAsync(
+            $"/clients/{ClientId}/ai-connections",
+            new StringContent(payload.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+        listed = await client.GetFromJsonAsync<List<AiConnectionDto>>($"/clients/{ClientId}/ai-connections", ApiJsonOptions);
+        Assert.DoesNotContain(listed!, item => item.DisplayName == "Different duplicate");
+    }
+
     private static readonly Guid ClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly JsonSerializerOptions ApiJsonOptions = CreateApiJsonOptions();
 

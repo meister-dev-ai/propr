@@ -6,12 +6,28 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
 
 /// <summary>Database-backed repository for client-scoped SCM provider scopes.</summary>
 public sealed class ClientScmScopeRepository(MeisterProPRDbContext dbContext) : IClientScmScopeRepository
 {
+    public async Task<IReadOnlyList<ClientScmScopeDto>> GetByClientIdAsync(
+        Guid clientId, ScmProvider provider, string scopeType, CancellationToken ct = default)
+    {
+        var records = await dbContext.ClientScmScopes
+            .AsNoTracking()
+            .Include(scope => scope.Connection)
+            .Where(scope => scope.ClientId == clientId)
+            .Where(scope => scope.ScopeType == scopeType)
+            .Where(scope => scope.Connection != null && scope.Connection.Provider == provider)
+            .OrderBy(scope => scope.ScopePath)
+            .ToListAsync(ct);
+
+        return records.Select(ToDto).ToList().AsReadOnly();
+    }
+
     public async Task<IReadOnlyList<ClientScmScopeDto>> GetByConnectionIdAsync(
         Guid clientId,
         Guid connectionId,

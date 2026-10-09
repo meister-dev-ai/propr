@@ -236,6 +236,7 @@ public partial class ReviewOrchestrationServiceTests
         prior.FileReviewResults.Add(priorResult);
 
         jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                job.ClientId,
                 job.OrganizationUrl,
                 job.ProjectId,
                 job.RepositoryId,
@@ -260,6 +261,7 @@ public partial class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         await jobs.Received(1).GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            job.ClientId,
             job.OrganizationUrl,
             job.ProjectId,
             job.RepositoryId,

@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Api.Controllers;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Commands.HandleProviderWebhookDelivery;
@@ -15,6 +14,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Api.Tests.Features.Crawling.Webhooks;
 
@@ -27,7 +27,7 @@ public sealed class ProviderWebhookReceiverControllerTests
     {
         var configRepo = Substitute.For<IWebhookConfigurationRepository>();
         var logRepo = Substitute.For<IWebhookDeliveryLogRepository>();
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
         var ingressService = Substitute.For<IWebhookIngressService>();
@@ -124,7 +124,7 @@ public sealed class ProviderWebhookReceiverControllerTests
         var providerHandler = CreateProviderHandler(
             configRepo,
             logRepo,
-            Substitute.For<IScmProviderRegistry>(),
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute(),
             Substitute.For<IClientRegistry>(),
             secretProtectionCodec,
             Substitute.For<IPullRequestSynchronizationService>());

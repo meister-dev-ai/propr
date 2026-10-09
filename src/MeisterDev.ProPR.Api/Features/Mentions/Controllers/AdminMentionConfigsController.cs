@@ -34,7 +34,8 @@ public sealed partial class AdminMentionConfigsController(
     IMentionConfigurationScopeValidator scopeValidator,
     ILogger<AdminMentionConfigsController> logger,
     IProviderActivationService? providerActivationService = null,
-    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
+    ILicensingCapabilityService? licensingCapabilityService = null,
+    IReviewConfigurationSelectionService? selections = null) : ControllerBase
 {
     private const string DisabledProviderMessage =
         "The selected provider family is currently disabled by system administration.";
@@ -183,7 +184,48 @@ public sealed partial class AdminMentionConfigsController(
             return authorization;
         }
 
-        if (!await this.IsProviderEnabledAsync(request.Provider, ct))
+        var provider = request.Provider;
+        var scopePath = NormalizeScopePath(request.ProviderScopePath);
+        var projectKey = request.ProviderProjectKey?.Trim() ?? string.Empty;
+        if (request.ConnectionId.HasValue)
+        {
+            try
+            {
+                if (selections is null)
+                {
+                    throw new InvalidOperationException("Connection discovery is unavailable.");
+                }
+
+                var selected = await selections.ResolveConnectionSelectionAsync(
+                    request.ClientId, request.ConnectionId.Value,
+                    request.ScopeKey ?? throw new InvalidOperationException("ScopeKey is required."), projectKey,
+                    provider, null, request.ProviderScopePath, ct);
+                provider = selected.Provider;
+                scopePath = selected.ProviderScopePath;
+                projectKey = selected.ProviderProjectKey;
+                var context = await selections.GetConnectionContextAsync(request.ClientId, request.ConnectionId.Value, ct);
+                var sources = await selections.GetSourcesAsync(context, request.ScopeKey!, projectKey, ProCursorSourceKind.Repository, ct);
+                if (request.RepoFilters.Any(filter => !sources.Any(source => source.RepositoryId == filter.RepositoryId &&
+                                                                             (filter.CanonicalSourceRef is null ||
+                                                                              filter.CanonicalSourceRef == source.CanonicalSourceRef.Value) &&
+                                                                             (filter.SourceProvider is null ||
+                                                                              filter.SourceProvider == source.CanonicalSourceRef.Provider))))
+                {
+                    throw new InvalidOperationException("A selected repository is not available through this connection.");
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                return this.BadRequest(new { error = "The connection or selected repository coordinates are invalid." });
+            }
+        }
+
+        if (!provider.HasValue)
+        {
+            return this.BadRequest(new { error = "Specify a connection or an explicit manual provider." });
+        }
+
+        if (!await this.IsProviderEnabledAsync(provider.Value, ct))
         {
             return this.BadRequest(new { error = DisabledProviderMessage });
         }
@@ -194,20 +236,17 @@ public sealed partial class AdminMentionConfigsController(
             return this.BadRequest(new { error = NoRepositoriesMessage });
         }
 
-        var scopePath = NormalizeScopePath(request.ProviderScopePath);
-        var projectKey = request.ProviderProjectKey?.Trim() ?? string.Empty;
-
         // Before anything is written, and for every provider. A scope path with nothing behind it reaches a
         // provider client at scan time carrying whatever credential the runtime can find.
-        var scopeVerdict = await scopeValidator.ValidateAsync(request.ClientId, request.Provider, scopePath, ct);
+        var scopeVerdict = await scopeValidator.ValidateAsync(request.ClientId, provider.Value, scopePath, ct);
         if (!scopeVerdict.IsAccepted)
         {
-            LogMentionConfigScopeRefused(logger, request.ClientId, request.Provider, scopeVerdict.Refusal);
+            LogMentionConfigScopeRefused(logger, request.ClientId, provider.Value, scopeVerdict.Refusal);
             return this.BadRequest(new { error = scopeVerdict.Message });
         }
 
         var existing = await mentionConfigRepo.GetByClientAsync(request.ClientId, ct);
-        if (existing.Any(c => c.Provider == request.Provider
+        if (existing.Any(c => c.Provider == provider.Value
                               && string.Equals(c.ProviderScopePath, scopePath, StringComparison.OrdinalIgnoreCase)
                               && string.Equals(c.ProviderProjectKey, projectKey, StringComparison.OrdinalIgnoreCase)))
         {
@@ -223,7 +262,7 @@ public sealed partial class AdminMentionConfigsController(
         {
             created = await mentionConfigRepo.AddAsync(
                 request.ClientId,
-                request.Provider,
+                provider.Value,
                 scopePath,
                 projectKey,
                 request.ScanIntervalSeconds ?? 60,
@@ -252,7 +291,7 @@ public sealed partial class AdminMentionConfigsController(
     /// <param name="request">The changes to apply. Omitted fields are left as they are.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The updated configuration.</response>
-    /// <response code="400">The repository list was given but empty.</response>
+    /// <response code="400">Repository selections are empty or conflict with stored or discovered coordinates.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks access to the client.</response>
     /// <response code="404">No such configuration.</response>
@@ -310,6 +349,46 @@ public sealed partial class AdminMentionConfigsController(
             if (filters.Count == 0)
             {
                 return this.BadRequest(new { error = NoRepositoriesMessage });
+            }
+        }
+
+        if (request.RepoFilters is not null && request.ConnectionId.HasValue)
+        {
+            try
+            {
+                if (selections is null)
+                {
+                    throw new InvalidOperationException("Connection discovery is unavailable.");
+                }
+
+                var scopeKey = request.ScopeKey ?? throw new InvalidOperationException("ScopeKey is required.");
+                await selections.ResolveConnectionSelectionAsync(
+                    existing.ClientId, request.ConnectionId.Value, scopeKey,
+                    existing.ProviderProjectKey, existing.Provider, null, existing.ProviderScopePath, ct);
+                var context = await selections.GetConnectionContextAsync(existing.ClientId, request.ConnectionId.Value, ct);
+                var sources = await selections.GetSourcesAsync(context, scopeKey, existing.ProviderProjectKey, ProCursorSourceKind.Repository, ct);
+                var retained = existing.RepoFilters.ToDictionary(filter => filter.RepositoryId, StringComparer.Ordinal);
+                if (filters!.Any(filter => retained.TryGetValue(filter.RepositoryId, out var saved)
+                        ? filter.CanonicalSourceRef is not null && filter.CanonicalSourceRef != saved.CanonicalSourceRef ||
+                          filter.SourceProvider is not null && filter.SourceProvider != saved.SourceProvider
+                        : !sources.Any(source => source.RepositoryId == filter.RepositoryId &&
+                                                 (filter.CanonicalSourceRef is null || filter.CanonicalSourceRef == source.CanonicalSourceRef.Value) &&
+                                                 (filter.SourceProvider is null || filter.SourceProvider == source.CanonicalSourceRef.Provider))))
+                {
+                    throw new InvalidOperationException("A selected repository is not available through this connection.");
+                }
+
+                filters = filters.Select(filter => retained.TryGetValue(filter.RepositoryId, out var saved)
+                    ? filter with
+                    {
+                        CanonicalSourceRef = filter.CanonicalSourceRef ?? saved.CanonicalSourceRef,
+                        SourceProvider = filter.SourceProvider ?? saved.SourceProvider, ClaimedAt = saved.ClaimedAt
+                    }
+                    : filter).ToList();
+            }
+            catch (InvalidOperationException)
+            {
+                return this.BadRequest(new { error = "The connection or selected repository coordinates are invalid." });
             }
         }
 

@@ -3,6 +3,7 @@
 
 using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Application.Features.Clients.Models;
 
 namespace MeisterDev.ProPR.Application.DTOs;
 
@@ -18,8 +19,8 @@ public sealed record ClientScmConnectionCredentialDto(
     string DisplayName,
     string Secret,
     bool IsActive,
-    long? GitHubAppId = null,
-    long? GitHubAppInstallationId = null,
+    ScmApplicationId? AppId = null,
+    ScmInstallationId? InstallationId = null,
     string? UserName = null)
 {
     /// <summary>Renders the connection without the secret; see <see cref="SecretSafeRendering" />.</summary>

@@ -238,7 +238,7 @@ public sealed class RestartReviewJobHandlerTests
         jobs.GetById(job.Id).Returns(job);
         var live = MakeJob();
         live.Status = JobStatus.Pending;
-        jobs.FindActiveJob(job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, job.IterationId)
+        jobs.FindActiveJob(job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, job.IterationId)
             .Returns(live);
 
         var sut = new RestartReviewJobHandler(jobs, queue, NullLogger<RestartReviewJobHandler>.Instance);

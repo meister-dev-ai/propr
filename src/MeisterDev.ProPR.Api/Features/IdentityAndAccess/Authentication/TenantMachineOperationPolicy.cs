@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Api.Features.Crawling.Configuration.Controllers;
 using MeisterDev.ProPR.Api.Features.Reviewing.Intake.Controllers;
+using MeisterDev.ProPR.Api.Features.Reviewing.Usage.Controllers;
 using Microsoft.AspNetCore.Mvc.Controllers;
 
 
@@ -26,10 +27,17 @@ public static class TenantMachineOperationPolicy
             Action<ReviewsController>(nameof(ReviewsController.GetHistory)), Action<ReviewJobsController>(nameof(ReviewJobsController.GetClientReview)),
             Action<ReviewJobsController>(nameof(ReviewJobsController.GetReview)),
             Action<ReviewJobsController>(nameof(ReviewJobsController.SubmitReviewByCoordinates)),
+            Action<CompletedReviewUsageController>(nameof(CompletedReviewUsageController.GetCompletedUsage)),
             Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.GetTargets)),
+            Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.GetManagementTargets)),
+            Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.GetManagementTarget)),
+            Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.ChangeLifecycle)),
             Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.CreateTarget)),
+            Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.UpdateTargetPolicy)),
             Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.GetRepositories)),
             Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.GetOpenReviews)),
+            Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.GetOverview)),
+            Action<ClientReviewTargetsController>(nameof(ClientReviewTargetsController.GetOpenReviewMetadata)),
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.GetProviderConnections)),
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.GetProviderConnection)),
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.GetProviderOperationalStatus)),

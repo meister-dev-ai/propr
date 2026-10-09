@@ -10,7 +10,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
 internal sealed class ProviderReviewerThreadStatusFetcher(
     IEnumerable<IProviderReviewerThreadStatusFetcher> providerFetchers,
-    IClientScmConnectionRepository? connectionRepository = null) : IReviewerThreadStatusFetcher
+    IClientScmConnectionRepository? connectionRepository = null,
+    IEnumerable<IScmConnectionConfigurationPolicy>? configurationPolicies = null) : IReviewerThreadStatusFetcher
 {
     private readonly IReadOnlyDictionary<ScmProvider, IProviderReviewerThreadStatusFetcher>
         _providerFetchersByProvider =
@@ -41,73 +42,9 @@ internal sealed class ProviderReviewerThreadStatusFetcher(
             ct);
     }
 
-    private async Task<ScmProvider> ResolveProviderAsync(string organizationUrl, Guid clientId, CancellationToken ct)
+    private Task<ScmProvider> ResolveProviderAsync(string organizationUrl, Guid clientId, CancellationToken ct)
     {
-        if (connectionRepository is null)
-        {
-            return ScmProvider.AzureDevOps;
-        }
-
-        var normalizedHostBaseUrl = NormalizeHostBaseUrl(organizationUrl);
-        var matchingProviders = (await connectionRepository.GetByClientIdAsync(clientId, ct))
-            .Where(connection => connection.IsActive)
-            .Where(connection => string.Equals(
-                connection.HostBaseUrl,
-                normalizedHostBaseUrl,
-                StringComparison.OrdinalIgnoreCase))
-            .Select(connection => connection.ProviderFamily)
-            .Distinct()
-            .ToList();
-
-        if (matchingProviders.Count == 1)
-        {
-            return matchingProviders[0];
-        }
-
-        if (matchingProviders.Count > 1)
-        {
-            if (LooksLikeAzureDevOpsScope(organizationUrl) && matchingProviders.Contains(ScmProvider.AzureDevOps))
-            {
-                return ScmProvider.AzureDevOps;
-            }
-
-            throw new InvalidOperationException(
-                $"Multiple active SCM providers share host {normalizedHostBaseUrl} for client {clientId}. The reviewer thread status provider is ambiguous.");
-        }
-
-        if (LooksLikeAzureDevOpsScope(organizationUrl))
-        {
-            return ScmProvider.AzureDevOps;
-        }
-
-        throw new InvalidOperationException($"No active SCM provider connection matched host {normalizedHostBaseUrl} for client {clientId}.");
-    }
-
-    private static bool LooksLikeAzureDevOpsScope(string organizationUrl)
-    {
-        if (!Uri.TryCreate(organizationUrl, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        return string.Equals(uri.Host, "dev.azure.com", StringComparison.OrdinalIgnoreCase)
-               || uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizeHostBaseUrl(string value)
-    {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
-        {
-            throw new ArgumentException("Provider scope must be an absolute URL.", nameof(value));
-        }
-
-        var builder = new UriBuilder(uri)
-        {
-            Path = string.Empty,
-            Query = string.Empty,
-            Fragment = string.Empty,
-        };
-
-        return builder.Uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+        return ProviderResolutionUtilities.ResolveProviderAsync(
+            organizationUrl, clientId, connectionRepository, ct, configurationPolicies, "reviewer thread status");
     }
 }

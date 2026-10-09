@@ -35,46 +35,14 @@ function setCapabilities(capabilities: Array<{ key: string; isAvailable: boolean
   }))
 }
 
-const listAdoOrganizationScopes = vi.fn()
-const listAdoProjects = vi.fn()
-const listAdoCrawlFilters = vi.fn()
-
-vi.mock('@/services/adoDiscoveryService', () => ({
-  listAdoOrganizationScopes: (...args: unknown[]) => listAdoOrganizationScopes(...args),
-  listAdoProjects: (...args: unknown[]) => listAdoProjects(...args),
-  listAdoCrawlFilters: (...args: unknown[]) => listAdoCrawlFilters(...args),
-}))
-
-const listProviderActivationStatuses = vi.fn()
-
-vi.mock('@/services/providerActivationService', () => ({
-  listProviderActivationStatuses: (...args: unknown[]) => listProviderActivationStatuses(...args),
-  formatProviderFamily: (providerFamily: string) =>
-    ({ azureDevOps: 'Azure DevOps', github: 'GitHub', gitLab: 'GitLab', forgejo: 'Forgejo' })[providerFamily]
-    ?? providerFamily,
-}))
-
-const listProviderConnections = vi.fn()
-
-vi.mock('@/services/providerConnectionsService', () => ({
-  listProviderConnections: (...args: unknown[]) => listProviderConnections(...args),
-}))
-
-const listProviderScopeOptions = vi.fn()
-const listProviderRepositoryOptions = vi.fn()
-
+const discovery = vi.hoisted(() => ({ descriptor: vi.fn(), scopes: vi.fn(), projects: vi.fn(), sources: vi.fn(), selection: vi.fn(), connections: vi.fn(), savedScopes: vi.fn() }))
 vi.mock('@/services/providerDiscoveryService', () => ({
-  listProviderScopeOptions: (...args: unknown[]) => listProviderScopeOptions(...args),
-  listProviderRepositoryOptions: (...args: unknown[]) => listProviderRepositoryOptions(...args),
+ listConnectionDescriptor: discovery.descriptor, listConnectionScopes: discovery.scopes, listConnectionProjects: discovery.projects,
+ listConnectionSources: discovery.sources, resolveConnectionSelection: discovery.selection, listConnectionBranches: vi.fn(), listConnectionFilters: vi.fn(),
 }))
-
-/** One provider activation row, in the shape the form filters on. */
-function activation(
-  providerFamily: string,
-  capabilities: string[] = ['activePullRequestDiscovery', 'reviewThreadReply'],
-) {
-  return { providerFamily, isEnabled: true, registeredCapabilities: capabilities }
-}
+vi.mock('@/services/providerConnectionsService', () => ({ listProviderConnections: discovery.connections, listProviderScopes: discovery.savedScopes }))
+vi.mock('@/services/providerActivationService', () => ({ formatProviderFamily: (family: string) => family }))
+import { connectionFixture, descriptorFixture, sourceFixture, selectionFixture } from '../../../../../tests/support/connectionDiscoveryFixtures'
 
 function okResponse(data: unknown) {
   return { data, error: undefined, response: { ok: true } }
@@ -99,14 +67,14 @@ describe('ClientMentionConfigsTab', () => {
     post.mockReset()
     patch.mockReset()
     del.mockReset()
-    // Reset first: a mockReturnValueOnce left queued by an earlier test outlives a plain mockResolvedValue.
-    listAdoOrganizationScopes.mockReset().mockResolvedValue([])
-    listAdoProjects.mockReset().mockResolvedValue([])
-    listAdoCrawlFilters.mockReset().mockResolvedValue([])
-    listProviderActivationStatuses.mockReset().mockResolvedValue([activation('azureDevOps')])
-    listProviderConnections.mockReset().mockResolvedValue([])
-    listProviderScopeOptions.mockReset().mockResolvedValue([])
-    listProviderRepositoryOptions.mockReset().mockResolvedValue([])
+    Object.values(discovery).forEach(mock => mock.mockReset())
+    discovery.connections.mockResolvedValue([connectionFixture()])
+    discovery.descriptor.mockResolvedValue(descriptorFixture)
+    discovery.scopes.mockResolvedValue([{ scopeKey: 'native-scope', displayName: 'Boundary', savedScopeId: 'scope-1' }])
+    discovery.projects.mockResolvedValue([{ projectId: 'project-1', projectName: 'Workspace' }])
+    discovery.sources.mockResolvedValue([sourceFixture()])
+    discovery.selection.mockResolvedValue(selectionFixture())
+    discovery.savedScopes.mockResolvedValue([{ id: 'scope-1', scopePath: 'https://scm.example.com/native', scopeKind: 'organization', isEnabled: true }])
     setCapabilities([{ key: 'mention-answering', isAvailable: true }])
   })
 
@@ -206,285 +174,144 @@ describe('ClientMentionConfigsTab', () => {
     expect(wrapper.text()).toContain('Select at least one repository')
   })
 
-  it('does not let a closed edit form select a project in the next one', async () => {
-    get.mockResolvedValue(
-      okResponse([
-        {
-          id: 'cfg-1',
-          clientId: 'client-1',
-          provider: 'azureDevOps',
-          providerScopePath: 'https://dev.azure.com/org',
-          providerProjectKey: 'proj-guid',
-          scanIntervalSeconds: 60,
-          isActive: true,
-          createdAt: '2026-08-11T00:00:00Z',
-          repoFilters: [{ id: 'f1', repositoryId: 'repo-guid', displayName: 'payments-api' }],
-        },
-      ]),
-    )
-    listAdoProjects.mockResolvedValue([{ organizationScopeId: 'scope-1', projectId: 'proj-guid', projectName: 'Payments' }])
-
-    // The edit form's organization request is still outstanding when the operator abandons it.
-    let releaseScopes: (value: unknown[]) => void = () => {}
-    listAdoOrganizationScopes.mockReturnValueOnce(new Promise((resolve) => (releaseScopes = resolve)))
-
+  async function select(wrapper: ReturnType<typeof mountTab>) {
+    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click')
+    await flushPromises()
+    await wrapper.find('#mention-connection').setValue('connection-1')
+    await flushPromises()
+    await wrapper.find('#mention-scope').setValue('native-scope')
+    await flushPromises()
+    if (wrapper.find('#mention-project').exists()) {
+      await wrapper.find('#mention-project').setValue('project-1')
+      await flushPromises()
+    }
+  }
+  it('does not apply a closed descriptor request to a reopened form', async () => {
+    get.mockResolvedValue(okResponse([]))
+    let release: (value: unknown) => void = () => {}
+    discovery.descriptor.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
     const wrapper = mountTab()
     await flushPromises()
-
-    await wrapper.find('.action-btn[title="Edit"]').trigger('click')
+    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click')
+    await flushPromises()
+    void wrapper.find('#mention-connection').setValue('connection-1')
     await wrapper.find('.mention-form-actions .btn-secondary').trigger('click')
-
-    listAdoOrganizationScopes.mockResolvedValue([
-      { id: 'scope-1', organizationUrl: 'https://dev.azure.com/org', displayName: 'org', isEnabled: true },
-    ])
     await wrapper.find('.section-card-header-actions .btn-primary').trigger('click')
     await flushPromises()
-
-    // Only now does the abandoned request answer. It must not reach into the form now on screen.
-    releaseScopes([
-      { id: 'scope-1', organizationUrl: 'https://dev.azure.com/org', displayName: 'org', isEnabled: true },
-    ])
+    release(descriptorFixture)
     await flushPromises()
-
-    expect((wrapper.find('#mentionProjectKey').element as HTMLSelectElement).value).toBe('')
+    expect((wrapper.find('#mention-connection').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.find('#mention-scope').exists()).toBe(false)
   })
-
-  it('stores the provider repository id behind a picked repository name', async () => {
-    get.mockResolvedValue(okResponse([]))
-    post.mockResolvedValue(okResponse({ id: 'cfg-new' }))
-    listAdoOrganizationScopes.mockResolvedValue([
-      { id: 'scope-1', organizationUrl: 'https://dev.azure.com/org', displayName: 'org', isEnabled: true },
-    ])
-    listAdoProjects.mockResolvedValue([{ organizationScopeId: 'scope-1', projectId: 'proj-guid', projectName: 'Payments' }])
-    listAdoCrawlFilters.mockResolvedValue([
-      {
-        canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-guid' },
-        displayName: 'payments-api',
-        branchSuggestions: [],
-      },
-    ])
-
-    const wrapper = mountTab()
-    await flushPromises()
-
-    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click')
-    await flushPromises()
-
-    await wrapper.find('#mentionScopePath').setValue('scope-1')
-    await flushPromises()
-    await wrapper.find('#mentionProjectKey').setValue('proj-guid')
-    await flushPromises()
-
-    // The operator picks a name; the id underneath is what scanning matches on.
-    expect(wrapper.text()).toContain('payments-api')
-    await wrapper.find('.mention-repo-list input[type="checkbox"]').setValue(true)
-    await wrapper.find('form').trigger('submit')
-    await flushPromises()
-
-    expect(post).toHaveBeenCalledTimes(1)
+  it('stores the native coordinates and repository identity', async () => {
+    get.mockResolvedValue(okResponse([])); post.mockResolvedValue(okResponse({ id: 'new' }))
+    const wrapper = mountTab(); await flushPromises(); await select(wrapper)
+    await wrapper.find('.mention-repo-list input').setValue(true)
+    await wrapper.find('form').trigger('submit'); await flushPromises()
     expect(post.mock.calls[0][1].body).toMatchObject({
-      providerScopePath: 'https://dev.azure.com/org',
-      providerProjectKey: 'proj-guid',
-      repoFilters: [
-        {
-          repositoryId: 'repo-guid',
-          displayName: 'payments-api',
-          canonicalSourceRef: 'repo-guid',
-          sourceProvider: 'azureDevOps',
-        },
-      ],
+      connectionId: 'connection-1', scopeKey: 'native-scope', provider: 'azureDevOps',
+      providerScopePath: 'https://scm.example.com/native', providerProjectKey: 'project-1',
+      repoFilters: [{ repositoryId: 'repo-1', canonicalSourceRef: 'repo-1', sourceProvider: 'azureDevOps' }],
     })
+    expect(discovery.sources).toHaveBeenCalledWith('client-1', 'connection-1', 'mention', 'native-scope', 'project-1', 'repository')
+  })
+  it('offers active connections without defaulting the provider', async () => {
+    get.mockResolvedValue(okResponse([]))
+    discovery.connections.mockResolvedValue([connectionFixture(), { ...connectionFixture('inactive'), isActive: false }])
+    const wrapper = mountTab(); await flushPromises()
+    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click'); await flushPromises()
+    expect(wrapper.find('#mention-connection').findAll('option').map(option => option.text())).toEqual(['Select a connection', 'connection-1'])
+    expect(discovery.descriptor).not.toHaveBeenCalled()
+  })
+  it.each(['github', 'gitLab', 'forgejo'] as const)('stores %s native coordinates without a project stage', async provider => {
+    get.mockResolvedValue(okResponse([])); post.mockResolvedValue(okResponse({ id: 'new' }))
+    discovery.connections.mockResolvedValue([connectionFixture('connection-1', provider)])
+    discovery.descriptor.mockResolvedValue({ ...descriptorFixture, provider, scopeLabel: 'Owner', projectLabel: null })
+    discovery.sources.mockResolvedValue([{ ...sourceFixture('native-scope', '101'), organizationScopeId: null, providerScopePath: 'https://scm.example.com', canonicalSourceRef: { provider, value: 'native/101' } }])
+    discovery.selection.mockResolvedValue({ ...selectionFixture('native-scope'), provider, organizationScopeId: null, providerScopePath: 'https://scm.example.com' })
+    const wrapper = mountTab(); await flushPromises(); await select(wrapper)
+    expect(wrapper.find('#mention-project').exists()).toBe(false)
+    await wrapper.find('.mention-repo-list input').setValue(true)
+    await wrapper.find('form').trigger('submit'); await flushPromises()
+    expect(post.mock.calls[0][1].body).toMatchObject({ provider, providerProjectKey: 'native-scope', repoFilters: [{ repositoryId: '101', canonicalSourceRef: 'native/101', sourceProvider: provider }] })
+  })
+  it('preserves inaccessible saved repositories on an unrelated edit without filter replacement', async () => {
+    get.mockResolvedValue(okResponse([{ id: 'cfg-1', clientId: 'client-1', provider: 'azureDevOps', organizationScopeId: 'scope-1', providerScopePath: 'https://scm.example.com/native', providerProjectKey: 'project-1', scanIntervalSeconds: 60, isActive: true, repoFilters: [{ id: 'retained-filter', repositoryId: 'inaccessible', displayName: 'Saved Repository' }] }]))
+    patch.mockResolvedValue(okResponse({}))
+    const wrapper = mountTab(); await flushPromises()
+    await wrapper.find('.action-btn[title="Edit"]').trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('Saved Repository')
+    expect((wrapper.find('#mention-scope').element as HTMLSelectElement).disabled).toBe(true)
+    await wrapper.find('#mentionScanInterval').setValue(90)
+    await wrapper.find('form').trigger('submit'); await flushPromises()
+    expect(patch.mock.calls[0][1].body.repoFilters).toBeUndefined()
+    expect(patch.mock.calls[0][1].body.scanIntervalSeconds).toBe(90)
+  })
+  it('sends a changed repository set with the resolved connection identity', async () => {
+    get.mockResolvedValue(okResponse([{ id: 'cfg-1', clientId: 'client-1', provider: 'azureDevOps', organizationScopeId: 'scope-1', providerScopePath: 'https://scm.example.com/native', providerProjectKey: 'project-1', scanIntervalSeconds: 60, isActive: true, repoFilters: [{ id: 'retained-filter', repositoryId: 'inaccessible', displayName: 'Saved Repository' }] }]))
+    patch.mockResolvedValue(okResponse({}))
+    const wrapper = mountTab(); await flushPromises()
+    await wrapper.find('.action-btn[title="Edit"]').trigger('click'); await flushPromises()
+    const choices = wrapper.findAll('.mention-repo-list label')
+    await choices.find(choice => choice.text().includes('Saved Repository'))!.find('input').setValue(false)
+    await choices.find(choice => choice.text().includes('Repository One'))!.find('input').setValue(true)
+    await wrapper.find('form').trigger('submit'); await flushPromises()
+    expect(patch.mock.calls[0][1].body).toMatchObject({ connectionId: 'connection-1', scopeKey: 'native-scope', repoFilters: [{ repositoryId: 'repo-1', canonicalSourceRef: 'repo-1', sourceProvider: 'azureDevOps' }] })
   })
 
-  it('offers only providers that are enabled and can both find a question and answer it', async () => {
-    get.mockResolvedValue(okResponse([]))
-    listProviderActivationStatuses.mockResolvedValue([
-      activation('azureDevOps'),
-      activation('github'),
-      // Both halves are needed, so a deployment holding one of them offers the provider for neither. The
-      // capability sets here are hypothetical. Every provider ships with both today; these cases keep
-      // that from being assumed.
-      activation('gitLab', ['repositoryDiscovery', 'reviewThreadReply']),
-      activation('forgejo', ['activePullRequestDiscovery']),
+  it.each(['saved-canonical-bytes', null])('preserves retained repository coordinates while adding a new repository (%s)', async savedCanonical => {
+    get.mockResolvedValue(okResponse([{ id: 'cfg-1', clientId: 'client-1', provider: 'azureDevOps', organizationScopeId: 'scope-1', providerScopePath: 'https://scm.example.com/native', providerProjectKey: 'project-1', scanIntervalSeconds: 60, isActive: true, repoFilters: [{ id: 'retained-filter', repositoryId: 'repo-1', canonicalSourceRef: savedCanonical, sourceProvider: null, displayName: 'Saved Repository' }] }]))
+    discovery.sources.mockResolvedValue([
+      { ...sourceFixture(), displayName: 'Renamed Repository', canonicalSourceRef: { provider: 'azureDevOps', value: 'new-live-canonical' } },
+      { ...sourceFixture('project-1', 'repo-2'), displayName: 'New Repository', canonicalSourceRef: { provider: 'azureDevOps', value: 'new-repository-canonical' } },
     ])
-
-    const wrapper = mountTab()
-    await flushPromises()
-
-    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click')
-    await flushPromises()
-
-    const options = wrapper.find('#mentionProvider').findAll('option').map((option) => option.text())
-    expect(options).toEqual(['Azure DevOps', 'GitHub'])
-  })
-
-  it('names the fields for what the chosen provider holds, and clears what was picked under the last one', async () => {
-    get.mockResolvedValue(okResponse([]))
-    listProviderActivationStatuses.mockResolvedValue([activation('azureDevOps'), activation('gitLab')])
-    listAdoOrganizationScopes.mockResolvedValue([
-      { id: 'scope-1', organizationUrl: 'https://dev.azure.com/org', displayName: 'org', isEnabled: true },
-    ])
-    listAdoProjects.mockResolvedValue([{ organizationScopeId: 'scope-1', projectId: 'proj-guid', projectName: 'Payments' }])
-    listAdoCrawlFilters.mockResolvedValue([
-      {
-        canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-guid' },
-        displayName: 'payments-api',
-        branchSuggestions: [],
-      },
-    ])
-    listProviderConnections.mockResolvedValue([
-      { id: 'conn-1', providerFamily: 'gitLab', hostBaseUrl: 'https://gitlab.example.com', displayName: 'GitLab', isActive: true },
-    ])
-
-    const wrapper = mountTab()
-    await flushPromises()
-
-    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click')
-    await flushPromises()
-
-    await wrapper.find('#mentionScopePath').setValue('scope-1')
-    await flushPromises()
-    await wrapper.find('#mentionProjectKey').setValue('proj-guid')
-    await flushPromises()
-    await wrapper.find('.mention-repo-list input[type="checkbox"]').setValue(true)
-
-    expect(wrapper.text()).toContain('Organization')
-    expect(wrapper.text()).toContain('Project')
-
-    await wrapper.find('#mentionProvider').setValue('gitLab')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Connection')
-    expect(wrapper.text()).toContain('Group')
-
-    // A repository belonging to Azure DevOps must not survive into a GitLab configuration.
-    expect(wrapper.find('.mention-repo-list').exists()).toBe(false)
-    expect((wrapper.find('#mentionScopePath').element as HTMLSelectElement).value).toBe('')
-  })
-
-  it('stores a GitHub repository by its provider-native id, under the connection host', async () => {
-    get.mockResolvedValue(okResponse([]))
-    post.mockResolvedValue(okResponse({ id: 'cfg-new' }))
-    listProviderActivationStatuses.mockResolvedValue([activation('github')])
-    listProviderConnections.mockResolvedValue([
-      { id: 'conn-1', providerFamily: 'github', hostBaseUrl: 'https://github.com', displayName: 'GitHub', isActive: true },
-      { id: 'conn-2', providerFamily: 'gitLab', hostBaseUrl: 'https://gitlab.com', displayName: 'GitLab', isActive: true },
-    ])
-    listProviderScopeOptions.mockResolvedValue([{ scopePath: 'acme', displayName: 'acme' }])
-    listProviderRepositoryOptions.mockResolvedValue([
-      { repositoryId: '101', displayName: 'acme/platform', scopePath: 'acme' },
-    ])
-
-    const wrapper = mountTab()
-    await flushPromises()
-
-    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click')
-    await flushPromises()
-
-    // Only the GitHub connection is offered, because the form is for GitHub.
-    expect(wrapper.find('#mentionScopePath').findAll('option').map((option) => option.text())).toEqual([
-      'Select connection',
-      'GitHub',
-    ])
-
-    await wrapper.find('#mentionScopePath').setValue('conn-1')
-    await flushPromises()
-    await wrapper.find('#mentionProjectKey').setValue('acme')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('acme/platform')
-    await wrapper.find('.mention-repo-list input[type="checkbox"]').setValue(true)
-    await wrapper.find('form').trigger('submit')
-    await flushPromises()
-
-    expect(post).toHaveBeenCalledTimes(1)
-    expect(post.mock.calls[0][1].body).toMatchObject({
-      provider: 'github',
-      providerScopePath: 'https://github.com',
-      providerProjectKey: 'acme',
-      repoFilters: [
-        {
-          repositoryId: '101',
-          displayName: 'acme/platform',
-          canonicalSourceRef: '101',
-          sourceProvider: 'github',
-        },
-      ],
+    patch.mockResolvedValue(okResponse({}))
+    const wrapper = mountTab(); await flushPromises()
+    await wrapper.find('.action-btn[title="Edit"]').trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('Renamed Repository')
+    const choices = wrapper.findAll('.mention-repo-list label')
+    await choices.find(choice => choice.text().includes('New Repository'))!.find('input').setValue(true)
+    await wrapper.find('form').trigger('submit'); await flushPromises()
+    const filters = patch.mock.calls[0][1].body.repoFilters
+    expect(filters.find((filter: { repositoryId: string }) => filter.repositoryId === 'repo-1')).toMatchObject({
+      repositoryId: 'repo-1', canonicalSourceRef: savedCanonical ?? undefined, sourceProvider: undefined,
     })
+    expect(filters.find((filter: { repositoryId: string }) => filter.repositoryId === 'repo-2')).toMatchObject({
+      repositoryId: 'repo-2', canonicalSourceRef: 'new-repository-canonical', sourceProvider: 'azureDevOps',
+    })
+    wrapper.unmount()
   })
 
-  it('shows an existing configuration its provider without letting it change', async () => {
-    get.mockResolvedValue(
-      okResponse([
-        {
-          id: 'cfg-1',
-          clientId: 'client-1',
-          provider: 'forgejo',
-          providerScopePath: 'https://forgejo.example',
-          providerProjectKey: 'acme',
-          scanIntervalSeconds: 60,
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          repoFilters: [{ id: 'f1', repositoryId: '101', displayName: 'acme/platform' }],
-        },
-      ]),
-    )
-    listProviderConnections.mockResolvedValue([
-      { id: 'conn-1', providerFamily: 'forgejo', hostBaseUrl: 'https://forgejo.example', displayName: 'Forgejo', isActive: true },
-    ])
-    listProviderScopeOptions.mockResolvedValue([{ scopePath: 'acme', displayName: 'acme' }])
-
-    const wrapper = mountTab()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Forgejo')
-
-    await wrapper.find('.action-btn[title="Edit"]').trigger('click')
-    await flushPromises()
-
-    const provider = wrapper.find('#mentionProvider').element as HTMLSelectElement
-    expect(provider.value).toBe('forgejo')
-    expect(provider.disabled).toBe(true)
+  it('refuses changed repository membership without resolved discovery but permits unchanged edits', async () => {
+    get.mockResolvedValue(okResponse([{ id: 'cfg-1', clientId: 'client-1', providerScopePath: 'https://saved.example.com', providerProjectKey: 'saved-project', scanIntervalSeconds: 60, repoFilters: [{ repositoryId: 'one', displayName: 'One' }, { repositoryId: 'two', displayName: 'Two' }] }]))
+    discovery.connections.mockResolvedValue([])
+    patch.mockResolvedValue(okResponse({}))
+    const wrapper = mountTab(); await flushPromises()
+    await wrapper.find('.action-btn[title="Edit"]').trigger('click'); await flushPromises()
+    const checkbox = wrapper.find('.mention-repo-list input')
+    await checkbox.setValue(false)
+    await wrapper.find('form').trigger('submit'); await flushPromises()
+    expect(patch).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Resolve the connection before changing repositories.')
+    await checkbox.setValue(true)
+    await wrapper.find('#mentionScanInterval').setValue(90)
+    await wrapper.find('form').trigger('submit'); await flushPromises()
+    expect(patch.mock.calls[0][1].body.repoFilters).toBeUndefined()
   })
 
-  /**
-   * A stale request that resolves after the operator has moved on must not overwrite the current selection,
-   * which is why the discovery loaders compare a request id before applying a result.
-   */
-  it('a repository listing answered after the owner changed does not overwrite the current one', async () => {
+  it('does not apply repositories from an abandoned scope', async () => {
     get.mockResolvedValue(okResponse([]))
-    listProviderActivationStatuses.mockResolvedValue([activation('github')])
-    listProviderConnections.mockResolvedValue([
-      { id: 'conn-1', providerFamily: 'github', hostBaseUrl: 'https://github.com', displayName: 'GitHub', isActive: true },
-    ])
-    listProviderScopeOptions.mockResolvedValue([
-      { scopePath: 'acme', displayName: 'acme' },
-      { scopePath: 'contoso', displayName: 'contoso' },
-    ])
-
-    let releaseFirst: (value: unknown) => void = () => {}
-    listProviderRepositoryOptions
-      .mockImplementationOnce(() => new Promise((resolve) => {
-        releaseFirst = resolve
-      }))
-      .mockResolvedValue([{ repositoryId: '202', displayName: 'contoso/tooling', scopePath: 'contoso' }])
-
-    const wrapper = mountTab()
-    await flushPromises()
-
-    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click')
-    await flushPromises()
-    await wrapper.find('#mentionScopePath').setValue('conn-1')
-    await flushPromises()
-
-    void wrapper.find('#mentionProjectKey').setValue('acme')
-    await wrapper.find('#mentionProjectKey').setValue('contoso')
-    await flushPromises()
-
-    releaseFirst([{ repositoryId: '101', displayName: 'acme/platform', scopePath: 'acme' }])
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('contoso/tooling')
-    expect(wrapper.text()).not.toContain('acme/platform')
+    discovery.descriptor.mockResolvedValue({ ...descriptorFixture, projectLabel: null })
+    discovery.scopes.mockResolvedValue([{ scopeKey: 'native-scope', displayName: 'One' }, { scopeKey: 'other', displayName: 'Two' }])
+    let release: (value: unknown) => void = () => {}
+    discovery.sources.mockImplementationOnce(() => new Promise(resolve => { release = resolve })).mockResolvedValue([{ ...sourceFixture('other'), displayName: 'Current Repository' }])
+    const wrapper = mountTab(); await flushPromises()
+    await wrapper.find('.section-card-header-actions .btn-primary').trigger('click'); await flushPromises()
+    await wrapper.find('#mention-connection').setValue('connection-1'); await flushPromises()
+    void wrapper.find('#mention-scope').setValue('native-scope')
+    await wrapper.find('#mention-scope').setValue('other'); await flushPromises()
+    release([{ ...sourceFixture(), displayName: 'Abandoned Repository' }]); await flushPromises()
+    expect(wrapper.text()).toContain('Current Repository')
+    expect(wrapper.text()).not.toContain('Abandoned Repository')
   })
 })

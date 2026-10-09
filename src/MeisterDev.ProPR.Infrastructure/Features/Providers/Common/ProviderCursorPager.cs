@@ -4,20 +4,13 @@
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
 /// <summary>
-///     Reads every page of a cursor-paginated GraphQL connection and returns their union.
+///     Reads every page of a cursor-paginated connection and returns the collected nodes.
 /// </summary>
 /// <remarks>
-///     The counterpart to <see cref="ProviderRestPager" /> for GitHub's review threads, which exist only in
-///     GraphQL. A connection carries its own answer in <c>pageInfo</c>, so there is no page size to guess from:
-///     the read ends when the connection says there is no next page, and otherwise resumes from its cursor.
+///     Pagination stops when the page reports no continuation and otherwise resumes from its cursor.
 /// </remarks>
 internal static class ProviderCursorPager
 {
-    /// <summary>
-    ///     The largest page a GitHub GraphQL connection accepts.
-    /// </summary>
-    internal const int PageSize = 100;
-
     /// <summary>
     ///     How many pages one connection is read across, on the same reasoning as
     ///     <see cref="ProviderRestPager.MaxPages" />: unreachable in practice, and there so that a connection

@@ -6,6 +6,9 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
@@ -14,8 +17,11 @@ using Microsoft.EntityFrameworkCore;
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.Persistence;
 
 /// <summary>EF Core implementation of the review-job intake store.</summary>
-public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IReviewJobIntakeStore
+public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext, IEnumerable<IReviewSourcePolicy>? sourcePolicies = null) : IReviewJobIntakeStore
 {
+    private readonly IReadOnlyDictionary<ScmProvider, IReviewSourcePolicy> _sourcePolicies =
+        (sourcePolicies ?? ScmLocalPolicyFactory.CreateSourcePolicies()).ToDictionary(policy => policy.Provider);
+
     /// <inheritdoc />
     public Task<ReviewJob?> FindActiveJobAsync(
         Guid clientId,
@@ -170,7 +176,7 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
                ?? throw new InvalidOperationException("Review intake request must include a repository identifier.");
     }
 
-    private static bool MatchesReviewIdentity(ReviewJob job, CodeReviewRef review, string projectId)
+    private bool MatchesReviewIdentity(ReviewJob job, CodeReviewRef review, string projectId)
     {
         return job.Provider == review.Repository.Host.Provider
                && job.HostBaseUrl == review.Repository.Host.HostBaseUrl
@@ -182,7 +188,7 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
                && job.PullRequestId == review.Number;
     }
 
-    private static bool RepositoryMatches(ReviewJob job, string repositoryId, string projectId)
+    private bool RepositoryMatches(ReviewJob job, string repositoryId, string projectId)
     {
         return string.Equals(
             GetRepositoryIdentityKey(job, job.RepositoryId, projectId),
@@ -190,34 +196,9 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
             StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetRepositoryIdentityKey(ReviewJob job, string repositoryId, string projectId)
-    {
-        if (job.Provider == ScmProvider.AzureDevOps)
-        {
-            return repositoryId;
-        }
-
-        var projectPath = string.IsNullOrWhiteSpace(job.RepositoryProjectPath)
-            ? repositoryId
-            : job.RepositoryProjectPath;
-        if (LooksLikeRepositoryPath(repositoryId) || LooksLikeRepositoryPath(projectPath))
-        {
-            return projectPath;
-        }
-
-        var ownerOrNamespace = string.IsNullOrWhiteSpace(job.RepositoryOwnerOrNamespace)
-            ? projectId
-            : job.RepositoryOwnerOrNamespace;
-        return string.Equals(repositoryId, job.RepositoryId, StringComparison.OrdinalIgnoreCase)
-            ? $"{ownerOrNamespace}/{repositoryId}"
-            : repositoryId;
-    }
-
-    private static bool LooksLikeRepositoryPath(string value)
-    {
-        return !string.IsNullOrWhiteSpace(value)
-               && value.Contains('/', StringComparison.Ordinal);
-    }
+    private string GetRepositoryIdentityKey(ReviewJob job, string repositoryId, string projectId) =>
+        (this._sourcePolicies.TryGetValue(job.Provider, out var policy) ? policy : new UnregisteredReviewSourcePolicy(job.Provider)).GetRepositoryIdentityKey(
+            repositoryId, job.RepositoryId, projectId, job.RepositoryProjectPath, job.RepositoryOwnerOrNamespace);
 
     private static int ResolveCompatibilityPullRequestId(SubmitReviewJobRequestDto request)
     {

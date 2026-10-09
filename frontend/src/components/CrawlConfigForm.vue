@@ -25,87 +25,11 @@
           </div>
           <span v-if="clientIdError" class="field-error">{{ clientIdError }}</span>
           <span v-else class="field-help">
-            Enter a client ID to load the allowed Azure DevOps organizations for guided discovery.
+            Enter a client ID to load its connections.
           </span>
         </div>
 
-        <div class="form-group">
-          <label for="crawlProvider">Automation Provider</label>
-          <div class="input-wrapper">
-            <input id="crawlProvider" :value="providerLabel" type="text" readonly />
-          </div>
-          <span class="field-help">
-            {{ isAzureDevOpsProvider ? 'Guided crawl discovery currently uses Azure DevOps organization and project selections.' : 'This configuration stores a non-Azure DevOps provider value. Guided selections remain read-only in this form.' }}
-          </span>
-        </div>
-
-        <div class="form-group">
-          <label for="crawlOrganizationScope">Azure DevOps Organization</label>
-          <div class="input-wrapper">
-            <select
-              id="crawlOrganizationScope"
-              v-model="organizationScopeId"
-              :disabled="!canEditOrganizationSelection || organizationScopesLoading"
-              :class="{ 'has-error': organizationScopeIdError }"
-              @change="handleOrganizationScopeChange"
-            >
-              <option value="">
-                {{ organizationScopesLoading ? 'Loading organizations...' : canLoadOrganizationScopes ? 'Select an organization' : 'Enter a client ID first' }}
-              </option>
-              <option
-                v-for="scope in organizationScopes"
-                :key="scope.id"
-                :value="scope.id ?? ''"
-                :disabled="scope.isEnabled === false"
-              >
-                {{ formatOrganizationScopeLabel(scope) }}
-              </option>
-            </select>
-          </div>
-          <span v-if="organizationScopeIdError" class="field-error">{{ organizationScopeIdError }}</span>
-          <span v-else-if="organizationScopesError" class="field-error">{{ organizationScopesError }}</span>
-          <span v-else-if="organizationScopeMissing" class="field-help legacy-note">
-            The saved organization scope is no longer available. Existing settings remain visible, but guided repair requires a valid scope.
-          </span>
-          <span v-else-if="selectedOrganizationScope" class="field-help">
-            {{ selectedOrganizationScope.organizationUrl }}
-          </span>
-          <span v-else-if="canLoadOrganizationScopes && !organizationScopes.length" class="field-help">
-            No enabled organization scopes are available for this client yet.
-          </span>
-        </div>
-
-        <div class="form-group">
-          <label for="crawlProjectId">Azure DevOps Project</label>
-          <div class="input-wrapper">
-            <select
-              id="crawlProjectId"
-              v-model="projectId"
-              :disabled="!canEditProjectSelection || projectsLoading"
-              :class="{ 'has-error': projectIdError }"
-              @change="handleProjectChange"
-            >
-              <option value="">
-                {{ projectsLoading ? 'Loading projects...' : organizationScopeId ? 'Select a project' : 'Select an organization first' }}
-              </option>
-              <option
-                v-for="project in projects"
-                :key="project.projectId ?? ''"
-                :value="project.projectId ?? ''"
-              >
-                {{ formatProjectLabel(project) }}
-              </option>
-            </select>
-          </div>
-          <span v-if="projectIdError" class="field-error">{{ projectIdError }}</span>
-          <span v-else-if="projectsError" class="field-error">{{ projectsError }}</span>
-          <span v-else-if="projectMissing" class="field-help legacy-note">
-            The saved project is no longer returned by discovery. Existing filters can stay in place, but guided additions should be verified before saving.
-          </span>
-          <span v-else-if="currentProjectOption" class="field-help">
-            {{ currentProjectOption.projectName || currentProjectOption.projectId }}
-          </span>
-        </div>
+        <ConnectionDiscoveryFields :discovery="discovery" id-prefix="crawl" :locked="editMode" :disabled="loading" />
 
         <div class="form-group">
           <label for="crawlIntervalSeconds">Crawl Interval (seconds)</label>
@@ -174,7 +98,7 @@
         <span v-if="repoFiltersError" class="field-error">{{ repoFiltersError }}</span>
         <span v-else-if="crawlFilterOptionsError" class="field-error">{{ crawlFilterOptionsError }}</span>
         <p v-else-if="!projectId" class="filters-empty-hint">
-          Select an organization and project before adding repository filters.
+          Complete the connection selection before adding repository filters.
         </p>
         <p v-else-if="crawlFilterOptionsLoading" class="filters-empty-hint">Loading repository options...</p>
         <p v-else-if="!crawlFilterOptions.length && !repoFilters.length" class="filters-empty-hint">
@@ -210,7 +134,7 @@
                   This filter has no canonical source reference yet. Reselect a repository to repair it.
                 </span>
                 <span v-else-if="isUnavailableCanonicalFilter(filter)" class="field-help legacy-note">
-                  The selected repository is no longer returned by discovery. Saving will fail until you remove or replace it.
+                  The saved repository is unavailable through discovery. Changing this filter requires an accessible repository.
                 </span>
                 <span v-else-if="filter.displayName" class="field-help">
                   {{ filter.displayName }}
@@ -442,15 +366,14 @@
 </template>
 
 <script setup lang="ts">
+import ConnectionDiscoveryFields from '@/components/ConnectionDiscoveryFields.vue'
 import TextViewerModal from '@/components/text/TextViewerModal.vue'
 import type { CrawlConfigResponse } from './crawlConfigForm.types'
 import {
   formatBranchSuggestion,
-  formatOrganizationScopeLabel,
   formatProCursorScopeRepairMessage,
   formatProCursorSourceLabel,
   formatProCursorSourcePath,
-  formatProjectLabel,
   sourceOptionKey,
 } from './crawlConfigFormatters'
 import { useCrawlConfigForm } from './useCrawlConfigForm'
@@ -466,6 +389,7 @@ const emit = defineEmits<{
 }>()
 
 const {
+  discovery,
   editMode,
   provider,
   providerLabel,
@@ -478,17 +402,11 @@ const {
   repairRequiredProCursorSourceIds,
   proCursorSourceScopeMode,
   proCursorSourceIds,
-  organizationScopes,
-  projects,
   crawlFilterOptions,
   proCursorSources,
   repoFilters,
-  organizationScopesLoading,
-  projectsLoading,
   crawlFilterOptionsLoading,
   proCursorSourcesLoading,
-  organizationScopesError,
-  projectsError,
   crawlFilterOptionsError,
   proCursorSourcesError,
   overrides,
@@ -509,21 +427,12 @@ const {
   loading,
   effectiveClientId,
   canLoadOrganizationScopes,
-  isAzureDevOpsProvider,
-  canEditOrganizationSelection,
-  canEditProjectSelection,
   canEditRepoFilters,
-  selectedOrganizationScope,
-  organizationScopeMissing,
-  currentProjectOption,
-  projectMissing,
   usesSelectedProCursorSources,
   selectableProCursorSources,
   selectedProCursorSourceCount,
   filteredOverrides,
   serializeProCursorSourceIds,
-  handleOrganizationScopeChange,
-  handleProjectChange,
   getAvailableFilterOptions,
   isUnavailableCanonicalFilter,
   handleFilterSelectionChange,

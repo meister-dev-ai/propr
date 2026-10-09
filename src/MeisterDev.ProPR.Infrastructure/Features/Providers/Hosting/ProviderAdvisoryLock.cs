@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;
 
@@ -44,9 +43,6 @@ internal static class ProviderAdvisoryLock
     {
         ArgumentNullException.ThrowIfNull(db);
 
-        return db.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock({0}, hashtext({1}))",
-            [scope, addInKey],
-            ct);
+        return PostgresAdvisoryLocks.AcquireScopedHashTextTransactionAsync(db, scope, addInKey, ct);
     }
 }

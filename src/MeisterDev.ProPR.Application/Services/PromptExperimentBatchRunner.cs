@@ -192,6 +192,7 @@ public sealed class PromptExperimentBatchRunner(
     private static ReviewJob CloneJob(ReviewJob template)
     {
         var clone = new ReviewJob(
+            template.CodeReviewReference,
             Guid.NewGuid(),
             template.ClientId,
             template.OrganizationUrl,

@@ -1,15 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import { computed, onMounted, ref } from 'vue'
-import { listAdoCrawlFilters, listAdoOrganizationScopes, listAdoProjects } from '@/services/adoDiscoveryService'
-import type { AdoCrawlFilterOptionDto, AdoProjectOptionDto, ClientAdoOrganizationScopeDto } from '@/services/adoDiscoveryService'
-import {
-  formatProviderFamily,
-  getEnabledProviderOptions,
-  listProviderActivationStatuses,
-  type ProviderActivationStatusDto,
-} from '@/services/providerActivationService'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useConnectionDiscovery } from '@/composables/useConnectionDiscovery'
 import {
   createWebhookConfiguration,
   updateWebhookConfiguration,
@@ -21,10 +14,7 @@ import {
 } from '@/services/webhookConfigurationService'
 import type { FilterRow } from './webhookConfigForm.types'
 import {
-  defaultManualOrganizationUrl,
   eventOptions,
-  formatManualProviderName,
-  matchesFilterOption,
   sourceOptionKey,
 } from './webhookConfigFormatters'
 
@@ -52,27 +42,21 @@ type WebhookConfigFormEmit = (event: 'config-saved', config: WebhookConfiguratio
  * in ./webhookConfigFormatters. `emit` is passed in from the SFC.
  */
 export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: WebhookConfigFormEmit) {
-  const editMode = computed(() => !!props.config)
+  const editMode = computed(() => !!props.config && (!props.clientId || props.config.clientId === props.clientId))
   const effectiveClientId = computed(() => props.clientId ?? props.config?.clientId ?? '')
 
-  const provider = ref<WebhookProviderType>(props.config?.provider ?? 'azureDevOps')
-  const providerStatuses = ref<ProviderActivationStatusDto[]>([])
-  const organizationScopeId = ref(props.config?.organizationScopeId ?? '')
-  const manualOrganizationUrl = ref(props.config?.providerScopePath ?? defaultManualOrganizationUrl(props.config?.provider))
-  const projectId = ref(props.config?.providerProjectKey ?? '')
+  const discovery = useConnectionDiscovery(() => effectiveClientId.value, 'webhook')
+  const provider = computed<WebhookProviderType | undefined>(() => discovery.state.selection?.provider ?? (editMode.value ? props.config?.provider : undefined))
+  const organizationScopeId = computed(() => discovery.state.selection?.organizationScopeId ?? (editMode.value ? props.config?.organizationScopeId : undefined) ?? '')
+  const projectId = computed(() => discovery.state.selection?.providerProjectKey ?? (editMode.value ? props.config?.providerProjectKey : undefined) ?? '')
   const reviewTemperatureInput = ref(props.config?.reviewTemperature?.toString() ?? '')
   const isActive = ref(props.config?.isActive ?? true)
   const enabledEvents = ref<WebhookEventType[]>(props.config?.enabledEvents ? [...props.config.enabledEvents] : [])
   const repoFilters = ref<FilterRow[]>(createInitialFilterRows(props.config?.repoFilters ?? undefined))
 
-  const organizationScopes = ref<ClientAdoOrganizationScopeDto[]>([])
-  const projects = ref<AdoProjectOptionDto[]>([])
-  const crawlFilterOptions = ref<AdoCrawlFilterOptionDto[]>([])
+  const crawlFilterOptions = computed(() => discovery.state.filters)
 
-  const organizationScopesLoading = ref(false)
-  const projectsLoading = ref(false)
-  const crawlFilterOptionsLoading = ref(false)
-  const providerOptionsLoading = ref(false)
+  const crawlFilterOptionsLoading = computed(() => discovery.state.loading.sources)
   const loading = ref(false)
 
   const organizationScopeIdError = ref('')
@@ -80,92 +64,35 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
   const enabledEventsError = ref('')
   const repoFiltersError = ref('')
   const reviewTemperatureError = ref('')
-  const crawlFilterOptionsError = ref('')
-  const providerOptionsError = ref('')
+  const crawlFilterOptionsError = computed(() => discovery.state.errors.sources)
   const formError = ref('')
 
-  const providerOptions = computed(() => {
-    const enabledOptions = getEnabledProviderOptions(providerStatuses.value)
-      .map((option) => ({ value: option.value as WebhookProviderType, label: option.label }))
-
-    if (editMode.value && !enabledOptions.some((option) => option.value === provider.value)) {
-      return [{ value: provider.value, label: formatProviderFamily(provider.value) }, ...enabledOptions]
-    }
-
-    return enabledOptions
-  })
-  const selectedOrganizationScope = computed(() =>
-    organizationScopes.value.find((scope) => scope.id === organizationScopeId.value),
-  )
-  const isAzureDevOpsProvider = computed(() => provider.value === 'azureDevOps')
-  const manualProviderName = computed(() => formatManualProviderName(provider.value))
-  const manualHostPlaceholder = computed(() => defaultManualOrganizationUrl(provider.value))
-  const manualProjectLabel = computed(() => provider.value === 'github' ? 'GitHub Owner or Namespace' : 'Group, User, or Namespace')
-
-  onMounted(async () => {
-    await loadProviderOptions()
-
-    if (!editMode.value && !providerOptions.value.length) {
-      return
-    }
-
-    if (!isAzureDevOpsProvider.value) {
-      return
-    }
-
-    await loadOrganizationScopes()
-
-    if (organizationScopeId.value) {
-      await loadProjects(false)
-    }
-
-    if (organizationScopeId.value && projectId.value) {
-      await loadFilterOptions(false)
-    }
-  })
-
-  async function loadProviderOptions() {
-    providerOptionsLoading.value = true
-    providerOptionsError.value = ''
-
-    try {
-      providerStatuses.value = await listProviderActivationStatuses()
-
-      if (!editMode.value && !providerOptions.value.some((option) => option.value === provider.value)) {
-        const nextProvider = providerOptions.value[0]?.value
-        if (nextProvider) {
-          const providerChanged = nextProvider !== provider.value
-          provider.value = nextProvider
-          if (providerChanged) {
-            await handleProviderChange()
-          }
-        }
-      }
-    } catch (error) {
-      providerOptionsError.value = error instanceof Error ? error.message : 'Failed to load enabled provider families.'
-      providerStatuses.value = []
-    } finally {
-      providerOptionsLoading.value = false
-    }
+  watch(() => [discovery.state.connectionId, discovery.state.scopeKey, discovery.state.projectId], () => {
+    if (!editMode.value) repoFilters.value = []
+  }, { flush: 'sync' })
+  async function initializeOwner() {
+    discovery.reset()
+    loading.value = false
+    formError.value = ''
+    const config = editMode.value ? props.config : undefined
+    reviewTemperatureInput.value = config?.reviewTemperature?.toString() ?? ''
+    isActive.value = config?.isActive ?? true
+    enabledEvents.value = [...(config?.enabledEvents ?? [])]
+    repoFilters.value = createInitialFilterRows(config?.repoFilters ?? undefined)
+    initialRepoFilters = JSON.stringify(buildRepoFilters())
+    if (config) await discovery.resolveForEdit(config)
+    else await discovery.loadConnections()
   }
-
-  function hydrateExistingFilterSelections() {
-    if (crawlFilterOptions.value.length === 0 || repoFilters.value.length === 0) {
-      return
-    }
-
+  onMounted(() => { void initializeOwner() })
+  watch(() => [effectiveClientId.value, props.config], () => { void initializeOwner() }, { flush: 'sync' })
+  watch(() => discovery.state.filters, options => {
+    if (!editMode.value) return
     for (const filter of repoFilters.value) {
-      const matchedOption = crawlFilterOptions.value.find((option) => matchesFilterOption(filter, option))
-      if (!matchedOption) {
-        continue
-      }
-
-      filter.selectedFilterKey = sourceOptionKey(matchedOption.canonicalSourceRef)
-      filter.repositoryName = matchedOption.displayName || matchedOption.canonicalSourceRef?.value || filter.repositoryName
-      filter.displayName = matchedOption.displayName || filter.displayName || filter.repositoryName
-      filter.canonicalSourceRef = matchedOption.canonicalSourceRef ?? filter.canonicalSourceRef
+      const match = options.find(option => sourceOptionKey(option.canonicalSourceRef) === filter.selectedFilterKey ||
+        !filter.canonicalSourceRef && option.displayName === (filter.displayName || filter.repositoryName))
+      if (match) filter.selectedFilterKey = sourceOptionKey(match.canonicalSourceRef)
     }
-  }
+  })
 
   function addFilter() {
     repoFilters.value.push({
@@ -225,91 +152,6 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
     }
   }
 
-  async function loadOrganizationScopes() {
-    if (!effectiveClientId.value || !isAzureDevOpsProvider.value) {
-      organizationScopes.value = []
-      return
-    }
-
-    organizationScopesLoading.value = true
-    try {
-      organizationScopes.value = await listAdoOrganizationScopes(effectiveClientId.value)
-    } finally {
-      organizationScopesLoading.value = false
-    }
-  }
-
-  async function loadProjects(reset = true) {
-    if (!effectiveClientId.value || !organizationScopeId.value || !isAzureDevOpsProvider.value) {
-      projects.value = []
-      return
-    }
-
-    projectsLoading.value = true
-    try {
-      projects.value = await listAdoProjects(effectiveClientId.value, organizationScopeId.value, 'webhook')
-      if (reset) {
-        projectId.value = ''
-        repoFilters.value = []
-        crawlFilterOptions.value = []
-      }
-    } finally {
-      projectsLoading.value = false
-    }
-  }
-
-  async function loadFilterOptions(reset = true) {
-    if (!effectiveClientId.value || !organizationScopeId.value || !projectId.value || !isAzureDevOpsProvider.value) {
-      crawlFilterOptions.value = []
-      return
-    }
-
-    crawlFilterOptionsLoading.value = true
-    crawlFilterOptionsError.value = ''
-    try {
-      crawlFilterOptions.value = await listAdoCrawlFilters(effectiveClientId.value, organizationScopeId.value, projectId.value, 'webhook')
-      if (reset) {
-        repoFilters.value = []
-      } else {
-        hydrateExistingFilterSelections()
-      }
-    } catch (error) {
-      crawlFilterOptionsError.value = error instanceof Error ? error.message : 'Failed to load webhook repository filters.'
-    } finally {
-      crawlFilterOptionsLoading.value = false
-    }
-  }
-
-  async function handleOrganizationScopeChange() {
-    await loadProjects()
-  }
-
-  async function handleProviderChange() {
-    organizationScopeIdError.value = ''
-    projectIdError.value = ''
-    repoFiltersError.value = ''
-    crawlFilterOptionsError.value = ''
-    repoFilters.value = []
-    crawlFilterOptions.value = []
-
-    if (!isAzureDevOpsProvider.value) {
-      organizationScopeId.value = ''
-      organizationScopes.value = []
-      projects.value = []
-      projectId.value = ''
-      manualOrganizationUrl.value = manualOrganizationUrl.value.trim() || defaultManualOrganizationUrl(provider.value)
-      return
-    }
-
-    await loadOrganizationScopes()
-    projects.value = []
-    projectId.value = ''
-  }
-
-  async function handleProjectChange() {
-    await loadFilterOptions()
-  }
-
   function buildEnabledEvents(): WebhookEventType[] {
     return eventOptions
       .map((option) => option.value)
@@ -322,10 +164,7 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
       .map((filter) => ({
         repositoryName: filter.repositoryName.trim() || undefined,
         displayName: filter.displayName.trim() || filter.repositoryName.trim() || undefined,
-        // Non-ADO providers send an explicit `null` to clear the ref (asserted by the
-        // webhook specs). The generated WebhookRepoFilterRequest type omits the nullable
-        // annotation, so cast until the OpenAPI spec marks canonicalSourceRef nullable.
-        canonicalSourceRef: isAzureDevOpsProvider.value ? filter.canonicalSourceRef : null,
+        canonicalSourceRef: filter.canonicalSourceRef,
         targetBranchPatterns: filter.targetBranchPatterns.map((pattern) => pattern.trim()).filter((pattern) => pattern.length > 0),
       })) as WebhookRepoFilterRequest[]
   }
@@ -348,20 +187,11 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
   }
 
   function validateOrganizationScope(): string {
-    if (isAzureDevOpsProvider.value && !organizationScopeId.value) {
-      return 'Select an organization scope.'
-    }
-    if (!isAzureDevOpsProvider.value && !manualOrganizationUrl.value.trim()) {
-      return 'Enter a host URL for the selected provider.'
-    }
-    return ''
+    return editMode.value || discovery.state.connectionId && discovery.state.scopeKey ? '' : 'Select a connection and scope.'
   }
 
   function validateProject(): string {
-    if (projectId.value) {
-      return ''
-    }
-    return isAzureDevOpsProvider.value ? 'Select a project.' : 'Enter an owner, group, or namespace.'
+    return editMode.value || discovery.ready.value ? '' : 'Complete the connection selection.'
   }
 
   function validateEnabledEvents(): string {
@@ -369,15 +199,16 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
   }
 
   function validateRepoFilters(): string {
+    if (editMode.value && JSON.stringify(buildRepoFilters()) !== initialRepoFilters && !discovery.ready.value) {
+      return 'Resolve the connection before changing repository filters.'
+    }
     const hasUnresolvedFilter = repoFilters.value.some(
       (filter) => !filter.repositoryName.trim() && !filter.displayName.trim() && !filter.canonicalSourceRef,
     )
     if (!hasUnresolvedFilter) {
       return ''
     }
-    return isAzureDevOpsProvider.value
-      ? 'Each repository filter must resolve to a discovered repository.'
-      : 'Each repository filter must include a repository name.'
+    return 'Each repository filter must include a selected repository.'
   }
 
   function validateReviewTemperature(): string {
@@ -416,9 +247,10 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
     const body = {
       clientId: effectiveClientId.value,
       provider: provider.value,
-      ...(isAzureDevOpsProvider.value
-        ? { organizationScopeId: organizationScopeId.value }
-        : { providerScopePath: manualOrganizationUrl.value.trim() }),
+      connectionId: discovery.state.connectionId,
+      scopeKey: discovery.state.scopeKey,
+      organizationScopeId: organizationScopeId.value || undefined,
+      providerScopePath: discovery.state.selection?.providerScopePath,
       providerProjectKey: projectId.value.trim(),
       enabledEvents: buildEnabledEvents(),
       repoFilters: buildRepoFilters(),
@@ -427,46 +259,48 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
 
     loading.value = true
     formError.value = ''
+    const current = discovery.capture()
     try {
       const saved = editMode.value && props.config?.id
           ? await updateWebhookConfiguration(props.config.id, {
             isActive: isActive.value,
             enabledEvents: body.enabledEvents,
-            repoFilters: body.repoFilters,
+            repoFilters: discovery.ready.value && JSON.stringify(body.repoFilters) !== initialRepoFilters
+              ? body.repoFilters.map(filter => ({ ...filter, canonicalSourceRef: filter.canonicalSourceRef ??
+                  discovery.state.filters.find(option => option.displayName === (filter.displayName || filter.repositoryName))?.canonicalSourceRef }))
+              : undefined,
+            connectionId: discovery.ready.value ? discovery.state.connectionId : undefined,
+            scopeKey: discovery.ready.value ? discovery.state.scopeKey : undefined,
             reviewTemperature: body.reviewTemperature,
           })
         : await createWebhookConfiguration(effectiveClientId.value, body)
 
-      emit('config-saved', saved)
+      if (current()) emit('config-saved', saved)
     } catch (error) {
-      formError.value = error instanceof Error ? error.message : 'Failed to save webhook configuration.'
+      if (current()) formError.value = error instanceof Error ? error.message : 'Failed to save webhook configuration.'
     } finally {
-      loading.value = false
+      if (current()) loading.value = false
     }
   }
 
+  let initialRepoFilters = JSON.stringify(buildRepoFilters())
+
   return {
+    discovery,
     // mode / identity
     editMode,
     effectiveClientId,
     // form state
     provider,
-    providerStatuses,
     organizationScopeId,
-    manualOrganizationUrl,
     projectId,
     reviewTemperatureInput,
     isActive,
     enabledEvents,
     repoFilters,
-    organizationScopes,
-    projects,
     crawlFilterOptions,
     // loading / error flags
-    organizationScopesLoading,
-    projectsLoading,
     crawlFilterOptionsLoading,
-    providerOptionsLoading,
     loading,
     organizationScopeIdError,
     projectIdError,
@@ -474,15 +308,8 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
     repoFiltersError,
     reviewTemperatureError,
     crawlFilterOptionsError,
-    providerOptionsError,
     formError,
     // derived
-    providerOptions,
-    selectedOrganizationScope,
-    isAzureDevOpsProvider,
-    manualProviderName,
-    manualHostPlaceholder,
-    manualProjectLabel,
     // actions
     addFilter,
     removeFilter,
@@ -491,9 +318,6 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
     handleManualRepositoryChange,
     getAvailableFilterOptions,
     handleFilterSelectionChange,
-    handleOrganizationScopeChange,
-    handleProviderChange,
-    handleProjectChange,
     handleSubmit,
   }
 }

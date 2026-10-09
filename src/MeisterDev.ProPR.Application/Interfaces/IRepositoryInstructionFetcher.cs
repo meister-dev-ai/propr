@@ -13,11 +13,11 @@ public interface IRepositoryInstructionFetcher
     /// <summary>
     ///     Fetches all valid <see cref="RepositoryInstruction" /> objects from the repository's instruction directory.
     /// </summary>
-    /// <param name="organizationUrl">Azure DevOps organisation URL.</param>
+    /// <param name="organizationUrl">Provider scope URL.</param>
     /// <param name="projectId">Project identifier.</param>
     /// <param name="repositoryId">Repository identifier.</param>
     /// <param name="targetBranch">The target branch from which to read instructions.</param>
-    /// <param name="clientId">Optional client identifier used to resolve ADO credentials.</param>
+    /// <param name="clientId">Optional client identifier used to resolve provider credentials.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<IReadOnlyList<RepositoryInstruction>> FetchAsync(
         string organizationUrl,

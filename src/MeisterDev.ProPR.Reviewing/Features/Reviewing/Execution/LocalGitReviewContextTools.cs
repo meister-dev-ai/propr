@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.CodeAnalysis;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Options;
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution;
 
 internal sealed class LocalGitReviewContextTools(
+    ProCursorReviewContextDto? symbolReviewContext,
     IReviewRepositoryWorkspace workspace,
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
@@ -22,6 +24,7 @@ internal sealed class LocalGitReviewContextTools(
     IStructuralCodeAnalyzer? structuralAnalyzer = null,
     IScmProviderRegistry? providerRegistry = null)
     : ProviderReviewContextToolsBase(
+        symbolReviewContext,
         proCursorGateway,
         options,
         request.CodeReview,

@@ -272,6 +272,6 @@ public sealed class ThreadOwnershipResolverTests
     [InlineData(ScmProvider.Forgejo, ProviderCommentIdScope.PullRequest)]
     public void CommentIdScope_IsTheOneStatedPerProvider(ScmProvider provider, ProviderCommentIdScope expected)
     {
-        Assert.Equal(expected, ProviderCommentIdScopes.For(provider));
+        Assert.Equal(expected, ProviderCommentIdScopes.For(MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(provider)));
     }
 }

@@ -437,7 +437,9 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                     Arg.Any<ReviewPublicationContext?>())
                 .Returns(ReviewCommentPostingDiagnosticsDto.Empty() with { PostedComments = postedComments, PostingFailures = failures });
 
-            var registry = Substitute.For<IScmProviderRegistry>();
+            var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+            registry.GetSourceIdentityPolicy(Arg.Any<ScmProvider>()).Returns(call =>
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetSourceIdentityPolicy(call.Arg<ScmProvider>()));
             registry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(commentPoster);
             registry.GetRegisteredCapabilities(Arg.Any<ScmProvider>()).Returns([]);
             return registry;

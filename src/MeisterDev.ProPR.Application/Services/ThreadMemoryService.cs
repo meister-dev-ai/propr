@@ -92,8 +92,8 @@ public sealed partial class ThreadMemoryService(
         }
 
         // The store keeps one canonical path form, so a record written from a provider thread path stays
-        // retrievable by the orchestrator's changed-file path. The two producers disagree: Azure DevOps
-        // thread contexts are repository-root-absolute, the rest of the pipeline is repository-relative.
+        // retrievable by the orchestrator's changed-file path. Thread paths can be repository-root-absolute
+        // while changed-file paths are repository-relative.
         var canonicalFilePath = CanonicalizeFilePath(evt.FilePath);
 
         try

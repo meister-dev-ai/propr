@@ -17,23 +17,12 @@ terminates TLS:
 | PostgreSQL | All durable state | yes |
 | Reverse proxy | Terminates TLS and routes to the API and the frontend | yes, in the example stack |
 
-The Clients module owns AI profile persistence and workspace purpose selection in PostgreSQL. Verified profile
-updates build and probe a detached candidate before opening a serializable promotion transaction. The transaction
-checks the saved configuration digest, client ownership and logical references before saving the candidate and
-its verification result together. Workspace selection validates all three models and effective logical mappings,
-then saves the selected purpose bindings and profile activation in one serializable transaction. Concurrent
-configuration changes return a conflict so the caller can reload and retry.
+ProPR stores client configuration, protected credentials and review history in PostgreSQL.
+Repository discovery uses an active, verified connection. See [SCM platforms](../platforms/index.md) and
+[AI credentials](../ai/credentials.md) for connection setup.
 
-The Reviewing Intake module owns the customer history reader port and PostgreSQL projection. It filters
-the owning client and optional status before counting and paging scalar metadata. PostgreSQL computes
-persisted finding counts without transferring result JSON or protocol events. Client-scoped result reads
-check the owning client in the database predicate before result deserialization.
-
-The PR review frontend reads retained files and discussions through the Reviewing archive API. It loads
-Code Insights classifications separately, using client-scoped finding pages when that capability is
-available. A classification read failure leaves retained diffs and comments available. The Browser tab
-owns file selection and filtering, while the shared diff renderer places comments next to new-side lines
-in Unified and Split layouts. The file pane and diff pane each scroll within the available viewport height.
+The management UI shows retained reviews, diffs and discussions. See
+[the PR review screen](reviews.md#pr-review-screen).
 
 The example compose stack uses nginx for the proxy, and bundles Loki and Grafana for log browsing -
 conveniences nothing in ProPR depends on. What has to route where, and on which ports, is in
@@ -78,11 +67,11 @@ Four ways, and they produce the same review:
 1. **Webhook** - your SCM host notifies ProPR when a pull request opens or updates. See [webhooks](../platforms/webhooks.md).
 2. **Crawl** - ProPR polls for open pull requests on a schedule you configure. Crawling requires a commercial license; see [editions and licensed features](../reference/editions.md).
 3. **On demand** - a call to the review API naming the pull request and the commits to review, from CI. See [trigger a review](../reference/api.md#trigger-a-review).
-4. **From coordinates** - a call naming only the client, repository and pull request, for callers such as a browser extension that know which pull request they mean but not which commits it is at. ProPR reads the current commits from your SCM host, so the same call starts a first review or a re-review after a push. The coordinates must be covered by a crawl or webhook configuration. See [trigger a review from coordinates alone](../reference/api.md#trigger-a-review-from-coordinates-alone).
+4. **From coordinates** - a call naming the client, repository and pull request. ProPR reads the current revision and checks the saved repository policy before submission. See [trigger a review from coordinates alone](../reference/api.md#trigger-a-review-from-coordinates-alone).
 
 Webhook and crawl are the automatic triggers, and they review a pull request once, at the first
 revision they see. A later push does not start another review, and a review already running is left
-to finish on the revision it started on rather than being cancelled by the push. The per-client
+to finish on its original revision. The per-client
 **Review every pushed update** setting changes that: with it on, every pushed update starts a new
 review and cancels any review still running for an older revision. It is off by default and lives on
 the client's System tab.

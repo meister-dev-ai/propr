@@ -1102,6 +1102,7 @@ const adoOrganizationScopesByClient: Record<string, any[]> = {
     {
       id: 'scope-1',
       clientId: '1',
+      connectionId: 'provider-conn-ado-1',
       organizationUrl: 'https://dev.azure.com/meister-propr',
       displayName: 'Meister Org',
       isEnabled: true,
@@ -1112,6 +1113,7 @@ const adoOrganizationScopesByClient: Record<string, any[]> = {
     {
       id: 'scope-2',
       clientId: '1',
+      connectionId: 'provider-conn-ado-1',
       organizationUrl: 'https://dev.azure.com/meister-propr-legacy',
       displayName: 'Legacy Sandbox',
       isEnabled: false,
@@ -3317,97 +3319,68 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  http.get(`${base}/admin/clients/:clientId/ado/discovery/projects`, async ({ params, request }) => {
-    await delay(250)
-    const clientId = String(params.clientId)
-    const url = new URL(request.url)
-    const organizationScopeId = url.searchParams.get('organizationScopeId')
-    const scope = getScope(clientId, organizationScopeId)
-
-    if (!scope || scope.isEnabled === false) {
-      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
-    }
-
-    return HttpResponse.json(adoProjectsByScope[scope.id] ?? [])
-  }),
-
-  http.get(`${base}/admin/clients/:clientId/ado/discovery/crawl-filters`, async ({ params, request }) => {
-    await delay(250)
-    const clientId = String(params.clientId)
-    const url = new URL(request.url)
-    const organizationScopeId = url.searchParams.get('organizationScopeId')
-    const projectId = url.searchParams.get('projectId')
-    const scope = getScope(clientId, organizationScopeId)
-
-    if (!scope || scope.isEnabled === false) {
-      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
-    }
-
-    return HttpResponse.json(getCrawlFilters(scope.id, projectId))
-  }),
-
-  // Provider-neutral discovery, which the mention configuration form drives for every provider other than
-  // Azure DevOps. Keyed on the connection, because that is where the host comes from.
-  http.get(`${base}/admin/clients/:clientId/providers/:provider/discovery/scopes`, async ({ request }) => {
+  http.get(`${base}/admin/clients/:clientId/connections/:connectionId/discovery/:operation`, async ({ params, request }) => {
     await delay(200)
-    const connectionId = new URL(request.url).searchParams.get('connectionId')
-
-    if (!connectionId) {
-      return HttpResponse.json({ error: 'That connection does not belong to this client.' }, { status: 400 })
-    }
-
-    return HttpResponse.json([
-      { scopePath: 'meister-dev', displayName: 'meister-dev' },
-      { scopePath: 'acme', displayName: 'acme' },
-    ])
-  }),
-
-  http.get(`${base}/admin/clients/:clientId/providers/:provider/discovery/repositories`, async ({ request }) => {
-    await delay(200)
-    const url = new URL(request.url)
-    const connectionId = url.searchParams.get('connectionId')
-    const scopePath = url.searchParams.get('scopePath')
-
-    if (!connectionId || !scopePath) {
-      return HttpResponse.json({ error: 'That connection does not belong to this client.' }, { status: 400 })
-    }
-
-    return HttpResponse.json([
-      { repositoryId: '101', displayName: `${scopePath}/propr`, scopePath },
-      { repositoryId: '102', displayName: `${scopePath}/propr-website`, scopePath },
-    ])
-  }),
-
-  http.get(`${base}/admin/clients/:clientId/ado/discovery/sources`, async ({ params, request }) => {
-    await delay(250)
     const clientId = String(params.clientId)
-    const url = new URL(request.url)
-    const organizationScopeId = url.searchParams.get('organizationScopeId')
-    const projectId = url.searchParams.get('projectId')
-    const sourceKind = url.searchParams.get('sourceKind') ?? 'repository'
-    const scope = getScope(clientId, organizationScopeId)
-
-    if (!scope || scope.isEnabled === false) {
-      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    const connectionId = String(params.connectionId)
+    const connection = getProviderConnection(clientId, connectionId)
+    const query = new URL(request.url).searchParams
+    const purpose = query.get('purpose')
+    if (!connection?.isActive || !purpose || !['crawl', 'mention', 'webhook', 'procursor'].includes(purpose)) {
+      return HttpResponse.json({ error: 'Select an active connection and a supported purpose.' }, { status: 400 })
     }
-
-    const key = `${scope.id}::${projectId}::${sourceKind}`
-    return HttpResponse.json(adoSourcesByProject[key] ?? [])
-  }),
-
-  http.get(`${base}/admin/clients/:clientId/ado/discovery/branches`, async ({ params, request }) => {
-    await delay(250)
-    const clientId = String(params.clientId)
-    const url = new URL(request.url)
-    const organizationScopeId = url.searchParams.get('organizationScopeId')
-    const canonicalSourceValue = url.searchParams.get('canonicalSourceValue')
-    const scope = getScope(clientId, organizationScopeId)
-
-    if (!scope || scope.isEnabled === false) {
-      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    const hasProjects = connection.providerFamily === 'azureDevOps'
+    const scopeKey = query.get('scopeKey')
+    const projectId = query.get('projectId')
+    const kind = query.get('sourceKind') ?? 'repository'
+    const nativeScopes = hasProjects ? (adoOrganizationScopesByClient[clientId] ?? []).filter(scope => scope.connectionId === connectionId && scope.isEnabled) : []
+    const scope = nativeScopes.find(candidate => candidate.organizationUrl === scopeKey)
+    const coordinates = {
+      provider: connection.providerFamily, connectionId, scopeKey, organizationScopeId: scope?.id ?? null,
+      providerScopePath: hasProjects ? scope?.organizationUrl : connection.hostBaseUrl,
+      providerProjectKey: hasProjects ? projectId : scopeKey,
     }
-
-    return HttpResponse.json(adoBranchesBySource[canonicalSourceValue ?? ''] ?? [])
+    switch (String(params.operation)) {
+      case 'descriptor':
+        return HttpResponse.json({
+          provider: connection.providerFamily, scopeLabel: hasProjects ? 'Organization' : 'Owner or group', projectLabel: hasProjects ? 'Project' : null,
+          sourceKinds: hasProjects ? [{ kind: 'repository', label: 'Repository' }, { kind: 'adoWiki', label: 'Wiki' }] : [{ kind: 'repository', label: 'Repository' }],
+          supportsBranches: hasProjects, supportsKnowledgeSources: hasProjects,
+        })
+      case 'scopes':
+        return HttpResponse.json(hasProjects ? nativeScopes.map(scope => ({ scopeKey: scope.organizationUrl, displayName: scope.displayName, savedScopeId: scope.id }))
+          : ['meister-dev', 'acme'].map(owner => ({ scopeKey: owner, displayName: owner, savedScopeId: null })))
+      case 'projects':
+        if (!hasProjects) return HttpResponse.json({ error: 'Project discovery is unsupported.' }, { status: 501 })
+        if (!scope) return HttpResponse.json({ error: 'Invalid scope selection.' }, { status: 400 })
+        return HttpResponse.json((adoProjectsByScope[scope.id] ?? []).map(project => ({ scopeId: scope.id, projectId: project.projectId, projectName: project.projectName })))
+      case 'selection':
+        return scopeKey && (!hasProjects || scope) ? HttpResponse.json(coordinates)
+          : HttpResponse.json({ error: 'Invalid scope selection.' }, { status: 400 })
+      case 'sources':
+        if (hasProjects) {
+          if (!scope) return HttpResponse.json({ error: 'Invalid scope selection.' }, { status: 400 })
+          return HttpResponse.json((adoSourcesByProject[`${scope.id}::${projectId}::${kind}`] ?? []).map(source => ({
+            ...coordinates, repositoryId: source.canonicalSourceRef.value, sourceKind: kind,
+            canonicalSourceRef: source.canonicalSourceRef, displayName: source.displayName, defaultBranch: source.defaultBranch,
+          })))
+        }
+        if (kind !== 'repository') return HttpResponse.json({ error: 'Source kind is unsupported.' }, { status: 501 })
+        return HttpResponse.json(['101', '102'].map((id, index) => ({
+          ...coordinates, repositoryId: id, sourceKind: kind, canonicalSourceRef: { provider: connection.providerFamily, value: id },
+          displayName: `${scopeKey}/${index ? 'propr-website' : 'propr'}`, defaultBranch: null,
+        })))
+      case 'filters':
+        return HttpResponse.json(hasProjects ? getCrawlFilters(scope?.id, projectId)
+          : ['101', '102'].map((id, index) => ({
+            canonicalSourceRef: { provider: connection.providerFamily, value: id }, displayName: `${scopeKey}/${index ? 'propr-website' : 'propr'}`, branchSuggestions: [],
+          })))
+      case 'branches':
+        return hasProjects ? HttpResponse.json(adoBranchesBySource[query.get('canonicalSourceValue') ?? ''] ?? [])
+          : HttpResponse.json({ error: 'Branch discovery is unsupported.' }, { status: 501 })
+      default:
+        return HttpResponse.json({ error: 'Unknown discovery operation.' }, { status: 404 })
+    }
   }),
 
   http.get(`${base}/admin/clients/:clientId/procursor/sources`, async ({ params }) => {
@@ -4188,7 +4161,10 @@ export const handlers = [
       return new HttpResponse(null, { status: 404 })
     }
 
-    return HttpResponse.json(providerScopesByConnection[connectionId] ?? [])
+    const configurationScopes = (adoOrganizationScopesByClient[clientId] ?? [])
+      .filter(scope => scope.connectionId === connectionId)
+      .map(scope => ({ ...scope, scopeType: 'organization', scopePath: scope.organizationUrl }))
+    return HttpResponse.json([...(providerScopesByConnection[connectionId] ?? []), ...configurationScopes])
   }),
 
   http.post(`${base}/clients/:clientId/provider-connections/:connectionId/scopes`, async ({ params, request }) => {

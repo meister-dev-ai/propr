@@ -143,8 +143,7 @@ public sealed class ThreadOwnershipResolver
     ///     Which ids have to match is the provider's comment-id regime, declared when this resolver was built.
     ///     Where comment ids are unique within the pull request the comment id decides alone. Where they are
     ///     numbered per thread the thread id has to match too, or the one row recorded for a summary would
-    ///     answer for every thread on the pull request whose first comment carries the same number, which on
-    ///     Azure DevOps is all of them.
+    ///     match another thread on the pull request whose first comment carries the same number.
     /// </remarks>
     public Guid? ResolveOriginatingJobId(string? providerThreadId, string? providerCommentId)
     {

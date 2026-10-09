@@ -11,7 +11,7 @@ using System.Text.Json;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 using MeisterDev.ProPR.Application.Features.Clients.Services;
 using MeisterDev.ProPR.Application.Features.Clients.Support;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
@@ -33,6 +33,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
+
 
 namespace MeisterDev.ProPR.Api.Tests.Features.Clients;
 
@@ -552,8 +553,8 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
             ScmAuthenticationKind.AppInstallation,
             displayName: "GitHub App",
             secret: "-----BEGIN PRIVATE KEY-----",
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012);
+            appId: 123456,
+            installationId: 789012);
 
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -617,8 +618,8 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
             ScmAuthenticationKind.AppInstallation,
             displayName: "GitHub App",
             secret: "-----BEGIN PRIVATE KEY-----",
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012);
+            appId: 123456,
+            installationId: 789012);
 
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -1132,7 +1133,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal("failed", body.GetProperty("verificationStatus").GetString());
         Assert.Contains(
-            "must use OAuth client credentials",
+            "Azure DevOps Services supports OAuth client credentials or personal access tokens",
             body.GetProperty("lastVerificationError").GetString(),
             StringComparison.OrdinalIgnoreCase);
     }
@@ -1147,8 +1148,8 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
             ScmAuthenticationKind.AppInstallation,
             displayName: "GitHub App",
             secret: "-----BEGIN PRIVATE KEY-----",
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012);
+            appId: 123456,
+            installationId: 789012);
         factory.SetDiscoveryScopes("acme");
 
         var httpClient = factory.CreateClient();
@@ -1420,7 +1421,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
 
         private readonly string _dbName = $"TestDb_ProviderConnections_{Guid.NewGuid()}";
         private readonly InMemoryDatabaseRoot _dbRoot = new();
-        private readonly IScmProviderRegistry _providerRegistry = Substitute.For<IScmProviderRegistry>();
+        private readonly IScmProviderRegistry _providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
 
         private readonly IRepositoryDiscoveryProvider _repositoryDiscoveryProvider =
             Substitute.For<IRepositoryDiscoveryProvider>();
@@ -1429,6 +1430,10 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
 
         public ProviderConnectionsApiFactory()
         {
+            this._providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps).Returns(this.AzureDiscovery);
+            this._providerRegistry.GetReviewerIdentityService(ScmProvider.AzureDevOps).Returns(Substitute.For<IReviewerIdentityService>());
+            this.AzureDiscovery.ListProjectOptionsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<IReadOnlyList<ScmDiscoveryProjectOption>>([]));
             this._providerRegistry.IsRegistered(Arg.Any<ScmProvider>()).Returns(false);
             this._providerRegistry.IsRegistered(ScmProvider.GitHub).Returns(true);
             this._providerRegistry.IsRegistered(ScmProvider.GitLab).Returns(true);
@@ -1453,6 +1458,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
         }
 
         public Guid ClientId { get; } = Guid.NewGuid();
+        public IProviderAdminDiscoveryService AzureDiscovery { get; } = Substitute.For<IProviderAdminDiscoveryService>();
         public Guid OtherClientId { get; } = Guid.NewGuid();
         public Guid MachineTenantId { get; } = Guid.NewGuid();
         public Guid OtherMachineTenantId { get; } = Guid.NewGuid();
@@ -1525,8 +1531,8 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
             string displayName = "Acme GitHub",
             string secret = "ghp_default_secret",
             bool isActive = true,
-            long? gitHubAppId = null,
-            long? gitHubAppInstallationId = null,
+            long? appId = null,
+            long? installationId = null,
             string? userName = null)
         {
             var resolvedHostBaseUrl = hostBaseUrl ?? $"https://github-{Guid.NewGuid():N}.example.com/acme/platform";
@@ -1543,8 +1549,8 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
                 displayName,
                 secret,
                 isActive,
-                gitHubAppId,
-                gitHubAppInstallationId,
+                appId,
+                installationId,
                 userName,
                 ct: CancellationToken.None);
 
@@ -1646,6 +1652,9 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
                 services.AddScoped<IProviderReadinessEvaluator, ProviderReadinessEvaluator>();
                 services.AddScoped<IProviderOperationalStatusService, ProviderOperationalStatusService>();
 
+                providerRegistry.GetConnectionConfigurationPolicy(Arg.Any<ScmProvider>())
+                    .Returns(call => ScmConnectionConfigurationPolicies.Get(call.Arg<ScmProvider>()));
+                providerRegistry.GetReviewSourcePolicy(Arg.Any<ScmProvider>()).Returns(call => ReviewSourcePolicies.Get(call.Arg<ScmProvider>()));
                 services.AddSingleton(providerRegistry);
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());

@@ -8,6 +8,8 @@ using MeisterDev.ProPR.Application.Features.Admission.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
@@ -16,8 +18,11 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 /// <summary>
 ///     In-memory <see cref="IJobRepository" /> used by offline review execution.
 /// </summary>
-public sealed class InMemoryReviewJobRepository : IJobRepository
+public sealed class InMemoryReviewJobRepository(IEnumerable<IReviewSourcePolicy>? sourcePolicies = null) : IJobRepository
 {
+    private readonly IReadOnlyDictionary<ScmProvider, IReviewSourcePolicy> _sourcePolicies =
+        (sourcePolicies ?? ScmLocalPolicyFactory.CreateSourcePolicies()).ToDictionary(policy => policy.Provider);
+
     private readonly ConcurrentDictionary<Guid, ReviewJob> _jobs = new();
 
     /// <summary>
@@ -57,7 +62,8 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     {
         var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
         var activeJobs = this._jobs.Values
-            .Where(candidate => string.Equals(candidate.OrganizationUrl, job.OrganizationUrl, StringComparison.Ordinal)
+            .Where(candidate => candidate.ClientId == job.ClientId
+                                && string.Equals(candidate.OrganizationUrl, job.OrganizationUrl, StringComparison.Ordinal)
                                 && string.Equals(candidate.ProjectId, job.ProjectId, StringComparison.Ordinal)
                                 && RepositoryMatches(candidate, job.RepositoryId, job.ProjectId)
                                 && candidate.PullRequestId == job.PullRequestId
@@ -107,13 +113,14 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     }
 
     public ReviewJob? FindActiveJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
         int pullRequestId,
         int iterationId)
     {
-        return this._jobs.Values.FirstOrDefault(job =>
+        return this._jobs.Values.Where(job => job.ClientId == clientId).FirstOrDefault(job =>
             string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
             && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
             && RepositoryMatches(job, repositoryId, projectId)
@@ -123,13 +130,14 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     }
 
     public ReviewJob? FindCompletedJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
         int pullRequestId,
         int iterationId)
     {
-        return this._jobs.Values
+        return this._jobs.Values.Where(job => job.ClientId == clientId)
             .Where(job =>
                 string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                 && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
@@ -142,13 +150,14 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     }
 
     public ReviewJob? FindFailedJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
         int pullRequestId,
         int iterationId)
     {
-        return this._jobs.Values
+        return this._jobs.Values.Where(job => job.ClientId == clientId)
             .Where(job =>
                 string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                 && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
@@ -786,12 +795,13 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     }
 
     public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<ReviewJob>>(
-            this._jobs.Values
+            this._jobs.Values.Where(job => job.ClientId == clientId)
                 .Where(job =>
                     string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                     && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
@@ -801,6 +811,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     }
 
     public Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -808,10 +819,11 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         int iterationId,
         CancellationToken ct = default)
     {
-        return Task.FromResult(this.FindCompletedJob(organizationUrl, projectId, repositoryId, pullRequestId, iterationId));
+        return Task.FromResult(this.FindCompletedJob(clientId, organizationUrl, projectId, repositoryId, pullRequestId, iterationId));
     }
 
     public Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -820,7 +832,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         CancellationToken ct = default)
     {
         return Task.FromResult(
-            this._jobs.Values
+            this._jobs.Values.Where(job => job.ClientId == clientId)
                 .Where(job =>
                     string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                     && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
@@ -836,6 +848,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     }
 
     public Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -844,7 +857,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         string currentRevisionKey,
         CancellationToken ct = default)
     {
-        var candidates = this._jobs.Values
+        var candidates = this._jobs.Values.Where(job => job.ClientId == clientId)
             .Where(job =>
                 string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                 && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
@@ -916,6 +929,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     }
 
     public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -924,7 +938,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         CancellationToken ct = default)
     {
         return Task.FromResult(
-            this._jobs.Values
+            this._jobs.Values.Where(job => job.ClientId == clientId)
                 .Where(job =>
                     string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                     && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
@@ -1040,7 +1054,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.FromResult<IReadOnlyList<ReviewJob>>(items);
     }
 
-    private static bool RepositoryMatches(ReviewJob job, string repositoryId, string projectId)
+    private bool RepositoryMatches(ReviewJob job, string repositoryId, string projectId)
     {
         return string.Equals(
             GetRepositoryIdentityKey(job, job.RepositoryId, projectId),
@@ -1048,32 +1062,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetRepositoryIdentityKey(ReviewJob job, string repositoryId, string projectId)
-    {
-        if (job.Provider == ScmProvider.AzureDevOps)
-        {
-            return repositoryId;
-        }
-
-        var projectPath = string.IsNullOrWhiteSpace(job.RepositoryProjectPath)
-            ? repositoryId
-            : job.RepositoryProjectPath;
-        if (LooksLikeRepositoryPath(repositoryId) || LooksLikeRepositoryPath(projectPath))
-        {
-            return projectPath;
-        }
-
-        var ownerOrNamespace = string.IsNullOrWhiteSpace(job.RepositoryOwnerOrNamespace)
-            ? projectId
-            : job.RepositoryOwnerOrNamespace;
-        return string.Equals(repositoryId, job.RepositoryId, StringComparison.OrdinalIgnoreCase)
-            ? $"{ownerOrNamespace}/{repositoryId}"
-            : repositoryId;
-    }
-
-    private static bool LooksLikeRepositoryPath(string value)
-    {
-        return !string.IsNullOrWhiteSpace(value)
-               && value.Contains('/', StringComparison.Ordinal);
-    }
+    private string GetRepositoryIdentityKey(ReviewJob job, string repositoryId, string projectId) =>
+        (this._sourcePolicies.TryGetValue(job.Provider, out var policy) ? policy : new UnregisteredReviewSourcePolicy(job.Provider)).GetRepositoryIdentityKey(
+            repositoryId, job.RepositoryId, projectId, job.RepositoryProjectPath, job.RepositoryOwnerOrNamespace);
 }

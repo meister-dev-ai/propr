@@ -1,6 +1,8 @@
 # Build output
 bin/
 obj/
+**/bin/
+**/obj/
 out/
 .publish/
 
@@ -28,6 +30,7 @@ Thumbs.db
 # Source control
 .git/
 .gitignore
+.claude/worktrees/
 
 # Docker files themselves
 Dockerfile*

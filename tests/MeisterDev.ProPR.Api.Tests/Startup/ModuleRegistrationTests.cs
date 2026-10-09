@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Reflection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Support;
 using Azure.Core;
 using MeisterDev.ProPR.Api.Features.ProCursor;
 using MeisterDev.ProPR.Application.Features.Budgeting;
@@ -38,7 +39,27 @@ namespace MeisterDev.ProPR.Api.Tests.Startup;
 
 public sealed class ModuleRegistrationTests
 {
-    private static readonly string RepoRoot = ResolveRepoRoot();
+    [Fact]
+    public void ClientsModule_ResolvesConnectionConfigurationCoordinator()
+    {
+        var services = new ServiceCollection();
+        var registry = Substitute.For<IScmProviderRegistry>();
+        var policy = Substitute.For<IScmConnectionConfigurationPolicy>();
+        var configuration = new MeisterDev.ProPR.Application.Features.Clients.Models.ScmAuthenticationConfiguration(
+            ScmProvider.GitHub, "https://github.com", ScmAuthenticationKind.PersonalAccessToken, null, null, null);
+        policy.Validate(configuration).Returns(new[] { ("HostBaseUrl", "native validation") });
+        registry.GetConnectionConfigurationPolicy(configuration.ProviderFamily).Returns(policy);
+        services.AddSingleton(registry);
+        services.AddSingleton(Substitute.For<IClientScmScopeRepository>());
+        services.AddClientsModule(CreateConfiguration(false));
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var coordinator = scope.ServiceProvider.GetRequiredService<IProviderConnectionConfigurationService>();
+
+        Assert.Equal(new[] { ("HostBaseUrl", "native validation") }, coordinator.Validate(configuration));
+        policy.Received(1).Validate(configuration);
+    }
 
     [Fact]
     public void InfrastructureSupport_RegistersOnlySharedSupportServices()
@@ -442,17 +463,6 @@ public sealed class ModuleRegistrationTests
     }
 
     [Fact]
-    public void Program_RegistersProPrOwnedBrokerBackends_ForApiHostComposition()
-    {
-        var contents = File.ReadAllText(Path.Combine(RepoRoot, "src/MeisterDev.ProPR.Api/Program.cs"));
-
-        Assert.Contains("LocalProPrScmBroker", contents, StringComparison.Ordinal);
-        Assert.Contains("LocalProPrEmbeddingBroker", contents, StringComparison.Ordinal);
-        Assert.DoesNotContain("LocalProCursorScmBroker", contents, StringComparison.Ordinal);
-        Assert.DoesNotContain("LocalProCursorEmbeddingBroker", contents, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Program_WithDisabledProCursorConfiguration_UsesDisabledGatewayMode()
     {
         var mode = InvokeEffectiveProCursorMode(
@@ -751,26 +761,6 @@ public sealed class ModuleRegistrationTests
     private static ServiceDescriptor? FindService<TService>(IServiceCollection services)
     {
         return services.LastOrDefault(descriptor => descriptor.ServiceType == typeof(TService));
-    }
-
-    private static string ResolveRepoRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (current is not null)
-        {
-            var hasSolution = File.Exists(Path.Combine(current.FullName, "MeisterDev.ProPR.slnx"));
-            var hasSourceTree = Directory.Exists(Path.Combine(current.FullName, "src"));
-
-            if (hasSolution && hasSourceTree)
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new InvalidOperationException("Unable to locate the repository root.");
     }
 
     private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment

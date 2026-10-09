@@ -54,6 +54,7 @@ public sealed partial class RestartReviewJobHandler(
             // the source and then reporting a duplicate would retire the operator's only restartable job and
             // leave nothing to restart.
             var active = jobs.FindActiveJob(
+                source.ClientId,
                 source.OrganizationUrl,
                 source.ProjectId,
                 source.RepositoryId,
@@ -87,6 +88,7 @@ public sealed partial class RestartReviewJobHandler(
         }
 
         var restarted = new ReviewJob(
+            source.CodeReviewReference,
             Guid.NewGuid(),
             source.ClientId,
             source.OrganizationUrl,

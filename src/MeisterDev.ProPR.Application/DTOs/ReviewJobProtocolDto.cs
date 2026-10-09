@@ -53,7 +53,7 @@ public sealed partial record ReviewJobProtocolDto(
 public partial record ReviewJobProtocolDto
 {
     /// <summary>Normalized SCM provider family for the parent review job.</summary>
-    public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
+    public required ScmProvider Provider { get; init; }
 
     /// <summary>Normalized provider scope path for the parent review job.</summary>
     public string? ProviderScopePath { get; init; }

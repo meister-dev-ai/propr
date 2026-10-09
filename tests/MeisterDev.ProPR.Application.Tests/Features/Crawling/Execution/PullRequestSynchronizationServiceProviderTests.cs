@@ -24,16 +24,17 @@ public sealed class PullRequestSynchronizationServiceProviderTests
     public async Task SynchronizeAsync_WithNormalizedGitHubContext_QueuesReviewJobWithProviderNeutralMetadata()
     {
         var jobs = Substitute.For<IJobRepository>();
-        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+        jobs.GetActiveJobsForConfigAsync(ClientId, "https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
             .Returns([]);
-        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindActiveJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
-        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindCompletedJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
         var sut = new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             jobs,
             NullLogger<PullRequestSynchronizationService>.Instance);
 
@@ -75,12 +76,12 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         var threadMemoryService = Substitute.For<IThreadMemoryService>();
         var scanRepository = Substitute.For<IReviewPrScanRepository>();
 
-        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+        jobs.GetActiveJobsForConfigAsync(ClientId, "https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
             .Returns([]);
 
-        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindActiveJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
-        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindCompletedJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
@@ -111,6 +112,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             ]);
 
         var sut = new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             jobs,
             NullLogger<PullRequestSynchronizationService>.Instance,
             threadStatusFetcher: threadStatusFetcher,
@@ -166,12 +168,12 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         var threadStatusFetcher = Substitute.For<IReviewerThreadStatusFetcher>();
         var scanRepository = Substitute.For<IReviewPrScanRepository>();
 
-        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+        jobs.GetActiveJobsForConfigAsync(ClientId, "https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
             .Returns([]);
 
-        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindActiveJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
-        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindCompletedJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
 
         scanRepository.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), "repo-gh-1", 42, Arg.Any<CancellationToken>())
@@ -187,6 +189,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             .Returns([]);
 
         var sut = new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             jobs,
             NullLogger<PullRequestSynchronizationService>.Instance,
             threadStatusFetcher: threadStatusFetcher,
@@ -226,11 +229,11 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
         var effectiveReviewer = new ReviewerIdentity(host, "propr-review[bot]", "propr-review[bot]", "ProPR Review", true);
 
-        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+        jobs.GetActiveJobsForConfigAsync(ClientId, "https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
             .Returns([]);
-        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindActiveJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
-        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindCompletedJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
@@ -265,6 +268,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             ]);
 
         var sut = new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             jobs,
             NullLogger<PullRequestSynchronizationService>.Instance,
             threadStatusFetcher: threadStatusFetcher,
@@ -317,16 +321,17 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         existingJob.SetProviderReviewContext(codeReview);
         existingJob.SetReviewRevision(new ReviewRevision("old-head-sha", "base-sha", "start-sha", "revision-0", "patch-0"));
 
-        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+        jobs.GetActiveJobsForConfigAsync(ClientId, "https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
             .Returns([existingJob]);
-        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindActiveJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
-        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+        jobs.FindCompletedJob(ClientId, "https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
         var sut = new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             jobs,
             NullLogger<PullRequestSynchronizationService>.Instance);
 
@@ -372,10 +377,11 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                 42));
         existingJob.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"));
 
-        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+        jobs.GetActiveJobsForConfigAsync(ClientId, "https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
             .Returns([existingJob]);
 
         var sut = new PullRequestSynchronizationService(
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry,
             jobs,
             NullLogger<PullRequestSynchronizationService>.Instance);
 

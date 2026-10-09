@@ -40,12 +40,12 @@ internal sealed class GitHubAuthenticationService
     public Task<string> GetAccessTokenAsync(
         ProviderHostRef host,
         ClientScmConnectionCredentialDto connection,
-        CancellationToken ct = default)
+        CancellationToken ct = default, bool readOutcomes = false)
     {
         return connection.AuthenticationKind switch
         {
             ScmAuthenticationKind.PersonalAccessToken => Task.FromResult(connection.Secret),
-            ScmAuthenticationKind.AppInstallation => this.GetInstallationAccessTokenAsync(host, connection, ct),
+            ScmAuthenticationKind.AppInstallation => this.GetInstallationAccessTokenAsync(host, connection, ct, readOutcomes),
             _ => Task.FromException<string>(new InvalidOperationException("GitHub connection authentication kind is not supported.")),
         };
     }
@@ -53,11 +53,11 @@ internal sealed class GitHubAuthenticationService
     public async Task<GitHubInstallationMetadata> GetInstallationMetadataAsync(
         ProviderHostRef host,
         ClientScmConnectionCredentialDto connection,
-        CancellationToken ct = default)
+        CancellationToken ct = default, bool readOutcomes = false)
     {
         ValidateAppInstallationConnection(connection);
 
-        var installationId = connection.GitHubAppInstallationId!.Value.ToString(CultureInfo.InvariantCulture);
+        var installationId = connection.InstallationId!.Value.ToString(CultureInfo.InvariantCulture);
         var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         this._logger.LogDebug(
             "Looking up GitHub App installation {InstallationId} for connection {ConnectionId} on host {HostBaseUrl}.",
@@ -69,6 +69,11 @@ internal sealed class GitHubAuthenticationService
             GitHubConnectionVerifier.BuildApiUri(host, $"/app/installations/{installationId}"),
             appJwt);
         using var response = await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+
+        if (readOutcomes)
+        {
+            MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support.GitHubReadFailures.ThrowIfDeniedOrThrottled(response, true);
+        }
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
@@ -158,7 +163,7 @@ internal sealed class GitHubAuthenticationService
     private async Task<string> GetInstallationAccessTokenAsync(
         ProviderHostRef host,
         ClientScmConnectionCredentialDto connection,
-        CancellationToken ct)
+        CancellationToken ct, bool readOutcomes)
     {
         ValidateAppInstallationConnection(connection);
 
@@ -168,7 +173,7 @@ internal sealed class GitHubAuthenticationService
             return cachedToken;
         }
 
-        var installationId = connection.GitHubAppInstallationId!.Value.ToString(CultureInfo.InvariantCulture);
+        var installationId = connection.InstallationId!.Value.ToString(CultureInfo.InvariantCulture);
         var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         this._logger.LogDebug(
             "Minting GitHub App installation token for installation {InstallationId} on connection {ConnectionId}.",
@@ -180,6 +185,11 @@ internal sealed class GitHubAuthenticationService
             appJwt,
             HttpMethod.Post);
         using var response = await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+
+        if (readOutcomes)
+        {
+            MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support.GitHubReadFailures.ThrowIfDeniedOrThrottled(response, true);
+        }
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
@@ -239,8 +249,8 @@ internal sealed class GitHubAuthenticationService
             '|',
             host.HostBaseUrl,
             connection.Id.ToString("N", CultureInfo.InvariantCulture),
-            connection.GitHubAppId!.Value.ToString(CultureInfo.InvariantCulture),
-            connection.GitHubAppInstallationId!.Value.ToString(CultureInfo.InvariantCulture),
+            connection.AppId!.Value.ToString(CultureInfo.InvariantCulture),
+            connection.InstallationId!.Value.ToString(CultureInfo.InvariantCulture),
             secretHash);
     }
 
@@ -251,12 +261,12 @@ internal sealed class GitHubAuthenticationService
             throw new InvalidOperationException("GitHub App authentication requires app installation credentials.");
         }
 
-        if (!connection.GitHubAppId.HasValue || connection.GitHubAppId.Value <= 0)
+        if (!connection.AppId.HasValue || connection.AppId.Value <= 0)
         {
             throw new InvalidOperationException("GitHub App ID is missing from the saved provider connection.");
         }
 
-        if (!connection.GitHubAppInstallationId.HasValue || connection.GitHubAppInstallationId.Value <= 0)
+        if (!connection.InstallationId.HasValue || connection.InstallationId.Value <= 0)
         {
             throw new InvalidOperationException("GitHub App installation ID is missing from the saved provider connection.");
         }
@@ -287,7 +297,7 @@ internal sealed class GitHubAuthenticationService
             {
                 { JwtRegisteredClaimNames.Iat, issuedAt.ToUnixTimeSeconds() },
                 { JwtRegisteredClaimNames.Exp, expiresAt.ToUnixTimeSeconds() },
-                { JwtRegisteredClaimNames.Iss, connection.GitHubAppId!.Value.ToString(CultureInfo.InvariantCulture) },
+                { JwtRegisteredClaimNames.Iss, connection.AppId!.Value.ToString(CultureInfo.InvariantCulture) },
             };
 
             return TokenHandler.WriteToken(new JwtSecurityToken(header, payload));

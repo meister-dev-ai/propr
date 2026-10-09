@@ -9,7 +9,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
 internal sealed class ProviderRepositoryExclusionFetcher(
     IEnumerable<IProviderRepositoryExclusionFetcher> providerFetchers,
-    IClientScmConnectionRepository? connectionRepository = null) : IRepositoryExclusionFetcher
+    IClientScmConnectionRepository? connectionRepository = null,
+    IEnumerable<IScmConnectionConfigurationPolicy>? configurationPolicies = null) : IRepositoryExclusionFetcher
 {
     private readonly IReadOnlyDictionary<ScmProvider, IProviderRepositoryExclusionFetcher> _providerFetchersByProvider =
         providerFetchers.ToDictionary(fetcher => fetcher.Provider);
@@ -26,7 +27,8 @@ internal sealed class ProviderRepositoryExclusionFetcher(
             organizationUrl,
             clientId,
             connectionRepository,
-            cancellationToken);
+            cancellationToken,
+            configurationPolicies);
 
         return this._providerFetchersByProvider.TryGetValue(provider, out var fetcher)
             ? await fetcher.FetchAsync(

@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -21,13 +22,14 @@ namespace MeisterDev.ProPR.Application.Tests.Services;
 public sealed class ReviewJobReuseTests
 {
     private static readonly Guid JobId = Guid.Parse("22222222-2222-4222-8222-222222222222");
+    private static readonly Guid ClientId = Guid.Parse("33333333-3333-4333-8333-333333333333");
 
     private readonly IReviewJobExecutionStore _store = Substitute.For<IReviewJobExecutionStore>();
     private readonly IReviewPrScanWatermarkStore _scans = Substitute.For<IReviewPrScanWatermarkStore>();
 
-    private static ReviewJob MakeJob(Guid? id = null)
+    private static ReviewJob MakeJob(Guid? id = null, Guid? clientId = null)
     {
-        var job = new ReviewJob(id ?? JobId, Guid.NewGuid(), "https://forge.invalid/org", "project", "repo", 42, 1);
+        var job = new ReviewJob(id ?? JobId, clientId ?? ClientId, "https://forge.invalid/org", "project", "repo", 42, 1);
         job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "rev-1", "base-sha...head-sha"));
         return job;
     }
@@ -48,7 +50,38 @@ public sealed class ReviewJobReuseTests
     {
         this._store.GetByIdWithFileResultsAsync(jobWithExistingRows.Id, Arg.Any<CancellationToken>())
             .Returns(jobWithExistingRows);
-        return new ReviewJobReuse(this._store, this._scans, NullLogger.Instance);
+        return new ReviewJobReuse(
+            this._store, this._scans, NullLogger.Instance,
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry);
+    }
+
+    [Fact]
+    public async Task ForeignClientResults_AreNeverResumedOrCarriedForward()
+    {
+        var job = MakeJob();
+        var foreign = WithCompletedRows(MakeJob(Guid.NewGuid(), Guid.NewGuid()), "src/a.cs");
+        var reuse = this.CreateReuse(job);
+        var paths = new HashSet<string>(["src/a.cs"], StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(0, await reuse.ResumePriorFileResultsAsync(job, foreign, paths, new HashSet<string>(), CancellationToken.None));
+        Assert.Empty(
+            await reuse.CarryForwardBaselineResultsAsync(
+                job, foreign, false, paths, ReviewExclusionRules.Default, new HashSet<string>(), CancellationToken.None));
+        await this._store.DidNotReceive().AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OverlappingClients_CanQueueTheSameRevisionIndependently()
+    {
+        var store = new InMemoryReviewJobRepository();
+        var first = MakeJob();
+        var second = MakeJob(Guid.NewGuid(), Guid.NewGuid());
+        await store.AddAsync(first);
+
+        var result = await store.TryAddIfNoActiveDuplicateAsync(second);
+
+        Assert.True(result.WasAdded);
+        Assert.Null(result.DuplicateJob);
     }
 
     [Fact]

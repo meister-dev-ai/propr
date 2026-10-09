@@ -30,11 +30,9 @@ public interface IPostedCommentOriginStore
     ///     (<paramref name="clientId" />, <paramref name="repositoryId" />, <paramref name="pullRequestId" />,
     ///     <paramref name="providerCommentId" />), or null when no provenance row is retained for it.
     ///     Resolution is comment-id-primary: among the pull request's origins with this comment id, a single
-    ///     match wins outright; only when several share the comment id (the Azure DevOps thread-local
-    ///     collision) does <paramref name="providerThreadId" /> disambiguate them. The thread id is therefore
-    ///     advisory — providers whose comment ids are globally unique within a pull request
-    ///     (GitHub/GitLab/Forgejo) resolve on the comment id alone and may pass a non-matching or null thread
-    ///     id without breaking attribution.
+    ///     match resolves immediately. When several origins share the comment identifier,
+    ///     <paramref name="providerThreadId" /> disambiguates them. A null or different thread identifier
+    ///     does not affect attribution when the comment identifier has one match.
     /// </summary>
     Task<Guid?> GetJobIdForCommentAsync(
         Guid clientId,
@@ -102,7 +100,7 @@ public sealed record PostedCommentOriginPullRequestRef(
 ///     One retained provenance row for a pull request: the provider thread id (when the provider exposes
 ///     one), the provider comment id, and the review job that posted it. Stamping resolves attribution
 ///     comment-id-primary — by comment id, falling back to the thread id only to break a collision when
-///     several rows of one pull request share a comment id (Azure DevOps scopes comment ids to a thread).
+///     several rows of one pull request share a thread-local comment identifier.
 /// </summary>
 /// <param name="ProviderThreadId">Provider thread identifier, or null when the provider exposes none.</param>
 /// <param name="ProviderCommentId">Provider-native comment identifier.</param>

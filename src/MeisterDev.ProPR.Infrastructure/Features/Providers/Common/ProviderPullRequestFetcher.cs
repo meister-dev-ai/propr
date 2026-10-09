@@ -10,7 +10,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
 internal sealed class ProviderPullRequestFetcher(
     IEnumerable<IProviderPullRequestFetcher> providerFetchers,
-    IClientScmConnectionRepository? connectionRepository = null) : IPullRequestFetcher
+    IClientScmConnectionRepository? connectionRepository = null,
+    IEnumerable<IScmConnectionConfigurationPolicy>? configurationPolicies = null) : IPullRequestFetcher
 {
     private readonly IReadOnlyDictionary<ScmProvider, IProviderPullRequestFetcher> _providerFetchersByProvider =
         providerFetchers.ToDictionary(fetcher => fetcher.Provider);
@@ -165,6 +166,7 @@ internal sealed class ProviderPullRequestFetcher(
             organizationUrl,
             clientId,
             connectionRepository,
-            ct);
+            ct,
+            configurationPolicies);
     }
 }

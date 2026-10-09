@@ -21,6 +21,7 @@ using MeisterDev.ProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -40,6 +41,9 @@ public static class ClientsModuleServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
+        services.AddScmProviderLocalDeclarations();
+        services.TryAddScoped<IProviderConnectionConfigurationService, ProviderConnectionConfigurationService>();
+
         if (configuration.HasDatabaseConnectionString())
         {
             services.TryAddScoped<IScmProviderRegistry, ScmProviderRegistry>();
@@ -54,7 +58,6 @@ public static class ClientsModuleServiceCollectionExtensions
                 var dbContext = sp.GetRequiredService<MeisterProPRDbContext>();
                 var connectionRepository = sp.GetRequiredService<IClientScmConnectionRepository>();
                 var reviewerIdentityRepository = sp.GetRequiredService<IClientReviewerIdentityRepository>();
-                var gitHubAuthenticationService = sp.GetRequiredService<GitHubAuthenticationService>();
                 var logger = sp.GetRequiredService<ILogger<DbClientRegistry>>();
 
                 return new DbClientRegistry(
@@ -63,17 +66,12 @@ public static class ClientsModuleServiceCollectionExtensions
                     reviewerIdentityRepository,
                     async (host, connection, ct) =>
                     {
-                        if (host.Provider != ScmProvider.GitHub || connection.AuthenticationKind != ScmAuthenticationKind.AppInstallation)
-                        {
-                            return null;
-                        }
-
-                        var app = await gitHubAuthenticationService.GetAppMetadataAsync(host, connection, ct);
-                        var login = app.Slug + "[bot]";
-                        return new ReviewerIdentity(host, login, login, app.DisplayName, true);
+                        var service = sp.GetKeyedService<IReviewerIdentityService>(host.Provider);
+                        return service is null ? null : await service.GetAutomaticReviewerIdentityAsync(host, connection, ct);
                     },
                     logger,
-                    sp.GetService<IDbContextFactory<MeisterProPRDbContext>>());
+                    sp.GetService<IDbContextFactory<MeisterProPRDbContext>>(),
+                    sp.GetServices<IScmIdentityPolicy>());
             });
             services.AddScoped<IClientAdminService, ClientAdminService>();
             services.AddScoped<IClientScmConnectionRepository, ClientScmConnectionRepository>();

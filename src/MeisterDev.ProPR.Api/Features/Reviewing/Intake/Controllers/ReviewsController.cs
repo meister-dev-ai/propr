@@ -34,17 +34,28 @@ public sealed class ReviewsController(IJobRepository jobRepository, ICustomerDas
         CancellationToken ct, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, [FromQuery] string? status = null)
     {
         var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
-        if (roleCheck is not null) return roleCheck;
+        if (roleCheck is not null)
+        {
+            return roleCheck;
+        }
+
         JobStatus? filter = null;
         if (status is not null)
         {
             if (!Enum.TryParse<JobStatus>(status, true, out var parsed) || !Enum.IsDefined(parsed) ||
                 !Enum.GetNames<JobStatus>().Any(name => string.Equals(name, status, StringComparison.OrdinalIgnoreCase)))
+            {
                 return this.BadRequest();
+            }
+
             filter = parsed;
         }
 
-        if (page < 1 || pageSize is < 1 or > 100 || page > int.MaxValue / pageSize) return this.BadRequest();
+        if (page < 1 || pageSize is < 1 or > 100 || page > int.MaxValue / pageSize)
+        {
+            return this.BadRequest();
+        }
+
         return this.Ok(await reader.GetAsync(clientId, page, pageSize, filter, ct).ConfigureAwait(false));
     }
 
@@ -141,7 +152,7 @@ public sealed record ReviewListItem(
     DateTimeOffset? CompletedAt)
 {
     /// <summary>Normalized provider family for the review job.</summary>
-    public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
+    public ScmProvider Provider { get; init; } = ScmProviderVocabulary.AzureDevOpsCompatibilityDefault;
 
     /// <summary>Normalized provider host base URL for the review job.</summary>
     public string? HostBaseUrl { get; init; }

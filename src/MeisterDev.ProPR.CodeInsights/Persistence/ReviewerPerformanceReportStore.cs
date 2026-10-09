@@ -60,7 +60,7 @@ public sealed class ReviewerPerformanceReportStore(
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct) : null;
         if (db.Database.IsNpgsql())
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({BitConverter.ToInt64(request.Id.ToByteArray(), 0)})", ct);
+            await PostgresAdvisoryLocks.AcquireTransactionAsync(db, BitConverter.ToInt64(request.Id.ToByteArray(), 0), ct);
         }
 
         var existing = await db.ReviewerPerformanceReports.AsNoTracking().Include(row => row.Clients).FirstOrDefaultAsync(row => row.Id == request.Id, ct);

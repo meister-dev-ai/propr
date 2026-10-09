@@ -4,214 +4,48 @@
 using FluentValidation;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
-using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Application.Features.Clients.Models;
+using MeisterDev.ProPR.Application.Interfaces;
 
 namespace MeisterDev.ProPR.Api.Validators;
 
-/// <summary>Validates <see cref="CreateClientProviderConnectionRequest" /> before a provider connection is created.</summary>
-public sealed class
-    CreateClientProviderConnectionRequestValidator : AbstractValidator<CreateClientProviderConnectionRequest>
+/// <summary>Validates connection request bounds and delegates native authentication requirements.</summary>
+public sealed class CreateClientProviderConnectionRequestValidator : AbstractValidator<CreateClientProviderConnectionRequest>
 {
-    /// <summary>Initializes a new instance of <see cref="CreateClientProviderConnectionRequestValidator" />.</summary>
-    /// <param name="egressUrlPolicy">What this installation permits an operator-entered address to reach.</param>
-    public CreateClientProviderConnectionRequestValidator(EgressUrlPolicy egressUrlPolicy)
+    public CreateClientProviderConnectionRequestValidator(EgressUrlPolicy egressUrlPolicy, IScmProviderRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(egressUrlPolicy);
-
-        this.RuleFor(request => request.AuthenticationKind)
-            .Must((request, authenticationKind) =>
-                IsSupportedAuthenticationKind(request.ProviderFamily, request.HostBaseUrl, authenticationKind))
-            .WithMessage(request => GetUnsupportedAuthenticationKindMessage(request.ProviderFamily));
-
-        this.RuleFor(request => request.UserName)
-            .NotEmpty()
-            .WithMessage("UserName is required for Azure DevOps Server Windows user-account connections.")
-            .MaximumLength(256)
-            .WithMessage("UserName must not exceed 256 characters.")
-            .When(request => RequiresUserName(request.ProviderFamily, request.HostBaseUrl, request.AuthenticationKind));
-
-        this.RuleFor(request => request.UserName)
-            .Must(string.IsNullOrWhiteSpace)
-            .WithMessage("UserName is only valid for Azure DevOps Server Windows user-account connections.")
-            .When(request => !RequiresUserName(request.ProviderFamily, request.HostBaseUrl, request.AuthenticationKind));
-
-        this.RuleFor(request => request)
-            .Must(request => !RequiresSecureWindowsUserAccountHost(request.ProviderFamily, request.HostBaseUrl, request.AuthenticationKind)
-                             || IsHttpsUrl(request.HostBaseUrl))
-            .WithMessage("Azure DevOps Server Windows user-account authentication requires an HTTPS host URL.");
-
-        this.RuleFor(request => request)
-            .Must(request => !RequiresSecureAzureDevOpsServerCredentialHost(request.ProviderFamily, request.HostBaseUrl, request.AuthenticationKind)
-                             || IsHttpsUrl(request.HostBaseUrl))
-            .WithMessage("Azure DevOps Server personal access token and Windows user-account authentication require an HTTPS host URL.");
-
-        this.RuleFor(request => request.HostBaseUrl)
-            .NotEmpty()
-            .WithMessage("HostBaseUrl is required.")
-            .Must(hostBaseUrl => GetHostBaseUrlRefusal(egressUrlPolicy, hostBaseUrl) is null)
+        this.RuleFor(request => request).Custom((request, context) =>
+        {
+            var state = new ScmAuthenticationConfiguration(
+                request.ProviderFamily, request.HostBaseUrl, request.AuthenticationKind,
+                request.UserName, request.OAuthTenantId, request.OAuthClientId, request.GitHubAppId, request.GitHubAppInstallationId);
+            foreach (var error in registry.GetConnectionConfigurationPolicy(request.ProviderFamily).ValidateCreate(state))
+            {
+                context.AddFailure(error.PropertyName, error.Message);
+            }
+        });
+        this.RuleFor(request => request.UserName).MaximumLength(256).WithMessage("UserName must not exceed 256 characters.")
+            .When(request => registry.GetConnectionConfigurationPolicy(request.ProviderFamily)
+                .RequiresUserName(request.HostBaseUrl, request.AuthenticationKind));
+        this.RuleFor(request => request.OAuthTenantId).MaximumLength(256).WithMessage("OAuthTenantId must not exceed 256 characters.")
+            .When(request => registry.GetConnectionConfigurationPolicy(request.ProviderFamily).RequiresOAuthMetadata(request.AuthenticationKind));
+        this.RuleFor(request => request.OAuthClientId).MaximumLength(256).WithMessage("OAuthClientId must not exceed 256 characters.")
+            .When(request => registry.GetConnectionConfigurationPolicy(request.ProviderFamily).RequiresOAuthMetadata(request.AuthenticationKind));
+        this.RuleFor(request => request.HostBaseUrl).NotEmpty().WithMessage("HostBaseUrl is required.")
+            .Must(host => GetHostBaseUrlRefusal(egressUrlPolicy, host) is null)
             .WithMessage(request => GetHostBaseUrlRefusal(egressUrlPolicy, request.HostBaseUrl));
-
-        this.RuleFor(request => request.DisplayName)
-            .NotEmpty()
-            .WithMessage("DisplayName is required.")
-            .MaximumLength(200)
-            .WithMessage("DisplayName must not exceed 200 characters.");
-
-        this.RuleFor(request => request.Secret)
-            .NotEmpty()
-            .WithMessage("Secret is required.")
-            .MaximumLength(4096)
-            .WithMessage("Secret must not exceed 4096 characters.");
-
-        this.When(
-            request => RequiresOAuthMetadata(request.ProviderFamily, request.AuthenticationKind),
-            () =>
-            {
-                this.RuleFor(request => request.OAuthTenantId)
-                    .NotEmpty()
-                    .WithMessage("OAuthTenantId is required for Azure DevOps OAuth client-credentials connections.")
-                    .MaximumLength(256)
-                    .WithMessage("OAuthTenantId must not exceed 256 characters.");
-
-                this.RuleFor(request => request.OAuthClientId)
-                    .NotEmpty()
-                    .WithMessage("OAuthClientId is required for Azure DevOps OAuth client-credentials connections.")
-                    .MaximumLength(256)
-                    .WithMessage("OAuthClientId must not exceed 256 characters.");
-            });
-
-        this.When(
-            request => request.ProviderFamily == ScmProvider.GitHub
-                       && request.AuthenticationKind == ScmAuthenticationKind.AppInstallation,
-            () =>
-            {
-                this.RuleFor(request => request.GitHubAppId)
-                    .NotNull()
-                    .WithMessage("GitHubAppId is required for GitHub App connections.")
-                    .GreaterThan(0)
-                    .WithMessage("GitHubAppId must be a positive numeric identifier.");
-
-                this.RuleFor(request => request.GitHubAppInstallationId)
-                    .NotNull()
-                    .WithMessage("GitHubAppInstallationId is required for GitHub App connections.")
-                    .GreaterThan(0)
-                    .WithMessage("GitHubAppInstallationId must be a positive numeric identifier.");
-            });
-
-        this.When(
-            request => request.ProviderFamily != ScmProvider.GitHub,
-            () =>
-            {
-                this.RuleFor(request => request.GitHubAppId)
-                    .Null()
-                    .WithMessage("GitHubAppId is only valid for GitHub provider connections.");
-
-                this.RuleFor(request => request.GitHubAppInstallationId)
-                    .Null()
-                    .WithMessage("GitHubAppInstallationId is only valid for GitHub provider connections.");
-            });
-
-        this.RuleFor(request => request.RetentionDays)
-            .InclusiveBetween(1, 3650)
-            .WithMessage("RetentionDays must be between 1 and 3650 when provided.")
-            .When(request => request.RetentionDays.HasValue);
+        this.RuleFor(request => request.DisplayName).NotEmpty().WithMessage("DisplayName is required.")
+            .MaximumLength(200).WithMessage("DisplayName must not exceed 200 characters.");
+        this.RuleFor(request => request.Secret).NotEmpty().WithMessage("Secret is required.")
+            .MaximumLength(4096).WithMessage("Secret must not exceed 4096 characters.");
+        this.RuleFor(request => request.RetentionDays).InclusiveBetween(1, 3650)
+            .WithMessage("RetentionDays must be between 1 and 3650 when provided.").When(request => request.RetentionDays.HasValue);
     }
 
-    internal static bool RequiresOAuthMetadata(ScmProvider providerFamily, ScmAuthenticationKind authenticationKind)
+    internal static string? GetHostBaseUrlRefusal(EgressUrlPolicy policy, string? host)
     {
-        return providerFamily == ScmProvider.AzureDevOps
-               && authenticationKind == ScmAuthenticationKind.OAuthClientCredentials;
-    }
-
-    internal static bool RequiresUserName(
-        ScmProvider providerFamily,
-        string? hostBaseUrl,
-        ScmAuthenticationKind authenticationKind)
-    {
-        return providerFamily == ScmProvider.AzureDevOps
-               && !IsHostedAzureDevOps(hostBaseUrl)
-               && authenticationKind == ScmAuthenticationKind.WindowsUserAccount;
-    }
-
-    internal static bool IsSupportedAuthenticationKind(
-        ScmProvider providerFamily,
-        string? hostBaseUrl,
-        ScmAuthenticationKind authenticationKind)
-    {
-        return providerFamily switch
-        {
-            ScmProvider.AzureDevOps => IsHostedAzureDevOps(hostBaseUrl)
-                ? authenticationKind == ScmAuthenticationKind.OAuthClientCredentials
-                : authenticationKind is ScmAuthenticationKind.PersonalAccessToken or ScmAuthenticationKind.WindowsUserAccount,
-            ScmProvider.GitHub => authenticationKind is ScmAuthenticationKind.PersonalAccessToken or ScmAuthenticationKind.AppInstallation,
-            _ => authenticationKind == ScmAuthenticationKind.PersonalAccessToken,
-        };
-    }
-
-    internal static string GetUnsupportedAuthenticationKindMessage(ScmProvider providerFamily)
-    {
-        return providerFamily switch
-        {
-            ScmProvider.AzureDevOps =>
-                "Azure DevOps provider connections must use OAuth client credentials for hosted Azure DevOps Services or personal access token/Windows user account authentication for self-hosted Azure DevOps Server.",
-            ScmProvider.GitHub =>
-                "GitHub provider connections currently support personal access tokens and GitHub App installations.",
-            ScmProvider.GitLab => "GitLab provider connections currently support only personal access tokens.",
-            ScmProvider.Forgejo => "Forgejo provider connections currently support only personal access tokens.",
-            _ => $"{providerFamily} provider connections currently use a restricted authentication model.",
-        };
-    }
-
-    /// <summary>
-    ///     Why this installation refuses <paramref name="hostBaseUrl" />, or <see langword="null" /> when it
-    ///     permits it. The address classification is the one the outbound guard applies, so an address refused
-    ///     when a connection is saved is the same set of addresses refused at connect time.
-    /// </summary>
-    /// <param name="egressUrlPolicy">What this installation permits an operator-entered address to reach.</param>
-    /// <param name="hostBaseUrl">The host base URL as the operator entered it.</param>
-    internal static string? GetHostBaseUrlRefusal(EgressUrlPolicy egressUrlPolicy, string? hostBaseUrl)
-    {
-        ArgumentNullException.ThrowIfNull(egressUrlPolicy);
-
-        return egressUrlPolicy.GetRepositoryHostRefusalReason(
-            hostBaseUrl,
-            nameof(CreateClientProviderConnectionRequest.HostBaseUrl));
-    }
-
-    internal static bool IsHostedAzureDevOps(string? hostBaseUrl)
-    {
-        if (!Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        return string.Equals(uri.Host, "dev.azure.com", StringComparison.OrdinalIgnoreCase)
-               || uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase);
-    }
-
-    internal static bool RequiresSecureWindowsUserAccountHost(
-        ScmProvider providerFamily,
-        string? hostBaseUrl,
-        ScmAuthenticationKind authenticationKind)
-    {
-        return providerFamily == ScmProvider.AzureDevOps
-               && !IsHostedAzureDevOps(hostBaseUrl)
-               && authenticationKind == ScmAuthenticationKind.WindowsUserAccount;
-    }
-
-    internal static bool RequiresSecureAzureDevOpsServerCredentialHost(
-        ScmProvider providerFamily,
-        string? hostBaseUrl,
-        ScmAuthenticationKind authenticationKind)
-    {
-        return providerFamily == ScmProvider.AzureDevOps
-               && !IsHostedAzureDevOps(hostBaseUrl)
-               && authenticationKind is ScmAuthenticationKind.PersonalAccessToken or ScmAuthenticationKind.WindowsUserAccount;
-    }
-
-    internal static bool IsHttpsUrl(string? hostBaseUrl)
-    {
-        return Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var uri)
-               && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+        ArgumentNullException.ThrowIfNull(policy);
+        return policy.GetRepositoryHostRefusalReason(host, nameof(CreateClientProviderConnectionRequest.HostBaseUrl));
     }
 }

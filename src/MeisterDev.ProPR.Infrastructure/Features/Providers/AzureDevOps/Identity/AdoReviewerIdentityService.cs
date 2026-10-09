@@ -5,6 +5,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using static MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Support.AdoProviderAdapterHelpers;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 

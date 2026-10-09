@@ -9,6 +9,8 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -25,6 +27,26 @@ internal sealed class GitHubConnectionVerifier(
 
     private readonly ILogger<GitHubConnectionVerifier> _logger = logger ?? NullLogger<GitHubConnectionVerifier>.Instance;
 
+    public Task<GitHubAuthenticationService.GitHubAppMetadata> GetAppMetadataAsync(
+        ProviderHostRef host, ClientScmConnectionCredentialDto connection, CancellationToken ct = default)
+        => this._authenticationService.GetAppMetadataAsync(host, connection, ct);
+
+    public async Task<GitHubConnectionContext> VerifyAsync(ConnectionDiscoveryContext context, CancellationToken ct = default)
+    {
+        EnsureGitHub(context.Host);
+        var connection = await connectionRepository.GetOperationalConnectionByIdAsync(context.ClientId, context.ConnectionId, ct).ConfigureAwait(false);
+        if (connection is null || !connection.IsActive || connection.Id != context.ConnectionId || connection.ClientId != context.ClientId ||
+            connection.ProviderFamily != context.Host.Provider ||
+            !string.Equals(
+                new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl).HostBaseUrl,
+                context.Host.HostBaseUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The selected connection is not available for this client and host.");
+        }
+
+        return await this.VerifyConnectionAsync(connection, context.Host, ct).ConfigureAwait(false);
+    }
+
     public async Task<GitHubConnectionContext> VerifyAsync(
         Guid clientId,
         ProviderHostRef host,
@@ -38,10 +60,24 @@ internal sealed class GitHubConnectionVerifier(
             throw new InvalidOperationException("No active GitHub connection is configured for the supplied host.");
         }
 
+        return await this.VerifyConnectionAsync(connection, host, ct).ConfigureAwait(false);
+    }
+
+    public async Task<GitHubConnectionContext> VerifyAsync(Guid clientId, ProviderHostRef host, ReviewDiscoveryContext context, CancellationToken ct = default)
+    {
+        EnsureGitHub(host);
+        var connection = await ManualReviewDiscoveryCredentials.ResolveAsync(
+            connectionRepository, clientId, host, context, new GitHubReviewSourcePolicy().IsSelectedScopeCompatible, ct).ConfigureAwait(false);
+        return await this.VerifyConnectionAsync(connection, host, ct, true).ConfigureAwait(false);
+    }
+
+    private async Task<GitHubConnectionContext> VerifyConnectionAsync(
+        ClientScmConnectionCredentialDto connection, ProviderHostRef host, CancellationToken ct, bool readOutcomes = false)
+    {
         return connection.AuthenticationKind switch
         {
-            ScmAuthenticationKind.PersonalAccessToken => await this.VerifyPersonalAccessTokenAsync(connection, host, ct),
-            ScmAuthenticationKind.AppInstallation => await this.VerifyAppInstallationAsync(connection, host, ct),
+            ScmAuthenticationKind.PersonalAccessToken => await this.VerifyPersonalAccessTokenAsync(connection, host, ct, readOutcomes),
+            ScmAuthenticationKind.AppInstallation => await this.VerifyAppInstallationAsync(connection, host, ct, readOutcomes),
             _ => throw new InvalidOperationException("GitHub connection authentication kind is not supported."),
         };
     }
@@ -49,13 +85,18 @@ internal sealed class GitHubConnectionVerifier(
     private async Task<GitHubConnectionContext> VerifyPersonalAccessTokenAsync(
         ClientScmConnectionCredentialDto connection,
         ProviderHostRef host,
-        CancellationToken ct)
+        CancellationToken ct, bool readOutcomes)
     {
         using var request = CreateAuthenticatedRequest(
             BuildApiUri(host, "/user"),
             await this._authenticationService.GetAccessTokenAsync(host, connection, ct));
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
         var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+
+        if (readOutcomes)
+        {
+            GitHubReadFailures.ThrowIfDeniedOrThrottled(response, true);
+        }
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
@@ -93,16 +134,16 @@ internal sealed class GitHubConnectionVerifier(
             user.Login.Trim(),
             user.Login.Trim(),
             host,
-            this._authenticationService);
+            this._authenticationService, readOutcomes);
     }
 
     private async Task<GitHubConnectionContext> VerifyAppInstallationAsync(
         ClientScmConnectionCredentialDto connection,
         ProviderHostRef host,
-        CancellationToken ct)
+        CancellationToken ct, bool readOutcomes)
     {
-        var installation = await this._authenticationService.GetInstallationMetadataAsync(host, connection, ct);
-        _ = await this._authenticationService.GetAccessTokenAsync(host, connection, ct);
+        var installation = await this._authenticationService.GetInstallationMetadataAsync(host, connection, ct, readOutcomes);
+        _ = await this._authenticationService.GetAccessTokenAsync(host, connection, ct, readOutcomes);
         var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         this._logger.LogDebug(
             "GitHub App verification succeeded for connection {ConnectionId} on host {HostBaseUrl} as installation account {AuthenticatedLogin}.",
@@ -117,7 +158,7 @@ internal sealed class GitHubConnectionVerifier(
             installation.AccountLogin,
             authenticatedActorLogin,
             host,
-            this._authenticationService);
+            this._authenticationService, readOutcomes);
     }
 
     internal static HttpRequestMessage CreateAuthenticatedRequest(Uri uri, string token, HttpMethod? method = null)
@@ -184,19 +225,21 @@ internal sealed class GitHubConnectionVerifier(
     {
         private readonly GitHubAuthenticationService _authenticationService;
         private readonly ProviderHostRef _host;
+        private readonly bool _readOutcomes;
 
         internal GitHubConnectionContext(
             ClientScmConnectionCredentialDto connection,
             string authenticatedLogin,
             string authenticatedActorLogin,
             ProviderHostRef host,
-            GitHubAuthenticationService authenticationService)
+            GitHubAuthenticationService authenticationService, bool readOutcomes = false)
         {
             this.Connection = connection;
             this.AuthenticatedLogin = authenticatedLogin;
             this.AuthenticatedActorLogin = authenticatedActorLogin;
             this._host = host;
             this._authenticationService = authenticationService;
+            this._readOutcomes = readOutcomes;
         }
 
         public ClientScmConnectionCredentialDto Connection { get; }
@@ -207,7 +250,7 @@ internal sealed class GitHubConnectionVerifier(
 
         public async Task<string> GetAccessTokenAsync(CancellationToken ct = default)
         {
-            return await this._authenticationService.GetAccessTokenAsync(this._host, this.Connection, ct);
+            return await this._authenticationService.GetAccessTokenAsync(this._host, this.Connection, ct, this._readOutcomes);
         }
 
         public async Task<HttpRequestMessage> CreateAuthenticatedRequestAsync(

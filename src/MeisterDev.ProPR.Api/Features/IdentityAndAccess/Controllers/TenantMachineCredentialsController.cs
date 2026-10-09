@@ -23,7 +23,11 @@ public sealed class TenantMachineCredentialsController(TenantMachineCredentialSe
     public async Task<IActionResult> Issue(Guid tenantId, [FromBody] IssueTenantMachineCredentialRequest request, CancellationToken ct)
     {
         var denial = AuthHelpers.RequirePlatformAdmin(this.HttpContext);
-        if (denial is not null) return denial;
+        if (denial is not null)
+        {
+            return denial;
+        }
+
         if (AuthHelpers.GetUserId(this.HttpContext) is not Guid actorUserId)
         {
             return this.Unauthorized();
@@ -69,7 +73,11 @@ public sealed class TenantMachineCredentialsController(TenantMachineCredentialSe
     public async Task<IActionResult> Revoke(Guid tenantId, Guid id, CancellationToken ct)
     {
         var denial = AuthHelpers.RequirePlatformAdmin(this.HttpContext);
-        if (denial is not null) return denial;
+        if (denial is not null)
+        {
+            return denial;
+        }
+
         if (AuthHelpers.GetUserId(this.HttpContext) is not Guid actorUserId)
         {
             return this.Unauthorized();

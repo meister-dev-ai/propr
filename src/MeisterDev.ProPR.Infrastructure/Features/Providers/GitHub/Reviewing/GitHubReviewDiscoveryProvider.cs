@@ -9,6 +9,8 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 
@@ -22,10 +24,13 @@ internal sealed class GitHubReviewDiscoveryProvider(
         Guid clientId,
         RepositoryRef repository,
         ReviewerIdentity? reviewer,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewDiscoveryContext? context = null)
     {
-        var context = await connectionVerifier.VerifyAsync(clientId, repository.Host, ct);
-        using var request = await context.CreateAuthenticatedRequestAsync(
+        var authentication = context is null
+            ? await connectionVerifier.VerifyAsync(clientId, repository.Host, ct).ConfigureAwait(false)
+            : await connectionVerifier.VerifyAsync(clientId, repository.Host, context, ct).ConfigureAwait(false);
+        using var request = await authentication.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 repository.Host,
                 $"/repos/{BuildRepositoryPath(repository)}/pulls",
@@ -33,6 +38,7 @@ internal sealed class GitHubReviewDiscoveryProvider(
             ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
+        MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support.GitHubReadFailures.ThrowIfDeniedOrThrottled(response);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException($"GitHub review discovery failed with status {(int)response.StatusCode}.");
@@ -88,7 +94,8 @@ internal sealed class GitHubReviewDiscoveryProvider(
             payload.Title ?? $"Pull Request #{payload.Number}",
             payload.HtmlUrl,
             payload.Head?.Ref,
-            payload.Base?.Ref);
+            payload.Base?.Ref,
+            ReviewOverviewPresentation.AuthorName(payload.User?.Name, payload.User?.Login));
     }
 
     private static string BuildRepositoryPath(RepositoryRef repository)
@@ -121,6 +128,11 @@ internal sealed class GitHubReviewDiscoveryProvider(
             return CodeReviewState.Merged;
         }
 
+        if (payload.Draft)
+        {
+            return CodeReviewState.Draft;
+        }
+
         return string.Equals(payload.State, "open", StringComparison.OrdinalIgnoreCase)
             ? CodeReviewState.Open
             : CodeReviewState.Closed;
@@ -144,7 +156,9 @@ internal sealed class GitHubReviewDiscoveryProvider(
         [property: JsonPropertyName("head")] GitHubRefResponse? Head,
         [property: JsonPropertyName("base")] GitHubRefResponse? Base,
         [property: JsonPropertyName("requested_reviewers")]
-        IReadOnlyList<GitHubReviewerResponse>? RequestedReviewers);
+        IReadOnlyList<GitHubReviewerResponse>? RequestedReviewers,
+        [property: JsonPropertyName("user")] GitHubReviewerResponse? User = null,
+        [property: JsonPropertyName("draft")] bool Draft = false);
 
     private sealed record GitHubRefResponse(
         [property: JsonPropertyName("ref")] string? Ref,

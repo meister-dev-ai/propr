@@ -300,6 +300,7 @@ public sealed class CodeInsightHistoryImporterTests
                 .Returns(_ => this._threads);
 
             this.Importer = new CodeInsightHistoryImporter(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                 this._dbContext,
                 gate,
                 ingestion,

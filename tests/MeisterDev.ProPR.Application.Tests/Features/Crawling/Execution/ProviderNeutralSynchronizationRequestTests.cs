@@ -60,6 +60,7 @@ public sealed class ProviderNeutralSynchronizationRequestTests
             RepositoryId = "repo-1",
             PullRequestId = 42,
             PullRequestStatus = PrStatus.Active,
+            Provider = MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps,
         };
 
         Assert.Equal(ScmProvider.AzureDevOps, request.Provider);

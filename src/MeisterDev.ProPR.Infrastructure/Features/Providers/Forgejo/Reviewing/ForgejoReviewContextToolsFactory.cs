@@ -30,6 +30,10 @@ internal sealed class ForgejoReviewContextToolsFactory(
         }
 
         return new LocalGitReviewContextTools(
+            providerRegistry.GetSourceIdentityPolicy(request.CodeReview.Repository.Host.Provider)
+                .PrepareProCursorSymbolContext(
+                    request.CodeReview.Repository, request.SourceBranch,
+                    request.CodeReview.Number, request.IterationId),
             request.Workspace,
             proCursorGateway,
             options,

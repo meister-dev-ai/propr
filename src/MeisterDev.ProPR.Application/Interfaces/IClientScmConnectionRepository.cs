@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Application.Features.Clients.Models;
 
 namespace MeisterDev.ProPR.Application.Interfaces;
 
@@ -45,8 +46,8 @@ public interface IClientScmConnectionRepository
         string displayName,
         string secret,
         bool isActive,
-        long? gitHubAppId = null,
-        long? gitHubAppInstallationId = null,
+        ScmApplicationId? appId = null,
+        ScmInstallationId? installationId = null,
         string? userName = null,
         bool storeThreads = false,
         bool storeDiffs = false,
@@ -64,8 +65,8 @@ public interface IClientScmConnectionRepository
         string displayName,
         string? secret,
         bool isActive,
-        long? gitHubAppId = null,
-        long? gitHubAppInstallationId = null,
+        ScmApplicationId? appId = null,
+        ScmInstallationId? installationId = null,
         string? userName = null,
         bool storeThreads = false,
         bool storeDiffs = false,

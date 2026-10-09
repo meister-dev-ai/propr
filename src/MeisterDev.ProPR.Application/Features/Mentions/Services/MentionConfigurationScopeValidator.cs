@@ -7,22 +7,11 @@ using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.Features.Mentions.Services;
 
-/// <summary>
-///     Holds a mention configuration to the connections its client has already set up.
-/// </summary>
-/// <remarks>
-///     A stored scope path reaches a provider client at scan time, which resolves credentials by looking up a
-///     connection for that host. An unknown host resolves to no credential, and the runtime answers an absent
-///     credential by acquiring a token from the platform's own managed identity and presenting it to the host
-///     in the URL. Without this rule a client administrator can therefore have the platform identity offered to
-///     a host of their choosing.
-///     The rule is one rule for every provider. The previous check ran only for Azure DevOps, so naming any
-///     other provider skipped it and stored an arbitrary URL.
-/// </remarks>
+/// <summary>Validates mention coverage against saved native scopes or enabled provider connections.</summary>
 public sealed class MentionConfigurationScopeValidator(
     IClientScmConnectionRepository connectionRepository,
     IScmProviderRegistry providerRegistry,
-    IClientAdoOrganizationScopeRepository? organizationScopeRepository = null)
+    IClientScmScopeRepository? scopeRepository = null)
     : IMentionConfigurationScopeValidator
 {
     private const string UnsupportedProviderMessage =
@@ -60,59 +49,39 @@ public sealed class MentionConfigurationScopeValidator(
             return new MentionScopeVerdict(MentionScopeRefusal.UnknownScopePath, UnknownScopePathMessage);
         }
 
-        var isKnown = provider == ScmProvider.AzureDevOps
-            ? await this.IsConfiguredOrganizationAsync(clientId, scopePath, ct)
-            : await this.IsConnectionHostAsync(clientId, provider, scopePath, ct);
+        var selection = providerRegistry.GetSourceIdentityPolicy(provider).PrepareMentionScopeSelection(scopePath);
+        var isKnown = selection.ScopeType is not null
+            ? await this.IsConfiguredScopeAsync(clientId, provider, selection, ct)
+            : await this.IsConnectionHostAsync(clientId, provider, selection, ct);
 
         return isKnown
             ? MentionScopeVerdict.Accepted
             : new MentionScopeVerdict(MentionScopeRefusal.UnknownScopePath, UnknownScopePathMessage);
     }
 
-    /// <summary>
-    ///     Reduces two spellings of one endpoint to the same string, so a trailing separator or a difference in
-    ///     case is a match rather than a refusal.
-    /// </summary>
-    private static string Normalize(string? value)
+    private async Task<bool> IsConfiguredScopeAsync(Guid clientId, ScmProvider provider, ReviewMentionScopeSelection selection, CancellationToken ct)
     {
-        return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().TrimEnd('/');
-    }
-
-    /// <summary>
-    ///     An Azure DevOps configuration names an organization, which sits under the connection rather than
-    ///     being the connection's own host, so the organization scopes are what it is matched against.
-    /// </summary>
-    private async Task<bool> IsConfiguredOrganizationAsync(Guid clientId, string scopePath, CancellationToken ct)
-    {
-        if (organizationScopeRepository is null)
+        if (scopeRepository is null)
         {
             return false;
         }
 
-        var scopes = await organizationScopeRepository.GetByClientIdAsync(clientId, ct);
+        var scopes = await scopeRepository.GetByClientIdAsync(clientId, provider, selection.ScopeType!, ct);
         return scopes.Any(scope =>
             scope.IsEnabled
-            && string.Equals(Normalize(scope.OrganizationUrl), Normalize(scopePath), StringComparison.OrdinalIgnoreCase));
+            && selection.MatchesScope(scope.ScopePath));
     }
 
-    /// <summary>
-    ///     Every other provider is addressed by its host, which is the connection's own. The provider named in
-    ///     the request decides which connection counts, so a client holding a GitHub and a Forgejo connection at
-    ///     one host cannot name one and be scanned through the other.
-    /// </summary>
     private async Task<bool> IsConnectionHostAsync(
         Guid clientId,
         ScmProvider provider,
-        string scopePath,
+        ReviewMentionScopeSelection selection,
         CancellationToken ct)
     {
         var connections = await connectionRepository.GetByClientIdAsync(clientId, ct);
         return connections.Any(connection =>
             connection.ProviderFamily == provider
             && connection.IsActive
-            && string.Equals(
-                Normalize(connection.HostBaseUrl),
-                Normalize(scopePath),
-                StringComparison.OrdinalIgnoreCase));
+            && selection.MatchesScope(connection.HostBaseUrl));
     }
 }

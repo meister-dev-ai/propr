@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 
 namespace MeisterDev.ProPR.Api.Tests.Features.Reviewing.Runners;
 

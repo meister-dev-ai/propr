@@ -65,9 +65,9 @@ public sealed class ReviewPrScanWriterSegregationTests
     }
 
     [Fact]
-    public void ThreadMemoryStateMachine_TakesOnlyTheThreadStatusStore()
+    public void Crawler_DelegatesScanWritesToSynchronization()
     {
-        Assert.Equal([typeof(IReviewPrScanThreadStatusStore)], ScanPortsOf(typeof(PrCrawlService)));
+        Assert.Empty(ScanPortsOf(typeof(PrCrawlService)));
     }
 
     [Fact]

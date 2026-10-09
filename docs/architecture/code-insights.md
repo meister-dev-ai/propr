@@ -36,6 +36,14 @@ Thread observations update current outcomes, including reopened threads. A human
 reviewer finding or contains an AI-authored comment is excluded from miss counts; its recorded judgements
 remain available.
 
+Current thread observations receive neutral resolution intent from provider policies. Providerless
+stored discussion text uses an explicit compatibility decoder for the historical
+service-account identifier, summary prefix and generated-marker grammar. Those exclusions remain
+global because the retained text does not establish a provider family or current runtime capability.
+Disposition, harvesting and history import obtain normalized intent for saved discussion statuses through
+the credential-free compatibility codec. Their account and publication exclusions retain the separate
+providerless stored-evidence decoder.
+
 ## Measurements
 
 Performance measurements apply scoring premises to stored counts. Counts refresh as evidence is collected,

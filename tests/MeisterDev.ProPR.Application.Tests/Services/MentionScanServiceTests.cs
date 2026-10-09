@@ -51,13 +51,16 @@ public sealed class MentionScanServiceTests
 
     private readonly IPullRequestFetcher _pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
     private readonly IMentionScanRepository _scanRepository = Substitute.For<IMentionScanRepository>();
-    private readonly IScmProviderRegistry _providerRegistry = Substitute.For<IScmProviderRegistry>();
+    private readonly IScmProviderRegistry _providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
     private readonly MentionScanService _sut;
 
     public MentionScanServiceTests()
     {
+        this._providerRegistry.GetIdentityPolicy(Arg.Any<ScmProvider>()).Returns(call =>
+            MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.GetIdentityPolicy(call.Arg<ScmProvider>()));
         this._channel = Channel.CreateUnbounded<MentionReplyJob>();
         this._sut = new MentionScanService(
+            this._providerRegistry,
             this._mentionConfigs,
             this._activePrFetcher,
             this._pullRequestFetcher,
@@ -66,8 +69,7 @@ public sealed class MentionScanServiceTests
             this._jobRepository,
             this._channel.Writer,
             NullLogger<MentionScanService>.Instance,
-            this._providerActivationService,
-            this._providerRegistry);
+            this._providerActivationService);
 
         this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
             .Returns(true);

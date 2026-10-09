@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
@@ -184,7 +185,7 @@ internal sealed class ForgejoReviewThreadStatusProvider(
 
         return new ProviderRestPager.RestPage<ForgejoPullReviewResponse>(
             reviews,
-            TotalCount: ProviderPaginationHeaders.ReadForgejoTotalCount(response));
+            TotalCount: ForgejoPaginationHeaders.ReadForgejoTotalCount(response));
     }
 
     private async Task<IReadOnlyList<ForgejoPullReviewCommentResponse>> GetReviewCommentsAsync(

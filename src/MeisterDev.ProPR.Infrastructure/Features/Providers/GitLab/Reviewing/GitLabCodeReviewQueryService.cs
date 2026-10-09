@@ -126,7 +126,8 @@ internal sealed class GitLabCodeReviewQueryService(
         [property: JsonPropertyName("diff_refs")]
         GitLabDiffRefsResponse? DiffRefs,
         [property: JsonPropertyName("reviewers")]
-        IReadOnlyList<GitLabReviewerResponse>? Reviewers);
+        IReadOnlyList<GitLabReviewerResponse>? Reviewers,
+        [property: JsonPropertyName("author")] GitLabReviewerResponse? Author = null);
 
     internal sealed record GitLabDiffRefsResponse(
         [property: JsonPropertyName("base_sha")]

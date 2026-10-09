@@ -2,12 +2,16 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.Interfaces;
 
 /// <summary>Persists client-scoped SCM provider scope selections.</summary>
 public interface IClientScmScopeRepository
 {
+    /// <summary>Returns saved scopes by native provider and exact scope type without runtime activation filtering.</summary>
+    Task<IReadOnlyList<ClientScmScopeDto>> GetByClientIdAsync(Guid clientId, ScmProvider provider, string scopeType, CancellationToken ct = default);
+
     /// <summary>Returns all provider scopes configured for one client connection.</summary>
     Task<IReadOnlyList<ClientScmScopeDto>> GetByConnectionIdAsync(
         Guid clientId,

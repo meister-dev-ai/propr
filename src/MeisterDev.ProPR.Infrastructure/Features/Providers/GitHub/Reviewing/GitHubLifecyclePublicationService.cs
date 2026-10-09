@@ -14,6 +14,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -191,7 +192,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
         return new ProviderRestPager.RestPage<GitHubReviewCommentResponse>(
             comments,
-            ProviderPaginationHeaders.ReadGitHubHasMore(response));
+            GitHubPaginationHeaders.ReadGitHubHasMore(response));
     }
 
     /// <summary>

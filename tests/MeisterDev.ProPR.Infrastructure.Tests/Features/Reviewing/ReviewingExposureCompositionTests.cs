@@ -16,6 +16,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing;
 
@@ -26,10 +27,6 @@ public sealed class ReviewingExposureCompositionTests
     [InlineData(false)]
     public async Task RegisteredFileReviewer_CompletesReviewAndRecordsExposureWhenCollectorIsAvailable(bool collectExposure)
     {
-        var moduleServices = new ServiceCollection();
-        moduleServices.AddReviewingModule(new ConfigurationBuilder().Build());
-        var registration = Assert.Single(moduleServices, descriptor => descriptor.ServiceType == typeof(FileReviewer));
-
         var core = Substitute.For<IAiReviewCore>();
         core.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewResult("No findings.", []));
@@ -39,21 +36,27 @@ public sealed class ReviewingExposureCompositionTests
             .Do(call => completed = call.ArgAt<ReviewFileResult>(0));
         var collector = Substitute.For<ICodeInsightReviewExposureCollector>();
 
-        IServiceCollection services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton(core);
-        services.AddSingleton(repository);
-        services.AddSingleton(Substitute.For<IProtocolRecorder>());
-        services.AddSingleton<IOptions<AiReviewOptions>>(Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var services = CreateIsolatedServices(core, repository);
         if (collectExposure)
         {
             services.AddSingleton(collector);
+            services.AddSingleton(LocalScmPolicies.Registry);
         }
-
-        services.Add(registration);
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
+        var registry = scope.ServiceProvider.GetService<IScmProviderRegistry>();
+        if (collectExposure)
+        {
+            var registeredRegistry = Assert.IsAssignableFrom<IScmProviderRegistry>(registry);
+            Assert.Same(LocalScmPolicies.Registry, registeredRegistry);
+            Assert.False(registeredRegistry.IsRegistered(ScmProvider.AzureDevOps));
+        }
+        else
+        {
+            Assert.Null(registry);
+        }
+
         var reviewer = scope.ServiceProvider.GetRequiredService<FileReviewer>();
         var file = new ChangedFile("src/Example.cs", ChangeType.Edit, "class Example {}", "@@ -1 +1 @@\n+class Example {}", false);
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "project", "repository", 32, 1);
@@ -73,5 +76,33 @@ public sealed class ReviewingExposureCompositionTests
                 key.ClientId == job.ClientId && key.RepositoryId == job.RepositoryId && key.PullRequestId == job.PullRequestId),
             job.Id, file.Path, Arg.Any<string>(), "review-model", Arg.Is<string?>(value => value == null), "AzureDevOps:https://dev.azure.com",
             "completed-file-baseline", Arg.Any<DateTimeOffset>(), CancellationToken.None);
+    }
+
+    [Fact]
+    public void RegisteredFileReviewer_WithCollectorWithoutSourcePolicies_RejectsComposition()
+    {
+        var services = CreateIsolatedServices(Substitute.For<IAiReviewCore>(), Substitute.For<IJobRepository>());
+        services.AddSingleton(Substitute.For<ICodeInsightReviewExposureCollector>());
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.Null(scope.ServiceProvider.GetService<IScmProviderRegistry>());
+        var error = Assert.Throws<ArgumentNullException>(() => scope.ServiceProvider.GetRequiredService<FileReviewer>());
+        Assert.Equal("providerRegistry", error.ParamName);
+    }
+
+    private static IServiceCollection CreateIsolatedServices(IAiReviewCore core, IJobRepository repository)
+    {
+        var moduleServices = new ServiceCollection();
+        moduleServices.AddReviewingModule(new ConfigurationBuilder().Build());
+        var registration = Assert.Single(moduleServices, descriptor => descriptor.ServiceType == typeof(FileReviewer));
+        IServiceCollection services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(core);
+        services.AddSingleton(repository);
+        services.AddSingleton(Substitute.For<IProtocolRecorder>());
+        services.AddSingleton<IOptions<AiReviewOptions>>(Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        services.Add(registration);
+        return services;
     }
 }

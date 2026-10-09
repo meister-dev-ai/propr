@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import type { CanonicalSourceReferenceDto } from '@/services/adoDiscoveryService'
+import type { CanonicalSourceReferenceDto } from '@/services/providerDiscoveryService'
 
 /** One editable repository-filter row in the webhook-config form. */
 export interface FilterRow {

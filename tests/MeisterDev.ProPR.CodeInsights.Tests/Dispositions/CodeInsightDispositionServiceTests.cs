@@ -391,6 +391,7 @@ public sealed class CodeInsightDispositionServiceTests
                 .Returns(true);
 
             this.Service = new CodeInsightDispositionService(
+                MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry.CompatibilityCodec,
                 this.Store,
                 this.Dispositions,
                 this.Classifier,

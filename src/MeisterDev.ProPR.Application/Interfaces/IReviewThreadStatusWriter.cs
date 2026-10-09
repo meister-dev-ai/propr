@@ -12,6 +12,9 @@ public interface IReviewThreadStatusWriter
     /// <summary>The provider family implemented by this adapter.</summary>
     ScmProvider Provider { get; }
 
+    /// <summary>Applies the normalized resolve action using the native status grammar.</summary>
+    Task ResolveThreadAsync(Guid clientId, ReviewThreadRef thread, CancellationToken ct = default);
+
     /// <summary>Updates the target review thread status.</summary>
     Task UpdateThreadStatusAsync(
         Guid clientId,

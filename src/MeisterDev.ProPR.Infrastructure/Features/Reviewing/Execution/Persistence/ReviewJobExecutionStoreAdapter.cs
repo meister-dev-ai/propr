@@ -67,6 +67,7 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
     }
 
     public Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -75,6 +76,7 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         CancellationToken ct = default)
     {
         return inner.GetCompletedJobWithFileResultsAsync(
+            clientId,
             organizationUrl,
             projectId,
             repositoryId,
@@ -84,6 +86,7 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
     }
 
     public Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -92,6 +95,7 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         CancellationToken ct = default)
     {
         return inner.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            clientId,
             organizationUrl,
             projectId,
             repositoryId,
@@ -101,6 +105,7 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
     }
 
     public Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -110,6 +115,7 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         CancellationToken ct = default)
     {
         return inner.GetLatestReusableTerminalJobAsync(
+            clientId,
             organizationUrl,
             projectId,
             repositoryId,
@@ -120,6 +126,7 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
     }
 
     public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -128,6 +135,7 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         CancellationToken ct = default)
     {
         return inner.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            clientId,
             organizationUrl,
             projectId,
             repositoryId,

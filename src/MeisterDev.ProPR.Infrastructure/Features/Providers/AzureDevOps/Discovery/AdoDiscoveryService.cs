@@ -2,13 +2,17 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.TeamFoundation.Core.WebApi;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.TeamFoundation.Wiki.WebApi;
 using Microsoft.VisualStudio.Services.WebApi;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Security;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
+
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Discovery;
 
@@ -24,11 +28,21 @@ public class AdoDiscoveryService(
 
     public ScmProvider Provider => ScmProvider.AzureDevOps;
 
+    public Task<GuidedSourceSelection> ResolveGuidedSourceAsync(
+        Guid clientId, Guid scopeId, string projectId, ProCursorSourceKind sourceKind,
+        CanonicalSourceReferenceDto? reference, CancellationToken ct = default, Guid? connectionId = null) =>
+        AdoGuidedDiscovery.ResolveSourceAsync(this, clientId, scopeId, projectId, sourceKind, reference, ct, connectionId);
+
     public Task<ClientScmScopeDto?> GetScopeAsync(
         Guid clientId,
         Guid scopeId,
-        CancellationToken ct = default)
+        CancellationToken ct = default, Guid? connectionId = null)
     {
+        if (connectionId.HasValue)
+        {
+            return scopeRepository.GetByIdAsync(clientId, connectionId.Value, scopeId, ct);
+        }
+
         return AdoProviderAdapterHelpers.ResolveOrganizationScopeByIdAsync(
             connectionRepository,
             scopeRepository,
@@ -37,16 +51,16 @@ public class AdoDiscoveryService(
             ct);
     }
 
-    public async Task<IReadOnlyList<AdoProjectOptionDto>> ListProjectsAsync(
+    public async Task<IReadOnlyList<ScmDiscoveryProjectOption>> ListProjectOptionsAsync(
         Guid clientId,
         Guid scopeId,
-        CancellationToken ct = default)
+        CancellationToken ct = default, Guid? connectionId = null)
     {
-        var (_, _, connection) = await this.ResolveScopeAsync(clientId, scopeId, ct);
+        var (_, _, connection) = await this.ResolveSelectedScopeAsync(clientId, scopeId, connectionId, ct);
         var projects = await this.GetProjectsAsync(connection, ct);
 
         return projects
-            .Select(project => new AdoProjectOptionDto(
+            .Select(project => new ScmDiscoveryProjectOption(
                 scopeId,
                 project.Id.ToString(),
                 string.IsNullOrWhiteSpace(project.Name) ? project.Id.ToString() : project.Name))
@@ -55,16 +69,16 @@ public class AdoDiscoveryService(
             .AsReadOnly();
     }
 
-    public async Task<IReadOnlyList<AdoSourceOptionDto>> ListSourcesAsync(
+    public async Task<IReadOnlyList<ScmDiscoverySourceOption>> ListSourceOptionsAsync(
         Guid clientId,
         Guid scopeId,
         string projectId,
         ProCursorSourceKind sourceKind,
-        CancellationToken ct = default)
+        CancellationToken ct = default, Guid? connectionId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var (_, _, connection) = await this.ResolveScopeAsync(clientId, scopeId, ct);
+        var (_, _, connection) = await this.ResolveSelectedScopeAsync(clientId, scopeId, connectionId, ct);
         return sourceKind switch
         {
             ProCursorSourceKind.Repository => await this.ListRepositoriesAsync(connection, projectId, ct),
@@ -73,18 +87,18 @@ public class AdoDiscoveryService(
         };
     }
 
-    public async Task<IReadOnlyList<AdoBranchOptionDto>> ListBranchesAsync(
+    public async Task<IReadOnlyList<ScmDiscoveryBranchOption>> ListBranchOptionsAsync(
         Guid clientId,
         Guid scopeId,
         string projectId,
         ProCursorSourceKind sourceKind,
         CanonicalSourceReferenceDto canonicalSourceRef,
-        CancellationToken ct = default)
+        CancellationToken ct = default, Guid? connectionId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentNullException.ThrowIfNull(canonicalSourceRef);
 
-        var (_, _, connection) = await this.ResolveScopeAsync(clientId, scopeId, ct);
+        var (_, _, connection) = await this.ResolveSelectedScopeAsync(clientId, scopeId, connectionId, ct);
         var repositoryId = await this.ResolveRepositoryIdAsync(
             connection,
             projectId,
@@ -105,26 +119,26 @@ public class AdoDiscoveryService(
             .Where(static branchName => !string.IsNullOrWhiteSpace(branchName))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(branchName => branchName, StringComparer.OrdinalIgnoreCase)
-            .Select(branchName => new AdoBranchOptionDto(
+            .Select(branchName => new ScmDiscoveryBranchOption(
                 branchName!,
                 string.Equals(branchName, defaultBranch, StringComparison.OrdinalIgnoreCase)))
             .ToList()
             .AsReadOnly();
     }
 
-    public async Task<IReadOnlyList<AdoCrawlFilterOptionDto>> ListCrawlFiltersAsync(
+    public async Task<IReadOnlyList<ScmDiscoveryCrawlFilterOption>> ListCrawlFilterOptionsAsync(
         Guid clientId,
         Guid scopeId,
         string projectId,
-        CancellationToken ct = default)
+        CancellationToken ct = default, Guid? connectionId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var (_, _, connection) = await this.ResolveScopeAsync(clientId, scopeId, ct);
+        var (_, _, connection) = await this.ResolveSelectedScopeAsync(clientId, scopeId, connectionId, ct);
         var repositories = await this.GetRepositoriesAsync(connection, projectId, ct);
 
         return repositories
-            .Select(repository => new AdoCrawlFilterOptionDto(
+            .Select(repository => new ScmDiscoveryCrawlFilterOption(
                 new CanonicalSourceReferenceDto(AzureDevOpsProvider, repository.Id.ToString()),
                 repository.Name ?? repository.Id.ToString(),
                 BuildBranchSuggestions(repository.DefaultBranch)))
@@ -133,7 +147,7 @@ public class AdoDiscoveryService(
             .AsReadOnly();
     }
 
-    protected internal virtual async Task<IReadOnlyList<AdoSourceOptionDto>> ListRepositoriesAsync(
+    protected internal virtual async Task<IReadOnlyList<ScmDiscoverySourceOption>> ListRepositoriesAsync(
         VssConnection connection,
         string projectId,
         CancellationToken ct)
@@ -141,7 +155,7 @@ public class AdoDiscoveryService(
         var repositories = await this.GetRepositoriesAsync(connection, projectId, ct);
 
         return repositories
-            .Select(repository => new AdoSourceOptionDto(
+            .Select(repository => new ScmDiscoverySourceOption(
                 ProCursorSourceKind.Repository.ToString("G"),
                 new CanonicalSourceReferenceDto(AzureDevOpsProvider, repository.Id.ToString()),
                 repository.Name ?? repository.Id.ToString(),
@@ -151,7 +165,7 @@ public class AdoDiscoveryService(
             .AsReadOnly();
     }
 
-    protected internal virtual async Task<IReadOnlyList<AdoSourceOptionDto>> ListWikisAsync(
+    protected internal virtual async Task<IReadOnlyList<ScmDiscoverySourceOption>> ListWikisAsync(
         VssConnection connection,
         string projectId,
         CancellationToken ct)
@@ -159,7 +173,7 @@ public class AdoDiscoveryService(
         var wikis = await this.GetWikisAsync(connection, projectId, ct);
 
         return wikis
-            .Select(wiki => new AdoSourceOptionDto(
+            .Select(wiki => new ScmDiscoverySourceOption(
                 ProCursorSourceKind.AdoWiki.ToString("G"),
                 new CanonicalSourceReferenceDto(AzureDevOpsProvider, wiki.Id.ToString()),
                 wiki.Name ?? wiki.Id.ToString(),
@@ -193,7 +207,7 @@ public class AdoDiscoveryService(
         };
     }
 
-    private static IReadOnlyList<AdoBranchOptionDto> BuildBranchSuggestions(string? defaultBranch)
+    private static IReadOnlyList<ScmDiscoveryBranchOption> BuildBranchSuggestions(string? defaultBranch)
     {
         var normalizedDefaultBranch = NormalizeBranchName(defaultBranch);
         if (string.IsNullOrWhiteSpace(normalizedDefaultBranch))
@@ -201,7 +215,7 @@ public class AdoDiscoveryService(
             return [];
         }
 
-        return [new AdoBranchOptionDto(normalizedDefaultBranch, true)];
+        return [new ScmDiscoveryBranchOption(normalizedDefaultBranch, true)];
     }
 
     private static string? NormalizeBranchName(string? branchName)
@@ -233,6 +247,34 @@ public class AdoDiscoveryService(
         }
 
         return wiki.RepositoryId.ToString();
+    }
+
+    private async Task<(ClientAdoOrganizationScopeDto Scope, AdoConnectionCredentials? Credentials, VssConnection Connection)> ResolveSelectedScopeAsync(
+        Guid clientId, Guid scopeId, Guid? connectionId, CancellationToken ct)
+    {
+        if (!connectionId.HasValue)
+        {
+            return await this.ResolveScopeAsync(clientId, scopeId, ct).ConfigureAwait(false);
+        }
+
+        var scope = await scopeRepository.GetByIdAsync(clientId, connectionId.Value, scopeId, ct).ConfigureAwait(false);
+        if (scope is null || !scope.IsEnabled || scope.ClientId != clientId || scope.ConnectionId != connectionId ||
+            !scope.ScopeType.Equals("organization", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The selected organization scope does not belong to this connection.");
+        }
+
+        var selectedConnection = await connectionRepository.GetOperationalConnectionByIdAsync(clientId, connectionId.Value, ct).ConfigureAwait(false);
+        if (selectedConnection is null || !selectedConnection.IsActive || selectedConnection.Id != connectionId.Value ||
+            selectedConnection.ClientId != clientId || selectedConnection.ProviderFamily != this.Provider)
+        {
+            throw new InvalidOperationException("The selected connection is not available for this client.");
+        }
+
+        var credentials = AdoProviderAdapterHelpers.ToAdoCredentials(selectedConnection);
+        AdoProviderAdapterHelpers.EnsureRuntimeCredentialsAvailable(scope.ScopePath, credentials);
+        var connection = await connectionFactory.GetConnectionAsync(scope.ScopePath, credentials, ct).ConfigureAwait(false);
+        return (AdoProviderAdapterHelpers.ToAdoOrganizationScopeDto(scope), credentials, connection);
     }
 
     protected internal virtual async

@@ -16,7 +16,7 @@ public sealed record SubmitReviewJobRequestDto(
     float? ReviewTemperature = null)
 {
     /// <summary>Normalized SCM provider family for the submitted review target.</summary>
-    public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
+    public required ScmProvider Provider { get; init; }
 
     /// <summary>Normalized provider host reference when the caller can supply it.</summary>
     public ProviderHostRef? Host { get; init; }

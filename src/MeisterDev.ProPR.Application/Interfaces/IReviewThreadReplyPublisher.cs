@@ -19,8 +19,7 @@ public interface IReviewThreadReplyPublisher
     ///     True for every adapter that replies inside the thread, because the identifier is what it addresses.
     ///     False for one that answers with a new comment on the pull request: it addresses the pull request and
     ///     says which comment it answers with a quote, so a thread it was never given is no obstacle. Callers
-    ///     read this before refusing a comment whose thread has no identifier — on Forgejo that is every
-    ///     comment on a line of code, and refusing those would leave half the questions unanswered.
+    ///     read this before refusing a comment whose thread has no identifier.
     /// </remarks>
     bool RequiresThreadIdentifier => true;
 
@@ -29,10 +28,10 @@ public interface IReviewThreadReplyPublisher
     ///     comment it created, or null when the adapter cannot obtain one.
     /// </summary>
     /// <remarks>
-    ///     The comment id alone, rather than a result also carrying the thread id: a reply lands in the thread
+    ///     The result contains the comment identifier. A reply is posted in the thread
     ///     the caller named, so every other coordinate provenance recording needs is already in the caller's
     ///     <see cref="ReviewThreadRef" />, and echoing it back would only invite the two to disagree. Nullable
-    ///     because an adapter that genuinely cannot report an id must still be free to post: the reply degrades
+    ///     because an adapter that cannot report an id must still be free to post: the reply degrades
     ///     to posted-but-unrecorded instead of being blocked.
     /// </remarks>
     /// <param name="clientId">The client whose credentials the reply is posted with.</param>
@@ -40,12 +39,8 @@ public interface IReviewThreadReplyPublisher
     /// <param name="replyText">What to say.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <param name="quotedComment">
-    ///     The text of the comment being answered. Used by the adapters that answer with a new comment on the
-    ///     pull request, which open it with a markdown blockquote so the reader can see what is being answered:
-    ///     Forgejo, and GitHub for a question asked in the conversation. Azure DevOps, GitLab and GitHub's
-    ///     review-thread path ignore it, because they post into the thread and the comment being answered is
-    ///     already directly above the reply. Supplied by the caller, which is the only party that knows which
-    ///     comment this reply answers.
+    ///     The text of the comment being answered. Adapters that post a new pull-request comment use a
+    ///     Markdown blockquote to identify the question. Adapters that reply inside a thread can ignore it.
     /// </param>
     Task<string?> ReplyAsync(
         Guid clientId,

@@ -7,8 +7,10 @@ using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Commands.HandleProviderWebhookDelivery;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
-using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Services;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.Crawling.Configuration;
+using MeisterDev.ProPR.Infrastructure.Features.Crawling.Configuration;
+using MeisterDev.ProPR.Infrastructure.Features.Crawling.Configuration.Persistence;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Crawling.Webhooks.Persistence;
@@ -21,6 +23,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.DependencyInject
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
@@ -39,6 +42,7 @@ public static class CrawlingModuleServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
+        services.AddScmProviderLocalDeclarations();
         services.AddAzureDevOpsProviderAdapters();
         services.AddGitHubProviderAdapters();
         services.AddGitLabProviderAdapters();
@@ -48,6 +52,9 @@ public static class CrawlingModuleServiceCollectionExtensions
         {
             services.TryAddScoped<IScmProviderRegistry, ScmProviderRegistry>();
             services.AddScoped<ICrawlConfigurationRepository, CrawlConfigurationRepository>();
+            services.AddScoped<IClientPullRequestOverviewStore, ClientPullRequestOverviewStore>();
+            services.AddScoped<ClientPullRequestOverviewService>();
+            services.AddScoped<IClientPullRequestOverviewService>(sp => sp.GetRequiredService<ClientPullRequestOverviewService>());
             services.AddScoped<IWebhookConfigurationRepository, EfWebhookConfigurationRepository>();
             services.AddScoped<IWebhookDeliveryLogRepository, EfWebhookDeliveryLogRepository>();
 
@@ -75,14 +82,14 @@ public static class CrawlingModuleServiceCollectionExtensions
 
         services.AddAzureDevOpsCrawlingServices(configuration);
         services.AddScoped<IPullRequestSynchronizationService, PullRequestSynchronizationService>();
+        services.AddScoped<MeisterDev.ProPR.Application.Features.Crawling.Configuration.IReviewConfigurationSelectionService,
+            MeisterDev.ProPR.Application.Features.Crawling.Configuration.ReviewConfigurationSelectionService>();
 
         // The close observation both seal paths share. It lives here, not in the code-insight module, because
         // deciding whether a comment is ProPR's own needs the posted-comment provenance and the
         // thread-ownership resolver. Registered unconditionally: it observes nothing when the code-insight
         // harvester is absent, and the sweep and the lifecycle pass both take it as optional.
         services.AddScoped<ICodeInsightCloseObserver, PullRequestCloseObserver>();
-        services.AddScoped<IWebhookReviewActivationService, WebhookReviewActivationService>();
-        services.AddScoped<IWebhookReviewLifecycleSyncService, WebhookReviewLifecycleSyncService>();
         services.AddScoped<HandleProviderWebhookDeliveryHandler>();
 
         services.AddScoped<IWebhookSecretGenerator, WebhookSecretGenerator>();

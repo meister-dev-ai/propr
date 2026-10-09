@@ -82,6 +82,7 @@ public sealed class FileReviewerInventoryLensTests
             });
 
         return new FileReviewer(
+            null,
             this._aiCore,
             this._recorder,
             this._jobRepository,

@@ -1,13 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Crawling.Webhooks.Persistence;
 
@@ -346,13 +346,9 @@ public sealed class EfWebhookConfigurationRepository(
 
     private static ScmProvider MapProviderType(WebhookProviderType providerType)
     {
-        return providerType switch
-        {
-            WebhookProviderType.AzureDevOps => ScmProvider.AzureDevOps,
-            WebhookProviderType.GitHub => ScmProvider.GitHub,
-            WebhookProviderType.GitLab => ScmProvider.GitLab,
-            WebhookProviderType.Forgejo => ScmProvider.Forgejo,
-            _ => throw new ArgumentOutOfRangeException(nameof(providerType), providerType, null),
-        };
+        return MeisterDev.ProPR.Infrastructure.Features.Providers.Common.Compatibility.ScmProviderCompatibilityCodec.TryMapWebhook(
+            providerType, out var provider)
+            ? provider
+            : throw new ArgumentOutOfRangeException(nameof(providerType), providerType, null);
     }
 }

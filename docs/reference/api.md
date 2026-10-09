@@ -59,426 +59,273 @@ curl -k https://localhost:5443/api/clients \
 List tokens with `GET /api/users/me/pats` and revoke one with `DELETE /api/users/me/pats/<pat-id>`. What
 a PAT can do, and how it is stored, is in [automation credentials](security.md#automation-credentials).
 
-### Tenant machine credentials
+## Tenant machine credentials
 
-A platform administrator issues a tenant credential with
-`POST /api/admin/tenants/{tenantId}/machine-credentials` and a JSON body containing `label` and optional
-future `expiresAt`. The response contains the token once. List credential metadata with `GET` on the
-same path, and revoke one with
-`DELETE /api/admin/tenants/{tenantId}/machine-credentials/{credentialId}`. These lifecycle endpoints
-require a platform administrator JWT or PAT.
+A platform administrator creates a credential with `POST /api/admin/tenants/{tenantId}/machine-credentials`,
+supplying `label` and optional future `expiresAt`. The token is returned once. `GET` lists metadata;
+`DELETE /api/admin/tenants/{tenantId}/machine-credentials/{credentialId}` revokes a credential.
 
-An external application sends the issued token as `X-Tenant-Machine-Token`. It can look up its tenant's
-clients, list and retrieve reviews, submit a review by configured pull-request coordinates, and manage
-client-scoped SCM connections, scopes, AI connections, and repository review targets. The API checks each action and resolves
-client ownership from the database. Tenant creation, user administration, and unrelated administrative
-endpoints refuse this credential. The token must remain on the server side.
-The credential can read the effective logical-model list at `GET /api/clients/{clientId}/logical-models`
-and the purpose routes at `GET /api/clients/{clientId}/logical-models/purposes` for a client currently owned
-by its tenant. Logical-model overrides and purpose-route mutations require a user credential.
-Machine callers can use `POST /api/clients/{clientId}/ai-connections/{connectionId}/verify-update` to verify
-candidate profile edits before replacement. They can apply the Default, High, and Embedding model purposes with
-`POST /api/clients/{clientId}/ai-connections/select-purposes`; the body contains `default`, `high` and
-`embedding`, each with `connectionId` and `configuredModelId`. Selection requires verified client-owned
-models and refuses conflicting logical or managed bindings. The credential cannot change inherited profiles
-or logical mappings through these bounded operations. See [AI connection configuration](../ai/credentials.md).
-Effective logical-model entries include optional `referencedModel` metadata for authorized references:
-the remote model ID, connection display name, supported operations and protocol modes, embedding tokenizer,
-input limit and dimensions, profile activity, and verification status. Missing, forbidden, or unavailable
-references return `referencedModel.availability` as `unavailable` and omit model and profile metadata.
-Machine-token requests can return `429 Too Many Requests` when the API host's global request limit or
-that credential's verification limit is reached. Both limits use one-second windows. The global limit
-defaults to 256 requests per second per API host and can be set with
-`MEISTER_MACHINE_AUTH_GLOBAL_PERMITS_PER_SECOND` (clamped to 1–4096). Each credential is limited to
-16 BCrypt verifications per second. Retry after the next second.
+External services send `X-Tenant-Machine-Token` and keep the token server-side.
 
-For a client with the crawl configuration capability, `GET /api/clients/{clientId}/review-targets`
-lists repository targets. `GET /api/clients/{clientId}/review-targets/repositories?connectionId={id}&scopePath={scope}`
-lists repositories reachable through an active, verified connection. For Azure DevOps, `scopePath` is an
-organization URL on the connection's origin; for GitHub, GitLab, and Forgejo it is an owner or namespace.
-Each returned entry contains `repositoryId`, `repositoryName`, `providerProjectKey`,
-`providerProjectDisplayName`, and `ownerOrNamespace`. For Azure DevOps,
-`providerProjectKey` is the stable project ID and `providerProjectDisplayName` is the project name used in
-browser URLs. For a repository in a nested namespace, `providerProjectKey` names the repository's full
-namespace even when `scopePath` queried a parent. Create a target with `POST /api/clients/{clientId}/review-targets` and a JSON body
-containing `connectionId`, `providerProjectKey`, `repositoryId`, `repositoryName`, and optional
-`providerScopePath`. Azure DevOps requires `providerScopePath` on the connection's origin; other providers
-derive it from the connection host. ProPR verifies the repository against the provider before creating a
-target. Creation returns `201` with `id`, `providerScopePath`,
-`providerProjectKey`, `repositoryId`, `repositoryName`, and `isActive: false`. An identical request returns
-`200` with the existing target. A different target for the same scope and project returns `409`.
+| Access | Contract |
+|---|---|
+| Client operations | ProPR checks current tenant ownership for client configuration, review reads and configured-coordinate submission. Foreign client access returns 403. |
+| Administrative operations | Tenant creation, user administration and unrelated administrative endpoints reject machine credentials. Credential lifecycle operations require a platform administrator JWT or PAT. |
+| Logical models | Machine callers can read effective models and purpose routes, but cannot change logical mappings or inherited profiles. Unavailable references omit profile metadata. |
+| AI configuration | Machine callers can verify candidate edits and select verified client-owned Default, High and Embedding purposes. See [AI credentials](../ai/credentials.md). |
+| Rate limits | Requests can return 429. The API-host limit defaults to 256 requests/second; `MEISTER_MACHINE_AUTH_GLOBAL_PERMITS_PER_SECOND` is clamped to 1–4096. Each credential permits 16 BCrypt verifications/second. Retry after the next one-second window. |
 
-`GET /api/clients/{clientId}/review-targets/{targetId}/open-reviews?connectionId={id}` lists up to 100
-open pull requests for one configured target. The connection must be active, verified, client-owned, and
-cover the target's provider and host. The response contains `number`, `title`, `webUrl`, and `state` (`open`
-or `draft`); an unsafe provider URL is returned as `null`. The endpoint uses the provider's bounded first
-page, so a repository with more than 100 open pull requests requires another way to locate older requests.
-The tenant machine credential can call this endpoint only for a client owned by its tenant.
+## Repository review targets
 
-`GET /api/clients/{clientId}/reviewing/dashboard` returns the selected client's processing reviews and a
-count of findings persisted in completed review results during the preceding 30 days. The count uses each
-job's completion time in the interval from `windowStart` inclusive to `windowEnd` exclusive. The response contains
-`windowStart`, `windowEnd`, `recentFindingCount`, and `runningReviews`. Each running review contains its
-`id`, `status`, `provider`, `repository`, `pullRequestNumber`, and `startedAt`. Pending and held reviews are
-not counted as running. The finding count comes from stored review results even when SCM comment posting is
-disabled. A tenant machine credential may call this endpoint only for a client currently owned by its tenant.
+All paths below start with `/api/clients/{clientId}/review-targets`. The client requires the crawl
+configuration capability. Each repository has its own target identity, including repositories in the
+same project or namespace.
 
-`GET /api/clients/{clientId}/reviewing/history` reads a bounded page of persisted review metadata. The
-query accepts `page` (one-based, default 1), `pageSize` (1–100, default 25), and an optional named job
-`status`. Invalid bounds or statuses return 400. The response contains `totalCount`, `page`, `pageSize`
-and `items`. Each item contains `id`, `status`, `provider`, `repository`, `pullRequestNumber`,
-`submittedAt`, `completedAt` and `findingCount`. ProPR counts and pages within the specified client
-and status, ordered by submission time and review ID descending. PostgreSQL computes finding counts
-from persisted result JSON without transferring result text or protocol events for history.
+| Operation | Input | Outcome |
+|---|---|---|
+| `GET /` | No provider credentials are required for saved targets. | ProPR returns configured targets. |
+| `GET /repositories` | `connectionId` selects an active, verified, client-owned connection; `scopePath` selects an enabled scope. | ProPR returns repository IDs, names, project keys/display names and owner namespaces. |
+| `POST /` | Supply `connectionId`, `providerProjectKey`, `repositoryId`, `repositoryName` and optional `providerScopePath` and `targetBranchPatterns`. | ProPR verifies repository access and returns 201. An identical existing target returns 200; conflicting identity or policy returns 409. New targets allow manual reviews with crawling off. |
+| `PATCH /{targetId}` | Supply `connectionId`, `expectedTargetBranchPatterns` and `targetBranchPatterns`. Both arrays are required. | ProPR replaces only destination policy. A stale expected policy or identity returns 409 without changing activation or other settings. |
+| `GET /management` | Accepts `search`, `provider`, `status` (`enabled` or `disabled`), `page` and `pageSize` (default 25, maximum 100). | ProPR returns saved metadata without SCM access, excluding removed targets, ordered by repository name and ID. |
+| `GET /management/{targetId}` | The target must belong to the client. | ProPR returns the saved target, including removed state. Missing or foreign targets return 404. Use this read to resolve uncertain lifecycle writes. |
+| `PATCH /{targetId}/lifecycle` | Supply `expectedRevision` and `lifecycle` (`enabled`, `disabled`, `removed`). Removal also requires the saved repository name in `confirmationName`. | A stale revision returns 409. Every lifecycle write leaves crawling off; already accepted reviews and history remain recorded. |
 
-`GET /api/clients/{clientId}/reviewing/jobs/{jobId}/status` returns a job's status and persisted result
-when that client owns it. The database lookup checks both identifiers before reading the result. A
-foreign or missing job returns 404. Both routes require client access; tenant machine credentials also
-require current tenant ownership of the client. Persisted-result access remains client-scoped when
-SCM connections or targets are removed.
+Azure DevOps uses the saved organization URL as `scopePath` and requires `providerScopePath` on the
+selected connection's origin. Enabled organization metadata must belong to that exact connection;
+a shared `dev.azure.com` origin does not establish coverage. Other providers use an owner or namespace
+and derive target scope from the connection host. Discovery returns the full namespace for nested
+repositories. Azure `providerProjectKey` is the stable project ID; `providerProjectDisplayName` is its
+browser-visible name. Provider-family values are `azureDevOps`, `github`, `gitLab` and `forgejo`.
+
+| Constraint | Contract |
+|---|---|
+| Revision | `revision`, `expectedRevision` and `expectedRemovedRevision` are positive decimal strings, from `"1"` through `"9223372036854775807"`. Preserve them as strings, including values above JavaScript's safe integer limit. |
+| Management pagination | The opaque `snapshotVersion` covers **all matching target representations**, including identity, metadata, revision, lifecycle, crawl state and policy. Combine pages only when every version matches; equal counts are insufficient. |
+| Removal | Removed identities continue to exclude customer submissions through overlapping configurations. A missing item on a management page does not confirm removal. |
+| Restoration | Creating a removed repository returns 409 with `removedTarget`. Restore through creation with `restoreRemovedTarget: true`, `expectedRemovedRevision` and current provider access. Restoration preserves the target ID, replaces destination policy and leaves crawling off. Lifecycle PATCH cannot restore a removed target. |
+| Administrative writes | Canonical target deletion returns 409 in every lifecycle state. Protected lifecycle/filter conflicts also return 409 without partial settings changes. Generic crawl configurations retain administrative deletion. |
+| Branch patterns | Empty patterns allow all branches. Up to 100 patterns of at most 512 characters are accepted; this bound does not truncate provider branch names. Exact names and case-insensitive `*`/`**` path globs are supported. |
+| Pattern validation | ProPR removes `refs/heads/` and surrounding whitespace. Empty and dot segments do not affect matching or duplicate detection. Blank/control-character patterns, patterns without effective segments and equivalent duplicates return field errors without a write. |
+| Candidate policy | Restricted policies exclude candidates without a destination branch. Fresh coordinate submissions check the current branch and canonical identity; generic configurations cannot bypass target policy. |
+
+## Pull request discovery
+
+All paths below start with `/api/clients/{clientId}/review-targets`. Every read, including cached reads,
+requires current client access, target policy and an active, verified selected connection covering the
+enabled saved scope. Adapters use that connection's current credentials without another connection or
+installation-credential fallback. Tenant machine callers require current tenant ownership.
+
+Installed adapters require positive native pull request or merge request numbers. The domain also
+stores an external review identifier; these operations do not accept opaque-only review identities.
+
+| Operation | Input | Outcome |
+|---|---|---|
+| `GET /{targetId}/open-reviews` | Supply `connectionId`. | ProPR returns at most 100 policy-matching open or draft reviews with available branches, author, URL and revision. Successful empty results are empty lists; provider failures return fixed 502 feedback. |
+| `GET /{targetId}/open-reviews/{number}/metadata` | Supply `connectionId` and a positive native number. | ProPR returns nullable message/discussion counts, `isComplete` and `resolutionSupported`. Provider failures return fixed 502 feedback. |
+| `POST /overview` | Supply `sources` (target/connection pairs), non-secret selection `binding`, optional `cursor`, `page`, `pageSize`, `loadMore` and `reload`. | ProPR returns immutable cumulative rows, source outcomes, coverage, nullable `totalRows`, observation times, freshness, expiry and next refresh time. Responses use `Cache-Control: no-store`. |
+
+The example ingress URL is `POST https://localhost:5443/api/clients/{clientId}/review-targets/overview`.
+Backend-relative OpenAPI paths omit the ingress `/api` prefix.
+
+| Overview constraint | Contract |
+|---|---|
+| Pages | `pageSize` defaults to 25 and permits at most 100. Pages above one require a generation cursor. |
+| Loading | `loadMore` creates a cumulative generation returned at page 1. `reload` uses the displayed generation cursor; omitting it starts a new read. |
+| Timing | Observations are fresh for 60 seconds. Refresh attempts share a 60-second cooldown, including failures. Generation eligibility is at most 15 minutes and cannot exceed original listing or metadata deadlines. |
+| Coverage | Each load covers at most 8 sources, each source at most 100 pull requests, and each generation at most 100 sources. Partial coverage and remaining sources are explicit; observed rows are not a complete inventory. |
+| Response capacity | Serialized responses are limited to 2 MiB. Capacity refusal returns no items or actionable cursor and `totalRows: null`, with source outcomes and next permitted refresh time. Unavailable totals are not zero. |
+| Expiry | Expired navigation requires a new read. Replacements cannot reactivate an expired cursor. |
+| Confirmed denial | `accessDenied` invalidates affected observations and retained cursors. Metadata-only permission denial keeps eligible listing rows with unavailable counts. |
+| Transient failure | `throttled` and other transient failures can retain eligible stale rows with their original observation times and deadlines. |
+| Metadata | Unavailable or incomplete counts are not zero. Nullable fields, `isComplete` and `resolutionSupported` describe the result; independently known counts can remain available. Complete empty collections have zero counts. Listing does not read discussions for every candidate. |
+
+| Metadata field | Meaning |
+|---|---|
+| `totalComments` | Published user messages from all authors, not only the reviewer. Deleted/system messages and unpublished review drafts are excluded where the provider exposes them. |
+| `resolvedDiscussions`, `unresolvedDiscussions` | Native discussion counts, not message counts or review approvals. Forgejo returns null for both and `resolutionSupported: false`. |
+| `isComplete` | The bounded provider read completed. Missing states, malformed fields or overlapping pagination can leave counts unknown. |
+| Read limits | REST reads use at most 12 data requests per review and at most 2 MiB per response, with pages up to 100 items. GitLab inspects at most 3,000 notes; Azure DevOps permits at most 1,000 threads and 10,000 comments. Reads have a 15-second deadline. |
+
+GitHub counts conversation comments, review comments and nonblank published review summaries; GitLab
+uses discussion notes; Azure DevOps uses live text comments and native thread status. Forgejo counts
+issue comments, published code comments and nonblank published review summaries once. Selected Forgejo
+verification and metadata preserve deployment prefixes; open-review discovery does not support them.
+
+## Client review history
+
+All paths below start with `/api/clients/{clientId}/reviewing`. Reads remain available after SCM
+connections or targets are removed. Missing or foreign jobs return 404.
+
+| Operation | Input | Outcome |
+|---|---|---|
+| `GET /dashboard` | The caller requires current client access. | ProPR returns processing reviews and findings persisted in completed results over `[windowStart, windowEnd)`, the preceding 30 days. Disabling comment publication does not remove findings from the count. |
+| `GET /history` | `page` defaults to 1; `pageSize` defaults to 25 and permits 1–100; optional `status` is a named job status. | ProPR returns `totalCount`, paging fields and metadata items, ordered by submission time and review ID descending. Invalid bounds/status return 400. |
+| `GET /jobs/{jobId}/status` | The client must own the job. | ProPR returns job status and persisted result. |
+
+## Completed-review usage export
+
+`GET /api/clients/{clientId}/reviewing/completed-usage` requires `X-Tenant-Machine-Token` and current
+tenant ownership of the client.
+
+| Input or field | Contract |
+|---|---|
+| `after` | The optional sequence cursor is exclusive. |
+| `limit` | The default and maximum are 100; valid values are 1–100. |
+| `items` | Only completed reviews with finalized protocols and measured execution duration produce facts. Facts have immutable sequence and content. |
+| `nextCursor` | The cursor is the last returned sequence; an empty page returns null. Persist each fact before advancing. Keep the supplied cursor on an empty page, and request another page after a non-empty page to confirm completion. |
+| Replay | Replaying a cursor preserves existing facts and can include newly finalized facts. |
+| `executionDurationMilliseconds` | The duration covers processing across attempts and excludes queue time. |
+| `aiConnectionId` | The ID identifies the connection, not BYOK or platform billing mode. Resolve billing mode from the consuming service's approved configuration. |
+| `estimatedCostUsd` | The nullable decimal amount has up to six fractional digits. Null means no reliable price, not zero cost. |
+| `costIsApproximate` | The flag is true when a component is estimated or the priced total excludes an unpriced component. |
+
+Facts also contain `sequence`, `jobId`, `clientId` and `completedAt`. The response contains no
+machine token, provider secret or customer credit rate.
 
 ## Client management
 
-Create a client:
+All paths below start with `/api/clients`.
 
-```bash
-curl -k -X POST https://localhost:5443/api/clients \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{"displayName": "My First Client", "tenantId": "<tenant-id>"}'
-```
+| Operation | Input | Outcome |
+|---|---|---|
+| `GET /` | The caller requires client access. | ProPR lists accessible clients. |
+| `POST /` | Supply `displayName` and required `tenantId`. | ProPR creates a client and returns its ID. |
 
-`tenantId` is required. List the tenants you may create a client in with `GET /api/admin/tenants`. A fresh
-installation seeds exactly one, the built-in **System** tenant, whose id is always
-`11111111-1111-1111-1111-111111111111`. Creating a client anywhere else needs the tenant-administrator role for
-that tenant; only a platform administrator can create one in the System tenant.
+Creating a client requires tenant administration; creating one in the System tenant requires platform
+administration. `GET /api/admin/tenants` lists available tenants. The seeded System tenant ID is
+`11111111-1111-1111-1111-111111111111`.
 
-List provider connections for a client:
+## SCM provider connections
 
-```bash
-curl -k https://localhost:5443/api/clients/<client-id>/provider-connections \
-  -H "Authorization: Bearer <accessToken>"
-```
+All paths below start with `/api/clients/{clientId}/provider-connections`.
+Provider and authentication fields depend on the [support matrix](../platforms/index.md#support-matrix).
+Secrets are write-only.
 
-Create an Azure DevOps provider connection:
-
-```bash
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{
-    "providerFamily": "azureDevOps",
-    "hostBaseUrl": "https://dev.azure.com",
-    "authenticationKind": "oauthClientCredentials",
-    "oAuthTenantId": "<tenant-id>",
-    "oAuthClientId": "<application-client-id>",
-    "displayName": "Contoso Azure DevOps",
-    "secret": "<client-secret-value>",
-    "isActive": true
-  }'
-```
-
-Create a GitHub provider connection:
-
-```bash
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{
-    "providerFamily": "github",
-    "hostBaseUrl": "https://github.com",
-    "authenticationKind": "personalAccessToken",
-    "displayName": "GitHub Cloud",
-    "secret": "<github-pat>",
-    "isActive": true
-  }'
-```
-
-Create a GitHub App provider connection, where ProPR acts as an installed App:
-
-```bash
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{
-    "providerFamily": "github",
-    "hostBaseUrl": "https://github.com",
-    "authenticationKind": "appInstallation",
-    "gitHubAppId": 123456,
-    "gitHubAppInstallationId": 789012,
-    "displayName": "GitHub App",
-    "secret": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
-    "isActive": true
-  }'
-```
-
-`providerFamily` and `authenticationKind` are required, and which other fields each combination needs
-is in [the support matrix](../platforms/index.md#support-matrix).
-
-Patch one provider connection:
-
-```bash
-curl -k -X PATCH https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id> \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{
-    "displayName": "Primary GitHub",
-    "isActive": true
-  }'
-```
-
-Create a provider scope on a connection:
-
-```bash
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id>/scopes \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{
-    "scopeType": "organization",
-    "externalScopeId": "my-org",
-    "scopePath": "https://dev.azure.com/my-org",
-    "displayName": "My Org",
-    "isEnabled": true
-  }'
-```
-
-Verify a provider connection:
-
-```bash
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id>/verify \
-  -H "Authorization: Bearer <accessToken>"
-```
-
-Resolve and store a reviewer identity for a provider connection:
-
-```bash
-curl -k "https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id>/reviewer-identities/resolve?search=My%20Service%20Principal" \
-  -H "Authorization: Bearer <accessToken>"
-
-curl -k -X PUT https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id>/reviewer-identity \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{
-    "externalUserId": "<resolved-provider-user-id>",
-    "login": "my-service-principal",
-    "displayName": "My Service Principal",
-    "isBot": true
-  }'
-```
+| Operation | Input | Outcome |
+|---|---|---|
+| `POST /` | Supply `providerFamily`, `authenticationKind`, `hostBaseUrl`, display name, secret and mode-specific identifiers. | ProPR stores a protected provider connection. Creation does not verify provider access. |
+| `PATCH /{connectionId}` | Supply changed connection fields. | ProPR updates the owned connection. See the platform page for credential replacement requirements. |
+| `POST /{connectionId}/scopes` | Supply `scopeType`, `externalScopeId`, `scopePath`, `displayName` and `isEnabled`. | ProPR saves the provider scope. Azure DevOps uses an organization or collection URL. |
+| `POST /{connectionId}/verify` | Azure DevOps requires an enabled organization scope. | ProPR verifies provider access separately from caller authorization. |
+| `GET /{connectionId}/reviewer-identities/resolve` | Supply `search`. | ProPR resolves provider users. |
+| `PUT /{connectionId}/reviewer-identity` | Supply `externalUserId`, `login`, `displayName` and `isBot`. | ProPR saves the reviewer identity. |
 
 ## AI connection profiles
 
-Create an AI connection profile:
+All paths below start with `/api/clients/{clientId}/ai-connections`.
+[AI credentials](../ai/credentials.md) describes provider-specific configuration.
 
-```bash
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/ai-connections \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{
-    "displayName": "Foundry Primary",
-    "providerKind": "azureOpenAi",
-    "baseUrl": "https://my-foundry.services.ai.azure.com/models",
-    "auth": {
-      "mode": "apiKey",
-      "apiKey": "<api-key>"
-    },
-    "discoveryMode": "manualOnly",
-    "configuredModels": [
-      {
-        "remoteModelId": "gpt-5.4-mini",
-        "displayName": "gpt-5.4-mini",
-        "operationKinds": ["chat"]
-      }
-    ],
-    "purposeBindings": [
-      {
-        "purpose": "reviewDefault",
-        "remoteModelId": "gpt-5.4-mini"
-      }
-    ]
-  }'
-```
+| Operation | Input | Outcome |
+|---|---|---|
+| `GET /` | The caller requires client access. | ProPR lists profile metadata, including creation correlation identifiers, without secrets. Use this read to recover an interrupted creation response. |
+| `GET /permitted-providers` | The caller requires client access. | ProPR returns installed family keys, tenant permissions, authentication modes, credential fields and protocol modes. |
+| `POST /probe` | Supply `providerKind`, `baseUrl` and `auth`. | ProPR probes the unsaved candidate. |
+| `POST /discover-models` | Supply the candidate provider, URL and authentication. | ProPR discovers available models. |
+| `POST /` | Supply `displayName` (at most 200 characters), `providerKind`, `baseUrl`, `auth`, and non-empty `configuredModels` and `purposeBindings`. | ProPR creates a profile with model IDs; missing required fields return 400. |
+| `POST /{connectionId}/verify` | The connection must belong to the client. | ProPR stores the verification result. |
+| `POST /{connectionId}/verify-update` | Supply candidate profile edits. | ProPR verifies the candidate before replacement; concurrent configuration conflicts require readback and retry. |
+| `POST /{connectionId}/activate` | The profile requires successful verification since its last configuration change. | ProPR activates the profile; an unverified profile returns 400. |
+| `POST /select-purposes` | Supply `default`, `high` and `embedding`, each with `connectionId` and `configuredModelId`. | ProPR selects verified client-owned models and rejects conflicting logical or managed bindings. |
 
-`providerKind` is required, `displayName` is required and capped at 200 characters, and
-`configuredModels` and `purposeBindings` are both required. An absent or empty array on either is
-rejected with `400`.
+Optional `creationRequestId` is a non-empty UUID for interrupted-creation readback. Create and list
+responses retain this immutable client-scoped identifier. Concurrent or later duplicate creation
+returns 409 without updating the existing profile or replaying 201. Retrieve the profile list to recover
+an uncertain result. The identifier is not a credential or TTL-based idempotency ledger; physical
+profile deletion permits later reuse. Omitted correlation remains null.
 
 ### Purpose bindings
 
-A binding names a `purpose` and the model on this profile that serves it. Name the model by `remoteModelId`,
-matched against `configuredModels` in the same request, or by `configuredModelId` once the model has an id.
-`protocolMode` defaults to `Auto` and `isEnabled` to `true`. A purpose may appear once.
+| Field | Contract |
+|---|---|
+| `purpose` | Each [AI purpose](../ai/purposes.md#ai-purposes) can occur once. |
+| `remoteModelId` or `configuredModelId` | The binding selects a configured model on this profile. |
+| `protocolMode`, `isEnabled` | Defaults are `Auto` and true. Embedding purposes require an embedding-capable model and `Auto` or `Embeddings`; other purposes require chat capability. |
 
-`purpose` takes the API value of any purpose listed under [AI purposes](../ai/purposes.md#ai-purposes).
-`embeddingDefault` needs an embedding-capable model and a `protocolMode` of `Auto` or `Embeddings`; every other
-purpose needs a chat-capable model.
-
-Logical models select a model first, and these bindings resolve after them. See
-[Logical models and purposes](#logical-models-and-purposes) below.
+Logical-model selection takes precedence over profile bindings.
 
 ### Per-model inputs
 
-Each entry in `configuredModels` takes these fields.
-
-| Field | Notes |
+| Field | Contract |
 |---|---|
-| `remoteModelId` | Required; unique within the request, case-insensitively |
-| `displayName` | Defaults to `remoteModelId` |
-| `operationKinds` | `chat`, `embedding`, or both |
-| `supportedProtocolModes` | `Auto`, `Embeddings`, and the shapes the family declares, each written as its identity key, a `:`, and the mode name; `permitted-providers` reports them under `protocolModes` |
-| `tokenizerName`, `maxInputTokens`, `embeddingDimensions` | Mandatory for an embedding model |
-| `supportsStructuredOutput`, `supportsToolUse` | Default `false` |
-| `maxContextTokens` | Context window, used for context budgeting |
-| `inputCostPer1MUsd`, `outputCostPer1MUsd`, `cachedInputCostPer1MUsd` | Prices used for spend reporting |
-| `id`, `source`, `lastSeenAt` | Round-tripped from discovery; omit on a hand-written model |
-
-The server infers `operationKinds` when you omit it: `embedding` when the model id contains `embedding` or when
-`tokenizerName` or `embeddingDimensions` is supplied, `chat` otherwise. It infers `supportedProtocolModes` the
-same way: `Auto` and `Embeddings` for an embedding-only model, and every shape the family speaks except
-`Embeddings` otherwise. A declared protocol the model's capabilities do not support is rejected: `Embeddings` on
-a model without embedding capability, or a shape a family owns on a model without chat capability.
-
-An embedding model must carry `tokenizerName`, a `maxInputTokens` above zero, and an `embeddingDimensions` between
-64 and 4096. `source` is `discovered`, `manual` or `knownCatalog`.
-
-`providerKind` takes the identity key a provider family declares, such as `meisterdev/anthropic`. Which keys an
-installation has depends on which add-ins it loaded, so ask the API which families this build can call, which
-the tenant permits, and which authentication and protocol modes each one accepts:
-
-```bash
-curl -k https://localhost:5443/api/clients/<client-id>/ai-connections/permitted-providers \
-  -H "Authorization: Bearer <accessToken>"
-```
-
-Probe a target before saving it, and discover the models behind it:
-
-```bash
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/ai-connections/probe \
-  -H "Content-Type: application/json" -H "Authorization: Bearer <accessToken>" \
-  -d '{ "providerKind": "anthropic", "baseUrl": "https://api.anthropic.com/v1",
-        "auth": { "mode": "apiKey", "apiKey": "<api-key>" } }'
-
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/ai-connections/discover-models \
-  -H "Content-Type: application/json" -H "Authorization: Bearer <accessToken>" \
-  -d '{ "providerKind": "anthropic", "baseUrl": "https://api.anthropic.com/v1",
-        "auth": { "mode": "apiKey", "apiKey": "<api-key>" } }'
-```
+| `remoteModelId` | The ID is required and case-insensitively unique within the request. |
+| `displayName` | The name defaults to the remote ID. |
+| `operationKinds` | Values are `chat`, `embedding`, or both. If omitted, embedding metadata or an ID containing `embedding` selects embedding; otherwise ProPR selects chat. |
+| `supportedProtocolModes` | Use installed family declarations from `permitted-providers`. Omission infers compatible modes; incompatible explicit modes are rejected. |
+| `tokenizerName`, `maxInputTokens`, `embeddingDimensions` | Embedding models require a tokenizer, positive input limit and dimensions from 64 through 4096. |
+| `supportsStructuredOutput`, `supportsToolUse` | Both flags default to false. |
+| `maxContextTokens` | ProPR uses the context window for budgeting. |
+| `inputCostPer1MUsd`, `outputCostPer1MUsd`, `cachedInputCostPer1MUsd` | ProPR uses these prices for spend reporting. |
+| `id`, `source`, `lastSeenAt` | Round-trip discovery metadata; hand-written models can omit it. Source values are `discovered`, `manual` and `knownCatalog`. |
 
 ### Logical models and purposes
 
-Which model serves which workload is configured through logical models, not on the profile. A logical model is a
-name you choose that points at one model on one connection; a purpose is a fixed slot the review loop asks for.
+A logical-model name selects one model on one connection. A purpose selects a logical-model name.
 
-| Call | Does |
+| Operation | Outcome |
 |---|---|
-| `GET /api/clients/<client-id>/logical-models` | The names effective for this client - its own overrides plus the tenant-catalog entries they do not shadow |
-| `POST /api/clients/<client-id>/logical-models/overrides` | Defines a per-client name |
-| `PUT /api/clients/<client-id>/logical-models/purposes/<purpose>` | Points one purpose at a name |
-| `GET /api/tenants/<tenant-id>/logical-models` | The tenant-catalog names every client in that tenant inherits |
+| `GET /api/clients/{clientId}/logical-models` | ProPR returns client overrides and inherited tenant names not overridden by them. |
+| `POST /api/clients/{clientId}/logical-models/overrides` | ProPR defines a client-owned name. |
+| `PUT /api/clients/{clientId}/logical-models/purposes/{purpose}` | ProPR assigns a purpose to a name. |
+| `GET /api/tenants/{tenantId}/logical-models` | ProPR returns the tenant catalog. |
 
-Tenant-catalog writes are refused for the System tenant, so a client in it defines its names as client overrides.
-
-The model catalog and its tenant pricing overrides live under `/api/tenants/<tenant-id>/model-catalog/`
-(`models`, `providers`, `overrides`). See [models and the catalog](../ai/models-and-catalog.md).
+The System tenant rejects tenant-catalog writes; its clients use overrides. Model catalog and pricing
+overrides use `/api/tenants/{tenantId}/model-catalog/`; see [models and the catalog](../ai/models-and-catalog.md).
 
 ### Scripted setup
 
-Create, verify, activate, bind, in that order. Activation is refused while the profile has not been verified
-since its last change.
+Create the profile, verify it, activate it, then define logical models and assign purposes.
+Unmapped purposes cannot perform their workload.
 
-```bash
-BASE=https://localhost:5443/api/clients/<client-id>
-AUTH=(-H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json")
-
-# 1. Create. The response carries the profile id and an id for each configured model.
-profile=$(curl -sk -X POST "$BASE/ai-connections" "${AUTH[@]}" -d '{
-  "displayName": "Bedrock Frankfurt",
-  "providerKind": "awsBedrock",
-  "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
-  "auth": {
-    "mode": "sigV4",
-    "fields": { "accessKeyId": "<accessKeyId>", "secretAccessKey": "<secretAccessKey>" }
-  },
-  "discoveryMode": "manualOnly",
-  "defaultQueryParams": { "region": "eu-central-1" },
-  "configuredModels": [
-    {
-      "remoteModelId": "<bedrock-model-or-inference-profile-id>",
-      "operationKinds": ["chat"],
-      "supportedProtocolModes": ["auto", "bedrockConverse"],
-      "maxContextTokens": 200000
-    }
-  ],
-  "purposeBindings": [
-    { "purpose": "reviewDefault", "remoteModelId": "<bedrock-model-or-inference-profile-id>" }
-  ]
-}')
-connection_id=$(printf '%s' "$profile" | jq -r '.id')
-model_id=$(printf '%s' "$profile" | jq -r '.configuredModels[0].id')
-
-# 2. Verify. Stores a verification snapshot on the profile.
-curl -sk -X POST "$BASE/ai-connections/$connection_id/verify" "${AUTH[@]}"
-
-# 3. Activate. Returns 400 while the last verification did not succeed.
-curl -sk -X POST "$BASE/ai-connections/$connection_id/activate" "${AUTH[@]}"
-
-# 4. Name the model, then point a purpose at that name.
-curl -sk -X POST "$BASE/logical-models/overrides" "${AUTH[@]}" -d "{
-  \"name\": \"deep\",
-  \"capability\": \"chat\",
-  \"connectionId\": \"$connection_id\",
-  \"configuredModelId\": \"$model_id\",
-  \"reasoningEffort\": \"medium\",
-  \"protocolMode\": \"Auto\"
-}"
-
-curl -sk -X PUT "$BASE/logical-models/purposes/reviewDefault" "${AUTH[@]}" \
-  -d '{"logicalModelName": "deep"}'
-```
-
-Repeat the last call for every purpose you use; an unmapped purpose fails the work that needs it.
-
-`capability` is `chat` or `embedding`; `reasoningEffort` takes the values listed under
-[reasoning effort](../ai/purposes.md#reasoning-effort).
-
-`defaultQueryParams` carries the values a provider reads from the profile instead of the URL: `region` for AWS
-Bedrock, `project` for Vertex AI. When to set each, and which wins if the host names one too, is in
-[provider-specific setup notes](../ai/credentials.md#provider-specific-setup-notes). `defaultHeaders` sends extra
-headers a gateway in front of a provider expects. Probe after setting one, because the families differ in where
-headers are applied.
-
-`auth.mode` names a credential shape the family declares, written as the family's identity key, a `:`, and the
-mode name — `meisterdev/googleVertex:GcpAdc`, say.
-
-`auth` carries the credential in one of two shapes. `auth.apiKey` sends a single-string key. `auth.fields` sends
-named values, keyed by the names `permitted-providers` reports for that mode under `credentialFields`:
-`serviceAccountJson` for `meisterdev/googleVertex:GcpAdc`. A mode that declares no field stores no credential:
-`meisterdev/azureOpenAi:AzureIdentity` reaches the resource with the host's managed identity. A family accepts the modes `permitted-providers` reports
-for it under `authModes`, and a create or update is refused when it names another mode, omits a required field,
-or sends a name the mode does not declare. What to send for each family is in
-[credentials by provider](../ai/credentials.md#credentials-by-provider).
+| Input | Contract |
+|---|---|
+| `auth.mode` | Use the family-declared authentication key returned by `permitted-providers`. |
+| `auth.apiKey` or `auth.fields` | Supply the single-string key or declared named credential fields. ProPR rejects missing required fields and undeclared names. Modes without credential fields can use host identity. |
+| `defaultQueryParams` | Supply provider settings such as Bedrock `region` or Vertex AI `project`; see [provider setup notes](../ai/credentials.md#provider-specific-setup-notes). |
+| `defaultHeaders` | Supply headers required by a gateway and probe the configuration. |
+| Logical-model `capability` | Use `chat` or `embedding`. |
+| Logical-model `reasoningEffort` | Use a supported [reasoning effort](../ai/purposes.md#reasoning-effort). |
 
 ## Guided discovery endpoints
 
-Resolve the Azure DevOps projects, sources and branches reachable through a connection's organization
-scope. All three need at least `ClientUser` for the client.
+Guided configuration uses `/admin/clients/{clientId}/connections/{connectionId}/discovery`.
+Every request requires an explicit `purpose`: `crawl`, `webhook`, `mention` or `procursor`.
+Crawl discovery requires `ClientUser` and the `crawl-configs` capability. Mention discovery requires
+`ClientAdmin`, the `mention-answering` capability and native mention capabilities. Webhook and
+ProCursor discovery require `ClientUser`. These read permissions do not grant configuration writes.
 
-Add `&purpose=crawl` to the project and crawl-filter queries when you are building a crawl
-configuration; that form is refused with HTTP 409 unless the `crawl-configs` capability is licensed.
+Read `descriptor` for the native scope label, optional project stage, source kinds and supported
+operations. Read `scopes`, then `projects` when the descriptor declares a project stage.
+`sources` returns native repository identifiers, canonical references and persistent coordinates.
+`selection` resolves persistent coordinates even when a repository listing is empty. Use
+`filters` for crawl and webhook repository choices, and `branches` when supported.
 
 ```bash
-# List projects
-curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/projects?organizationScopeId=<scope-id>" \
+curl -k "https://localhost:5443/api/admin/clients/<client-id>/connections/<connection-id>/discovery/descriptor?purpose=webhook" \
   -H "Authorization: Bearer <accessToken>"
 
-# List repository/wiki sources for a project
-curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/sources?organizationScopeId=<scope-id>&projectId=my-project&sourceKind=repository" \
+curl -k "https://localhost:5443/api/admin/clients/<client-id>/connections/<connection-id>/discovery/scopes?purpose=webhook" \
   -H "Authorization: Bearer <accessToken>"
 
-# List branches for a repository
-curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/branches?organizationScopeId=<scope-id>&projectId=my-project&sourceKind=repository&canonicalSourceProvider=azureDevOps&canonicalSourceValue=repo-1" \
+curl -k "https://localhost:5443/api/admin/clients/<client-id>/connections/<connection-id>/discovery/sources?purpose=webhook&scopeKey=<scope-key>&projectId=<project-id>&sourceKind=repository" \
   -H "Authorization: Bearer <accessToken>"
 ```
+
+Unknown or missing purposes return HTTP 400. Empty lists return HTTP 200. Unsupported native
+operations return HTTP 501. Unavailable resources return HTTP 404; invalid connection selections
+or native discovery failures return HTTP 400 with sanitized guidance. Entitlement refusals return
+HTTP 409. A supplied connection must belong to the client and be active before native discovery runs.
+
+Guided creates include `connectionId` and `scopeKey`. The server validates supplied provider and
+scope coordinates against the native selection. Manual configuration APIs require an explicit
+provider. Saved legacy configurations remain readable, and unrelated patches do not replace filters.
+Source discovery rejects scopes unavailable through the selected connection before repository queries.
+Saved native project names and ID casing resolve through native project metadata; patches retain
+stored coordinates. Repository-filter replacement preserves unchanged legacy targets with null
+canonical references. Retained mention repositories preserve omitted source metadata and claim times;
+explicit conflicting source coordinates are refused.
+Native project IDs take precedence over name fallback. Guided mention patches refuse changed
+canonical/provider coordinates for retained repository IDs even when they match live discovery.
 
 ## ProCursor source management
 
@@ -491,6 +338,8 @@ curl -k -X POST https://localhost:5443/api/admin/clients/<client-id>/procursor/s
   -d '{
     "displayName": "Platform Docs",
     "sourceKind": "repository",
+    "connectionId": "<connection-id>",
+    "scopeKey": "<scope-key>",
     "organizationScopeId": "<scope-id>",
     "providerProjectKey": "my-project",
     "canonicalSourceRef": {
@@ -511,7 +360,9 @@ curl -k -X POST https://localhost:5443/api/admin/clients/<client-id>/procursor/s
   }'
 ```
 
-`sourceKind` is `repository` or `adoWiki`, and `refreshTriggerMode` is `manual` or `branchUpdate`.
+`sourceKind` must be declared by the selected connection descriptor. Knowledge-source creation requires
+its knowledge-source capability. Azure DevOps supports `repository` and `adoWiki`; other native adapters
+do not register knowledge-source materializers. `refreshTriggerMode` is `manual` or `branchUpdate`.
 
 ## Crawl configurations
 
@@ -519,7 +370,7 @@ Crawl configurations require the `crawl-configs` capability; see [editions](edit
 repository filters, then create one:
 
 ```bash
-curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/crawl-filters?organizationScopeId=<scope-id>&projectId=my-project" \
+curl -k "https://localhost:5443/api/admin/clients/<client-id>/connections/<connection-id>/discovery/filters?purpose=crawl&scopeKey=<scope-key>&projectId=my-project" \
   -H "Authorization: Bearer <accessToken>"
 
 curl -k -X POST https://localhost:5443/api/admin/crawl-configurations \
@@ -527,6 +378,8 @@ curl -k -X POST https://localhost:5443/api/admin/crawl-configurations \
   -H "Authorization: Bearer <accessToken>" \
   -d '{
     "clientId": "<client-id>",
+    "connectionId": "<connection-id>",
+    "scopeKey": "<scope-key>",
     "organizationScopeId": "<scope-id>",
     "providerProjectKey": "my-project",
     "crawlIntervalSeconds": 60,
@@ -706,8 +559,7 @@ starts once the installation's concurrency ceiling allows it - see [editions](ed
 
 ### Trigger a review from coordinates alone
 
-Post the coordinates when you know which pull request you mean but not which commits it is at. ProPR
-reads the revision from your SCM host.
+Submit configured repository coordinates to have ProPR read the current revision from the SCM host.
 
 ```bash
 curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/jobs/by-coordinates \
@@ -721,21 +573,24 @@ curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/jobs/by
   }'
 ```
 
-All four fields are required, and `providerScopePath` and `providerProjectKey` must match a crawl or
-webhook configuration of that client exactly. The match tells ProPR which provider family the
-coordinates belong to, and it limits the client's source-control credential to the repositories that
-client configured. Where the configuration lists specific repositories and recorded their provider ids,
-`repositoryId` must be one of them; a configuration that lists none covers its whole scope. Deactivating
-a configuration stops it starting reviews by itself and still lets you ask for one, which gives you a
-manual-only setup. The review runs under that configuration's code-knowledge source scope and review
-temperature.
+| Input constraint | Contract |
+|---|---|
+| Required coordinates | Supply `providerScopePath`, `providerProjectKey`, `repositoryId` and a positive native `pullRequestId`. |
+| Saved coverage | Scope and project must exactly match the client's crawl or webhook configuration. Repository filters must cover the supplied repository. |
+| Current policy | Canonical repository lifecycle and destination policy apply even through an overlapping generic configuration. Disabled or removed targets cannot admit customer reviews. |
+| Manual-only setup | Inactive generic configurations still permit manual submission. This does not override canonical target lifecycle. |
+| Execution settings | ProPR applies the current configured source scope and review temperature. |
 
 The same request serves the first review and every re-review after new commits, because the revision is
 read fresh each time. An earlier job at an older revision is retired as superseded. Unlike the automatic
 triggers, this request reviews a revision that has already been reviewed, or that a previous review
 failed at. A review already running at this exact revision is not started twice.
 
-`ClientUser` is enough here, as it is for restart. Every answer to a complete request carries a named
+Duplicate jobs and superseded jobs belong to the submitting client. Other clients reviewing the same
+pull request retain their jobs and results. Resumption and incremental result reuse also select only
+the submitting client's history.
+
+`ClientUser` is enough here, as it is for restart. Every response to a complete request carries a named
 `outcome`:
 
 | `outcome` | Status | Means |
@@ -745,28 +600,22 @@ failed at. A review already running at this exact revision is not started twice.
 | `notSubmittable` | 409 | The pull request is closed, merged, blocked, or its configured source scope no longer resolves. `reason` says which |
 | `notAuthorized` | 403 | No configuration of this client covers the coordinates, or you lack the role |
 | `pullRequestNotFound` | 404 | The provider reports no such pull request |
-| `submissionFailed` | 500 | The pull request resolved, but queueing the review failed inside ProPR. The server logs carry the detail |
+| `submissionFailed` | 500 | The review could not be admitted or submitted inside ProPR. The server logs carry the detail |
 | `revisionUnresolvable` | 502 | The provider could not be asked, or answered without commits. Check the connection and retry |
 
 A request missing one of the four fields carries no `outcome`. It is refused with `400` and a plain
 `{"error": "..."}`, the shape the other endpoints on this page use.
 
-Poll the job, and restart or stop it:
+Coverage or admission failures return `submissionFailed` without internal diagnostics.
+ProPR reads the revision fresh and rechecks current authorization, lifecycle and branch policy before
+queueing with the current source scope and temperature. Provider revision failures return
+`revisionUnresolvable`. Caller cancellation propagates before acceptance.
 
-```bash
-curl -k https://localhost:5443/api/reviewing/jobs/<job-id>/status \
-  -H "X-User-Pat: <token>"
-
-curl -k -X POST https://localhost:5443/api/reviewing/jobs/<job-id>/restart \
-  -H "X-User-Pat: <token>"
-
-curl -k -X POST https://localhost:5443/api/reviewing/jobs/<job-id>/stop \
-  -H "X-User-Pat: <token>"
-```
-
-Reading status and restarting need only `ClientUser`; stopping needs `ClientAdministrator`. A failed
-review is never continued automatically; restart it explicitly. Stopping is terminal and does not
-requeue the job.
+| Job operation | Access and outcome |
+|---|---|
+| `GET /api/reviewing/jobs/{jobId}/status` | ClientUser can read status and result. |
+| `POST /api/reviewing/jobs/{jobId}/restart` | ClientUser can explicitly restart a failed review; failed jobs do not resume automatically. |
+| `POST /api/reviewing/jobs/{jobId}/stop` | ClientAdministrator can stop a job. Stopping is terminal and does not requeue it. |
 
 ## Blocking and dismissing
 
@@ -878,38 +727,17 @@ judgements remain present, but `countsAsMiss` is false.
 
 ## Usage statistics
 
-Six platform-administrator endpoints cover the daily snapshot. [Usage statistics](usage-statistics.md) describes
-each field of that snapshot and why it is collected.
+These operations require platform administration. [Usage statistics](usage-statistics.md) describes the
+daily snapshot fields. Paths start with `/api/admin/usage-statistics`.
 
-`GET /api/admin/usage-statistics` returns the current state: whether sending is on, whether a commercial
-license governs the control, the last send attempt and its outcome, and the newest version and advisories the
-receiver last reported.
-
-`PATCH /api/admin/usage-statistics` with `{"enabled": false}` switches sending off. It answers `409` while a
-commercial license is installed.
-
-`GET /api/admin/usage-statistics/preview` returns the request body the next snapshot would carry. Requesting it
-sends nothing, in any state.
-
-```bash
-curl -s -H "Authorization: Bearer $TOKEN" \
-  https://localhost:5443/api/admin/usage-statistics/preview
-```
-
-`POST /api/admin/usage-statistics/send` runs a send cycle now instead of waiting for the daily one. The daily
-rules still apply, so an installation that is switched off or has not shown the notice sends nothing. The
-response carries a `decision` of `sent`, `disabled`, `awaitingConsent` or `notDue`, and the state after the
-attempt.
-
-```bash
-curl -s -X POST -H "Authorization: Bearer $TOKEN" \
-  https://localhost:5443/api/admin/usage-statistics/send
-```
-
-`POST /api/admin/usage-statistics/notice/shown` records that the consent notice reached an administrator, which
-lets a community installation start sending. The administration UI calls it when the notice renders, and it is
-idempotent. `POST /api/admin/usage-statistics/notice/dismiss` hides the notice and changes nothing about what is
-sent.
+| Operation | Input | Outcome |
+|---|---|---|
+| `GET /` | No body is required. | ProPR returns sending state, license constraints, last attempt and receiver advisories. |
+| `PATCH /` | Supply `{"enabled": false}` to disable sending. | A commercial license prevents disabling and returns 409. |
+| `GET /preview` | No body is required. | ProPR returns the next snapshot payload without sending it. |
+| `POST /send` | No body is required. | ProPR runs a send cycle under the daily rules and returns `sent`, `disabled`, `awaitingConsent` or `notDue`. |
+| `POST /notice/shown` | No body is required. | ProPR records that an administrator saw the consent notice; the operation is idempotent. |
+| `POST /notice/dismiss` | No body is required. | ProPR hides the notice without changing sending policy. |
 
 ## Health endpoints behind the proxy
 

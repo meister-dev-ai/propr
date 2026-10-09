@@ -12,7 +12,7 @@ namespace MeisterDev.ProPR.Api.Validators;
 public sealed class CreateAdminCrawlConfigRequestValidator : AbstractValidator<CreateAdminCrawlConfigRequest>
 {
     /// <summary>Initializes a new instance of <see cref="CreateAdminCrawlConfigRequestValidator" />.</summary>
-    public CreateAdminCrawlConfigRequestValidator()
+    public CreateAdminCrawlConfigRequestValidator(IReviewConfigurationSelectionService selections)
     {
         this.RuleFor(r => r.ClientId)
             .NotEmpty()
@@ -24,11 +24,9 @@ public sealed class CreateAdminCrawlConfigRequestValidator : AbstractValidator<C
             .When(r => !string.IsNullOrWhiteSpace(r.ProviderScopePath));
 
         this.RuleFor(r => r)
-            .Must(r =>
-                r.Provider == ScmProvider.AzureDevOps
-                    ? r.OrganizationScopeId.HasValue || !string.IsNullOrWhiteSpace(r.ProviderScopePath)
-                    : !string.IsNullOrWhiteSpace(r.ProviderScopePath))
-            .WithMessage("Azure DevOps requires OrganizationScopeId or ProviderScopePath. Other providers require ProviderScopePath.");
+            .Must(r => r.ConnectionId.HasValue && !string.IsNullOrWhiteSpace(r.ScopeKey) ||
+                       r.Provider.HasValue && selections.HasScopeSelection(r.Provider.Value, r.OrganizationScopeId, r.ProviderScopePath))
+            .WithMessage("Select a connection and scope, or supply an explicit provider and its manual scope coordinates.");
 
         this.RuleFor(r => r.ProviderProjectKey)
             .NotEmpty()

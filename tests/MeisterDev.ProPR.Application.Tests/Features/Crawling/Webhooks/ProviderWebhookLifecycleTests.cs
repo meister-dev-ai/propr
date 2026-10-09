@@ -3,7 +3,7 @@
 
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Models;
-using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Services;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Webhooks;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -25,6 +25,7 @@ public sealed class ProviderWebhookLifecycleTests
         var unrelated = CreateGitHubJob(configuration.ClientId, delivery.RepositoryId, delivery.PullRequestId + 1, 4);
 
         jobRepository.GetActiveJobsForConfigAsync(
+                configuration.ClientId,
                 configuration.OrganizationUrl,
                 configuration.ProjectId,
                 Arg.Any<CancellationToken>())
@@ -37,7 +38,7 @@ public sealed class ProviderWebhookLifecycleTests
         var actionSummaries = await sut.SynchronizeAsync(
             configuration,
             delivery,
-            new AdoWebhookEventClassification(AdoWebhookEventKind.PullRequestClosed),
+            new WebhookEventClassification(WebhookEventKind.PullRequestClosed),
             CancellationToken.None);
 
         await jobRepository.Received(1).SetCancelledAsync(matching.Id, Arg.Any<CancellationToken>());
@@ -64,9 +65,9 @@ public sealed class ProviderWebhookLifecycleTests
             SecretCiphertext: "ciphertext");
     }
 
-    private static IncomingAdoWebhookDelivery CreateClosedDelivery()
+    private static IncomingWebhookDelivery CreateClosedDelivery()
     {
-        return new IncomingAdoWebhookDelivery(
+        return new IncomingWebhookDelivery(
             "path-key",
             "git.pullrequest.updated",
             WebhookEventType.PullRequestUpdated,

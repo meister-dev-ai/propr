@@ -9,96 +9,7 @@
     </div>
 
     <div class="form-grid">
-      <div class="form-group">
-        <label for="webhookProvider">Automation Provider</label>
-        <div class="input-wrapper">
-          <select id="webhookProvider" v-model="provider" :disabled="editMode || providerOptionsLoading || (!editMode && providerOptions.length === 0)" @change="handleProviderChange">
-            <option v-for="providerOption in providerOptions" :key="providerOption.value" :value="providerOption.value">
-              {{ providerOption.label }}
-            </option>
-          </select>
-        </div>
-        <span v-if="providerOptionsError" class="field-error">{{ providerOptionsError }}</span>
-        <span v-else-if="!editMode && !providerOptions.length" class="field-help">No provider families are currently enabled for new webhook listeners.</span>
-        <span v-else class="field-help">
-          {{ isAzureDevOpsProvider ? 'Azure DevOps uses guided organization and project discovery.' : `${manualProviderName} webhook listeners use a manual host and namespace-style scope selection.` }}
-        </span>
-      </div>
-
-      <div v-if="isAzureDevOpsProvider" class="form-group">
-        <label for="webhookOrganizationScope">Azure DevOps Organization</label>
-        <div class="input-wrapper">
-          <select
-            id="webhookOrganizationScope"
-            v-model="organizationScopeId"
-            :disabled="editMode || organizationScopesLoading || !effectiveClientId"
-            :class="{ 'has-error': organizationScopeIdError }"
-            @change="handleOrganizationScopeChange"
-          >
-            <option value="">
-              {{ organizationScopesLoading ? 'Loading organizations...' : 'Select an organization' }}
-            </option>
-            <option
-              v-for="scope in organizationScopes"
-              :key="scope.id"
-              :value="scope.id ?? ''"
-              :disabled="scope.isEnabled === false"
-            >
-              {{ scope.displayName || scope.organizationUrl }}
-            </option>
-          </select>
-        </div>
-        <span v-if="organizationScopeIdError" class="field-error">{{ organizationScopeIdError }}</span>
-        <span v-else-if="selectedOrganizationScope" class="field-help">{{ selectedOrganizationScope.organizationUrl }}</span>
-      </div>
-
-      <div v-else class="form-group">
-        <label for="webhookHostUrl">{{ manualProviderName }} Host</label>
-        <div class="input-wrapper">
-          <input
-            id="webhookHostUrl"
-            v-model="manualOrganizationUrl"
-            type="text"
-            :placeholder="manualHostPlaceholder"
-            :disabled="editMode"
-            :class="{ 'has-error': organizationScopeIdError }"
-          />
-        </div>
-        <span v-if="organizationScopeIdError" class="field-error">{{ organizationScopeIdError }}</span>
-        <span v-else class="field-help">Enter the {{ manualProviderName }} host base URL for the configured connection.</span>
-      </div>
-
-      <div class="form-group">
-        <label :for="isAzureDevOpsProvider ? 'webhookProjectId' : 'webhookProjectScope'">{{ isAzureDevOpsProvider ? 'Azure DevOps Project' : manualProjectLabel }}</label>
-        <div v-if="isAzureDevOpsProvider" class="input-wrapper">
-          <select
-            id="webhookProjectId"
-            v-model="projectId"
-            :disabled="editMode || projectsLoading || !organizationScopeId"
-            :class="{ 'has-error': projectIdError }"
-            @change="handleProjectChange"
-          >
-            <option value="">
-              {{ projectsLoading ? 'Loading projects...' : organizationScopeId ? 'Select a project' : 'Select an organization first' }}
-            </option>
-            <option v-for="project in projects" :key="project.projectId ?? ''" :value="project.projectId ?? ''">
-              {{ project.projectName || project.projectId }}
-            </option>
-          </select>
-        </div>
-        <div v-else class="input-wrapper">
-          <input
-            id="webhookProjectScope"
-            v-model="projectId"
-            type="text"
-            placeholder="acme"
-            :disabled="editMode"
-            :class="{ 'has-error': projectIdError }"
-          />
-        </div>
-        <span v-if="projectIdError" class="field-error">{{ projectIdError }}</span>
-        <span v-else-if="!isAzureDevOpsProvider" class="field-help">Use the owner, group, or namespace that owns the repositories this listener should accept.</span>
-      </div>
+      <ConnectionDiscoveryFields :discovery="discovery" id-prefix="webhook" :locked="editMode" :disabled="loading" />
 
       <div v-if="editMode" class="form-group checkbox-group">
         <label for="webhookIsActive">Configuration State</label>
@@ -164,22 +75,22 @@
           <span class="field-section-label">Repository Filters</span>
           <p class="field-hint">Add repository filters to scope this listener. Leave empty to allow all repositories in the selected scope.</p>
         </div>
-        <button id="webhookAddFilter" type="button" class="btn-add-row" :disabled="editMode || !projectId" @click="addFilter">
+        <button id="webhookAddFilter" type="button" class="btn-add-row" :disabled="editMode || !discovery.ready.value" @click="addFilter">
           <i class="fi fi-rr-plus"></i> Add Filter
         </button>
       </div>
 
       <span v-if="repoFiltersError" class="field-error">{{ repoFiltersError }}</span>
       <span v-else-if="crawlFilterOptionsError" class="field-error">{{ crawlFilterOptionsError }}</span>
-      <p v-else-if="isAzureDevOpsProvider && crawlFilterOptionsLoading" class="filters-empty-hint">Loading repository options...</p>
+      <p v-else-if="crawlFilterOptionsLoading" class="filters-empty-hint">Loading repository options...</p>
       <p v-else-if="!projectId" class="filters-empty-hint">Select a provider scope before adding repository filters.</p>
 
       <div v-if="repoFilters.length" class="filters-list">
         <div v-for="(filter, idx) in repoFilters" :key="filter.id" class="filter-row">
           <div class="filter-row-body">
             <div class="form-group filter-select-group">
-              <label :for="isAzureDevOpsProvider ? `webhookFilterSelection-${idx}` : `webhookFilterRepository-${idx}`">{{ isAzureDevOpsProvider ? 'Repository' : 'Repository Name' }}</label>
-              <div v-if="isAzureDevOpsProvider" class="input-wrapper">
+              <label :for="`webhookFilterSelection-${idx}`">Repository</label>
+              <div class="input-wrapper">
                 <select
                   :id="`webhookFilterSelection-${idx}`"
                   :data-testid="`webhook-filter-select-${idx}`"
@@ -187,7 +98,8 @@
                   :disabled="editMode"
                   @change="handleFilterSelectionChange(filter)"
                 >
-                  <option value="">Select a repository</option>
+                  <option v-if="!editMode || !(filter.displayName || filter.repositoryName) || getAvailableFilterOptions(filter.id).some(option => sourceOptionKey(option.canonicalSourceRef) === filter.selectedFilterKey)" value="">Select a repository</option>
+                  <option v-else :value="filter.selectedFilterKey">{{ filter.displayName || filter.repositoryName }} (saved)</option>
                   <option
                     v-for="option in getAvailableFilterOptions(filter.id)"
                     :key="sourceOptionKey(option.canonicalSourceRef)"
@@ -197,18 +109,7 @@
                   </option>
                 </select>
               </div>
-              <div v-else class="input-wrapper">
-                <input
-                  :id="`webhookFilterRepository-${idx}`"
-                  :data-testid="`webhook-filter-repository-${idx}`"
-                  v-model="filter.repositoryName"
-                  type="text"
-                  placeholder="propr"
-                  :disabled="editMode"
-                  @input="handleManualRepositoryChange(filter)"
-                />
-              </div>
-              <span v-if="!isAzureDevOpsProvider" class="field-help">Repository names are matched inside the selected scope.</span>
+
             </div>
 
             <div class="form-group filter-branches-group">
@@ -241,7 +142,7 @@
 
     <div class="form-footer">
       <button type="button" class="btn-secondary" @click="$emit('cancel')">Cancel</button>
-      <button type="submit" class="btn-primary" :disabled="loading || providerOptionsLoading || (!editMode && !providerOptions.length)">
+      <button type="submit" class="btn-primary" :disabled="loading || !editMode && !discovery.ready.value">
         {{ loading ? (editMode ? 'Updating...' : 'Creating...') : (editMode ? 'Update Webhook' : 'Create Webhook') }}
       </button>
     </div>
@@ -249,6 +150,7 @@
 </template>
 
 <script setup lang="ts">
+import ConnectionDiscoveryFields from '@/components/ConnectionDiscoveryFields.vue'
 import type { WebhookConfigurationResponse } from '@/services/webhookConfigurationService'
 import { eventOptions, sourceOptionKey } from './webhookConfigFormatters'
 import { useWebhookConfigForm } from './useWebhookConfigForm'
@@ -264,24 +166,18 @@ const emit = defineEmits<{
 }>()
 
 const {
+  discovery,
   editMode,
   effectiveClientId,
   provider,
-  providerStatuses,
   organizationScopeId,
-  manualOrganizationUrl,
   projectId,
   reviewTemperatureInput,
   isActive,
   enabledEvents,
   repoFilters,
-  organizationScopes,
-  projects,
   crawlFilterOptions,
-  organizationScopesLoading,
-  projectsLoading,
   crawlFilterOptionsLoading,
-  providerOptionsLoading,
   loading,
   organizationScopeIdError,
   projectIdError,
@@ -289,14 +185,7 @@ const {
   repoFiltersError,
   reviewTemperatureError,
   crawlFilterOptionsError,
-  providerOptionsError,
   formError,
-  providerOptions,
-  selectedOrganizationScope,
-  isAzureDevOpsProvider,
-  manualProviderName,
-  manualHostPlaceholder,
-  manualProjectLabel,
   addFilter,
   removeFilter,
   addPattern,
@@ -304,9 +193,6 @@ const {
   handleManualRepositoryChange,
   getAvailableFilterOptions,
   handleFilterSelectionChange,
-  handleOrganizationScopeChange,
-  handleProviderChange,
-  handleProjectChange,
   handleSubmit,
 } = useWebhookConfigForm(props, emit)
 </script>

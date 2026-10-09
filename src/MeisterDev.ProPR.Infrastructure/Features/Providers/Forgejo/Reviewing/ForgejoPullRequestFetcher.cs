@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
@@ -271,7 +272,7 @@ internal sealed class ForgejoPullRequestFetcher(
         var comments = await response.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoIssueCommentResponse>>(ct) ?? [];
         return new ProviderRestPager.RestPage<ForgejoIssueCommentResponse>(
             comments,
-            TotalCount: ProviderPaginationHeaders.ReadForgejoTotalCount(response));
+            TotalCount: ForgejoPaginationHeaders.ReadForgejoTotalCount(response));
     }
 
     public async Task<PullRequest> FetchThreadContextAsync(
@@ -508,7 +509,7 @@ internal sealed class ForgejoPullRequestFetcher(
 
         return new ProviderRestPager.RestPage<ForgejoPullRequestFileResponse>(
             files,
-            TotalCount: ProviderPaginationHeaders.ReadForgejoTotalCount(response));
+            TotalCount: ForgejoPaginationHeaders.ReadForgejoTotalCount(response));
     }
 
     private async Task<IReadOnlyList<ForgejoPullRequestFileResponse>?> TryGetComparedFilesAsync(
@@ -741,7 +742,7 @@ internal sealed class ForgejoPullRequestFetcher(
 
         return new ProviderRestPager.RestPage<ForgejoPullReviewResponse>(
             reviews,
-            TotalCount: ProviderPaginationHeaders.ReadForgejoTotalCount(response));
+            TotalCount: ForgejoPaginationHeaders.ReadForgejoTotalCount(response));
     }
 
     // Forgejo clamps a requested page size to the host's configured maximum response length, which is why the

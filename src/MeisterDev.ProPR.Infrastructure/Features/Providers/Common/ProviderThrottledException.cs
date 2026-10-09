@@ -4,13 +4,12 @@
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
 /// <summary>
-///     A provider asked the caller to slow down.
+///     Identifies a provider throttle refusal.
 /// </summary>
 /// <remarks>
-///     Carried as its own type so a caller can tell "wait" from "no". Everything else a provider refuses is a
-///     failure of that one call; this one says the next calls would fail as well.
+///     The typed refusal preserves rich-read classification and the legacy controlled failure response.
 /// </remarks>
-internal sealed class ProviderThrottledException : Exception
+internal sealed class ProviderThrottledException : InvalidOperationException
 {
     public ProviderThrottledException()
     {

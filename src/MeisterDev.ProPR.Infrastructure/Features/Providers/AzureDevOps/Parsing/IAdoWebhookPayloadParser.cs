@@ -9,5 +9,5 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Parsing
 /// <summary>Provider-local parser for Azure DevOps webhook payloads.</summary>
 public interface IAdoWebhookPayloadParser
 {
-    IncomingAdoWebhookDelivery Parse(string pathKey, JsonElement payload);
+    IncomingWebhookDelivery Parse(string pathKey, JsonElement payload);
 }

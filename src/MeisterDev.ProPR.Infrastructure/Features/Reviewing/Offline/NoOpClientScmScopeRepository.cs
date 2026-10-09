@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 
@@ -11,6 +12,9 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 /// </summary>
 public sealed class NoOpClientScmScopeRepository : IClientScmScopeRepository
 {
+    public Task<IReadOnlyList<ClientScmScopeDto>> GetByClientIdAsync(Guid clientId, ScmProvider provider, string scopeType, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ClientScmScopeDto>>([]);
+
     public Task<IReadOnlyList<ClientScmScopeDto>> GetByConnectionIdAsync(
         Guid clientId,
         Guid connectionId,

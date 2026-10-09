@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -54,6 +55,7 @@ public static class CodeInsightsModuleServiceCollectionExtensions
         // Bound before the database gate, so the workers resolve their settings even on a host where the rest
         // of the module stays inert. Read from the same flat environment keys the host already documents, so
         // nothing deployed has to change: the options type is how the code reads them, not a new contract.
+        services.AddScmProviderLocalDeclarations();
         services.AddOptions<CodeInsightsOptions>().Configure(options => BindOptions(options, configuration));
 
         if (!configuration.HasDatabaseConnectionString())

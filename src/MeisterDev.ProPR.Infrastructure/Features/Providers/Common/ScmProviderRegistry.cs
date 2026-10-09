@@ -19,8 +19,64 @@ internal sealed class ScmProviderRegistry(
     IEnumerable<IReviewThreadReplyPublisher> reviewThreadReplyPublishers,
     IEnumerable<IProviderAdminDiscoveryService> providerAdminDiscoveryServices,
     IEnumerable<IWebhookIngressService> webhookIngressServices,
-    IEnumerable<ILinkedItemProvider> linkedItemProviders) : IScmProviderRegistry
+    IEnumerable<ILinkedItemProvider> linkedItemProviders,
+    IEnumerable<IReviewOverviewProvider>? reviewOverviewProviders = null,
+    IEnumerable<IReviewSourcePolicy>? reviewSourcePolicies = null,
+    IEnumerable<IScmConnectionConfigurationPolicy>? connectionConfigurationPolicies = null,
+    IEnumerable<IScmIdentityPolicy>? identityPolicies = null,
+    IEnumerable<ICodeReviewPreparationPolicy>? preparationPolicies = null,
+    IEnumerable<IWebhookIngressPolicy>? webhookIngressPolicies = null,
+    IScmProviderCompatibilityCodec? compatibilityCodec = null) : IScmProviderRegistry
 {
+    public IScmProviderCompatibilityCodec CompatibilityCodec => compatibilityCodec
+                                                                ?? throw new InvalidOperationException("The stored provider evidence codec is unavailable.");
+
+    private readonly IReadOnlyDictionary<ScmProvider, IWebhookIngressPolicy> _webhookIngressPolicies =
+        (webhookIngressPolicies ?? []).ToDictionary(policy => policy.Provider);
+
+    public IWebhookIngressPolicy GetWebhookIngressPolicy(ScmProvider provider) =>
+        this._webhookIngressPolicies.TryGetValue(provider, out var policy) ? policy : new UnregisteredWebhookIngressPolicy(provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, ICodeReviewPreparationPolicy> _preparationPolicies =
+        (preparationPolicies ?? []).ToDictionary(policy => policy.Provider);
+
+    public ICodeReviewPreparationPolicy GetCodeReviewPreparationPolicy(ScmProvider provider) =>
+        this._preparationPolicies.TryGetValue(provider, out var policy)
+            ? policy
+            : new UnregisteredCodeReviewPreparationPolicy(provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, IScmIdentityPolicy> _identityPolicies =
+        (identityPolicies ?? []).ToDictionary(policy => policy.Provider);
+
+    public IScmIdentityPolicy GetIdentityPolicy(ScmProvider provider) =>
+        this._identityPolicies.TryGetValue(provider, out var policy)
+            ? policy
+            : new UnregisteredScmIdentityPolicy(provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, IScmConnectionConfigurationPolicy> _connectionPolicies =
+        (connectionConfigurationPolicies ?? []).ToDictionary(policy => policy.Provider);
+
+    public IScmConnectionConfigurationPolicy GetConnectionConfigurationPolicy(ScmProvider provider) =>
+        this._connectionPolicies.TryGetValue(provider, out var policy)
+            ? policy
+            : new UnregisteredScmConnectionConfigurationPolicy(provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, IReviewSourcePolicy> _reviewSourcePoliciesByProvider =
+        (reviewSourcePolicies ?? []).ToDictionary(policy => policy.Provider);
+
+    public IReviewSourcePolicy GetReviewSourcePolicy(ScmProvider provider) =>
+        this._reviewSourcePoliciesByProvider.TryGetValue(provider, out var policy)
+            ? policy
+            : throw new InvalidOperationException("The provider review-source policy is unavailable.");
+
+    public IReviewSourcePolicy GetSourceIdentityPolicy(ScmProvider provider) =>
+        this._reviewSourcePoliciesByProvider.TryGetValue(provider, out var policy)
+            ? policy
+            : new UnregisteredReviewSourcePolicy(provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, IReviewOverviewProvider> _reviewOverviewProvidersByProvider =
+        (reviewOverviewProviders ?? []).ToDictionary(provider => provider.Provider);
+
     private readonly IReadOnlyDictionary<ScmProvider, ILinkedItemProvider> _linkedItemProvidersByProvider =
         linkedItemProviders.ToDictionary(provider => provider.Provider);
 
@@ -85,6 +141,7 @@ internal sealed class ScmProviderRegistry(
         AddCapability(capabilities, this._codeReviewQueryServicesByProvider, provider, "codeReviewQuery");
         AddCapability(capabilities, this._codeReviewPublicationServicesByProvider, provider, "codeReviewPublication");
         AddCapability(capabilities, this._reviewDiscoveryProvidersByProvider, provider, "reviewDiscovery");
+        AddCapability(capabilities, this._reviewOverviewProvidersByProvider, provider, "reviewOverview");
         AddCapability(capabilities, this._reviewerIdentityServicesByProvider, provider, "reviewerIdentity");
         AddCapability(capabilities, this._reviewAssignmentServicesByProvider, provider, "reviewAssignment");
         AddCapability(capabilities, this._reviewThreadStatusWritersByProvider, provider, "reviewThreadStatus");
@@ -137,6 +194,9 @@ internal sealed class ScmProviderRegistry(
     {
         return GetRequired(this._reviewDiscoveryProvidersByProvider, provider, nameof(IReviewDiscoveryProvider));
     }
+
+    public IReviewOverviewProvider GetReviewOverviewProvider(ScmProvider provider) =>
+        GetRequired(this._reviewOverviewProvidersByProvider, provider, nameof(IReviewOverviewProvider));
 
     public IReviewerIdentityService GetReviewerIdentityService(ScmProvider provider)
     {

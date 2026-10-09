@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Support;
 using Microsoft.VisualStudio.Services.Common;
 using NSubstitute;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -367,17 +368,24 @@ public class VssConnectionFactoryTests
             .GetTokenAsync(Arg.Any<TokenRequestContext>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task GetConnectionAsync_WithPersonalAccessToken_DoesNotUseGlobalCredential()
+    [Theory]
+    [InlineData("https://ado-server.example.com")]
+    [InlineData("https://dev.azure.com/org")]
+    [InlineData("https://org.visualstudio.com")]
+    public async Task GetConnectionAsync_WithPersonalAccessToken_DoesNotUseGlobalCredential(string organizationUrl)
     {
         var globalCredential = Substitute.For<TokenCredential>();
         var factory = new VssConnectionFactory(globalCredential);
 
         var connection = await factory.GetConnectionAsync(
-            "https://ado-server.example.com",
+            organizationUrl,
             AdoConnectionCredentials.ForPersonalAccessToken("server-pat"));
 
         Assert.NotNull(connection);
+        Assert.IsType<VssBasicCredential>(connection.Credentials.Federated);
+        var header = await factory.GetHttpAuthorizationHeaderAsync(
+            organizationUrl, AdoConnectionCredentials.ForPersonalAccessToken("server-pat"), CancellationToken.None);
+        Assert.Equal($"AUTHORIZATION: Basic {Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(":server-pat"))}", header);
         await globalCredential.DidNotReceiveWithAnyArgs()
             .GetTokenAsync(Arg.Any<TokenRequestContext>(), Arg.Any<CancellationToken>());
     }

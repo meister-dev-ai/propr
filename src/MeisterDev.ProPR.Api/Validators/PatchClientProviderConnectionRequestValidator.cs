@@ -5,6 +5,7 @@ using FluentValidation;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Application.Interfaces;
 
 namespace MeisterDev.ProPR.Api.Validators;
 
@@ -14,7 +15,7 @@ public sealed class
 {
     /// <summary>Initializes a new instance of <see cref="PatchClientProviderConnectionRequestValidator" />.</summary>
     /// <param name="egressUrlPolicy">What this installation permits an operator-entered address to reach.</param>
-    public PatchClientProviderConnectionRequestValidator(EgressUrlPolicy egressUrlPolicy)
+    public PatchClientProviderConnectionRequestValidator(EgressUrlPolicy egressUrlPolicy, IEnumerable<IScmConnectionConfigurationPolicy> localPolicies)
     {
         ArgumentNullException.ThrowIfNull(egressUrlPolicy);
 
@@ -92,14 +93,20 @@ public sealed class
             .WithMessage("RetentionDays must be between 1 and 3650 when provided.")
             .When(request => request.RetentionDays.HasValue);
 
+        var compatibilityPolicies = localPolicies.ToArray();
         this.RuleFor(request => request)
-            .Must(request => request.AuthenticationKind != ScmAuthenticationKind.WindowsUserAccount || request.UserName is not null)
-            .WithMessage("UserName must be provided when switching to Azure DevOps Server Windows user-account authentication.")
+            .Custom((request, context) =>
+            {
+                foreach (var policy in compatibilityPolicies)
+                {
+                    foreach (var error in policy.ValidateCompatibilityPatchRequest(request.AuthenticationKind, request.UserName))
+                    {
+                        context.AddFailure(error.PropertyName, error.Message);
+                    }
+                }
+            })
             .When(request => request.AuthenticationKind.HasValue);
 
-        // The "credential auth requires an HTTPS host" rule is provider-specific (Azure DevOps Server only),
-        // but a patch request does not carry the provider. Enforcing it here would assume Azure DevOps and
-        // wrongly reject other providers (e.g. a Forgejo connection on an http host). The controller resolves
-        // the existing connection's provider and enforces this through the provider-aware authentication check.
+        // Host credential requirements are evaluated against the saved provider after merging the patch.
     }
 }

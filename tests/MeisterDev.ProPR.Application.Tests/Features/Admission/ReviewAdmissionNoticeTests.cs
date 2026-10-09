@@ -59,7 +59,7 @@ public sealed class ReviewAdmissionNoticeTests
         ICodeReviewPublicationService publication,
         IClientRegistry clients)
     {
-        var providers = Substitute.For<IScmProviderRegistry>();
+        var providers = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         providers.GetCodeReviewPublicationService(job.Provider).Returns(publication);
 
         return new ReviewAdmissionNotice(providers, clients, NullLogger<ReviewAdmissionNotice>.Instance);

@@ -34,6 +34,9 @@ internal sealed partial class GitLabReviewThreadStatusWriter(
 
     public ScmProvider Provider => ScmProvider.GitLab;
 
+    public Task ResolveThreadAsync(Guid clientId, ReviewThreadRef thread, CancellationToken ct = default) =>
+        ((IReviewThreadStatusWriter)this).UpdateThreadStatusAsync(clientId, thread, "fixed", ct);
+
     public async Task UpdateThreadStatusAsync(
         Guid clientId,
         ReviewThreadRef thread,

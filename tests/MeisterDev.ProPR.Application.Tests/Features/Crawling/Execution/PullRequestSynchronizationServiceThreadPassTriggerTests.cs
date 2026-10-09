@@ -178,6 +178,29 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
             .CancelActiveForPullRequestAsync(ClientId, ScopePath, ProjectKey, RepositoryId, PullRequestId, Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ThreadPassRetainsCapturedAndMissingReviewContextCompatibility(bool capturedContext)
+    {
+        var harness = new Harness();
+        harness.WithNoScan();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.example/team");
+        var captured = new CodeReviewRef(
+            new RepositoryRef(host, RepositoryId, "team", "team/native"),
+            CodeReviewPlatformKind.PullRequest, "native-review", PullRequestId);
+        var outcome = await harness.SynchronizeAsync(provider: ScmProvider.GitHub, context: capturedContext ? captured : null);
+        Assert.Equal(PullRequestSynchronizationThreadPassDecision.Queued, outcome.ThreadPassDecision);
+        await harness.ThreadPassJobs.Received(1).TryClaimAsync(
+            Arg.Is<ThreadPassJob>(job => job.Provider == (capturedContext ? ScmProvider.GitHub : ScmProvider.AzureDevOps)
+                                         && job.OrganizationUrl == ScopePath && job.ProjectId == ProjectKey
+                                         && job.RepositoryOwnerOrNamespace == (capturedContext ? "team" : ProjectKey)
+                                         && job.RepositoryProjectPath == (capturedContext ? "team/native" : ProjectKey)
+                                         && job.ExternalCodeReviewId == (capturedContext ? "native-review" : "42")
+                                         && job.RevisionKey == "7"),
+            Arg.Any<CancellationToken>());
+    }
+
     private sealed class Harness
     {
         private readonly IJobRepository _jobs = Substitute.For<IJobRepository>();
@@ -187,7 +210,7 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
 
         private readonly IReviewPrScanRepository _scanRepository = Substitute.For<IReviewPrScanRepository>();
         private readonly IClientRegistry _clientRegistry = Substitute.For<IClientRegistry>();
-        private readonly IScmProviderRegistry _providerRegistry = Substitute.For<IScmProviderRegistry>();
+        private readonly IScmProviderRegistry _providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         private ReviewPrScan? _scan;
 
         public Harness()
@@ -201,12 +224,12 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
                 .Returns(CommentResolutionBehavior.Silent);
             this._clientRegistry.GetReviewEveryIncrementEnabledAsync(ClientId, Arg.Any<CancellationToken>())
                 .Returns(true);
-            this._providerRegistry.GetRegisteredCapabilities(ScmProvider.AzureDevOps)
+            this._providerRegistry.GetRegisteredCapabilities(Arg.Any<ScmProvider>())
                 .Returns([ReviewThreadCapabilities.Status, ReviewThreadCapabilities.Reply]);
 
             this._jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
                 .Returns(new TryAddReviewJobResult(true, null, 0));
-            this._jobs.GetActiveJobsForConfigAsync(ScopePath, ProjectKey, Arg.Any<CancellationToken>())
+            this._jobs.GetActiveJobsForConfigAsync(ClientId, ScopePath, ProjectKey, Arg.Any<CancellationToken>())
                 .Returns([]);
 
             this.ThreadPassJobs.TryClaimAsync(Arg.Any<ThreadPassJob>(), Arg.Any<CancellationToken>())
@@ -301,9 +324,11 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
                 "7|existing");
         }
 
-        public Task<PullRequestSynchronizationOutcome> SynchronizeAsync(PrStatus status = PrStatus.Active)
+        public Task<PullRequestSynchronizationOutcome> SynchronizeAsync(
+            PrStatus status = PrStatus.Active, ScmProvider provider = ScmProvider.AzureDevOps, CodeReviewRef? context = null)
         {
             var sut = new PullRequestSynchronizationService(
+                this._providerRegistry,
                 this._jobs,
                 NullLogger<PullRequestSynchronizationService>.Instance,
                 Substitute.For<IPullRequestIterationResolver>(),
@@ -311,12 +336,13 @@ public sealed class PullRequestSynchronizationServiceThreadPassTriggerTests
                 Substitute.For<IThreadMemoryService>(),
                 this._scanRepository,
                 this._clientRegistry,
-                threadPassJobs: this.ThreadPassJobs,
-                providerRegistry: this._providerRegistry);
+                threadPassJobs: this.ThreadPassJobs);
 
             return sut.SynchronizeAsync(
                 new PullRequestSynchronizationRequest
                 {
+                    Provider = provider,
+                    CodeReview = context,
                     ActivationSource = PullRequestActivationSource.Crawl,
                     SummaryLabel = "crawl discovery",
                     ClientId = ClientId,

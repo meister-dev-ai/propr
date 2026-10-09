@@ -24,7 +24,7 @@ public sealed class WorkerHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_WithConfiguredRegistry_ReportsSeparateActivationAndReadinessSemantics()
     {
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.IsRegistered(Arg.Any<ScmProvider>()).Returns(true);
         registry.GetRegisteredCapabilities(Arg.Any<ScmProvider>()).Returns(["repositoryDiscovery"]);
         var providerActivationService = Substitute.For<IProviderActivationService>();
@@ -69,7 +69,8 @@ public sealed class WorkerHealthCheckTests
         var services = new ServiceCollection();
         services.AddSingleton(registry);
         services.AddSingleton(providerActivationService);
-        services.AddSingleton<IProviderReadinessProfileCatalog>(new StaticProviderReadinessProfileCatalog());
+        services.AddSingleton<IProviderReadinessProfileCatalog>(
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies));
 
         using var provider = services.BuildServiceProvider();
         var configuration = new ConfigurationBuilder()

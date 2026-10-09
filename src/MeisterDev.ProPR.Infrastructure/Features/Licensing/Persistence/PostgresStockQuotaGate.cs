@@ -45,8 +45,6 @@ public sealed class PostgresStockQuotaGate(
     TimeProvider timeProvider,
     ILicensingCapabilityService? licensingCapabilityService = null) : IStockQuotaGate
 {
-    private const string TakeQuotaLockSql = "SELECT pg_advisory_xact_lock(hashtextextended({0}, 0))";
-
     /// <inheritdoc />
     public Task<StockQuotaAdmission> AdmitOneAsync(
         LicenseLimitKey key,
@@ -101,8 +99,7 @@ public sealed class PostgresStockQuotaGate(
 
         try
         {
-            await dbContext.Database
-                .ExecuteSqlRawAsync(TakeQuotaLockSql, [quota.LockKey], cancellationToken)
+            await PostgresAdvisoryLocks.AcquireTransactionAsync(dbContext, quota.LockKey, cancellationToken)
                 .ConfigureAwait(false);
 
             var current = await quota.CountAsync(cancellationToken).ConfigureAwait(false);

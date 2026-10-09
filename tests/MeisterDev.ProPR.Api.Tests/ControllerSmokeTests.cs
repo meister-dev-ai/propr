@@ -23,6 +23,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 
 namespace MeisterDev.ProPR.Api.Tests;
 
@@ -141,7 +142,7 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
                 // Pull-request resolution reads webhook coverage beside crawl coverage, and asks the
                 // provider registry only for a repository identity a configuration did not record.
                 services.AddSingleton(Substitute.For<IWebhookConfigurationRepository>());
-                var providerRegistry = Substitute.For<IScmProviderRegistry>();
+                var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
                 providerRegistry.IsRegistered(Arg.Any<MeisterDev.ProPR.Domain.Enums.ScmProvider>()).Returns(false);
                 services.AddSingleton(providerRegistry);
 

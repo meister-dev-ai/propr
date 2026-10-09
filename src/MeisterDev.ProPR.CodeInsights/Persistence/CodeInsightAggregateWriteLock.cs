@@ -27,7 +27,7 @@ internal static class CodeInsightAggregateWriteLock
                         key.PullRequestId
                     }));
             var lockId = BinaryPrimitives.ReadInt64LittleEndian(hash);
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockId})", ct);
+            await PostgresAdvisoryLocks.AcquireTransactionAsync(db, lockId, ct);
         }
     }
 }

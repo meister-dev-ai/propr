@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
@@ -401,7 +402,7 @@ internal sealed class GitHubPullRequestFetcher(
         var comments = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubIssueCommentResponse>>(ct) ?? [];
         return new ProviderRestPager.RestPage<GitHubIssueCommentResponse>(
             comments,
-            ProviderPaginationHeaders.ReadGitHubHasMore(response));
+            GitHubPaginationHeaders.ReadGitHubHasMore(response));
     }
 
     private async Task<string> ResolveRepositoryPathAsync(
@@ -510,7 +511,7 @@ internal sealed class GitHubPullRequestFetcher(
 
         return new ProviderRestPager.RestPage<GitHubPullRequestFileResponse>(
             files,
-            ProviderPaginationHeaders.ReadGitHubHasMore(response));
+            GitHubPaginationHeaders.ReadGitHubHasMore(response));
     }
 
     private async Task<IReadOnlyList<GitHubPullRequestFileResponse>?> TryGetComparedFilesAsync(
@@ -566,7 +567,7 @@ internal sealed class GitHubPullRequestFetcher(
 
         return new ProviderRestPager.RestPage<GitHubPullRequestFileResponse>(
             payload?.Files ?? [],
-            ProviderPaginationHeaders.ReadGitHubHasMore(response));
+            GitHubPaginationHeaders.ReadGitHubHasMore(response));
     }
 
     // The first page asks for a size and no page number, which is the request a single-page collection made

@@ -300,7 +300,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
 
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         providerRegistry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(publicationService);
         providerRegistry.GetReviewAssignmentService(Arg.Any<ScmProvider>()).Returns(reviewerManager);
         providerRegistry.GetReviewThreadStatusWriter(Arg.Any<ScmProvider>()).Returns(threadStatusWriter);
@@ -458,7 +458,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
 
-        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         providerRegistry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(publicationService);
         providerRegistry.GetReviewAssignmentService(Arg.Any<ScmProvider>()).Returns(reviewerManager);
         providerRegistry.GetReviewThreadStatusWriter(Arg.Any<ScmProvider>()).Returns(threadStatusWriter);

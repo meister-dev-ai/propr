@@ -170,14 +170,7 @@ public sealed class WorkerHealthCheck(
 
     private static string GetProviderKey(ScmProvider provider)
     {
-        return provider switch
-        {
-            ScmProvider.AzureDevOps => "azureDevOps",
-            ScmProvider.GitHub => "github",
-            ScmProvider.GitLab => "gitLab",
-            ScmProvider.Forgejo => "forgejo",
-            _ => provider.ToString(),
-        };
+        return Enum.IsDefined(provider) ? ScmProviderVocabulary.ToPublicName(provider) : provider.ToString().ToLowerInvariant();
     }
 
     private static ProviderConnectionReadinessLevel ResolveSupportClaimReadiness(

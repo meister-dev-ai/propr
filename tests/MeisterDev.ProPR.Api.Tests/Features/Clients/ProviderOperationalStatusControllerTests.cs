@@ -65,8 +65,8 @@ public sealed class ProviderOperationalStatusControllerTests(ClientProviderConne
             ScmAuthenticationKind.AppInstallation,
             displayName: "GitHub App",
             secret: "-----BEGIN PRIVATE KEY-----",
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012);
+            appId: 123456,
+            installationId: 789012);
         factory.SetDiscoveryFailure("GitHub App installation token request failed because permission is missing.");
 
         var httpClient = factory.CreateClient();

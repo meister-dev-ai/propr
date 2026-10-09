@@ -56,6 +56,10 @@ public sealed record AiConnectionDto(
     [JsonIgnore]
     public string? ConfigurationStamp { get; init; }
 
+    /// <summary>Optional immutable client-scoped identifier supplied on creation for interrupted-request readback.</summary>
+    /// <remarks>Repeated creation with this identifier returns 409 while the profile exists; it does not replay the creation response.</remarks>
+    public Guid? CreationRequestId { get; init; }
+
     /// <summary>
     ///     Whether this profile can be used as it is stored, and what stands in the way when it cannot.
     /// </summary>

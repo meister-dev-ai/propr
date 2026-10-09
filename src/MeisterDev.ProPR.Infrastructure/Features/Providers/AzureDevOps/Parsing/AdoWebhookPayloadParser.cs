@@ -11,7 +11,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Parsing
 public sealed class AdoWebhookPayloadParser : IAdoWebhookPayloadParser
 {
     /// <inheritdoc />
-    public IncomingAdoWebhookDelivery Parse(string pathKey, JsonElement payload)
+    public IncomingWebhookDelivery Parse(string pathKey, JsonElement payload)
     {
         var eventType = RequireString(payload, "eventType");
         var repositoryId = RequireString(payload, "resource", "repository", "id");
@@ -25,7 +25,7 @@ public sealed class AdoWebhookPayloadParser : IAdoWebhookPayloadParser
             throw new InvalidOperationException("Payload is missing a valid pullRequestId.");
         }
 
-        return new IncomingAdoWebhookDelivery(
+        return new IncomingWebhookDelivery(
             pathKey,
             eventType,
             NormalizeEventType(eventType),

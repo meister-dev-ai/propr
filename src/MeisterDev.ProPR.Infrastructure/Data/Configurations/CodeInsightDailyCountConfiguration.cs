@@ -52,7 +52,7 @@ internal sealed class CodeInsightDailyCountConfiguration : IEntityTypeConfigurat
 
         builder.Property(count => count.DimensionKey)
             .HasColumnName("dimension_key")
-            .HasMaxLength(64)
+            .HasMaxLength(512)
             .IsRequired();
 
         builder.Property(count => count.Count)

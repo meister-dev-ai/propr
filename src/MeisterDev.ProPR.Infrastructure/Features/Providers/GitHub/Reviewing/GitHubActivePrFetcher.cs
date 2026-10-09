@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
 using Microsoft.Extensions.Logging;
 
@@ -74,7 +75,7 @@ internal sealed class GitHubActivePrFetcher(
                 ct: ct);
             using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
-            if (ProviderThrottleSignal.IsThrottled(response))
+            if (GitHubReadFailures.IsThrottled(response))
             {
                 throw new ProviderThrottledException($"GitHub throttled the pull-request listing for {repositoryPath}.");
             }
@@ -119,7 +120,7 @@ internal sealed class GitHubActivePrFetcher(
             }
 
             if (reachedWatermark
-                || ProviderPaginationHeaders.ReadGitHubHasMore(response) == false
+                || GitHubPaginationHeaders.ReadGitHubHasMore(response) == false
                 || pullRequests.Count < PageSize)
             {
                 reachedPageLimit = false;
@@ -168,7 +169,7 @@ internal sealed class GitHubActivePrFetcher(
             ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
-        if (ProviderThrottleSignal.IsThrottled(response))
+        if (GitHubReadFailures.IsThrottled(response))
         {
             throw new ProviderThrottledException($"GitHub throttled the repository lookup for {repository.RepositoryId}.");
         }

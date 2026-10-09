@@ -79,6 +79,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             options,
             logger,
             new FileReviewer(
+                null,
                 aiCore,
                 protocolRecorder,
                 jobRepository,

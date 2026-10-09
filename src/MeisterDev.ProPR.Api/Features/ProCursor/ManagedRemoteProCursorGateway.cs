@@ -1,11 +1,11 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
+
 
 namespace MeisterDev.ProPR.Api.Features.ProCursor;
 
@@ -15,7 +15,8 @@ namespace MeisterDev.ProPR.Api.Features.ProCursor;
 /// </summary>
 public sealed class ManagedRemoteProCursorGateway(
     IProCursorKnowledgeSourceRepository knowledgeSourceRepository,
-    HttpProCursorGateway remoteGateway) : IProCursorGateway
+    HttpProCursorGateway remoteGateway,
+    IScmProviderCompatibilityCodec compatibilityCodec) : IProCursorGateway
 {
     /// <inheritdoc />
     public Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default)
@@ -231,12 +232,10 @@ public sealed class ManagedRemoteProCursorGateway(
         return removed;
     }
 
-    private static ProCursorKnowledgeSourceDto MapSource(ProCursorKnowledgeSource source)
+    private ProCursorKnowledgeSourceDto MapSource(ProCursorKnowledgeSource source)
     {
-        var canonicalSourceRef = !string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) &&
-                                 !string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
-            ? new CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue)
-            : new CanonicalSourceReferenceDto("azureDevOps", source.RepositoryId);
+        var canonicalSourceRef = compatibilityCodec.ResolveCanonicalSourceReference(
+            source.CanonicalSourceProvider, source.CanonicalSourceValue, source.RepositoryId);
 
         return new ProCursorKnowledgeSourceDto(
             source.Id,

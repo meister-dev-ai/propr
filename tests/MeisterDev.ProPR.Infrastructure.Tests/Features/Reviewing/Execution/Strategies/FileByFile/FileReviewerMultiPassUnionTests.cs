@@ -120,6 +120,7 @@ public sealed class FileReviewerMultiPassUnionTests
             });
 
         return new FileReviewer(
+            null,
             this._aiCore,
             this._recorder,
             this._jobRepository,

@@ -42,7 +42,7 @@ public static class RetentionConnectionResolver
     private static bool HostMatchesAuthority(string connectionHostBaseUrl, string hostAuthority)
     {
         // The job host is normalized to an authority (scheme://host[:port]); a connection's stored host
-        // base URL may carry a path (e.g. an Azure DevOps organization URL). Match on the authority.
+        // base URL may carry a saved scope path. Match on the authority.
         if (!Uri.TryCreate(connectionHostBaseUrl.Trim(), UriKind.Absolute, out var connectionUri))
         {
             return string.Equals(

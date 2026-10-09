@@ -99,7 +99,7 @@ public sealed class ReviewExclusionRules
         }
 
         // Matcher requires forward slashes and relative paths.
-        // ADO returns paths with a leading '/' (e.g. "/openapi.json"); strip it so that
+        // Provider paths may contain a leading '/' (e.g. "/openapi.json"); strip it so that
         // anchored patterns like "openapi.json" match as expected. Patterns that already
         // use "**/" are unaffected since ** absorbs any leading sNo itegments either way.
         var normalised = filePath.Replace('\\', '/').TrimStart('/');

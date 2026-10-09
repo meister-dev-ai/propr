@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Stub;
 

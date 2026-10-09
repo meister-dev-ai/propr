@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Support;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Security;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Discovery;
@@ -19,13 +20,48 @@ internal sealed class GitLabDiscoveryService(
 {
     public ScmProvider Provider => ScmProvider.GitLab;
 
+    public ConnectionDiscoveryCoordinates GetConfigurationCoordinates(ConnectionDiscoveryContext context, ConnectionDiscoveryScope scope, string? projectId) =>
+        string.IsNullOrWhiteSpace(projectId) || projectId == scope.ScopeKey
+            ? new(null, context.Host.HostBaseUrl, scope.ScopeKey)
+            : throw new InvalidOperationException("The supplied project conflicts with the selected scope.");
+
+    public ConnectionDiscoveryDescriptor Descriptor => new(
+        this.Provider, "Owner or group", null,
+        [new(ProCursorSourceKind.Repository, "Repository")], false, false);
+
+    public async Task<IReadOnlyList<ConnectionDiscoveryScope>> ListScopesAsync(ConnectionDiscoveryContext context, CancellationToken ct = default)
+    {
+        var native = await connectionVerifier.VerifyAsync(context, ct).ConfigureAwait(false);
+        return (await this.ListScopesCoreAsync(native, context.Host, ct).ConfigureAwait(false))
+            .Select(scope => new ConnectionDiscoveryScope(scope, scope)).ToList();
+    }
+
+    public async Task<IReadOnlyList<ConnectionDiscoverySource>> ListSourcesAsync(
+        ConnectionDiscoveryContext context, string scopeKey, string? projectId, ProCursorSourceKind sourceKind, CancellationToken ct = default)
+    {
+        if (sourceKind != ProCursorSourceKind.Repository ||
+            !string.IsNullOrWhiteSpace(projectId) && !string.Equals(projectId, scopeKey, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The selected source kind or project is not supported.");
+        }
+
+        var native = await connectionVerifier.VerifyAsync(context, ct).ConfigureAwait(false);
+        var repositories = await this.ListRepositoriesCoreAsync(native, context.Host, scopeKey, ct).ConfigureAwait(false);
+        return repositories.Select(repository => new ConnectionDiscoverySource(
+            null, context.Host.HostBaseUrl, scopeKey, repository.ExternalRepositoryId, sourceKind,
+            new("gitLab", repository.ExternalRepositoryId), repository.ProjectPath, null)).ToList();
+    }
+
+
     public async Task<IReadOnlyList<string>> ListScopesAsync(
         Guid clientId,
         ProviderHostRef host,
         CancellationToken ct = default)
-    {
-        var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
+        => await this.ListScopesCoreAsync(await connectionVerifier.VerifyAsync(clientId, host, ct), host, ct).ConfigureAwait(false);
 
+    private async Task<IReadOnlyList<string>> ListScopesCoreAsync(
+        GitLabConnectionVerifier.GitLabConnectionContext context, ProviderHostRef host, CancellationToken ct)
+    {
         // Read across pages: an operator belonging to more groups than one page holds would otherwise be
         // offered a truncated list with nothing said about the rest.
         var groups = await ProviderRestPager.LoadAllAsync(
@@ -67,11 +103,13 @@ internal sealed class GitLabDiscoveryService(
         ProviderHostRef host,
         string scopePath,
         CancellationToken ct = default)
+        => await this.ListRepositoriesCoreAsync(await connectionVerifier.VerifyAsync(clientId, host, ct), host, scopePath, ct).ConfigureAwait(false);
+
+    private async Task<IReadOnlyList<RepositoryRef>> ListRepositoriesCoreAsync(
+        GitLabConnectionVerifier.GitLabConnectionContext context, ProviderHostRef host, string scopePath, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scopePath);
-
         var normalizedScopePath = scopePath.Trim();
-        var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
         var isPersonalScope = string.Equals(
             normalizedScopePath,
             context.AuthenticatedUsername,
@@ -142,7 +180,7 @@ internal sealed class GitLabDiscoveryService(
         }
 
         var items = await response.Content.ReadFromJsonAsync<IReadOnlyList<T>>(ct) ?? [];
-        return new ProviderRestPager.RestPage<T>(items, ProviderPaginationHeaders.ReadGitLabHasMore(response));
+        return new ProviderRestPager.RestPage<T>(items, GitLabPaginationHeaders.ReadGitLabHasMore(response));
     }
 
     private static RepositoryRef ToRepository(ProviderHostRef host, GitLabProjectResponse project)

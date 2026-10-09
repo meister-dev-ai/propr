@@ -176,7 +176,10 @@ const availableProviderOptions = computed(() => props.providerOptions?.length ? 
 function resolveAuthenticationOptions(providerFamily: ScmProviderFamily | undefined, hostBaseUrl: string) {
   if (providerFamily === 'azureDevOps') {
     if (isHostedAzureDevOpsHost(hostBaseUrl)) {
-      return [{ value: 'oauthClientCredentials', label: 'OAuth Client Credentials' }]
+      return [
+        { value: 'oauthClientCredentials', label: 'OAuth Client Credentials' },
+        { value: 'personalAccessToken', label: 'Personal Access Token' },
+      ]
     }
     return [
       { value: 'personalAccessToken', label: 'Personal Access Token' },

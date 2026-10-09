@@ -3,10 +3,12 @@
     <!--
         MSBuild imports this file into every project below the repository root. It defines the
         Microsoft.Extensions.AI package versions so that every project that references one of those packages
-        names the same version. Target frameworks, compiler settings and analyzer configuration stay in the
-        individual project files.
+        names the same version. It also enables build-time code style analysis. Target frameworks and
+        compiler settings stay in the individual project files.
     -->
     <PropertyGroup>
+
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 
         <!--
             The version of Microsoft.Extensions.AI, Microsoft.Extensions.AI.Abstractions and

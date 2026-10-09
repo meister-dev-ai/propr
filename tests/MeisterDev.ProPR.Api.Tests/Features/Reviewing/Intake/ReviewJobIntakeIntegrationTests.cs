@@ -328,7 +328,7 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
                 services.AddSingleton(licensing);
 
                 services.AddSingleton(Substitute.For<IWebhookConfigurationRepository>());
-                var providerRegistry = Substitute.For<IScmProviderRegistry>();
+                var providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
                 providerRegistry.IsRegistered(Arg.Any<ScmProvider>()).Returns(false);
                 services.AddSingleton(providerRegistry);
                 services.AddSingleton(Substitute.For<IClientScmConnectionRepository>());

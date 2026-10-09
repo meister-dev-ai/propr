@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
 
@@ -27,8 +28,12 @@ public sealed class DbClientRegistry(
     Func<ProviderHostRef, ClientScmConnectionCredentialDto, CancellationToken, Task<ReviewerIdentity?>>?
         deriveReviewerIdentityAsync = null,
     ILogger<DbClientRegistry>? logger = null,
-    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : IClientRegistry
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
+    IEnumerable<IScmIdentityPolicy>? identityPolicies = null) : IClientRegistry
 {
+    private readonly IReadOnlyDictionary<ScmProvider, IScmIdentityPolicy> _identityPolicies =
+        (identityPolicies ?? ScmLocalPolicyFactory.CreateIdentityPolicies()).ToDictionary(policy => policy.Provider);
+
     private readonly Func<ProviderHostRef, ClientScmConnectionCredentialDto, CancellationToken, Task<ReviewerIdentity?>>?
         _deriveReviewerIdentityAsync = deriveReviewerIdentityAsync;
 
@@ -74,13 +79,15 @@ public sealed class DbClientRegistry(
             return configuredIdentity;
         }
 
-        if (host.Provider != ScmProvider.GitHub || this._deriveReviewerIdentityAsync is null)
+        if (this._deriveReviewerIdentityAsync is null
+            || !this._identityPolicies.TryGetValue(host.Provider, out var policy)
+            || !policy.CanDeriveAutomaticReviewerIdentity)
         {
             return null;
         }
 
         var connection = await connectionRepository.GetOperationalConnectionAsync(clientId, host, ct);
-        if (connection is null || connection.AuthenticationKind != ScmAuthenticationKind.AppInstallation)
+        if (connection is null || !policy.IsAutomaticReviewerIdentityEligible(connection.AuthenticationKind))
         {
             return null;
         }

@@ -11,7 +11,7 @@ namespace MeisterDev.ProPR.Api.Features.Crawling.Webhooks.Validators;
 public sealed class CreateAdminWebhookConfigRequestValidator : AbstractValidator<CreateAdminWebhookConfigRequest>
 {
     /// <summary>Initializes a new instance of <see cref="CreateAdminWebhookConfigRequestValidator" />.</summary>
-    public CreateAdminWebhookConfigRequestValidator()
+    public CreateAdminWebhookConfigRequestValidator(IReviewConfigurationSelectionService selections)
     {
         this.RuleFor(request => request.ClientId)
             .NotEmpty()
@@ -23,11 +23,10 @@ public sealed class CreateAdminWebhookConfigRequestValidator : AbstractValidator
             .When(request => !string.IsNullOrWhiteSpace(request.ProviderScopePath));
 
         this.RuleFor(request => request)
-            .Must(request =>
-                request.Provider == WebhookProviderType.AzureDevOps
-                    ? request.OrganizationScopeId.HasValue || !string.IsNullOrWhiteSpace(request.ProviderScopePath)
-                    : !string.IsNullOrWhiteSpace(request.ProviderScopePath))
-            .WithMessage("Azure DevOps requires OrganizationScopeId or ProviderScopePath. Other providers require ProviderScopePath.");
+            .Must(request => request.ConnectionId.HasValue && !string.IsNullOrWhiteSpace(request.ScopeKey) ||
+                             request.Provider.HasValue && selections.HasScopeSelection(
+                                 request.Provider.Value, request.OrganizationScopeId, request.ProviderScopePath))
+            .WithMessage("Select a connection and scope, or supply an explicit provider and its manual scope coordinates.");
 
         this.RuleFor(request => request.ProviderProjectKey)
             .NotEmpty()

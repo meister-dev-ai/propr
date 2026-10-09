@@ -24,12 +24,13 @@ public interface IJobRepository : IReviewFileResultStore
     Task<TryAddReviewJobResult> TryAddIfNoActiveDuplicateAsync(ReviewJob job, CancellationToken ct = default);
 
     /// <summary>Returns the first Pending or Processing job for the given PR iteration, or null.</summary>
-    /// <param name="organizationUrl">Base URL of the Azure DevOps organization.</param>
-    /// <param name="projectId">ID of the Azure DevOps project.</param>
+    /// <param name="organizationUrl">Provider scope URL.</param>
+    /// <param name="projectId">Provider project key.</param>
     /// <param name="repositoryId">ID of the repository containing the pull request.</param>
     /// <param name="pullRequestId">Numeric ID of the pull request.</param>
     /// <param name="iterationId">ID of the pull request iteration.</param>
     ReviewJob? FindActiveJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -38,6 +39,7 @@ public interface IJobRepository : IReviewFileResultStore
 
     /// <summary>Returns the most-recent Completed job for the given PR iteration, or null.</summary>
     ReviewJob? FindCompletedJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -50,6 +52,7 @@ public interface IJobRepository : IReviewFileResultStore
     ///     so that deterministic failures do not loop and require a manual restart instead.
     /// </summary>
     ReviewJob? FindFailedJob(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -363,8 +366,9 @@ public interface IJobRepository : IReviewFileResultStore
         Guid excludeJobId,
         CancellationToken ct = default);
 
-    /// <summary>Returns all Pending or Processing jobs for the given ADO organisation/project combination.</summary>
+    /// <summary>Returns all Pending or Processing jobs for the given provider scope/project combination.</summary>
     Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         CancellationToken ct = default);
@@ -379,7 +383,7 @@ public interface IJobRepository : IReviewFileResultStore
     ///     itself used, which makes history a better source than asking the provider again: no
     ///     credential, no network call, and nothing to fail.
     ///     <para>
-    ///         A pull request number is only unique within a repository on GitLab and Forgejo, so the
+    ///         A pull request number can be unique only within a repository, so the
     ///         number alone cannot identify one. Jobs carrying the requested repository name are preferred,
     ///         and an answer is given only when the candidates agree on a single identity.
     ///     </para>
@@ -411,6 +415,7 @@ public interface IJobRepository : IReviewFileResultStore
     ///     <see cref="ReviewJob.FileReviewResults" /> eagerly loaded, or <see langword="null" />.
     /// </summary>
     Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -424,6 +429,7 @@ public interface IJobRepository : IReviewFileResultStore
     ///     <see langword="null" />.
     /// </summary>
     Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -442,6 +448,7 @@ public interface IJobRepository : IReviewFileResultStore
     ///     is eagerly loaded. Returns <see langword="null" /> when no such job exists.
     /// </summary>
     Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -475,6 +482,7 @@ public interface IJobRepository : IReviewFileResultStore
     ///     <see langword="null" />.
     /// </summary>
     Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,

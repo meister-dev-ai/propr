@@ -15,6 +15,7 @@ public sealed class ReviewJob
 
     private ReviewJob()
     {
+        this.Provider = ScmProvider.AzureDevOps;
         this.OrganizationUrl = string.Empty;
         this.ProjectId = string.Empty;
         this.RepositoryId = string.Empty;
@@ -24,6 +25,38 @@ public sealed class ReviewJob
     ///     Creates a new <see cref="ReviewJob" />.
     /// </summary>
     public ReviewJob(
+        Guid id,
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId)
+        : this(
+            new CodeReviewSourceContext(
+                ScmProvider.AzureDevOps, organizationUrl, projectId, projectId,
+                CodeReviewPlatformKind.PullRequest, pullRequestId.ToString()), id, clientId, organizationUrl, projectId, repositoryId, pullRequestId,
+            iterationId)
+    {
+    }
+
+    /// <summary>Creates work using explicitly captured source coordinates.</summary>
+    public ReviewJob(
+        CodeReviewRef codeReview,
+        Guid id,
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId)
+        : this(CodeReviewSourceContext.FromReview(codeReview), id, clientId, organizationUrl, projectId, repositoryId, pullRequestId, iterationId)
+    {
+    }
+
+    /// <summary>Creates work using explicitly prepared source coordinates.</summary>
+    public ReviewJob(
+        CodeReviewSourceContext sourceContext,
         Guid id,
         Guid clientId,
         string organizationUrl,
@@ -69,14 +102,16 @@ public sealed class ReviewJob
         this.RepositoryId = repositoryId;
         this.PullRequestId = pullRequestId;
         this.IterationId = iterationId;
-        this.Provider = ScmProvider.AzureDevOps;
-        this.HostBaseUrl = NormalizeHostBaseUrl(organizationUrl);
-        this.RepositoryOwnerOrNamespace = projectId;
-        this.RepositoryProjectPath = projectId;
-        this.CodeReviewPlatformKind = CodeReviewPlatformKind.PullRequest;
-        this.ExternalCodeReviewId = pullRequestId.ToString();
+        this.Provider = sourceContext.Provider;
+        _ = new ProviderHostRef(sourceContext.Provider, organizationUrl);
+        this.HostBaseUrl = new ProviderHostRef(sourceContext.Provider, sourceContext.HostBaseUrl).HostBaseUrl;
+        this.RepositoryOwnerOrNamespace = sourceContext.OwnerOrNamespace;
+        this.RepositoryProjectPath = sourceContext.ProjectPath;
+        this.CodeReviewPlatformKind = sourceContext.Platform;
+        this.ExternalCodeReviewId = sourceContext.ExternalReviewId;
         this.Status = JobStatus.Pending;
         this.SubmittedAt = DateTimeOffset.UtcNow;
+        this.ExecutionDurationMilliseconds = 0;
     }
 
     /// <summary>
@@ -91,6 +126,12 @@ public sealed class ReviewJob
 
     /// <summary>When the job began processing, if available.</summary>
     public DateTimeOffset? ProcessingStartedAt { get; set; }
+
+    /// <summary>Total time spent in Processing across execution attempts, excluding queue time.</summary>
+    public long? ExecutionDurationMilliseconds { get; set; }
+
+    /// <summary>When protocol cleanup completed for a finished review.</summary>
+    public DateTimeOffset? UsageFinalizedAt { get; set; }
 
     /// <summary>
     ///     Unique identifier for the review job.
@@ -144,7 +185,7 @@ public sealed class ReviewJob
     public Guid ClientId { get; init; }
 
     /// <summary>Normalized source-control provider family for this review job.</summary>
-    public ScmProvider Provider { get; private set; } = ScmProvider.AzureDevOps;
+    public ScmProvider Provider { get; private set; }
 
     /// <summary>Normalized provider host base URL for this review job.</summary>
     public string? HostBaseUrl { get; private set; }

@@ -125,6 +125,7 @@ internal sealed class RunnerReviewPipeline : IDisposable
             usageRecorder: null);
 
         var fileReviewer = new FileReviewer(
+            null,
             new ToolAwareAiReviewCore(
                 null,
                 reviewOptions,
@@ -228,6 +229,7 @@ internal sealed class RunnerReviewPipeline : IDisposable
             new(
                 "exposureCollector", absent,
                 "per-file analytics exposure collection is available only in-process; compatible human-miss model attribution remains unavailable"),
+            new("providerRegistry", absent, "native namespace projection is used only by the absent exposure collector"),
             new("chatClient", supplied, "the relayed default model"),
             new("fileReviewer", supplied, "composed above"),
             new("fileReviewDispatchPlanner", supplied, "composed above; two of its dependencies are absent, named below"),

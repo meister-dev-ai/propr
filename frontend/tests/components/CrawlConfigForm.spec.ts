@@ -29,10 +29,35 @@ vi.mock('@/services/api', () => ({
   UnauthorizedError: class UnauthorizedError extends Error {},
 }))
 
-vi.mock('@/services/adoDiscoveryService', () => ({
-  listAdoOrganizationScopes: listOrganizationScopesMock,
-  listAdoProjects: listProjectsMock,
-  listAdoCrawlFilters: listCrawlFiltersMock,
+vi.mock('@/services/providerConnectionsService', () => ({
+  listProviderConnections: vi.fn(async () => [{
+    id: 'connection-1', clientId: CLIENT_ID, providerFamily: 'azureDevOps', hostBaseUrl: 'https://dev.azure.com',
+    displayName: 'Example connection', isActive: true,
+  }]),
+  listProviderScopes: vi.fn(async () => [{ id: SCOPE_ID, scopePath: 'https://dev.azure.com/example' }]),
+}))
+
+vi.mock('@/services/providerDiscoveryService', () => ({
+  listConnectionDescriptor: vi.fn(async () => ({
+    provider: 'azureDevOps', scopeLabel: 'Organization', projectLabel: 'Project',
+    sourceKinds: [{ kind: 'repository', label: 'Repository' }, { kind: 'adoWiki', label: 'Wiki' }],
+    supportsBranches: true, supportsKnowledgeSources: true,
+  })),
+  listConnectionScopes: async (...args: unknown[]) => (await listOrganizationScopesMock(...args)).map((scope: { id: string; organizationUrl: string; displayName: string }) => ({
+    scopeKey: scope.organizationUrl, displayName: scope.displayName, savedScopeId: scope.id,
+  })),
+  listConnectionProjects: (...args: unknown[]) => listProjectsMock(...args),
+  listConnectionSources: async (...args: unknown[]) => (await listCrawlFiltersMock(...args)).map((source: { canonicalSourceRef: { provider: string; value: string }; displayName: string; defaultBranch?: string }) => ({
+    organizationScopeId: SCOPE_ID, providerScopePath: args[3], providerProjectKey: args[4],
+    repositoryId: source.canonicalSourceRef.value, sourceKind: args[5], canonicalSourceRef: source.canonicalSourceRef,
+    displayName: source.displayName, defaultBranch: source.defaultBranch ?? 'main',
+  })),
+  resolveConnectionSelection: async (...args: unknown[]) => ({
+    provider: 'azureDevOps', connectionId: args[1], scopeKey: args[3], organizationScopeId: SCOPE_ID,
+    providerScopePath: args[3], providerProjectKey: args[4],
+  }),
+  listConnectionFilters: (...args: unknown[]) => listCrawlFiltersMock(...args),
+  listConnectionBranches: vi.fn(async () => []),
 }))
 
 vi.mock('@/services/proCursorService', () => ({
@@ -51,7 +76,7 @@ vi.mock('@/composables/useSession', () => ({
 
 async function mountForm() {
   const { default: CrawlConfigForm } = await import('@/components/CrawlConfigForm.vue')
-  return mount(CrawlConfigForm, {
+  const wrapper = mount(CrawlConfigForm, {
     props: {
       clientId: CLIENT_ID,
     },
@@ -61,6 +86,10 @@ async function mountForm() {
       },
     },
   })
+  await flushPromises()
+  await wrapper.get('#crawl-connection').setValue('connection-1')
+  await flushPromises()
+  return wrapper
 }
 
 async function mountEditForm(config: Record<string, unknown>) {
@@ -111,7 +140,7 @@ describe('CrawlConfigForm', () => {
         projectName: 'Project Two',
       },
     ])
-    listCrawlFiltersMock.mockImplementation((_clientId: string, _scopeId: string, projectId: string) => {
+    listCrawlFiltersMock.mockImplementation((_clientId: string, _connectionId: string, _purpose: string, _scopeKey: string, projectId: string) => {
       if (projectId === 'project-2') {
         return Promise.resolve([
           {
@@ -216,9 +245,9 @@ describe('CrawlConfigForm', () => {
     const wrapper = await mountForm()
     await flushPromises()
 
-    await wrapper.get('#crawlOrganizationScope').setValue(SCOPE_ID)
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example')
     await flushPromises()
-    await wrapper.get('#crawlProjectId').setValue('project-1')
+    await wrapper.get('#crawl-project').setValue('project-1')
     await flushPromises()
 
     await wrapper.get('#crawlAddFilter').trigger('click')
@@ -230,10 +259,10 @@ describe('CrawlConfigForm', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(listOrganizationScopesMock).toHaveBeenCalledWith(CLIENT_ID)
+    expect(listOrganizationScopesMock).toHaveBeenCalledWith(CLIENT_ID, 'connection-1', 'crawl')
     expect(listProCursorSourcesMock).toHaveBeenCalledWith(CLIENT_ID)
-    expect(listProjectsMock).toHaveBeenCalledWith(CLIENT_ID, SCOPE_ID, 'crawl')
-    expect(listCrawlFiltersMock).toHaveBeenCalledWith(CLIENT_ID, SCOPE_ID, 'project-1', 'crawl')
+    expect(listProjectsMock).toHaveBeenCalledWith(CLIENT_ID, 'connection-1', 'crawl', 'https://dev.azure.com/example')
+    expect(listCrawlFiltersMock).toHaveBeenCalledWith(CLIENT_ID, 'connection-1', 'crawl', 'https://dev.azure.com/example', 'project-1')
     expect(mockPost).toHaveBeenCalledWith(
       '/admin/crawl-configurations',
       expect.objectContaining({
@@ -241,6 +270,9 @@ describe('CrawlConfigForm', () => {
           clientId: CLIENT_ID,
           provider: 'azureDevOps',
           organizationScopeId: SCOPE_ID,
+          connectionId: 'connection-1',
+          scopeKey: 'https://dev.azure.com/example',
+          providerScopePath: 'https://dev.azure.com/example',
           providerProjectKey: 'project-1',
           crawlIntervalSeconds: 60,
           reviewTemperature: 0.2,
@@ -261,6 +293,37 @@ describe('CrawlConfigForm', () => {
       }),
     )
     expect(wrapper.emitted('config-saved')).toBeTruthy()
+  })
+
+  it('does not emit a pending create result after the form unmounts', async () => {
+    let release: (value: unknown) => void = () => {}
+    mockPost.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const wrapper = await mountForm()
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example')
+    await flushPromises()
+    await wrapper.get('#crawl-project').setValue('project-1')
+    await flushPromises()
+    await wrapper.find('form').trigger('submit')
+    wrapper.unmount()
+    release({ data: {}, response: { ok: true, status: 201 } })
+    await flushPromises()
+    expect(wrapper.emitted('config-saved')).toBeUndefined()
+  })
+
+  it('reloads connections and releases a pending save when the reused owner changes client', async () => {
+    const connections = await import('@/services/providerConnectionsService')
+    let release: (value: unknown) => void = () => {}
+    mockPost.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const wrapper = await mountForm()
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example'); await flushPromises()
+    await wrapper.get('#crawl-project').setValue('project-1'); await flushPromises()
+    await wrapper.find('form').trigger('submit')
+    const nextClient = '00000000-0000-0000-0000-000000000002'
+    await wrapper.setProps({ clientId: nextClient }); await flushPromises()
+    expect(connections.listProviderConnections).toHaveBeenLastCalledWith(nextClient)
+    expect(wrapper.text()).not.toContain('Creating...')
+    release({ data: {}, response: { ok: true, status: 201 } }); await flushPromises()
+    expect(wrapper.emitted('config-saved')).toBeUndefined()
   })
 
   it('includes review temperature when editing an existing crawl configuration', async () => {
@@ -299,9 +362,9 @@ describe('CrawlConfigForm', () => {
     const wrapper = await mountForm()
     await flushPromises()
 
-    await wrapper.get('#crawlOrganizationScope').setValue(SCOPE_ID)
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example')
     await flushPromises()
-    await wrapper.get('#crawlProjectId').setValue('project-1')
+    await wrapper.get('#crawl-project').setValue('project-1')
     await flushPromises()
     await wrapper.get('#crawlReviewTemperature').setValue('2.5')
 
@@ -316,9 +379,9 @@ describe('CrawlConfigForm', () => {
     const wrapper = await mountForm()
     await flushPromises()
 
-    await wrapper.get('#crawlOrganizationScope').setValue(SCOPE_ID)
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example')
     await flushPromises()
-    await wrapper.get('#crawlProjectId').setValue('project-1')
+    await wrapper.get('#crawl-project').setValue('project-1')
     await flushPromises()
     await wrapper.get('#crawlSourceScopeSelected').setValue(true)
     await flushPromises()
@@ -376,9 +439,9 @@ describe('CrawlConfigForm', () => {
     const wrapper = await mountForm()
     await flushPromises()
 
-    await wrapper.get('#crawlOrganizationScope').setValue(SCOPE_ID)
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example')
     await flushPromises()
-    await wrapper.get('#crawlProjectId').setValue('project-1')
+    await wrapper.get('#crawl-project').setValue('project-1')
     await flushPromises()
     await wrapper.get('#crawlSourceScopeSelected').setValue(true)
     await flushPromises()
@@ -393,9 +456,9 @@ describe('CrawlConfigForm', () => {
     const wrapper = await mountForm()
     await flushPromises()
 
-    await wrapper.get('#crawlOrganizationScope').setValue(SCOPE_ID)
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example')
     await flushPromises()
-    await wrapper.get('#crawlProjectId').setValue('project-1')
+    await wrapper.get('#crawl-project').setValue('project-1')
     await flushPromises()
 
     await wrapper.get('#crawlAddFilter').trigger('click')
@@ -404,10 +467,10 @@ describe('CrawlConfigForm', () => {
 
     expect(wrapper.text()).toContain('Repository One')
 
-    await wrapper.get('#crawlProjectId').setValue('project-2')
+    await wrapper.get('#crawl-project').setValue('project-2')
     await flushPromises()
 
-    expect(listCrawlFiltersMock).toHaveBeenLastCalledWith(CLIENT_ID, SCOPE_ID, 'project-2', 'crawl')
+    expect(listCrawlFiltersMock).toHaveBeenLastCalledWith(CLIENT_ID, 'connection-1', 'crawl', 'https://dev.azure.com/example', 'project-2')
     expect(wrapper.findAll('[data-testid^="crawl-filter-select-"]')).toHaveLength(0)
     expect(wrapper.text()).toContain('No filters selected — all repositories are crawled.')
   })
@@ -422,9 +485,9 @@ describe('CrawlConfigForm', () => {
     const wrapper = await mountForm()
     await flushPromises()
 
-    await wrapper.get('#crawlOrganizationScope').setValue(SCOPE_ID)
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example')
     await flushPromises()
-    await wrapper.get('#crawlProjectId').setValue('project-1')
+    await wrapper.get('#crawl-project').setValue('project-1')
     await flushPromises()
     await wrapper.get('#crawlAddFilter').trigger('click')
     await wrapper.get('[data-testid="crawl-filter-select-0"]').setValue('azureDevOps::repo-1')

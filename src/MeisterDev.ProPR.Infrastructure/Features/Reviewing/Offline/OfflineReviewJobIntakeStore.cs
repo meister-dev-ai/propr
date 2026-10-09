@@ -21,6 +21,7 @@ public sealed class OfflineReviewJobIntakeStore(InMemoryReviewJobRepository jobs
     {
         return Task.FromResult(
             jobs.FindActiveJob(
+                clientId,
                 request.ProviderScopePath,
                 request.ProviderProjectKey,
                 request.RepositoryId,

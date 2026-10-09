@@ -140,8 +140,8 @@ public sealed class ProviderSupportIntegrationTests(ClientProviderConnectionsCon
             ScmAuthenticationKind.AppInstallation,
             displayName: "GitHub App",
             secret: "-----BEGIN PRIVATE KEY-----",
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012);
+            appId: 123456,
+            installationId: 789012);
 
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.ClientId}/provider-connections");

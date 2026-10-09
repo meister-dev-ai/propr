@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Api.Extensions;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -10,6 +9,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using MeisterDev.ProPR.Web;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Api.Features.ProCursor.Controllers;
 
@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Api.Features.ProCursor.Controllers;
 [Route("admin/clients/{clientId:guid}/procursor/sources")]
 public sealed partial class ProCursorKnowledgeSourcesController(
     IClientAdminService clientAdminService,
-    IScmProviderRegistry providerRegistry,
+    IReviewConfigurationSelectionService selections,
     IProCursorGateway proCursorGateway,
     ILogger<ProCursorKnowledgeSourcesController> logger) : ControllerBase
 {
@@ -381,7 +381,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
 
     private static void ValidateSourceSelection(ModelStateDictionary modelState, ProCursorKnowledgeSourceRequest request)
     {
-        var hasGuidedSelection = request.OrganizationScopeId.HasValue ||
+        var hasGuidedSelection = request.ConnectionId.HasValue || request.OrganizationScopeId.HasValue ||
                                  request.CanonicalSourceRef is not null ||
                                  !string.IsNullOrWhiteSpace(request.SourceDisplayName);
 
@@ -397,7 +397,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
 
     private static void ValidateGuidedSourceSelection(ModelStateDictionary modelState, ProCursorKnowledgeSourceRequest request)
     {
-        if (!request.OrganizationScopeId.HasValue)
+        if (!request.OrganizationScopeId.HasValue && !request.ConnectionId.HasValue)
         {
             modelState.AddModelError(
                 nameof(request.OrganizationScopeId),
@@ -461,7 +461,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             .ToList()
             .AsReadOnly();
 
-        var hasGuidedSelection = request.OrganizationScopeId.HasValue;
+        var hasGuidedSelection = request.ConnectionId.HasValue || request.OrganizationScopeId.HasValue;
         if (!hasGuidedSelection)
         {
             return new ProCursorKnowledgeSourceRegistrationRequest(
@@ -500,47 +500,33 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         ProCursorKnowledgeSourceRequest request,
         CancellationToken ct)
     {
-        var scopeId = request.OrganizationScopeId
-                      ?? throw new InvalidOperationException("OrganizationScopeId is required for guided source selection.");
         var canonicalSourceRef = request.CanonicalSourceRef
                                  ?? throw new InvalidOperationException("CanonicalSourceRef is required for guided source selection.");
-
-        var discoveryService = providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps);
-        var scope = await discoveryService.GetScopeAsync(clientId, scopeId, ct);
-        if (scope is null)
+        var connectionId = request.ConnectionId ?? await selections.ResolveHistoricalConnectionAsync(clientId, request.OrganizationScopeId!.Value, ct);
+        var context = await selections.GetConnectionContextAsync(clientId, connectionId, ct);
+        if (!selections.GetDescriptor(context).SupportsKnowledgeSources)
         {
-            throw new KeyNotFoundException($"Organization scope {scopeId} was not found for client {clientId}.");
+            throw new InvalidOperationException("Knowledge source creation is not supported by the selected connection.");
         }
 
-        if (!scope.IsEnabled)
+        var availableScopes = await selections.GetScopesAsync(context, ct);
+        var selectedScope = availableScopes.SingleOrDefault(scope =>
+                                request.ScopeKey is not null ? scope.ScopeKey == request.ScopeKey : scope.SavedScopeId == request.OrganizationScopeId)
+                            ?? throw new InvalidOperationException("The selected scope does not belong to this connection.");
+        var sourceOption = (await selections.GetSourcesAsync(
+                               context, selectedScope.ScopeKey,
+                               request.ProviderProjectKey, request.SourceKind, ct)).SingleOrDefault(source => source.CanonicalSourceRef == canonicalSourceRef)
+                           ?? throw new InvalidOperationException("The selected source is no longer available.");
+        if (request.OrganizationScopeId.HasValue && request.OrganizationScopeId != sourceOption.OrganizationScopeId ||
+            !string.IsNullOrWhiteSpace(request.ProviderScopePath) && request.ProviderScopePath != sourceOption.ProviderScopePath ||
+            !string.IsNullOrWhiteSpace(request.RepositoryId) && request.RepositoryId != sourceOption.RepositoryId)
         {
-            throw new InvalidOperationException("The selected organization scope is disabled.");
+            throw new InvalidOperationException("The supplied source coordinates conflict with the selected connection.");
         }
 
-        var projectId = request.ProviderProjectKey.Trim();
-        var availableSources = await discoveryService.ListSourcesAsync(clientId, scope.Id, projectId, request.SourceKind, ct);
-        var sourceOption = availableSources.FirstOrDefault(option =>
-            string.Equals(option.CanonicalSourceRef.Provider, canonicalSourceRef.Provider, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(option.CanonicalSourceRef.Value, canonicalSourceRef.Value, StringComparison.OrdinalIgnoreCase));
-
-        if (sourceOption is null)
-        {
-            throw new InvalidOperationException("The selected source is no longer available in Azure DevOps.");
-        }
-
-        var availableBranches = await discoveryService.ListBranchesAsync(
-            clientId,
-            scope.Id,
-            projectId,
-            request.SourceKind,
-            canonicalSourceRef,
-            ct);
-
-        var branchNames = availableBranches
-            .Select(branch => branch.BranchName)
-            .Where(static branchName => !string.IsNullOrWhiteSpace(branchName))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var branchNames = (await selections.GetBranchesAsync(
+            context, selectedScope.ScopeKey, sourceOption.ProviderProjectKey,
+            request.SourceKind, canonicalSourceRef, ct)).Select(branch => branch.BranchName).ToList();
 
         var sourceDisplayName = NormalizeOptional(request.SourceDisplayName) ?? sourceOption.DisplayName;
         var branchValidationError = ValidateBranchSelection(request, branchNames, sourceDisplayName);
@@ -550,10 +536,10 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         }
 
         return new ResolvedSourceSelection(
-            scope.ScopePath,
-            canonicalSourceRef.Value,
-            scope.Id,
-            canonicalSourceRef,
+            sourceOption.ProviderScopePath,
+            sourceOption.RepositoryId,
+            sourceOption.OrganizationScopeId,
+            sourceOption.CanonicalSourceRef,
             sourceDisplayName);
     }
 

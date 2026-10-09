@@ -24,6 +24,10 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.TestSupport;
+using MeisterDev.ProPR.Infrastructure.Features.Clients;
+using MeisterDev.ProPR.Infrastructure.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
@@ -39,6 +43,108 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     private IHttpClientFactory _httpClientFactory = null!;
     private DbClientRegistry _registry = null!;
     private ClientReviewerIdentityRepository _reviewerIdentityRepository = null!;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ClientsCompositionDerivesSelectedAppIdentityWithoutConstructingOtherNativeServices(bool provideUnrelatedDependency)
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connection = new ClientScmConnectionCredentialDto(
+            Guid.NewGuid(), clientId, ScmProvider.GitHub,
+            host.HostBaseUrl, ScmAuthenticationKind.AppInstallation, null, null, "GitHub App",
+            GitHubAppTestHelpers.CreatePrivateKeyPem(true), true, AppId: 123456, InstallationId: 789012);
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>()).Returns(connection);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["DB_CONNECTION_STRING"] = fixture.ConnectionString }).Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddInfrastructureSupport(configuration, includeProviderOperationalServices: false);
+        services.AddClientsModule(configuration);
+        services.AddSingleton(connections);
+        services.AddSingleton(Substitute.For<IClientReviewerIdentityRepository>());
+        services.AddSingleton(this._httpClientFactory);
+        if (provideUnrelatedDependency)
+        {
+            services.AddSingleton(Substitute.For<IIdentityResolver>());
+        }
+
+        var unrelatedConstructed = false;
+        services.AddScoped<IReviewerIdentityService>(_ =>
+        {
+            unrelatedConstructed = true;
+            throw new InvalidOperationException("Unrelated native identity service must not be constructed.");
+        });
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IClientRegistry>()
+            .GetEffectiveReviewerIdentityAsync(clientId, host);
+
+        Assert.False(unrelatedConstructed);
+        Assert.NotNull(result);
+        Assert.Equal("propr-review[bot]", result.Login);
+        await connections.Received(2).GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(ScmProvider.AzureDevOps)]
+    [InlineData(ScmProvider.GitLab)]
+    [InlineData(ScmProvider.Forgejo)]
+    public async Task AutomaticIdentity_IneligibleProviderDoesNotRepeatConnectionLookup(ScmProvider provider)
+    {
+        var host = new ProviderHostRef(provider, "https://scm.example");
+        var clientId = Guid.NewGuid();
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        var identities = Substitute.For<IClientReviewerIdentityRepository>();
+        var connection = new ClientScmConnectionCredentialDto(
+            Guid.NewGuid(), clientId, provider,
+            host.HostBaseUrl, ScmAuthenticationKind.PersonalAccessToken, "SCM", "test", true);
+        connections.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>()).Returns(connection);
+        var derived = false;
+        var registry = new DbClientRegistry(
+            this._dbContext, connections, identities,
+            (_, _, _) =>
+            {
+                derived = true;
+                return Task.FromResult<ReviewerIdentity?>(null);
+            });
+
+        Assert.Null(await registry.GetEffectiveReviewerIdentityAsync(clientId, host));
+
+        Assert.False(derived);
+        await connections.Received(1).GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>());
+        await identities.Received(1).GetByConnectionIdAsync(clientId, connection.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AutomaticIdentity_UsesTheInjectedNativeEligibilityDeclaration()
+    {
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://scm.example");
+        var clientId = Guid.NewGuid();
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        var identities = Substitute.For<IClientReviewerIdentityRepository>();
+        var connection = new ClientScmConnectionCredentialDto(
+            Guid.NewGuid(), clientId, host.Provider,
+            host.HostBaseUrl, ScmAuthenticationKind.PersonalAccessToken, "SCM", "test", true);
+        connections.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>()).Returns(connection);
+        var policy = Substitute.For<IScmIdentityPolicy>();
+        policy.Provider.Returns(host.Provider);
+        policy.CanDeriveAutomaticReviewerIdentity.Returns(true);
+        policy.IsAutomaticReviewerIdentityEligible(connection.AuthenticationKind).Returns(true);
+        var expected = new ReviewerIdentity(host, "native", "native", "Native", true);
+        var registry = new DbClientRegistry(
+            this._dbContext, connections, identities,
+            (_, selected, _) => Task.FromResult<ReviewerIdentity?>(ReferenceEquals(selected, connection) ? expected : null),
+            identityPolicies: [policy]);
+
+        Assert.Same(expected, await registry.GetEffectiveReviewerIdentityAsync(clientId, host));
+        policy.Received(1).IsAutomaticReviewerIdentityEligible(connection.AuthenticationKind);
+        await connections.Received(2).GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>());
+    }
 
     public async Task InitializeAsync()
     {
@@ -69,10 +175,9 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
             this._reviewerIdentityRepository,
             async (host, connection, ct) =>
             {
-                var authenticationService = new GitHubAuthenticationService(this._httpClientFactory);
-                var app = await authenticationService.GetAppMetadataAsync(host, connection, ct);
-                var login = app.Slug + "[bot]";
-                return new ReviewerIdentity(host, login, login, app.DisplayName, true);
+                var service = new MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Identity.GitHubReviewerIdentityService(
+                    new GitHubConnectionVerifier(this._connectionRepository, this._httpClientFactory), this._httpClientFactory);
+                return await service.GetAutomaticReviewerIdentityAsync(host, connection, ct);
             });
     }
 
@@ -262,8 +367,8 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.Equal(credentialBefore.AuthenticationKind, credentialAfter.AuthenticationKind);
         Assert.Equal(credentialBefore.OAuthClientId, credentialAfter.OAuthClientId);
         Assert.Equal(credentialBefore.OAuthTenantId, credentialAfter.OAuthTenantId);
-        Assert.Equal(credentialBefore.GitHubAppId, credentialAfter.GitHubAppId);
-        Assert.Equal(credentialBefore.GitHubAppInstallationId, credentialAfter.GitHubAppInstallationId);
+        Assert.Equal(credentialBefore.AppId, credentialAfter.AppId);
+        Assert.Equal(credentialBefore.InstallationId, credentialAfter.InstallationId);
     }
 
     [Fact]
@@ -315,8 +420,8 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.Equal(credentialBeforeDelete.AuthenticationKind, credentialAfterDelete.AuthenticationKind);
         Assert.Equal(credentialBeforeDelete.OAuthClientId, credentialAfterDelete.OAuthClientId);
         Assert.Equal(credentialBeforeDelete.OAuthTenantId, credentialAfterDelete.OAuthTenantId);
-        Assert.Equal(credentialBeforeDelete.GitHubAppId, credentialAfterDelete.GitHubAppId);
-        Assert.Equal(credentialBeforeDelete.GitHubAppInstallationId, credentialAfterDelete.GitHubAppInstallationId);
+        Assert.Equal(credentialBeforeDelete.AppId, credentialAfterDelete.AppId);
+        Assert.Equal(credentialBeforeDelete.InstallationId, credentialAfterDelete.InstallationId);
     }
 
     [Fact]

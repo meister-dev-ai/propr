@@ -684,6 +684,26 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The update conflicts with the current target lifecycle or protected filters, the repository replacement is incompatible or conflicts with an existing target, or the capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -691,7 +711,7 @@
         "tags": [
           "AdminCrawlConfigs"
         ],
-        "summary": "Deletes a crawl configuration.\nAdmins may delete any config; non-Admin users may only delete configs for their clients.",
+        "summary": "Deletes a generic crawl configuration. Managed canonical targets require revision-checked lifecycle removal.\nAdmins may delete eligible generic configurations; non-Admin users may only delete eligible configurations for their clients.",
         "parameters": [
           {
             "name": "configId",
@@ -764,6 +784,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Deletion was rejected; managed canonical targets require lifecycle removal.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1580,7 +1620,7 @@
             }
           },
           "400": {
-            "description": "The repository list was given but empty.",
+            "description": "Repository selections are empty or conflict with stored or discovered coordinates.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4332,718 +4372,6 @@
         }
       }
     },
-    "/admin/clients/{clientId}/ado/discovery/projects": {
-      "get": {
-        "tags": [
-          "AdoDiscovery"
-        ],
-        "summary": "Lists projects available within one configured Azure DevOps organization scope.\nRequires global admin or `ClientUser` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "organizationScopeId",
-            "in": "query",
-            "description": "Organization-scope identifier.",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "purpose",
-            "in": "query",
-            "description": "Optional discovery purpose. Use `crawl` to enforce premium capability checks.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Projects found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoProjectOptionDto"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoProjectOptionDto"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoProjectOptionDto"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The query is invalid.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The organization scope was not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The requested premium capability is unavailable.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/clients/{clientId}/ado/discovery/sources": {
-      "get": {
-        "tags": [
-          "AdoDiscovery"
-        ],
-        "summary": "Lists repositories or wikis available within one configured Azure DevOps project.\nRequires global admin or `ClientUser` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "organizationScopeId",
-            "in": "query",
-            "description": "Organization-scope identifier.",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "projectId",
-            "in": "query",
-            "description": "Azure DevOps project identifier.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sourceKind",
-            "in": "query",
-            "description": "Source type: `repository` or `adoWiki`.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Sources found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoSourceOptionDto"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoSourceOptionDto"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoSourceOptionDto"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The query is invalid.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The organization scope was not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The requested premium capability is unavailable.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/clients/{clientId}/ado/discovery/branches": {
-      "get": {
-        "tags": [
-          "AdoDiscovery"
-        ],
-        "summary": "Lists branches available for one discovered repository or wiki source.\nRequires global admin or `ClientUser` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "organizationScopeId",
-            "in": "query",
-            "description": "Organization-scope identifier.",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "projectId",
-            "in": "query",
-            "description": "Azure DevOps project identifier.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sourceKind",
-            "in": "query",
-            "description": "Source type: `repository` or `adoWiki`.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "canonicalSourceProvider",
-            "in": "query",
-            "description": "Canonical source-reference provider.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "canonicalSourceValue",
-            "in": "query",
-            "description": "Canonical source-reference value.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Branches found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoBranchOptionDto"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoBranchOptionDto"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoBranchOptionDto"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The query is invalid.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The organization scope was not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The requested premium capability is unavailable.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/clients/{clientId}/ado/discovery/crawl-filters": {
-      "get": {
-        "tags": [
-          "AdoDiscovery"
-        ],
-        "summary": "Lists repository options and branch suggestions suitable for crawl-filter configuration.\nRequires global admin or `ClientUser` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "organizationScopeId",
-            "in": "query",
-            "description": "Organization-scope identifier.",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "projectId",
-            "in": "query",
-            "description": "Azure DevOps project identifier.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "purpose",
-            "in": "query",
-            "description": "Optional discovery purpose. Use `crawl` to enforce crawl-configuration premium checks.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Crawl-filter options found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoCrawlFilterOptionDto"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoCrawlFilterOptionDto"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AdoCrawlFilterOptionDto"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The query is invalid.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The organization scope was not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The requested premium capability is unavailable.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/ai-provider-actions/dispatch": {
       "post": {
         "tags": [
@@ -6009,7 +5337,8 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Creates a new AI connection profile for the specified client.",
+        "summary": "Creates an AI connection profile for the specified client.",
+        "description": "CreationRequestId is an optional, immutable correlation identifier scoped to the client.\nClients can read the profile list to recover the result of an interrupted creation request.\nA repeated identifier returns 409; the endpoint does not replay the original 201 response.\nPhysical deletion of the profile permits later reuse of the identifier.",
         "parameters": [
           {
             "name": "clientId",
@@ -6042,7 +5371,7 @@
         },
         "responses": {
           "201": {
-            "description": "Created",
+            "description": "The profile was created.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6057,6 +5386,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AiConnectionDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The client already has a profile with the supplied creation correlation identifier.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -8988,7 +8337,7 @@
         "tags": [
           "ClientProviderConnections"
         ],
-        "summary": "Creates a provider connection for a client.",
+        "summary": "Creates a provider connection for a client. Azure DevOps Services supports OAuth client credentials and personal access tokens.",
         "parameters": [
           {
             "name": "clientId",
@@ -9260,7 +8609,7 @@
         "tags": [
           "ClientProviderConnections"
         ],
-        "summary": "Applies partial updates to one provider connection.",
+        "summary": "Applies partial updates to one provider connection. Changing authentication kind requires a replacement\nsecret; Azure DevOps OAuth client-credentials authentication also requires tenant and client identifiers.",
         "parameters": [
           {
             "name": "clientId",
@@ -9855,12 +9204,12 @@
         }
       }
     },
-    "/admin/clients/{clientId}/providers/{provider}/discovery/scopes": {
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/descriptor": {
       "get": {
         "tags": [
           "ClientProviderDiscovery"
         ],
-        "summary": "Lists the owners, organizations, or groups the connection can reach.",
+        "summary": "Returns native labels, hierarchy and supported operations.",
         "parameters": [
           {
             "name": "clientId",
@@ -9873,168 +9222,9 @@
             }
           },
           {
-            "name": "provider",
-            "in": "path",
-            "description": "Provider family the connection belongs to.",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/ScmProvider"
-            }
-          },
-          {
             "name": "connectionId",
-            "in": "query",
-            "description": "Provider-connection identifier.",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The scopes the connection can reach.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderScopeOptionResponse"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderScopeOptionResponse"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderScopeOptionResponse"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The connection is unusable, or the provider refused the request.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not an administrator of the client.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The provider family has no discovery in this deployment.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "This installation is not entitled to answer mentions.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/clients/{clientId}/providers/{provider}/discovery/repositories": {
-      "get": {
-        "tags": [
-          "ClientProviderDiscovery"
-        ],
-        "summary": "Lists the repositories in one scope the connection can reach.",
-        "parameters": [
-          {
-            "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
+            "description": "Selected connection identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -10042,82 +9232,16 @@
             }
           },
           {
-            "name": "provider",
-            "in": "path",
-            "description": "Provider family the connection belongs to.",
+            "name": "purpose",
+            "in": "query",
+            "description": "Required configuration purpose: crawl, mention, webhook or procursor.",
             "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/ScmProvider"
-            }
-          },
-          {
-            "name": "connectionId",
-            "in": "query",
-            "description": "Provider-connection identifier.",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "scopePath",
-            "in": "query",
-            "description": "The owner, organization, or group to list within.",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": "The repositories in that scope.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderRepositoryOptionResponse"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderRepositoryOptionResponse"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderRepositoryOptionResponse"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The connection is unusable, the scope is missing, or the provider refused.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
           "401": {
             "description": "Missing or invalid credentials.",
             "content": {
@@ -10139,7 +9263,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an administrator of the client.",
+            "description": "Insufficient client role.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10159,7 +9283,7 @@
             }
           },
           "404": {
-            "description": "The provider family has no discovery in this deployment.",
+            "description": "The selected resource is not available.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10179,7 +9303,7 @@
             }
           },
           "409": {
-            "description": "This installation is not entitled to answer mentions.",
+            "description": "Required licensed capability is unavailable.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10197,6 +9321,1065 @@
                 }
               }
             }
+          },
+          "501": {
+            "description": "The operation is unsupported."
+          },
+          "200": {
+            "description": "The native discovery descriptor.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionDiscoveryDescriptor"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionDiscoveryDescriptor"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionDiscoveryDescriptor"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid purpose or unavailable connection."
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/scopes": {
+      "get": {
+        "tags": [
+          "ClientProviderDiscovery"
+        ],
+        "summary": "Lists scopes reachable through the selected connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Selected connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "description": "Required configuration purpose.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient client role.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The selected resource is not available.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Required licensed capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The operation is unsupported."
+          },
+          "200": {
+            "description": "Scopes, including an empty successful listing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectionDiscoveryScope"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectionDiscoveryScope"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectionDiscoveryScope"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selection or provider request failure."
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/projects": {
+      "get": {
+        "tags": [
+          "ClientProviderDiscovery"
+        ],
+        "summary": "Lists projects when the native hierarchy has a project stage.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Selected connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "description": "Required configuration purpose.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeKey",
+            "in": "query",
+            "description": "Native scope key.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient client role.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The selected resource is not available.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Required licensed capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The connection has no project stage."
+          },
+          "200": {
+            "description": "Native projects.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryProjectOption"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryProjectOption"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryProjectOption"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selection or provider request failure."
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/sources": {
+      "get": {
+        "tags": [
+          "ClientProviderDiscovery"
+        ],
+        "summary": "Lists sources with native persistent coordinates and identities.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Selected connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "description": "Required configuration purpose.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeKey",
+            "in": "query",
+            "description": "Native scope key.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "description": "Native project key when the hierarchy declares that stage.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceKind",
+            "in": "query",
+            "description": "Declared source kind.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProCursorSourceKind"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient client role.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The selected resource is not available.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Required licensed capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The source kind is unsupported."
+          },
+          "200": {
+            "description": "Native source selections.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectionDiscoverySource"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectionDiscoverySource"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectionDiscoverySource"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selection or provider request failure."
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/branches": {
+      "get": {
+        "tags": [
+          "ClientProviderDiscovery"
+        ],
+        "summary": "Lists branches when native branch discovery is supported.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Selected connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "description": "Required configuration purpose.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeKey",
+            "in": "query",
+            "description": "Native scope key.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "description": "Native project key.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceKind",
+            "in": "query",
+            "description": "Declared source kind.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProCursorSourceKind"
+            }
+          },
+          {
+            "name": "canonicalSourceProvider",
+            "in": "query",
+            "description": "Canonical provider key returned by source discovery.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "canonicalSourceValue",
+            "in": "query",
+            "description": "Canonical value returned by source discovery.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient client role.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The selected resource is not available.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Required licensed capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Branch discovery is unsupported."
+          },
+          "200": {
+            "description": "Native branch suggestions.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryBranchOption"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryBranchOption"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryBranchOption"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selection or provider request failure."
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/filters": {
+      "get": {
+        "tags": [
+          "ClientProviderDiscovery"
+        ],
+        "summary": "Projects repository sources into filter options without requiring branch discovery.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Selected connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "description": "Required configuration purpose.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeKey",
+            "in": "query",
+            "description": "Native scope key.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "description": "Optional native project key.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient client role.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The selected resource is not available.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Required licensed capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The operation is unsupported."
+          },
+          "200": {
+            "description": "Filter options with known default branch suggestions.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryCrawlFilterOption"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryCrawlFilterOption"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScmDiscoveryCrawlFilterOption"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selection or provider request failure."
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/connections/{connectionId}/discovery/selection": {
+      "get": {
+        "tags": [
+          "ClientProviderDiscovery"
+        ],
+        "summary": "Resolves native configuration coordinates for the selected hierarchy.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Selected connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "description": "Required configuration purpose.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeKey",
+            "in": "query",
+            "description": "Native scope key.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "description": "Optional native project key.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient client role.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The selected resource is not available.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Required licensed capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The operation is unsupported."
+          },
+          "200": {
+            "description": "Native persistent selection coordinates.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionDiscoverySelection"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionDiscoverySelection"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionDiscoverySelection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selection or provider request failure."
           }
         }
       }
@@ -11401,6 +11584,541 @@
         }
       }
     },
+    "/clients/{clientId}/review-targets/overview": {
+      "post": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Returns a rich pull request page with shared source freshness and immutable generation navigation.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Authorized source selections, page bounds and retained generation cursor.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientPullRequestOverviewRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientPullRequestOverviewRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientPullRequestOverviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pull requests, metadata, source outcomes and refresh availability; bounded capacity refusals return no rows or cursor and a null total.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientPullRequestOverviewPage"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientPullRequestOverviewPage"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientPullRequestOverviewPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The page bounds or retained generation are invalid or obsolete.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current client or source access is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The crawl configuration capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Shared page storage is unavailable."
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-targets/management/{targetId}": {
+      "get": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Reads one owned saved repository target, including removed targets, without provider access.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "targetId",
+            "in": "path",
+            "description": "Saved repository target identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The authoritative saved target and revision.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot access this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The client does not own a canonical repository target with this identifier.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The configuration capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-targets/management": {
+      "get": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Searches and pages saved repository metadata without contacting a provider.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Repository name, project, or host search.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Optional provider family filter.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Optional enabled or disabled review availability filter.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "One-based page number.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Rows per page, from 1 to 100.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The owned saved configuration page and opaque version of its entire matched representation.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetPageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetPageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The filters or bounds are invalid.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot access this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The configuration capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-targets/{targetId}/lifecycle": {
+      "patch": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Conditionally enables, disables, or removes a saved repository target.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "targetId",
+            "in": "path",
+            "description": "Saved repository target identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Expected revision, lifecycle, and removal confirmation.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeClientReviewTargetLifecycleRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeClientReviewTargetLifecycleRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeClientReviewTargetLifecycleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The saved lifecycle and revision.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The lifecycle or confirmation is invalid.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot administer this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The client does not own this target.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The target changed or the configuration capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/review-targets/repositories": {
       "get": {
         "tags": [
@@ -11657,7 +12375,7 @@
           }
         ],
         "requestBody": {
-          "description": "Verified connection and repository coordinates.",
+          "description": "Verified connection, repository coordinates, and optional destination branch patterns.",
           "content": {
             "application/json": {
               "schema": {
@@ -11758,7 +12476,7 @@
             }
           },
           "409": {
-            "description": "The project already has a different configuration or the capability is unavailable.",
+            "description": "The repository identity conflicts with stored configuration or the capability is unavailable.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -11785,7 +12503,7 @@
         "tags": [
           "ClientReviewTargets"
         ],
-        "summary": "Lists open pull requests for one configured repository review target.",
+        "summary": "Lists up to 100 open pull requests using the selected verified connection and saved target scope.",
         "parameters": [
           {
             "name": "clientId",
@@ -11929,6 +12647,313 @@
           },
           "502": {
             "description": "The provider could not list pull requests."
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-targets/{targetId}/open-reviews/{number}/metadata": {
+      "get": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Reads bounded comment and discussion metadata for one configured pull request.",
+        "description": "Installed adapters address reviews by their native number. The overview reconstructs the external review identifier from this number; opaque-only identifiers are not supported by this route.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "targetId",
+            "in": "path",
+            "description": "Configured review target identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "description": "Positive provider-native pull request or merge request number.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "query",
+            "description": "Verified selected connection identifier.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Counts and their completeness and resolution availability.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOverviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOverviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOverviewDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The pull request number or connection is invalid.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot access this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The target or metadata capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The crawl configuration capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The selected provider could not return metadata."
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-targets/{targetId}": {
+      "patch": {
+        "tags": [
+          "ClientReviewTargets"
+        ],
+        "summary": "Conditionally replaces a repository target's destination branch policy.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "targetId",
+            "in": "path",
+            "description": "Saved repository target identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Verified connection, expected stored patterns, and replacement patterns.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClientReviewTargetPolicyRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClientReviewTargetPolicyRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClientReviewTargetPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The policy was saved without changing target activation or settings.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewTargetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The patterns or connection are invalid.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot administer this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The client does not own this canonical repository target.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The target identity or stored policy changed, or the capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -13317,6 +14342,127 @@
           },
           "403": {
             "description": "Caller has no client access, lacks the licence, or asked for a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/reviewing/completed-usage": {
+      "get": {
+        "tags": [
+          "CompletedReviewUsage"
+        ],
+        "summary": "Returns a keyset page of finalized usage facts for a tenant-owned client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Last processed sequence, omitted for the first page.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum facts, from 1 to 100.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of immutable completed-review usage facts.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompletedReviewUsagePage"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompletedReviewUsagePage"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompletedReviewUsagePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor or page size.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid machine credential.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not a tenant machine or does not own the client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -20925,7 +22071,7 @@
             }
           },
           "500": {
-            "description": "The pull request resolved, but queueing the review failed.",
+            "description": "The review could not be admitted or submitted.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -27849,82 +28995,6 @@
         "additionalProperties": false,
         "description": "Payload carrying the license document to activate."
       },
-      "AdoBranchOptionDto": {
-        "type": "object",
-        "properties": {
-          "branchName": {
-            "type": "string",
-            "nullable": true
-          },
-          "isDefault": {
-            "type": "boolean"
-          }
-        },
-        "additionalProperties": false,
-        "description": "A branch option discovered for one source."
-      },
-      "AdoCrawlFilterOptionDto": {
-        "type": "object",
-        "properties": {
-          "canonicalSourceRef": {
-            "$ref": "#/components/schemas/CanonicalSourceReferenceDto"
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
-          },
-          "branchSuggestions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AdoBranchOptionDto"
-            },
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "A crawl-filter option discovered for one project."
-      },
-      "AdoProjectOptionDto": {
-        "type": "object",
-        "properties": {
-          "organizationScopeId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "projectId": {
-            "type": "string",
-            "nullable": true
-          },
-          "projectName": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "A project option discovered for one organization scope."
-      },
-      "AdoSourceOptionDto": {
-        "type": "object",
-        "properties": {
-          "sourceKind": {
-            "type": "string",
-            "nullable": true
-          },
-          "canonicalSourceRef": {
-            "$ref": "#/components/schemas/CanonicalSourceReferenceDto"
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
-          },
-          "defaultBranch": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "A repository or wiki option discovered for one project."
-      },
       "AiAuthModeOptionDto": {
         "type": "object",
         "properties": {
@@ -28355,6 +29425,12 @@
           "tenantId": {
             "type": "string",
             "description": "Owning tenant ID for a tenant-scoped connection (inherited by the tenant's clients); null for a client-scoped one.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "creationRequestId": {
+            "type": "string",
+            "description": "Optional immutable client-scoped identifier supplied on creation for interrupted-request readback.",
             "format": "uuid",
             "nullable": true
           },
@@ -29778,6 +30854,25 @@
         "additionalProperties": false,
         "description": "Transport shape for a provider-aware canonical source reference."
       },
+      "ChangeClientReviewTargetLifecycleRequest": {
+        "type": "object",
+        "properties": {
+          "expectedRevision": {
+            "type": "string",
+            "nullable": true
+          },
+          "lifecycle": {
+            "type": "string",
+            "nullable": true
+          },
+          "confirmationName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A conditional saved repository lifecycle transition."
+      },
       "ChangePasswordRequest": {
         "type": "object",
         "properties": {
@@ -29974,10 +31069,263 @@
           "state": {
             "type": "string",
             "nullable": true
+          },
+          "sourceBranch": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetBranch": {
+            "type": "string",
+            "nullable": true
+          },
+          "authorName": {
+            "type": "string",
+            "nullable": true
+          },
+          "headSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerRevisionId": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
         "description": "Open pull request details available to a review target."
+      },
+      "ClientPullRequestOverviewOutcome": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureKind": {
+            "type": "string",
+            "nullable": true
+          },
+          "listedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "nextRefreshAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Current source coverage and permitted refresh time."
+      },
+      "ClientPullRequestOverviewPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientPullRequestOverviewRow"
+            },
+            "nullable": true
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientPullRequestOverviewOutcome"
+            },
+            "nullable": true
+          },
+          "cursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalRows": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "totalSources": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "attemptedSources": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isStale": {
+            "type": "boolean"
+          },
+          "nextRefreshAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "perSourceLimit": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "An immutable cumulative page with explicit freshness and coverage."
+      },
+      "ClientPullRequestOverviewRequest": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientPullRequestOverviewSource"
+            },
+            "nullable": true
+          },
+          "binding": {
+            "type": "string",
+            "nullable": true
+          },
+          "cursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "loadMore": {
+            "type": "boolean"
+          },
+          "reload": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Client-scoped source selection, generation navigation and row bounds."
+      },
+      "ClientPullRequestOverviewRow": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer",
+            "description": "Positive provider-native pull request or merge request number required by installed adapter operations.",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "webUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceBranch": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetBranch": {
+            "type": "string",
+            "nullable": true
+          },
+          "authorName": {
+            "type": "string",
+            "nullable": true
+          },
+          "headSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerRevisionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ReviewOverviewDto"
+          },
+          "metadataStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "listedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metadataAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "associations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientPullRequestOverviewSource"
+            },
+            "description": "Authorized source associations for a deduplicated pull request.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Discovery and metadata observations for one pull request revision."
+      },
+      "ClientPullRequestOverviewSource": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Source coordinates selected by an authenticated client caller."
       },
       "ClientResponse": {
         "type": "object",
@@ -30106,6 +31454,41 @@
         "additionalProperties": false,
         "description": "Client-scoped review profile response."
       },
+      "ClientReviewTargetPageResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientReviewTargetResponse"
+            },
+            "description": "Saved target rows.",
+            "nullable": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "description": "Number of matched targets.",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "description": "One-based page number.",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "Maximum rows per page.",
+            "format": "int32"
+          },
+          "snapshotVersion": {
+            "type": "string",
+            "description": "Opaque lowercase SHA-256 version of all matched target metadata.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A server-filtered page of saved repository configuration."
+      },
       "ClientReviewTargetRepositoryResponse": {
         "type": "object",
         "properties": {
@@ -30158,6 +31541,25 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "providerFamily": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetBranchPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "lifecycle": {
+            "type": "string",
+            "nullable": true
+          },
+          "revision": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -31769,6 +33171,197 @@
         "type": "string",
         "description": "Severity level of a review comment."
       },
+      "CompletedReviewUsageFact": {
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "executionDurationMilliseconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "aiConnectionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "estimatedCostUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "costIsApproximate": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Measured usage from one completed review. EstimatedCostUsd is a decimal US-dollar amount with up to\nsix fractional digits; null means no priced cost was available, not zero cost. CostIsApproximate is\ntrue when any component used an estimate or a priced total excludes an unpriced component."
+      },
+      "CompletedReviewUsagePage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompletedReviewUsageFact"
+            },
+            "nullable": true
+          },
+          "nextCursor": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A bounded sequence page of finalized review facts. NextCursor is the last returned sequence, or null\nwhen this page has no items; retain the supplied cursor in that case. Replaying a cursor can include\nfacts finalized after the previous request."
+      },
+      "ConnectionDiscoveryDescriptor": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "scopeLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionDiscoverySourceKind"
+            },
+            "nullable": true
+          },
+          "supportsBranches": {
+            "type": "boolean"
+          },
+          "supportsKnowledgeSources": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Describes the native hierarchy and the operations registered for a connection."
+      },
+      "ConnectionDiscoveryScope": {
+        "type": "object",
+        "properties": {
+          "scopeKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "savedScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One native scope with its saved identity when the provider uses saved scopes."
+      },
+      "ConnectionDiscoverySelection": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopeKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "organizationScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "providerScopePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConnectionDiscoverySource": {
+        "type": "object",
+        "properties": {
+          "organizationScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "providerScopePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceKind": {
+            "$ref": "#/components/schemas/ProCursorSourceKind"
+          },
+          "canonicalSourceRef": {
+            "$ref": "#/components/schemas/CanonicalSourceReferenceDto"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "defaultBranch": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Native source identity and persistent configuration coordinates."
+      },
+      "ConnectionDiscoverySourceKind": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ProCursorSourceKind"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ContributingMemorySummaryDto": {
         "type": "object",
         "properties": {
@@ -31947,7 +33540,12 @@
             "nullable": true
           },
           "provider": {
-            "$ref": "#/components/schemas/ScmProvider"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ScmProvider"
+              }
+            ],
+            "nullable": true
           },
           "organizationScopeId": {
             "type": "string",
@@ -31984,6 +33582,15 @@
             "type": "number",
             "format": "float",
             "nullable": true
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "scopeKey": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -32000,7 +33607,12 @@
             "format": "uuid"
           },
           "provider": {
-            "$ref": "#/components/schemas/WebhookProviderType"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WebhookProviderType"
+              }
+            ],
+            "nullable": true
           },
           "organizationScopeId": {
             "type": "string",
@@ -32032,6 +33644,15 @@
           "reviewTemperature": {
             "type": "number",
             "format": "float",
+            "nullable": true
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "scopeKey": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -32095,6 +33716,12 @@
             "additionalProperties": {
               "type": "string"
             },
+            "nullable": true
+          },
+          "creationRequestId": {
+            "type": "string",
+            "description": "Optional immutable client-scoped correlation identifier for creation readback. Reuse while the profile exists returns 409.",
+            "format": "uuid",
             "nullable": true
           }
         },
@@ -32232,6 +33859,20 @@
           "providerScopePath": {
             "type": "string",
             "nullable": true
+          },
+          "targetBranchPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "restoreRemovedTarget": {
+            "type": "boolean"
+          },
+          "expectedRemovedRevision": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -32246,7 +33887,12 @@
             "format": "uuid"
           },
           "provider": {
-            "$ref": "#/components/schemas/ScmProvider"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ScmProvider"
+              }
+            ],
+            "nullable": true
           },
           "providerScopePath": {
             "type": "string",
@@ -32270,6 +33916,15 @@
             "type": "integer",
             "description": "Shortest gap between two scans. Defaults to 60 seconds.",
             "format": "int32",
+            "nullable": true
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "scopeKey": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -33740,6 +35395,17 @@
             "description": "Optional full-replacement repository filter set.",
             "nullable": true
           },
+          "connectionId": {
+            "type": "string",
+            "description": "Selected connection used to validate a guided filter replacement.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "scopeKey": {
+            "type": "string",
+            "description": "Native scope key used to validate a guided filter replacement.",
+            "nullable": true
+          },
           "proCursorSourceScopeMode": {
             "$ref": "#/components/schemas/ProCursorSourceScopeMode"
           },
@@ -33812,6 +35478,17 @@
               "$ref": "#/components/schemas/WebhookRepoFilterRequest"
             },
             "description": "Optional full-replacement repository filter set.",
+            "nullable": true
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "Selected connection used to validate a guided filter replacement.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "scopeKey": {
+            "type": "string",
+            "description": "Native scope key used to validate a guided filter replacement.",
             "nullable": true
           },
           "reviewTemperature": {
@@ -34019,6 +35696,15 @@
               "$ref": "#/components/schemas/MentionRepoFilterRequest"
             },
             "description": "Replacement repository list, or null to leave it. Must not be empty when given.",
+            "nullable": true
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "scopeKey": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -34608,6 +36294,15 @@
             "$ref": "#/components/schemas/CanonicalSourceReferenceDto"
           },
           "sourceDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "scopeKey": {
             "type": "string",
             "nullable": true
           }
@@ -36595,45 +38290,6 @@
         "additionalProperties": false,
         "description": "Operator-facing provider operational status response."
       },
-      "ProviderRepositoryOptionResponse": {
-        "type": "object",
-        "properties": {
-          "repositoryId": {
-            "type": "string",
-            "description": "The provider-native identifier, which survives a rename.",
-            "nullable": true
-          },
-          "displayName": {
-            "type": "string",
-            "description": "The repository's path, for reading.",
-            "nullable": true
-          },
-          "scopePath": {
-            "type": "string",
-            "description": "The owner, organization, or group it belongs to.",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "One repository a connection can reach within a scope."
-      },
-      "ProviderScopeOptionResponse": {
-        "type": "object",
-        "properties": {
-          "scopePath": {
-            "type": "string",
-            "description": "What the provider is addressed by, and what a configuration stores.",
-            "nullable": true
-          },
-          "displayName": {
-            "type": "string",
-            "description": "What to show an operator.",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "One owner, organization, or group a connection can reach."
-      },
       "PullRequestHistoryItem": {
         "type": "object",
         "properties": {
@@ -37679,6 +39335,39 @@
         },
         "additionalProperties": false,
         "description": "List item for a review job."
+      },
+      "ReviewOverviewDto": {
+        "type": "object",
+        "properties": {
+          "totalComments": {
+            "type": "integer",
+            "description": "Published user messages from all authors; null when the count is unavailable or incomplete.",
+            "format": "int32",
+            "nullable": true
+          },
+          "resolvedDiscussions": {
+            "type": "integer",
+            "description": "Native resolved discussions, not resolved messages; null when unavailable or unsupported.",
+            "format": "int32",
+            "nullable": true
+          },
+          "unresolvedDiscussions": {
+            "type": "integer",
+            "description": "Native unresolved discussions, not unresolved messages; null when unavailable or unsupported.",
+            "format": "int32",
+            "nullable": true
+          },
+          "isComplete": {
+            "type": "boolean",
+            "description": "Whether the provider read completed within its bounds."
+          },
+          "resolutionSupported": {
+            "type": "boolean",
+            "description": "Whether the provider exposes discussion resolution; Forgejo does not."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Comment messages and native discussion resolution metadata for one pull request."
       },
       "ReviewPassEntry": {
         "type": "object",
@@ -40098,6 +41787,58 @@
         "type": "string",
         "description": "Credential models supported by SCM provider connections."
       },
+      "ScmDiscoveryBranchOption": {
+        "type": "object",
+        "properties": {
+          "branchName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ScmDiscoveryCrawlFilterOption": {
+        "type": "object",
+        "properties": {
+          "canonicalSourceRef": {
+            "$ref": "#/components/schemas/CanonicalSourceReferenceDto"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "branchSuggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScmDiscoveryBranchOption"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ScmDiscoveryProjectOption": {
+        "type": "object",
+        "properties": {
+          "scopeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Saved scope and project coordinates returned by a discovery capability."
+      },
       "ScmProvider": {
         "enum": [
           "azureDevOps",
@@ -41301,6 +43042,37 @@
         "additionalProperties": false,
         "description": "Request body for updating an existing provider-neutral AI connection profile."
       },
+      "UpdateClientReviewTargetPolicyRequest": {
+        "required": [
+          "connectionId",
+          "expectedTargetBranchPatterns",
+          "targetBranchPatterns"
+        ],
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "Selected verified connection identifier.",
+            "format": "uuid"
+          },
+          "expectedTargetBranchPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Required raw stored policy snapshot; an empty array represents All."
+          },
+          "targetBranchPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Required replacement policy; an empty array represents All."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A policy-only conditional update for a saved repository target."
+      },
       "UpdatePromptOverrideRequest": {
         "type": "object",
         "properties": {
@@ -41869,9 +43641,6 @@
       "name": "AdminWebhookConfigs"
     },
     {
-      "name": "AdoDiscovery"
-    },
-    {
       "name": "AiProviderActions"
     },
     {
@@ -41921,6 +43690,9 @@
     },
     {
       "name": "CodeQuality"
+    },
+    {
+      "name": "CompletedReviewUsage"
     },
     {
       "name": "FindingDismissal"

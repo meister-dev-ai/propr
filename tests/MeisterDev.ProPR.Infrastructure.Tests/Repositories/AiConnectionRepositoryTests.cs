@@ -152,9 +152,21 @@ public sealed class AiConnectionRepositoryTests
         var clientId = Guid.NewGuid();
         var first = MakeProfile(unavailable == "foreign" ? Guid.NewGuid() : clientId, true, true, "A", AiPurpose.ReviewHighEffort);
         var second = MakeProfile(clientId, true, true, "B", AiPurpose.ReviewHighEffort);
-        if (unavailable == "disabled") first.PurposeBindings.Single().IsEnabled = false;
-        if (unavailable == "missing") first.ConfiguredModels.Clear();
-        if (unavailable == "inactive") first.IsActive = false;
+        if (unavailable == "disabled")
+        {
+            first.PurposeBindings.Single().IsEnabled = false;
+        }
+
+        if (unavailable == "missing")
+        {
+            first.ConfiguredModels.Clear();
+        }
+
+        if (unavailable == "inactive")
+        {
+            first.IsActive = false;
+        }
+
         db.AiConnectionProfiles.AddRange(first, second);
         await db.SaveChangesAsync();
 
@@ -235,10 +247,26 @@ public sealed class AiConnectionRepositoryTests
         var result = await repository.VerifyUpdateAsync(
             clientId, original, request, async (_, _) =>
             {
-                if (mutation == "auth") profile.AuthMode = "AzureIdentity";
-                if (mutation == "model") profile.ConfiguredModels.First().SupportsToolUse = false;
-                if (mutation == "timestamp") profile.UpdatedAt = profile.UpdatedAt.AddSeconds(1);
-                if (mutation == "owner") clientOwner.TenantId = Guid.NewGuid();
+                if (mutation == "auth")
+                {
+                    profile.AuthMode = "AzureIdentity";
+                }
+
+                if (mutation == "model")
+                {
+                    profile.ConfiguredModels.First().SupportsToolUse = false;
+                }
+
+                if (mutation == "timestamp")
+                {
+                    profile.UpdatedAt = profile.UpdatedAt.AddSeconds(1);
+                }
+
+                if (mutation == "owner")
+                {
+                    clientOwner.TenantId = Guid.NewGuid();
+                }
+
                 await db.SaveChangesAsync();
                 return original.Verification;
             });
@@ -271,11 +299,18 @@ public sealed class AiConnectionRepositoryTests
             second.TenantId = Guid.NewGuid();
         }
 
-        if (scenario == "managed") second.AuthMode = "AzureIdentity";
+        if (scenario == "managed")
+        {
+            second.AuthMode = "AzureIdentity";
+        }
+
         db.AddRange(first, second);
         if (scenario == "logical")
+        {
             db.ClientPurposeLogicalModels.Add(
                 new() { Id = Guid.NewGuid(), ClientId = clientId, Purpose = AiPurpose.ReviewDefault, LogicalModelName = "missing-role" });
+        }
+
         await db.SaveChangesAsync();
         var before = first.PurposeBindings.ToDictionary(b => b.Purpose, b => b.ConfiguredModelId);
         var chat = second.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
@@ -293,7 +328,10 @@ public sealed class AiConnectionRepositoryTests
                          AiPurpose.ReviewDefault, AiPurpose.ReviewTriage, AiPurpose.ReviewVerification, AiPurpose.ReviewLowEffort, AiPurpose.ReviewMediumEffort,
                          AiPurpose.ReviewHighEffort, AiPurpose.MemoryReconsideration, AiPurpose.EmbeddingDefault
                      })
+            {
                 Assert.Equal(second.Id, (await CreateRepository(db).GetActiveBindingForPurposeAsync(clientId, purpose))!.Connection.Id);
+            }
+
             Assert.Equal(
                 before[AiPurpose.ProRVPrefilter.ToString()],
                 first.PurposeBindings.Single(b => b.Purpose == AiPurpose.ProRVPrefilter.ToString()).ConfiguredModelId);
@@ -393,7 +431,10 @@ public sealed class AiConnectionRepositoryTests
         profile.ProviderKind = AzureKey;
         profile.AuthMode = AzureApiKey;
         foreach (var model in profile.ConfiguredModels)
+        {
             model.SupportedProtocolModes = model.OperationKinds.Contains("Embedding") ? ["Auto", "Embeddings"] : ["Auto"];
+        }
+
         db.Add(profile);
         await db.SaveChangesAsync();
         var drivers = DeclaringProviderFamilies.Declaring(

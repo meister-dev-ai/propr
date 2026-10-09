@@ -13,7 +13,7 @@ namespace MeisterDev.ProPR.Api.OpenApi;
 /// <remarks>
 ///     OpenAPI 3.0 ignores metadata beside a direct reference. Wrapping the reference in <c>allOf</c> gives the
 ///     property its own schema, where the OpenAPI 3.0 writer can emit <c>nullable: true</c> and generated clients
-///     can represent the response value accurately.
+///     can represent null values.
 /// </remarks>
 public sealed class NullableReferenceSchemaFilter : ISchemaFilter
 {
@@ -24,6 +24,9 @@ public sealed class NullableReferenceSchemaFilter : ISchemaFilter
         new Dictionary<Type, string[]>
         {
             [typeof(JobsController.BudgetStatusDto)] = ["scope"],
+            [typeof(CreateAdminCrawlConfigRequest)] = ["provider"],
+            [typeof(CreateAdminWebhookConfigRequest)] = ["provider"],
+            [typeof(CreateMentionConfigRequest)] = ["provider"],
         };
 
     /// <inheritdoc />

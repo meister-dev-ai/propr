@@ -37,13 +37,18 @@ public sealed class AiConnectionScopeGuard(
             if ((owner is null || owner == Guid.Empty) && connection.ClientId is { } clientId && clientId != Guid.Empty)
             {
                 if (!owners.TryGetValue(clientId, out owner))
+                {
                     owners[clientId] = owner = await clients.GetTenantIdAsync(clientId, ct).ConfigureAwait(false);
+                }
             }
 
             if (owner != referencingTenantId || owner == Guid.Empty ||
                 !policy.IsAllowed(connection.ProviderKind) ||
                 policy.DescribeReachRefusal(connection.BaseUrl, providerDrivers.ReachedHostPatterns(connection.ProviderKind)) is not null)
+            {
                 continue;
+            }
+
             allowed.Add(connection.Id);
         }
 

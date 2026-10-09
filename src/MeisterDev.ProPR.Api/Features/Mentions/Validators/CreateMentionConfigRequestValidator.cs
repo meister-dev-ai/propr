@@ -21,12 +21,17 @@ public sealed class CreateMentionConfigRequestValidator : AbstractValidator<Crea
             .NotEmpty()
             .WithMessage("ClientId is required.");
 
+        this.RuleFor(r => r)
+            .Must(r => r.ConnectionId.HasValue || r.Provider.HasValue)
+            .WithMessage("Specify a connection or an explicit manual provider.");
+
         // Two rules rather than one chain. A When clause applies to every rule preceding it in the same
         // chain, so guarding the URL check with "when it is not blank" would switch off the NotEmpty check
         // for exactly the blank values it exists to catch, and a null scope path would reach the database.
         this.RuleFor(r => r.ProviderScopePath)
             .NotEmpty()
-            .WithMessage("ProviderScopePath is required.");
+            .WithMessage("ProviderScopePath is required.")
+            .When(r => !r.ConnectionId.HasValue);
 
         // Resolving the reviewer identity builds a ProviderHostRef, which rejects anything that is not an
         // absolute URL by throwing inside the scan where nobody sees it.

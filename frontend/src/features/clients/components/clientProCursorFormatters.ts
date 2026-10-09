@@ -1,11 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import type {
-  AdoBranchOptionDto,
-  AdoSourceOptionDto,
-  ClientAdoOrganizationScopeDto,
-} from '@/services/adoDiscoveryService'
+import type { DiscoveryBranch } from '@/services/providerDiscoveryService'
 import type {
   ProCursorKnowledgeSourceDto,
   ProCursorRefreshTriggerMode,
@@ -32,44 +28,6 @@ export function sortBranches(items: ProCursorTrackedBranchDto[]): ProCursorTrack
   })
 }
 
-export function sortOrganizationScopes(items: ClientAdoOrganizationScopeDto[]): ClientAdoOrganizationScopeDto[] {
-  return [...items].sort((left, right) => {
-    const leftLabel = (left.displayName || left.organizationUrl || '').trim()
-    const rightLabel = (right.displayName || right.organizationUrl || '').trim()
-    return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: 'base' })
-  })
-}
-
-export function sortProjects(items: Array<{ projectId?: string | null; projectName?: string | null }>) {
-  return [...items].sort((left, right) => {
-    return (left.projectName || left.projectId || '').localeCompare(right.projectName || right.projectId || '', undefined, {
-      sensitivity: 'base',
-    })
-  })
-}
-
-export function sortSourceOptions(items: AdoSourceOptionDto[]): AdoSourceOptionDto[] {
-  return [...items].sort((left, right) => {
-    return (left.displayName || left.canonicalSourceRef?.value || '').localeCompare(
-      right.displayName || right.canonicalSourceRef?.value || '',
-      undefined,
-      { sensitivity: 'base' },
-    )
-  })
-}
-
-export function sortDiscoveredBranches(items: AdoBranchOptionDto[]): AdoBranchOptionDto[] {
-  return [...items].sort((left, right) => {
-    if (Boolean(left.isDefault) !== Boolean(right.isDefault)) {
-      return left.isDefault ? -1 : 1
-    }
-
-    return (left.branchName || '').localeCompare(right.branchName || '', undefined, {
-      sensitivity: 'base',
-    })
-  })
-}
-
 export function toErrorMessage(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback
 }
@@ -79,24 +37,7 @@ export function trimOptional(value: string): string | null {
   return trimmed ? trimmed : null
 }
 
-export function sourceOptionKey(sourceOption: AdoSourceOptionDto): string {
-  const provider = sourceOption.canonicalSourceRef?.provider?.trim()
-  const value = sourceOption.canonicalSourceRef?.value?.trim()
-  return provider && value ? `${provider}::${value}` : ''
-}
-
-export function formatOrganizationScopeLabel(scope: ClientAdoOrganizationScopeDto): string {
-  const displayName = scope.displayName?.trim()
-  const organizationUrl = scope.organizationUrl?.trim() || 'Unnamed organization'
-
-  if (displayName && !displayName.localeCompare(organizationUrl, undefined, { sensitivity: 'base' })) {
-    return displayName
-  }
-
-  return displayName ? `${displayName} (${organizationUrl})` : organizationUrl
-}
-
-export function formatBranchOptionLabel(branch: AdoBranchOptionDto): string {
+export function formatBranchOptionLabel(branch: DiscoveryBranch): string {
   return branch.isDefault ? `${branch.branchName || 'Unnamed branch'} (default)` : branch.branchName || 'Unnamed branch'
 }
 

@@ -31,7 +31,7 @@ public interface IReviewJobIntakeStore
     /// <summary>Returns a review job only when the specified client owns it.</summary>
     Task<ReviewJob?> GetForClientAsync(Guid clientId, Guid jobId, CancellationToken cancellationToken = default);
 
-    /// <summary>Updates the PR context snapshot captured from ADO after the job was created.</summary>
+    /// <summary>Updates the PR context snapshot captured from the provider after the job was created.</summary>
     Task UpdatePrContextAsync(
         Guid jobId,
         string? title,

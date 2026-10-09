@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
@@ -17,6 +18,14 @@ internal sealed class GitHubReviewerIdentityService(
     IHttpClientFactory httpClientFactory) : IReviewerIdentityService
 {
     public ScmProvider Provider => ScmProvider.GitHub;
+
+    public async Task<ReviewerIdentity?> GetAutomaticReviewerIdentityAsync(
+        ProviderHostRef host, ClientScmConnectionCredentialDto connection, CancellationToken ct = default)
+    {
+        var app = await connectionVerifier.GetAppMetadataAsync(host, connection, ct);
+        var login = app.Slug + "[bot]";
+        return new ReviewerIdentity(host, login, login, app.DisplayName, true);
+    }
 
     public async Task<IReadOnlyList<ReviewerIdentity>> ResolveCandidatesAsync(
         Guid clientId,

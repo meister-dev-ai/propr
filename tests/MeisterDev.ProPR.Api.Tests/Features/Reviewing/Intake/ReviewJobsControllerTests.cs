@@ -4,7 +4,6 @@
 using MeisterDev.ProPR.Api.Features.Reviewing.Contracts;
 using MeisterDev.ProPR.Api.Features.Reviewing.Intake.Controllers;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
@@ -23,6 +22,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using MeisterDev.ProPR.ProCursor.Contracts.Sources;
 
 namespace MeisterDev.ProPR.Api.Tests.Features.Reviewing.Intake;
 
@@ -710,11 +710,16 @@ public sealed class ReviewJobsControllerTests
             jobRepository ?? Substitute.For<IJobRepository>(),
             Substitute.For<IReviewJobCancellationRegistry>(),
             NullLogger<StopReviewJobHandler>.Instance);
+        var effectiveSynchronization = synchronization ?? SubstituteSynchronization(SubmittedOutcome(Guid.NewGuid()));
+        effectiveSynchronization.PrepareAsync(Arg.Any<PullRequestSynchronizationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call => new PreparedPullRequestSynchronization(
+                call.Arg<PullRequestSynchronizationRequest>(),
+                (authorized, ct) => effectiveSynchronization.SynchronizeAsync(authorized, ct)));
         var byCoordinatesHandler = new SubmitReviewByCoordinatesHandler(
             crawlConfigurations ?? SubstituteCrawlRepository(clientId),
             SubstituteWebhookRepository(),
             providerRegistry ?? SubstituteRegistry(SubstituteQueryService(OpenPullRequest())),
-            synchronization ?? SubstituteSynchronization(SubmittedOutcome(Guid.NewGuid())),
+            effectiveSynchronization,
             NullLogger<SubmitReviewByCoordinatesHandler>.Instance);
         var controller = new ReviewJobsController(
             submitHandler,
@@ -813,7 +818,7 @@ public sealed class ReviewJobsControllerTests
 
     private static IScmProviderRegistry SubstituteRegistry(ICodeReviewQueryService queryService)
     {
-        var registry = Substitute.For<IScmProviderRegistry>();
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         registry.IsRegistered(Arg.Any<ScmProvider>()).Returns(true);
         registry.GetCodeReviewQueryService(Arg.Any<ScmProvider>()).Returns(queryService);
         registry.GetRepositoryDiscoveryProvider(Arg.Any<ScmProvider>())

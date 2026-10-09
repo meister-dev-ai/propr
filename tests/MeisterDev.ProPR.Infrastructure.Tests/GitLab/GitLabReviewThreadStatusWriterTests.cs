@@ -35,8 +35,13 @@ public sealed class GitLabReviewThreadStatusWriterTests
         Assert.IsType<GitLabReviewThreadStatusWriter>(statusWriter);
     }
 
-    [Fact]
-    public async Task UpdateThreadStatusAsync_FixedStatus_ResolvesTheDiscussion()
+    [Theory]
+    [InlineData("fixed")]
+    [InlineData(" Fixed ")]
+    [InlineData("CLOSED")]
+    [InlineData("WontFix")]
+    [InlineData("ByDesign")]
+    public async Task UpdateThreadStatusAsync_FixedStatus_ResolvesTheDiscussion(string status)
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
@@ -61,7 +66,7 @@ public sealed class GitLabReviewThreadStatusWriterTests
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
             httpClientFactory);
 
-        await sut.UpdateThreadStatusAsync(clientId, thread, "fixed");
+        await sut.UpdateThreadStatusAsync(clientId, thread, status);
 
         Assert.Equal(HttpMethod.Put, resolveMethod);
         Assert.Equal(
@@ -150,8 +155,12 @@ public sealed class GitLabReviewThreadStatusWriterTests
         Assert.Contains("could not find", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public async Task UpdateThreadStatusAsync_StatusWithNoResolvedEquivalent_IsRefusedWithoutCallingGitLab()
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData("2")]
+    [InlineData("0")]
+    [InlineData(" Fixed extra ")]
+    public async Task UpdateThreadStatusAsync_StatusWithNoResolvedEquivalent_IsRefusedWithoutCallingGitLab(string status)
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
@@ -169,7 +178,7 @@ public sealed class GitLabReviewThreadStatusWriterTests
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
             httpClientFactory);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.UpdateThreadStatusAsync(clientId, thread, "unknown"));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.UpdateThreadStatusAsync(clientId, thread, status));
 
         Assert.Contains("has no equivalent", exception.Message, StringComparison.Ordinal);
         Assert.Contains("wontfix", exception.Message, StringComparison.Ordinal);

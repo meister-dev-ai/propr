@@ -33,7 +33,8 @@ public sealed class ProviderReadinessEvaluator(
         var reviewerIdentity = await reviewerIdentityRepository.GetByConnectionIdAsync(clientId, connection.Id, ct);
 
         var hasEnabledScope = scopes.Any(scope => scope.IsEnabled);
-        var hasReviewerIdentity = reviewerIdentity is not null || AllowsAutomaticReviewerIdentity(connection);
+        var hasReviewerIdentity = reviewerIdentity is not null || providerRegistry.GetConnectionConfigurationPolicy(connection.ProviderFamily)
+            .AllowsAutomaticReviewerIdentity(connection.AuthenticationKind);
         var adapterSetRegistered = providerRegistry.IsRegistered(connection.ProviderFamily);
         var verificationStatus = NormalizeVerificationStatus(connection.VerificationStatus);
         var criteriaResults = BuildCriteriaResults(
@@ -122,7 +123,7 @@ public sealed class ProviderReadinessEvaluator(
             criteriaResults);
     }
 
-    private static IReadOnlyList<ProviderReadinessCriterionResult> BuildCriteriaResults(
+    private IReadOnlyList<ProviderReadinessCriterionResult> BuildCriteriaResults(
         ClientScmConnectionDto connection,
         ProviderReadinessProfile profile,
         bool hasEnabledScope,
@@ -190,7 +191,7 @@ public sealed class ProviderReadinessEvaluator(
         return new ProviderReadinessCriterionResult(key, scope, satisfied ? "satisfied" : "unsatisfied", summary);
     }
 
-    private static string BuildVerificationCriterionSummary(
+    private string BuildVerificationCriterionSummary(
         ClientScmConnectionDto connection,
         VerificationState verificationStatus)
     {
@@ -198,31 +199,21 @@ public sealed class ProviderReadinessEvaluator(
         {
             VerificationState.Failed => BuildVerificationReadinessReason(connection, verificationStatus),
             VerificationState.Stale => BuildVerificationReadinessReason(connection, verificationStatus),
-            VerificationState.Unknown when IsGitHubAppConnection(connection) =>
-                "GitHub App connection has not completed onboarding verification yet.",
-            VerificationState.Unknown => "Connection has not been verified yet.",
+            VerificationState.Unknown => providerRegistry.GetConnectionConfigurationPolicy(connection.ProviderFamily)
+                .GetUnknownVerificationSummary(connection),
             _ => "Connection passed onboarding verification.",
         };
     }
 
-    private static string BuildVerificationReadinessReason(
+    private string BuildVerificationReadinessReason(
         ClientScmConnectionDto connection,
         VerificationState verificationStatus)
     {
-        if (IsGitHubAppConnection(connection) && !string.IsNullOrWhiteSpace(connection.LastVerificationFailureCategory))
+        var nativeReason = providerRegistry.GetConnectionConfigurationPolicy(connection.ProviderFamily)
+            .GetVerificationReadinessReason(connection, verificationStatus.ToString().ToLowerInvariant());
+        if (nativeReason is not null)
         {
-            return connection.LastVerificationFailureCategory switch
-            {
-                "authentication" =>
-                    "GitHub App verification failed. Check the saved App ID, installation ID, private key, and granted permissions.",
-                "discovery" =>
-                    "GitHub App installation could not be found or no longer exposes the configured scope.",
-                "configuration" =>
-                    "GitHub App configuration needs review before verification can succeed.",
-                _ when verificationStatus == VerificationState.Stale =>
-                    "GitHub App connection needs re-verification before it can be treated as ready.",
-                _ => "GitHub App verification no longer satisfies onboarding readiness.",
-            };
+            return nativeReason;
         }
 
         var explicitError = connection.LastVerificationError?.Trim();
@@ -231,18 +222,9 @@ public sealed class ProviderReadinessEvaluator(
             return explicitError;
         }
 
-        if (!IsGitHubAppConnection(connection))
-        {
-            return verificationStatus switch
-            {
-                VerificationState.Stale => "Connection needs re-verification before it can be treated as ready.",
-                _ => "Connection verification no longer satisfies onboarding readiness.",
-            };
-        }
-
         return verificationStatus == VerificationState.Stale
-            ? "GitHub App connection needs re-verification before it can be treated as ready."
-            : "GitHub App verification no longer satisfies onboarding readiness.";
+            ? "Connection needs re-verification before it can be treated as ready."
+            : "Connection verification no longer satisfies onboarding readiness.";
     }
 
     private static string BuildReviewerIdentityCriterionSummary(bool hasReviewerIdentity)
@@ -250,17 +232,6 @@ public sealed class ProviderReadinessEvaluator(
         return hasReviewerIdentity
             ? "Reviewer-trigger identity is configured and will further narrow automatic PR processing when the provider supports assignment filtering."
             : "Reviewer-trigger identity is optional; leaving it empty keeps baseline automatic PR processing enabled.";
-    }
-
-    private static bool IsGitHubAppConnection(ClientScmConnectionDto connection)
-    {
-        return connection.ProviderFamily == ScmProvider.GitHub
-               && connection.AuthenticationKind == ScmAuthenticationKind.AppInstallation;
-    }
-
-    private static bool AllowsAutomaticReviewerIdentity(ClientScmConnectionDto connection)
-    {
-        return IsGitHubAppConnection(connection);
     }
 
     private static VerificationState NormalizeVerificationStatus(string status)

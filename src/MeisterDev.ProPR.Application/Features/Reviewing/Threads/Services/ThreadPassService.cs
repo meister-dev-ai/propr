@@ -52,8 +52,6 @@ public sealed partial class ThreadPassService(
     IBudgetScopeAccessor? budgetScopeAccessor = null,
     IBudgetEventPublisher? budgetEventPublisher = null) : IThreadPassService
 {
-    private const string ResolvedThreadStatus = "fixed";
-
     /// <inheritdoc />
     public async Task ProcessAsync(ThreadPassJob job, CancellationToken ct = default)
     {
@@ -430,7 +428,7 @@ public sealed partial class ThreadPassService(
         ThreadEvidenceAccess? evidence,
         CancellationToken ct)
     {
-        if (IsResolvedStatus(thread.Status))
+        if (providerRegistry.CompatibilityCodec.DecodeStoredThreadResolution(thread.Status) != ThreadResolutionIntent.Active)
         {
             return;
         }
@@ -601,8 +599,8 @@ public sealed partial class ThreadPassService(
                 clientId: job.ClientId,
                 cancellationToken: ct);
 
-            // Presented under the path the provider put on the thread. Azure DevOps anchors a thread to a
-            // repo-root-absolute path while a changed file carries the repo-relative one, and the prompt
+            // Presented under the path the provider put on the thread. A thread can use a repository-root-absolute
+            // path while a changed file carries the repository-relative one, and the prompt
             // matches the two by string, so the fetched diff has to arrive under the name the thread uses.
             return file is null
                 ? pullRequest
@@ -707,10 +705,9 @@ public sealed partial class ThreadPassService(
         if (resolvedAction.ShouldResolveThread)
         {
             await providerRegistry.GetReviewThreadStatusWriter(job.Provider)
-                .UpdateThreadStatusAsync(
+                .ResolveThreadAsync(
                     job.ClientId,
                     CreateReviewThreadRef(job, thread, threadId),
-                    ResolvedThreadStatus,
                     ct);
 
             LogThreadResolved(logger, threadId, job.PullRequestId);
@@ -871,7 +868,7 @@ public sealed partial class ThreadPassService(
         CancellationToken ct)
     {
         var identity = new ThreadOwnerIdentity(pullRequest.AuthorizedIdentityId, pullRequest.AuthorizedIdentityName);
-        var commentIdScope = ProviderCommentIdScopes.For(job.Provider);
+        var commentIdScope = providerRegistry.GetIdentityPolicy(job.Provider).CommentIdScope;
 
         if (postedCommentOriginStore is null)
         {
@@ -957,8 +954,7 @@ public sealed partial class ThreadPassService(
             !comment.IsSystemGenerated && !ownership.OwnsComment(ToCommentRef(thread, comment)));
     }
 
-    // Azure DevOps scopes a comment id to its thread, so both ids travel together: the pair is what
-    // provenance was recorded under, and on every other provider the comment id resolves on its own.
+    // Comment identifiers can be thread-local, so provenance lookup receives both identifiers.
     private static ThreadCommentRef ToCommentRef(PrCommentThread thread, PrThreadComment comment)
     {
         return new ThreadCommentRef(
@@ -990,14 +986,6 @@ public sealed partial class ThreadPassService(
         }
 
         return hasNewReplies ? "code-change-with-reply" : "code-change";
-    }
-
-    private static bool IsResolvedStatus(string? status)
-    {
-        return string.Equals(status, "Fixed", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "WontFix", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

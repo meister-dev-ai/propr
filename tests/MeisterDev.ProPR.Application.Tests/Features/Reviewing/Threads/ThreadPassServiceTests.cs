@@ -51,10 +51,9 @@ public sealed class ThreadPassServiceTests
 
         await harness.RunAsync();
 
-        await harness.StatusWriter.Received(1).UpdateThreadStatusAsync(
+        await harness.StatusWriter.Received(1).ResolveThreadAsync(
             ClientId,
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "17"),
-            "fixed",
             Arg.Any<CancellationToken>());
         await harness.PrScans.Received(1).SetThreadPassWatermarkAsync(
             ClientId,
@@ -77,10 +76,9 @@ public sealed class ThreadPassServiceTests
 
         await harness.RunAsync();
 
-        await harness.StatusWriter.Received(1).UpdateThreadStatusAsync(
+        await harness.StatusWriter.Received(1).ResolveThreadAsync(
             ClientId,
             Arg.Any<ReviewThreadRef>(),
-            "fixed",
             Arg.Any<CancellationToken>());
         await harness.ReplyPublisher.DidNotReceive().ReplyAsync(
             Arg.Any<Guid>(),
@@ -139,10 +137,9 @@ public sealed class ThreadPassServiceTests
             CreateThread(ThreadId, nonReviewerComments: 0),
             CreateThread("99", nonReviewerComments: 0));
         harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
-        harness.StatusWriter.UpdateThreadStatusAsync(
+        harness.StatusWriter.ResolveThreadAsync(
                 ClientId,
                 Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "99"),
-                Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("the provider refused"));
 
@@ -179,10 +176,9 @@ public sealed class ThreadPassServiceTests
 
         await harness.ThreadPassJobs.Received(1)
             .SetSkippedAsync(harness.Job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await harness.StatusWriter.DidNotReceive().UpdateThreadStatusAsync(
+        await harness.StatusWriter.DidNotReceive().ResolveThreadAsync(
             Arg.Any<Guid>(),
             Arg.Any<ReviewThreadRef>(),
-            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -195,10 +191,9 @@ public sealed class ThreadPassServiceTests
 
         await harness.RunAsync();
 
-        await harness.StatusWriter.DidNotReceive().UpdateThreadStatusAsync(
+        await harness.StatusWriter.DidNotReceive().ResolveThreadAsync(
             Arg.Any<Guid>(),
             Arg.Any<ReviewThreadRef>(),
-            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
 
         // Skipped rather than completed: a completed pass would block the identical trigger, so switching
@@ -239,10 +234,9 @@ public sealed class ThreadPassServiceTests
 
         await harness.RunAsync();
 
-        await harness.StatusWriter.DidNotReceive().UpdateThreadStatusAsync(
+        await harness.StatusWriter.DidNotReceive().ResolveThreadAsync(
             Arg.Any<Guid>(),
             Arg.Any<ReviewThreadRef>(),
-            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -267,10 +261,9 @@ public sealed class ThreadPassServiceTests
             Arg.Any<string?>(),
             Arg.Any<bool>(),
             Arg.Any<ThreadEvidenceAccess?>());
-        await harness.StatusWriter.Received(1).UpdateThreadStatusAsync(
+        await harness.StatusWriter.Received(1).ResolveThreadAsync(
             ClientId,
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "17"),
-            "fixed",
             Arg.Any<CancellationToken>());
     }
 
@@ -336,10 +329,9 @@ public sealed class ThreadPassServiceTests
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == ThreadId),
             "Agreed on the null check, the fix reads well.",
             Arg.Any<CancellationToken>());
-        await harness.StatusWriter.Received(1).UpdateThreadStatusAsync(
+        await harness.StatusWriter.Received(1).ResolveThreadAsync(
             ClientId,
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == ThreadId),
-            "fixed",
             Arg.Any<CancellationToken>());
     }
 
@@ -363,10 +355,9 @@ public sealed class ThreadPassServiceTests
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == ThreadId),
             "It threw once a zero quantity removed an item mid-loop.",
             Arg.Any<CancellationToken>());
-        await harness.StatusWriter.Received(1).UpdateThreadStatusAsync(
+        await harness.StatusWriter.Received(1).ResolveThreadAsync(
             ClientId,
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == ThreadId),
-            "fixed",
             Arg.Any<CancellationToken>());
     }
 
@@ -389,10 +380,9 @@ public sealed class ThreadPassServiceTests
             Arg.Any<ReviewThreadRef>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
-        await harness.StatusWriter.Received(1).UpdateThreadStatusAsync(
+        await harness.StatusWriter.Received(1).ResolveThreadAsync(
             ClientId,
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == ThreadId),
-            "fixed",
             Arg.Any<CancellationToken>());
     }
 
@@ -421,10 +411,9 @@ public sealed class ThreadPassServiceTests
             Arg.Any<ReviewThreadRef>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
-        await harness.StatusWriter.DidNotReceive().UpdateThreadStatusAsync(
+        await harness.StatusWriter.DidNotReceive().ResolveThreadAsync(
             Arg.Any<Guid>(),
             Arg.Any<ReviewThreadRef>(),
-            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -457,10 +446,9 @@ public sealed class ThreadPassServiceTests
         var harness = new Harness();
         harness.WithReviewerThread(observedNonReviewerComments: 0);
         harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
-        harness.StatusWriter.UpdateThreadStatusAsync(
+        harness.StatusWriter.ResolveThreadAsync(
                 Arg.Any<Guid>(),
                 Arg.Any<ReviewThreadRef>(),
-                Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("the provider returned 429"));
 
@@ -500,10 +488,9 @@ public sealed class ThreadPassServiceTests
 
         Received.InOrder(() =>
         {
-            harness.StatusWriter.UpdateThreadStatusAsync(
+            harness.StatusWriter.ResolveThreadAsync(
                 ClientId,
                 Arg.Any<ReviewThreadRef>(),
-                "fixed",
                 Arg.Any<CancellationToken>());
             harness.ThreadPassJobs.RecordHandledThreadAsync(
                 harness.Job.Id,
@@ -611,10 +598,9 @@ public sealed class ThreadPassServiceTests
 
         await harness.RunAsync();
 
-        await harness.StatusWriter.DidNotReceive().UpdateThreadStatusAsync(
+        await harness.StatusWriter.DidNotReceive().ResolveThreadAsync(
             Arg.Any<Guid>(),
             Arg.Any<ReviewThreadRef>(),
-            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
         await harness.ThreadPassJobs.DidNotReceive().SetCompletedAsync(
             Arg.Any<Guid>(),
@@ -1109,10 +1095,9 @@ public sealed class ThreadPassServiceTests
 
         await harness.RunAsync();
 
-        await harness.StatusWriter.Received(1).UpdateThreadStatusAsync(
+        await harness.StatusWriter.Received(1).ResolveThreadAsync(
             ClientId,
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "17"),
-            "fixed",
             Arg.Any<CancellationToken>());
         await harness.ThreadPassJobs.Received(1).SetCompletedAsync(harness.Job.Id, Arg.Any<CancellationToken>());
     }
@@ -1147,7 +1132,7 @@ public sealed class ThreadPassServiceTests
     private sealed class Harness
     {
         private readonly IClientRegistry _clientRegistry = Substitute.For<IClientRegistry>();
-        private readonly IScmProviderRegistry _providerRegistry = Substitute.For<IScmProviderRegistry>();
+        private readonly IScmProviderRegistry _providerRegistry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         private readonly IAiRuntimeResolver _aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
         private readonly BudgetScopeAccessor _budgetScopeAccessor = new();
 

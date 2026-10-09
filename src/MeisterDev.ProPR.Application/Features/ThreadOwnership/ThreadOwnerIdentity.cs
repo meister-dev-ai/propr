@@ -7,10 +7,8 @@ namespace MeisterDev.ProPR.Application.Features.ThreadOwnership;
 ///     The account ProPR's comments appear under: the identity the connection's token authenticates as.
 /// </summary>
 /// <remarks>
-///     Providers name an author differently, so both forms are carried and a provider populates whichever it
-///     has. Azure DevOps names an author by identity GUID; GitHub, GitLab and Forgejo by login. No provider
-///     persists this identity, so it is resolved through the same live handshake the adapter already performs
-///     to reach the host, which is why it can be absent.
+///     Provider capabilities populate a normalized identity GUID, login, or both. This identity is resolved
+///     through the existing authenticated provider operation and can be absent when that operation fails.
 /// </remarks>
 /// <param name="Id">Provider identity GUID, when the provider names authors that way.</param>
 /// <param name="Login">Provider-native login or display name, when the provider names authors that way.</param>

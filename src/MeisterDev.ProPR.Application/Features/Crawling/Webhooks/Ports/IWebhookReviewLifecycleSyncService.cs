@@ -12,7 +12,7 @@ public interface IWebhookReviewLifecycleSyncService
     /// <summary>Cancels or suppresses active review work for one classified webhook delivery.</summary>
     Task<IReadOnlyList<string>> SynchronizeAsync(
         WebhookConfigurationDto configuration,
-        IncomingAdoWebhookDelivery delivery,
-        AdoWebhookEventClassification classification,
+        IncomingWebhookDelivery delivery,
+        WebhookEventClassification classification,
         CancellationToken ct = default);
 }
