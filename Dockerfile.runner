@@ -27,7 +27,7 @@ RUN dotnet publish src/MeisterDev.ProPR.Runner/MeisterDev.ProPR.Runner.csproj \
 # Minimal git runtime slice. Same approach and same pinned Ubuntu digest as the application image: the
 # chiseled runtime ships no package manager, so git, its helpers, and their shared-library closure are
 # staged here and copied in. Noble matches the chiseled base's glibc.
-FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS gittools
+FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 AS gittools
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends git ca-certificates; \
