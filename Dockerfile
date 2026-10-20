@@ -86,7 +86,7 @@ RUN dotnet publish src/MeisterDev.DataProtection.AzureKeyVaultAddIn/MeisterDev.D
     -c Release -o /app/data-protection-add-ins/MeisterDev.DataProtection.AzureKeyVaultAddIn --no-restore
 
 # Minimal Kerberos runtime slice for Azure DevOps client auth support.
-FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS kerberos
+FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 AS kerberos
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
@@ -110,7 +110,7 @@ RUN mkdir -p /kerberos-root/usr/lib/x86_64-linux-gnu \
 # approach used for Kerberos above. Ubuntu 24.04 (Noble) matches the chiseled
 # base's glibc, so the copied libraries are ABI-compatible. perl is intentionally
 # excluded: the fetch/worktree/rev-parse plumbing never invokes perl subcommands.
-FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS gittools
+FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 AS gittools
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
