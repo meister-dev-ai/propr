@@ -102,7 +102,7 @@
                         >
                             No findings — the review completed clean.
                         </p>
-                        <div v-else class="severity-summary-row">
+                        <div v-else class="severity-summary-row" role="group" aria-label="Classification counts">
                             <div
                                 v-for="(count, sev) in vm.severityCounts"
                                 :key="sev"
@@ -128,10 +128,14 @@
                             <h4>Findings by file</h4>
                             <span class="aggregate-findings-hint">Each finding links to the pass that produced it.</span>
                         </div>
+                        <FindingRiskFilters v-model="vm.riskFilters" />
+                        <p v-if="vm.riskCounts" class="aggregate-findings-hint" aria-label="Risk severity counts">
+                            <template v-for="(count, risk) in vm.riskCounts" :key="risk"><span v-if="count">{{ riskLabel(risk) }}: {{ count }} · </span></template>
+                        </p>
                         <JobProtocolCommentGroups
                             :vm="vm"
                             :groups="vm.aggregateFindingsByFile"
-                            empty-message="No findings — the review completed clean."
+                            empty-message="No findings match these filters."
                             show-origin
                             show-root-header
                         />
@@ -149,13 +153,14 @@
                             <h4 class="comments-main-title">Comments for {{ vm.selectedCommentPath }}</h4>
                             <div class="comments-filter-controls">
                                 <input v-model="vm.localSearchQuery" type="text" class="comment-search-input" placeholder="Search file comments…" />
-                                <div class="severity-pills">
+                                <div class="severity-pills" role="group" aria-label="Filter finding classification">
                                     <button
                                         v-for="sev in severities"
                                         :key="sev"
                                         class="severity-pill"
                                         :class="[`severity-pill--${sev}`, { 'severity-pill--active': vm.localSeverities.has(sev) }]"
                                         :data-severity="sev"
+                                        :aria-pressed="vm.localSeverities.has(sev)"
                                         @click="vm.toggleSeverity(sev)"
                                     >
                                         {{ sev }}
@@ -163,6 +168,8 @@
                                 </div>
                             </div>
                         </div>
+
+                        <FindingRiskFilters v-model="vm.riskFilters" />
 
                         <JobProtocolCommentGroups
                             :vm="vm"
@@ -179,6 +186,8 @@
 </template>
 
 <script setup lang="ts">
+import FindingRiskFilters from '@/components/findings/FindingRiskFilters.vue'
+import { riskLabel } from '@/features/reviews/findingRisk'
 import ProgressOrb from '@/components/ProgressOrb.vue'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 import JobProtocolCommentGroups from './JobProtocolCommentGroups.vue'

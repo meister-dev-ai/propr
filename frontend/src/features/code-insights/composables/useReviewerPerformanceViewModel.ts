@@ -32,6 +32,7 @@ import {
   type CodeInsightScopedMetric,
 } from '@/services/codeInsightsAnalyticsService'
 import type { ReviewerPerformanceGrain } from '@/features/code-insights/components/ReviewerPerformanceByScopePanel.vue'
+import type { FindingRiskFilters } from '@/features/reviews/findingRisk'
 
 /** Which question is on screen. */
 export type ReviewerPerformanceSection = 'ranges' | 'correctness' | 'byScope' | 'acceptance' | 'misses' | 'coverage'
@@ -62,6 +63,7 @@ function isoDate(date: Date): string {
 
 export function useReviewerPerformanceViewModel() {
   const section = ref<ReviewerPerformanceSection>('ranges')
+  const riskFilters = ref<FindingRiskFilters>({})
 
   const to = ref(isoDate(new Date()))
   // A wider default window than the code-quality views use: correctness only moves when pull requests close, and
@@ -93,11 +95,13 @@ export function useReviewerPerformanceViewModel() {
   const drillLoading = ref(false)
 
   const scope = computed<CodeInsightScope>(() => ({
+    ...riskFilters.value,
     from: from.value,
     to: to.value,
     clientId: clientId.value,
     repositoryId: repositoryId.value,
   }))
+  const hasRiskFilter = computed(() => Object.values(riskFilters.value).some(Boolean))
 
   /**
    * Whether correctness rests on enough closed pull requests to be presented as a number rather than as an
@@ -135,6 +139,7 @@ export function useReviewerPerformanceViewModel() {
     // though it described this one.
     importOutcome.value = null
     importError.value = null
+    if (hasRiskFilter.value) misses.value = []
     try {
       // Coverage loads beside these rather than with them. It describes the measurement apparatus rather than
       // the measurements, and one failed read of it must not cost the page every number on it: an installation
@@ -147,7 +152,7 @@ export function useReviewerPerformanceViewModel() {
 
       const [loadedQuality, loadedMisses, loadedByScope] = await Promise.all([
         fetchQuality(scope.value, bucket.value),
-        fetchMisses(scope.value, 50),
+        hasRiskFilter.value ? Promise.resolve<CodeInsightMiss[]>([]) : fetchMisses(scope.value, 50),
         fetchReviewerPerformanceByGrain(scope.value, scopeGrain.value),
       ])
 
@@ -165,7 +170,9 @@ export function useReviewerPerformanceViewModel() {
   async function loadCoverage(): Promise<void> {
     coverageError.value = null
     try {
-      coverage.value = await fetchCoverage(scope.value)
+      coverage.value = await fetchCoverage({
+        from: from.value, to: to.value, clientId: clientId.value, repositoryId: repositoryId.value,
+      })
     } catch (err) {
       coverage.value = EMPTY_COVERAGE
       coverageError.value = err instanceof Error ? err.message : 'Failed to load the collection coverage.'
@@ -255,6 +262,8 @@ export function useReviewerPerformanceViewModel() {
   }
 
   return {
+    riskFilters,
+    hasRiskFilter,
     section,
     from,
     to,

@@ -19,6 +19,36 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Ver
 public sealed class LocalReviewVerificationExecutorTests
 {
     [Fact]
+    public async Task ApplyDetailedAsync_LegacyConfirmationDoesNotInheritGeneratorCertainty()
+    {
+        var extractor = new DeterministicReviewClaimExtractor();
+        var verifier = Substitute.For<IReviewFindingVerifier>();
+        verifier.VerifyAsync(
+                Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(),
+                Arg.Any<ReviewVerificationContext?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<IReadOnlyList<VerificationWorkItem>>().Select(item => new VerificationOutcome(
+                item.Claim.ClaimId, item.Claim.FindingId, VerificationOutcome.SupportedKind, FinalGateDecision.PublishDisposition,
+                [], [], VerificationOutcome.ModerateEvidence, "Legacy confirmation.", VerificationOutcome.AiMicroVerifierEvaluator, false)).ToArray());
+        var assessment = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Possible, "Data loss.", "Input 0.",
+            "review_model", FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "Generated assertion.");
+        var result = new ReviewResult(
+            "summary", [
+                new ReviewComment("src/Foo.cs", 10, CommentSeverity.Error, "Input 0 loses data.")
+                    { RiskAssessment = assessment }
+            ]);
+        var sut = new LocalReviewVerificationExecutor(extractor, verifier, CreateProtocolRecorder());
+
+        var actual = await sut.ApplyDetailedAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), null, [], null, null, CancellationToken.None);
+
+        var comment = Assert.Single(actual.Result.Comments);
+        Assert.Equal(FindingConfidence.Unknown, comment.RiskAssessment!.Confidence);
+        Assert.Equal(FindingConfidence.Unknown, Assert.Single(actual.VerifiedCandidateFindings).RiskAssessment!.Confidence);
+        Assert.Equal(FindingRiskSeverity.High, comment.RiskAssessment.Severity);
+        Assert.Equal(CommentSeverity.Error, comment.Severity);
+    }
+
+    [Fact]
     public async Task ApplyAsync_WhenNoClaimsAreExtracted_WithholdsTheFindingAndNormalizesLineNumbers()
     {
         CandidateReviewFinding? capturedFinding = null;
@@ -431,7 +461,7 @@ public sealed class LocalReviewVerificationExecutorTests
                 var prompt = string.Join("\n", callInfo.Arg<IEnumerable<ChatMessage>>().Select(message => message.Text));
                 return prompt.Contains(hedgedTrue, StringComparison.Ordinal)
                     ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"line 3 indexes the map without a check\"}"))
-                    : new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"not_confirmed\",\"reason\":\"line 3 returns the mapped value\"}"));
+                    : new ChatResponse(new ChatMessage(ChatRole.Assistant, MappedValueRefutation()));
             });
         var recorder = CreateProtocolRecorder();
         var details = new List<string>();
@@ -455,7 +485,7 @@ public sealed class LocalReviewVerificationExecutorTests
 
         var published = Assert.Single(actual.Comments);
         Assert.Equal(hedgedTrue, published.Message);
-        Assert.Contains("1 candidate finding was withheld", actual.Summary, StringComparison.Ordinal);
+        Assert.Contains("1 candidate finding was dropped", actual.Summary, StringComparison.Ordinal);
         Assert.Equal(2, details.Count);
         var decisions = details.Select(value => JsonDocument.Parse(value).RootElement).ToList();
         var confirmed = Assert.Single(decisions, decision => decision.GetProperty("lineNumber").GetInt32() == 3);
@@ -465,7 +495,7 @@ public sealed class LocalReviewVerificationExecutorTests
         Assert.Contains("indexes the map without a check", confirmed.GetProperty("reason").GetString(), StringComparison.Ordinal);
         var refused = Assert.Single(decisions, decision => decision.GetProperty("lineNumber").GetInt32() == 7);
         Assert.Equal(EvidenceJudgeVerdicts.NotConfirmed, refused.GetProperty("judgeVerdict").GetString());
-        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, refused.GetProperty("disposition").GetString());
+        Assert.Equal(FinalGateDecision.DropDisposition, refused.GetProperty("disposition").GetString());
         Assert.Contains("returns the mapped value", refused.GetProperty("reason").GetString(), StringComparison.Ordinal);
     }
 
@@ -480,7 +510,7 @@ public sealed class LocalReviewVerificationExecutorTests
                 var prompt = string.Join("\n", callInfo.Arg<IEnumerable<ChatMessage>>().Select(message => message.Text));
                 return prompt.Contains(kept, StringComparison.Ordinal)
                     ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"line 3 indexes the map\"}"))
-                    : new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"not_confirmed\",\"reason\":\"line 7 checks the value\"}"));
+                    : new ChatResponse(new ChatMessage(ChatRole.Assistant, MappedValueRefutation()));
             });
         var keptComment = new ReviewComment("src/Lookup.cs", 3, CommentSeverity.Warning, kept)
         {
@@ -502,7 +532,7 @@ public sealed class LocalReviewVerificationExecutorTests
             result, new ReviewFileResult(Guid.NewGuid(), "src/Lookup.cs"), Guid.NewGuid(), [], CreateJudgeContext(judge), CancellationToken.None);
 
         var published = Assert.Single(actual.Comments);
-        Assert.Same(keptComment, published);
+        Assert.Equal(keptComment with { ProducedWithRepositoryTools = false }, published);
         Assert.Equal(ReviewCommentReadGrounding.Covered, published.SourceReadGrounding);
         Assert.Equal("inventory", published.OriginPassLens);
         Assert.Equal("Lookup", published.OriginSymbolName);
@@ -623,7 +653,7 @@ public sealed class LocalReviewVerificationExecutorTests
     {
         var judge = Substitute.For<IChatClient>();
         judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, $"{{\"verdict\":\"not_confirmed\",\"reason\":\"{new string('x', 900)}\"}}")));
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, $"{{\"verdict\":\"confirmed\",\"reason\":\"{new string('x', 900)}\"}}")));
         var recorder = CreateProtocolRecorder();
         var details = new List<string>();
         await recorder.RecordVerificationEventAsync(
@@ -645,7 +675,7 @@ public sealed class LocalReviewVerificationExecutorTests
 
         var reason = JsonDocument.Parse(Assert.Single(details)).RootElement.GetProperty("reason").GetString();
         Assert.NotNull(reason);
-        Assert.True(reason!.Length <= 280);
+        Assert.Equal(280, reason.Length);
     }
 
     private static List<string> CaptureDegradedEvents(IProtocolRecorder recorder)
@@ -677,6 +707,16 @@ public sealed class LocalReviewVerificationExecutorTests
             .Returns("public string Lookup(string key)\n{\n    return _map[key];\n}");
         return new ReviewVerificationContext(tools, "feature/x", judge, "judge-model");
     }
+
+    private static string MappedValueRefutation() =>
+        """
+        {"verdict":"not_confirmed","reason":"line 3 returns the mapped value","confidence_evidence":{
+          "level":"low","witness":"For key known and map entry value, Lookup returns value.",
+          "consequence":"Lookup does not always return null.",
+          "counterevidence":"The return statement reads the supplied key's mapped value instead of returning a null constant.",
+          "assumptions":[],"all_claims_covered":true,
+          "source_quotes":[{"file_path":"src/Lookup.cs","quote":"return _map[key];"}]}}
+        """;
 
     private static IProtocolRecorder CreateProtocolRecorder()
     {

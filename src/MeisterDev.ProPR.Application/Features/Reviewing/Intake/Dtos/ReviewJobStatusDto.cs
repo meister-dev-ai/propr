@@ -56,4 +56,9 @@ public sealed record ReviewJobWorkspaceStatusDto(
 public sealed record ReviewJobResultDto(string Summary, IReadOnlyList<ReviewJobCommentDto> Comments);
 
 /// <summary>Application DTO for a single review comment.</summary>
-public sealed record ReviewJobCommentDto(string? FilePath, int? LineNumber, CommentSeverity Severity, string Message);
+public sealed record ReviewJobCommentDto(
+    string? FilePath,
+    int? LineNumber,
+    CommentSeverity Severity,
+    string Message,
+    FindingRiskAssessment? RiskAssessment = null);

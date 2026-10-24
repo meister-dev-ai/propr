@@ -12,6 +12,53 @@ namespace MeisterDev.ProPR.CodeInsights.Tests.Metrics;
 
 public sealed class ReviewerPerformanceModelEvidenceTests
 {
+    [Theory]
+    [InlineData("filter")]
+    [InlineData("group")]
+    [InlineData("matrix")]
+    public void RiskRestrictionsDisableRecallDespiteValidIndependentModelProof(string mode)
+    {
+        var fixture = new Fixture();
+        fixture.Concern("missed", false);
+        var publication = new ReviewerPerformanceDailyCount
+        {
+            CodeInsightPullRequestId = fixture.AggregateId, ClientId = ModelOpportunityEvaluatorTests.Source.ClientId,
+            RepositoryId = "repo", PullRequestId = 42, ProviderScope = fixture.Key.ProviderScope, BucketDate = fixture.To,
+            ModelId = "A", LogicalModelName = "logical-A", Outcome = "positive", PublicationState = CodeInsightPublicationState.Published,
+            DuplicateState = CodeInsightDuplicateState.CheckedNonduplicate, IsClassified = true, Count = 3,
+            Impact = FindingImpact.High, Likelihood = FindingLikelihood.Likely, RiskSeverity = FindingRiskSeverity.High,
+            RiskRubricVersion = FindingRiskAssessment.CurrentRubricVersion,
+        };
+        var scope = fixture.Scope("A");
+        var snapshot = fixture.Snapshot([publication]);
+        var baselineQuery = new ReviewerPerformanceQuery { Views = [scope] };
+        var baseline = ReviewerPerformanceViewBuilder.Build(baselineQuery, scope, 0, [publication.ClientId], snapshot, new(80, 1), DateTimeOffset.UtcNow);
+        Assert.NotNull(baseline.Series[0].Points.Last().Score.Summary.Recall);
+        if (mode == "filter")
+        {
+            scope = scope with { RiskSeverities = ["High"] };
+        }
+
+        var query = baselineQuery with
+        {
+            Views = [scope], Grouping = mode == "group" ? "likelihood" : "none",
+            Breakdown = mode == "matrix" ? new("model", "impact", fixture.To) : null,
+        };
+        var view = ReviewerPerformanceViewBuilder.Build(query, scope, 0, [publication.ClientId], snapshot, new(80, 1), DateTimeOffset.UtcNow);
+        var points = (mode == "matrix" ? view.Breakdown.Select(cell => cell.Measurement) : view.Series.Select(series => series.Points.Last())).ToList();
+        Assert.NotEmpty(points);
+        Assert.All(
+            points, point =>
+            {
+                Assert.Equal(1, point.Coverage!.CoveredPullRequests);
+                Assert.False(point.Coverage.RecallSupported);
+                Assert.Contains("miss-risk-assessment-unavailable", point.UnavailableReasons);
+                Assert.Null(point.Score.Summary.Recall);
+                Assert.Null(point.Score.Summary.F1);
+                Assert.NotNull(point.OverallPrecision!.Summary);
+            });
+    }
+
     [Fact]
     public void ModelExclusionsCaptureClassificationCooldownAndPermanentHistoryActions()
     {

@@ -88,7 +88,10 @@ public sealed class FixturePullRequestFetcher(IReviewEvaluationFixtureAccessor f
                 .AsReadOnly(),
             snapshot.AllChangedFileSummaries,
             snapshot.AuthorizedIdentityId,
-            Author: snapshot.Author);
+            Author: snapshot.Author)
+        {
+            FetchedHeadSha = snapshot.Revision.HeadSha,
+        };
 
         return Task.FromResult(pullRequest);
     }

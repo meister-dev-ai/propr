@@ -120,6 +120,26 @@ public sealed class CodeInsightBrowseReader(
                                         && outcome.RejectionReason == reason));
                 }
 
+                if (query.Impact is { } impact)
+                {
+                    findings = findings.Where(finding => finding.Impact == impact);
+                }
+
+                if (query.Likelihood is { } likelihood)
+                {
+                    findings = findings.Where(finding => finding.Likelihood == likelihood);
+                }
+
+                if (query.RiskSeverity is { } riskSeverity)
+                {
+                    findings = findings.Where(finding => finding.RiskSeverity == riskSeverity);
+                }
+
+                if (query.Confidence is { } confidence)
+                {
+                    findings = findings.Where(finding => finding.Confidence == confidence);
+                }
+
                 var rows = await findings
                     .OrderByDescending(finding => finding.ObservedAt)
                     // A stable tie-break, so paging or a repeated read does not reshuffle equal timestamps.
@@ -135,6 +155,7 @@ public sealed class CodeInsightBrowseReader(
                         finding.LineNumber,
                         finding.Severity,
                         finding.EncryptedMessage,
+                        finding.EncryptedRiskAssessment,
                         finding.ProviderThreadId,
                         finding.ObservedAt,
                     })
@@ -195,7 +216,8 @@ public sealed class CodeInsightBrowseReader(
                             hasOutcome ? outcome!.Disposition : null,
                             row.ProviderThreadId,
                             row.ObservedAt,
-                            hasOutcome ? outcome!.RejectionReason : null);
+                            hasOutcome ? outcome!.RejectionReason : null,
+                            Persistence.CodeInsightRiskAssessmentProtection.Read(row.EncryptedRiskAssessment, secretProtectionCodec));
                     })
                     .ToList();
             },

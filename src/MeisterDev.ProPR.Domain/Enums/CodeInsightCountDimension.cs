@@ -43,4 +43,16 @@ public enum CodeInsightCountDimension
     ///     closed by inventing a bucket for it.
     /// </remarks>
     Symbol = 3,
+
+    /// <summary>Assessed impact, including Unknown.</summary>
+    Impact = 4,
+
+    /// <summary>Occurrence likelihood, including Unknown and NotApplicable.</summary>
+    Likelihood = 5,
+
+    /// <summary>Derived risk severity, including Unknown.</summary>
+    RiskSeverity = 6,
+
+    /// <summary>Correctness confidence, including Unknown.</summary>
+    Confidence = 7,
 }

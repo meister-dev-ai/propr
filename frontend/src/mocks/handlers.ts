@@ -5,6 +5,8 @@ import { http, HttpResponse, delay } from 'msw'
 import protocolMockData from '../../mock/data/protocol_response_1.json'
 import { API_BASE_URL } from '@/services/apiBase'
 import { reviewerPerformanceHandlers } from './reviewerPerformance'
+import { findingRisk, matchesFindingRisk } from '@/features/reviews/findingRisk'
+import type { CodeInsightFinding } from '@/services/codeInsightsAnalyticsService'
 
 const base = API_BASE_URL
 
@@ -575,6 +577,7 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     defaultReviewPipelineProfileId: storedProfile,
     defaultReviewPipelineProfileUpdatedAtUtc: clientReviewProfiles[id]?.updatedAtUtc ?? null,
     scmCommentPostingEnabled: true,
+    findingBadgeStyle: 'shieldsIo',
     enableMultiPassUnion: false,
     reviewEveryIncrementEnabled: false,
     withholdOutOfScopeFindings: false,
@@ -2695,6 +2698,10 @@ function mockCodeInsightFindings(coreType: string | null) {
       filePath: 'src/Payments/RefundProcessor.cs',
       lineNumber: 214,
       severity: 'Error',
+      riskAssessment: { impact: 'moderate', likelihood: 'unlikely', severity: 'low', confidence: 'high', confidenceReason: 'The retry condition and missing bound are visible in the complete loop.',
+        impactReason: 'The optional retry report is incorrect when a gateway stays unavailable.',
+        likelihoodReason: 'Only an extended gateway conflict reaches this retry path.',
+        source: 'review-generation', rubricVersion: 'finding-risk-v1' },
       message: 'The retry loop has no ceiling: a persistent 409 from the gateway will retry indefinitely.',
       coreTags: ['logic-error', 'resource-handling'],
       disposition: 'addressed',
@@ -2710,6 +2717,10 @@ function mockCodeInsightFindings(coreType: string | null) {
       filePath: 'src/Payments/LedgerWriter.cs',
       lineNumber: 63,
       severity: 'Warning',
+      riskAssessment: { impact: 'critical', likelihood: 'likely', severity: 'critical', confidence: 'certain', confidenceReason: 'The separate writes deterministically allow partial persistence on the failure path.',
+        impactReason: 'The ledger and account balance can disagree after a failed write.',
+        likelihoodReason: 'The write is executed for every payment and failures are retried.',
+        source: 'review-generation', rubricVersion: 'finding-risk-v1' },
       message: 'The ledger write and the balance update are not in one transaction.',
       coreTags: ['data-validation'],
       disposition: 'falsePositive',
@@ -2731,9 +2742,82 @@ function mockCodeInsightFindings(coreType: string | null) {
       providerThreadId: null,
       observedAt: '2026-07-19T13:20:00Z',
     },
-  ]
+  ] satisfies CodeInsightFinding[]
 
   return coreType ? all.filter((finding) => finding.coreTags.includes(coreType)) : all
+}
+
+function mockQueryInteger(value: string | null, fallback: number): number | null {
+  if (value === null) return fallback
+  const trimmed = value.trim()
+  if (!/^[+-]?\d+$/.test(trimmed)) return null
+  const parsed = Number(trimmed)
+  return Number.isInteger(parsed) && parsed >= -2147483648 && parsed <= 2147483647 ? parsed : null
+}
+
+/** Derives all filtered mock reads from the same finding population. */
+function mockRiskCodeQuality(url: URL, kind: string, page = { offset: 0, limit: 50 }) {
+  const filters = { impact: url.searchParams.get('impact') ?? '', likelihood: url.searchParams.get('likelihood') ?? '', riskSeverity: url.searchParams.get('riskSeverity') ?? '', confidence: url.searchParams.get('confidence') ?? '' }
+  const hasScope = ['coreType', 'from', 'to', 'clientId', 'repositoryId', 'filePath', 'pullRequestId']
+    .some(key => url.searchParams.get(key))
+  if (kind !== 'risk' && kind !== 'findings' && !hasScope && !Object.values(filters).some(Boolean)) return null
+  const all = mockCodeInsightFindings(url.searchParams.get('coreType'))
+  const from = url.searchParams.get('from'), to = url.searchParams.get('to')
+  const findings = all.filter(finding => matchesFindingRisk(finding.riskAssessment, filters) &&
+    (!from || finding.observedAt.slice(0, 10) >= from) && (!to || finding.observedAt.slice(0, 10) <= to) &&
+    ['clientId', 'repositoryId', 'filePath', 'pullRequestId'].every(key => !url.searchParams.get(key) || String(finding[key as 'clientId']) === url.searchParams.get(key)))
+  const prCount = (rows: typeof findings) => new Set(rows.map(row => `${row.clientId}/${row.repositoryId}/${row.pullRequestId}`)).size
+  const grouped = (key: (finding: (typeof findings)[number]) => string) => {
+    const groups = new Map<string, typeof findings>()
+    for (const finding of findings) { const id = key(finding); groups.set(id, [...(groups.get(id) ?? []), finding]) }
+    return [...groups.values()]
+  }
+  if (kind === 'types' || kind === 'risk') {
+    const dimension = url.searchParams.get('dimension') ?? 'riskSeverity'
+    const bucket = url.searchParams.get('bucket')?.toLowerCase() ?? 'day'
+    const counts = new Map<string, { bucketStart: string; key: string; count: number }>()
+    for (const finding of findings) {
+      const date = new Date(`${finding.observedAt.slice(0, 10)}T00:00:00Z`)
+      if (bucket === 'month') date.setUTCDate(1)
+      if (bucket === 'week') date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7)
+      const bucketStart = date.toISOString().slice(0, 10)
+      const value = findingRisk(finding.riskAssessment)[dimension as 'riskSeverity']
+      const keys = kind === 'types' ? finding.coreTags : [value.charAt(0).toUpperCase() + value.slice(1)]
+      for (const key of keys) {
+        const identity = `${bucketStart}/${key}`
+        counts.set(identity, { bucketStart, key, count: (counts.get(identity)?.count ?? 0) + 1 })
+      }
+    }
+    const points = [...counts.values()].sort((a, b) => a.bucketStart.localeCompare(b.bucketStart) || a.key.localeCompare(b.key))
+    return { totalFindings: findings.length, keys: [...new Set(points.map(point => point.key))].sort(), points }
+  }
+  if (kind === 'findings') {
+    return findings.slice(page.offset, page.offset + page.limit)
+  }
+  if (kind === 'directory') {
+    const rows = grouped(finding => `${finding.clientId}/${finding.repositoryId}`).map(rows => ({
+      clientId: rows[0]!.clientId, clientName: 'Acme Corp', repositoryId: rows[0]!.repositoryId, repositoryName: rows[0]!.repositoryId,
+      findings: rows.length, pullRequests: prCount(rows), files: new Set(rows.map(row => row.filePath)).size,
+      averagePerPullRequest: rows.length / prCount(rows), lastActivityOn: rows.map(row => row.observedAt).sort().at(-1),
+    }))
+    return { totalFindings: findings.length, repositories: rows.length, pullRequests: prCount(findings), averagePerPullRequest: findings.length ? findings.length / prCount(findings) : null, rows }
+  }
+  if (kind === 'concentration') {
+    const grain = url.searchParams.get('grain') ?? 'repository'
+    return grouped(finding => `${finding.clientId}/${grain === 'client' ? '' : finding.repositoryId}/${grain === 'pullRequest' ? finding.pullRequestId : grain === 'file' ? finding.filePath : grain === 'job' ? finding.jobId : ''}`).map(rows => ({
+      clientId: rows[0]!.clientId, clientName: 'Acme Corp', repositoryId: grain === 'client' ? null : rows[0]!.repositoryId,
+      repositoryName: rows[0]!.repositoryId, pullRequestId: grain === 'pullRequest' ? rows[0]!.pullRequestId : null,
+      filePath: grain === 'file' ? rows[0]!.filePath : null, count: rows.length,
+    }))
+  }
+  if (kind === 'hotspots') {
+    const symbols = url.searchParams.get('groupBy') === 'symbol'
+    const files = symbols ? [] : grouped(finding => finding.filePath).map(rows => ({ filePath: rows[0]!.filePath, symbolName: null, findings: rows.length, pullRequests: prCount(rows), averagePerPullRequest: rows.length / prCount(rows) }))
+    return { totalFindings: findings.length, pullRequests: prCount(findings), averagePerPullRequest: findings.length ? findings.length / prCount(findings) : null, fileCount: files.length, files, unplacedFindings: symbols ? findings.length : 0 }
+  }
+  const fixed = findings.filter(finding => finding.disposition === 'addressed').length
+  const total = { persisted: findings.length - fixed, fixed, dropped: 0, total: findings.length, persistenceRate: findings.length ? (findings.length - fixed) / findings.length : null, pullRequests: prCount(findings) }
+  return { total, pullRequests: [] }
 }
 
 export const handlers = [
@@ -4653,6 +4737,10 @@ export const handlers = [
             filePath: "/.azure/modules/containerApps.bicep",
             lineNumber: 101,
             severity: "error",
+            riskAssessment: { impact: 'moderate', likelihood: 'unlikely', severity: 'low', confidence: 'high', confidenceReason: 'The retry condition and missing bound are visible in the complete loop.',
+              impactReason: 'One deployment can fail and be retried without changing stored data.',
+              likelihoodReason: 'The principal propagation delay affects the first deployment after identity creation.',
+              source: 'review-generation', rubricVersion: 'finding-risk-v1' },
             message: "Role assignment depends on `db.identity.principalId` but has no explicit `dependsOn` on `db`. Managed identity service principals can be eventually consistent; this can cause intermittent `PrincipalNotFound` during deployment. Add `dependsOn: [db]` (or a deterministic dependency path) to ensure identity exists before assignment."
           },
           {
@@ -5267,6 +5355,8 @@ export const handlers = [
   http.get(`${base}/code-quality/types-over-time`, async ({ request }) => {
     await delay(220)
     const url = new URL(request.url)
+    const filtered = mockRiskCodeQuality(url, 'types')
+    if (filtered !== null) return HttpResponse.json(filtered)
     const repository = url.searchParams.get('repositoryId')
     const pullRequestId = url.searchParams.get('pullRequestId')
 
@@ -5316,6 +5406,8 @@ export const handlers = [
   http.get(`${base}/code-quality/concentration`, async ({ request }) => {
     await delay(180)
     const url = new URL(request.url)
+    const filtered = mockRiskCodeQuality(url, 'concentration')
+    if (filtered !== null) return HttpResponse.json(filtered)
     const grain = url.searchParams.get('grain') ?? 'repository'
     const pullRequestId = url.searchParams.get('pullRequestId')
 
@@ -5366,8 +5458,15 @@ export const handlers = [
     ])
   }),
 
-  http.get(`${base}/code-quality/repositories`, async () => {
+  http.get(`${base}/code-quality/risk-over-time`, async ({ request }) => {
+    await delay(120)
+    return HttpResponse.json(mockRiskCodeQuality(new URL(request.url), 'risk'))
+  }),
+
+  http.get(`${base}/code-quality/repositories`, async ({ request }) => {
     await delay(200)
+    const filtered = mockRiskCodeQuality(new URL(request.url), 'directory')
+    if (filtered !== null) return HttpResponse.json(filtered)
 
     // The entry: where the findings are, ranked by volume. Two of these belong to different clients, which 
     // the row's second line is for.
@@ -5391,6 +5490,8 @@ export const handlers = [
   http.get(`${base}/code-quality/hotspots`, async ({ request }) => {
     await delay(200)
     const url = new URL(request.url)
+    const filtered = mockRiskCodeQuality(url, 'hotspots')
+    if (filtered !== null) return HttpResponse.json(filtered)
     const filesFrom = url.searchParams.get('filesFromPullRequestId')
 
     // Grouped by definition: the same findings, one level deeper, and the ones the syntax could not place are
@@ -5448,6 +5549,8 @@ export const handlers = [
   http.get(`${base}/code-quality/survival`, async ({ request }) => {
     await delay(200)
     const url = new URL(request.url)
+    const filtered = mockRiskCodeQuality(url, 'survival')
+    if (filtered !== null) return HttpResponse.json(filtered)
     const pullRequestId = url.searchParams.get('pullRequestId')
 
     // Scoped to one pull request, the totals and the single broken-out row are the same pull request.
@@ -5498,9 +5601,14 @@ export const handlers = [
   http.get(`${base}/code-quality/findings`, async ({ request }) => {
     await delay(200)
     const url = new URL(request.url)
-    const coreType = url.searchParams.get('coreType')
-
-    return HttpResponse.json(mockCodeInsightFindings(coreType))
+    const offset = mockQueryInteger(url.searchParams.get('offset'), 0)
+    const limit = mockQueryInteger(url.searchParams.get('limit'), 50)
+    if (offset === null || limit === null) {
+      return HttpResponse.json({ detail: 'Pagination values must be 32-bit integers.' }, { status: 400 })
+    }
+    return HttpResponse.json(mockRiskCodeQuality(url, 'findings', {
+      offset: Math.max(0, offset), limit: Math.max(1, Math.min(200, limit)),
+    }))
   }),
 
   http.get(`${base}/reviewer-performance/quality`, async ({ request }) => {

@@ -227,7 +227,7 @@ public sealed partial class CodeInsightHistoryImporter(
                     comment.OriginModelId,
                     comment.OriginLogicalModelName,
                     comment.OriginSymbolName,
-                    comment.OriginSymbolKind));
+                    comment.OriginSymbolKind, RiskAssessment: comment.RiskAssessment));
         }
 
         return produced;

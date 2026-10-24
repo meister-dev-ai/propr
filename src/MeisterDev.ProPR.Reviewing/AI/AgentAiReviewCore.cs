@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
@@ -40,10 +42,10 @@ public sealed class AgentAiReviewCore(IChatClient chatClient, IOptions<AiReviewO
         var response = await chatClient.GetResponseAsync(messages, chatOptions, cancellationToken);
         var json = response.Text ?? "";
 
-        return ParseReviewResult(json);
+        return ParseReviewResult(json, systemContext.FindingTypeVocabulary);
     }
 
-    private static ReviewResult ParseReviewResult(string json)
+    private static ReviewResult ParseReviewResult(string json, FindingTypeVocabulary vocabulary)
     {
         var dto = JsonSerializer.Deserialize<ReviewResultDto>(json, JsonOptions)
                   ?? throw new InvalidOperationException("AI returned null response.");
@@ -52,7 +54,12 @@ public sealed class AgentAiReviewCore(IChatClient chatClient, IOptions<AiReviewO
                 c.FilePath,
                 c.LineNumber,
                 Enum.TryParse<CommentSeverity>(c.Severity, true, out var sev) ? sev : CommentSeverity.Info,
-                c.Message ?? ""))
+                c.Message ?? "")
+            {
+                RiskAssessment = FindingRiskAssessmentParser.ParseProperties(c.AdditionalProperties),
+                FindingClassification = FindingTypeClassificationParser.ParseProperties(c.AdditionalProperties, vocabulary),
+                SuggestedFix = ReviewSuggestedFixValidator.ParseProperties(c.AdditionalProperties)
+            })
             .ToList();
 
         return new ReviewResult(dto.Summary ?? "", comments.AsReadOnly());
@@ -60,5 +67,9 @@ public sealed class AgentAiReviewCore(IChatClient chatClient, IOptions<AiReviewO
 
     private sealed record ReviewResultDto(string? Summary, List<ReviewCommentDto>? Comments);
 
-    private sealed record ReviewCommentDto(string? FilePath, int? LineNumber, string? Severity, string? Message);
+    private sealed record ReviewCommentDto(string? FilePath, int? LineNumber, string? Severity, string? Message)
+    {
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalProperties { get; init; }
+    }
 }

@@ -19,6 +19,7 @@ import {
   fetchRepositoryDirectory,
   fetchSurvival,
   fetchTypesOverTime,
+  fetchRiskOverTime,
   type CodeInsightBucket,
   type CodeInsightConcentrationRow,
   type CodeInsightFinding,
@@ -30,9 +31,10 @@ import {
   type CodeInsightSurvivalReport,
   type CodeInsightTypeSeries,
 } from '@/services/codeInsightsAnalyticsService'
+import type { FindingRiskFilters, RiskDimension } from '@/features/reviews/findingRisk'
 
 /** Which question is on screen. */
-export type CodeQualitySection = 'types' | 'concentration' | 'hotspots' | 'survival'
+export type CodeQualitySection = 'types' | 'concentration' | 'hotspots' | 'survival' | 'risk'
 
 export interface CodeQualityDrillContext {
   title: string
@@ -47,6 +49,10 @@ export interface CodeQualityDrillContext {
   acrossPullRequests?: boolean
   /** Narrows to one definition, for the drill from a symbol hotspot. */
   symbolName?: string | null
+  impact?: string | null
+  likelihood?: string | null
+  riskSeverity?: string | null
+  confidence?: string | null
 }
 
 const DEFAULT_WINDOW_DAYS = 30
@@ -85,6 +91,12 @@ export interface CodeQualityScope {
 export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
   const pinnedToPullRequest = pinned.pullRequestId != null
   const section = ref<CodeQualitySection>('types')
+  const riskFilters = ref<FindingRiskFilters>({})
+  const riskDimension = ref<RiskDimension>('riskSeverity')
+  const riskSeries = shallowRef<CodeInsightTypeSeries>({ points: [], totalFindings: 0, keys: [] })
+  const riskLoading = ref(false)
+  const riskError = ref<string | null>(null)
+  let riskRequest = 0
 
   const to = ref(isoDate(new Date()))
   const from = ref(
@@ -143,6 +155,7 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
   const drillLoading = ref(false)
 
   const scope = computed<CodeInsightScope>(() => ({
+    ...riskFilters.value,
     from: from.value,
     to: to.value,
     clientId: clientId.value,
@@ -151,7 +164,7 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
     pullRequestId: pullRequestId.value,
   }))
 
-  const window = computed<CodeInsightScope>(() => ({ from: from.value, to: to.value, clientId: clientId.value }))
+  const window = computed<CodeInsightScope>(() => ({ ...riskFilters.value, from: from.value, to: to.value, clientId: clientId.value }))
 
   /**
    * Loads the repositories the caller can see in this window, busiest first, and lands on the first one.
@@ -219,6 +232,12 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
   async function load(): Promise<void> {
     loading.value = true
     error.value = null
+    riskRequest++
+    riskLoading.value = false
+    riskError.value = null
+    riskSeries.value = { points: [], totalFindings: 0, keys: [] }
+    closeDrill()
+    let riskLoad: Promise<void> | undefined
     try {
       await resolveRepositoriesAsync()
 
@@ -233,6 +252,8 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
           return
         }
       }
+
+      if (section.value === 'risk') riskLoad = loadRisk()
 
       const [loadedTypes, loadedConcentration, loadedSurvival, loadedHotspots, loadedCurrentByFile] =
         await Promise.all([
@@ -260,8 +281,33 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load code quality.'
     } finally {
+      await riskLoad
       loading.value = false
     }
+  }
+
+  async function loadRisk(): Promise<void> {
+    const request = ++riskRequest
+    const requestedScope = { ...scope.value }
+    const dimension = riskDimension.value
+    const requestedBucket = bucket.value
+    riskSeries.value = { points: [], totalFindings: 0, keys: [] }
+    riskLoading.value = true
+    riskError.value = null
+    const isCurrent = () => request === riskRequest && dimension === riskDimension.value && requestedBucket === bucket.value && JSON.stringify(requestedScope) === JSON.stringify(scope.value)
+    try {
+      const series = await fetchRiskOverTime(requestedScope, requestedBucket, dimension)
+      if (isCurrent()) riskSeries.value = series
+    } catch (err) {
+      if (isCurrent()) riskError.value = err instanceof Error ? err.message : 'Failed to load the finding risk distribution.'
+    } finally {
+      if (request === riskRequest) riskLoading.value = false
+    }
+  }
+
+  async function setRiskFilters(filters: FindingRiskFilters): Promise<void> {
+    riskFilters.value = filters
+    await load()
   }
 
   /** Reloads only the hotspots, for when the grouping changes without the window having moved. */
@@ -295,6 +341,10 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
       drillFindings.value = await fetchFindings(
         {
           ...scope.value,
+          impact: context.impact ?? scope.value.impact,
+          likelihood: context.likelihood ?? scope.value.likelihood,
+          riskSeverity: context.riskSeverity ?? scope.value.riskSeverity,
+          confidence: context.confidence ?? scope.value.confidence,
           repositoryId: context.repositoryId ?? scope.value.repositoryId,
           filePath: context.filePath ?? scope.value.filePath,
           // A pinned pull request outranks a clicked one: a drill inside a review must not walk out of it,
@@ -318,6 +368,13 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
   }
 
   return {
+    riskFilters,
+    riskDimension,
+    riskSeries,
+    riskLoading,
+    riskError,
+    loadRisk,
+    setRiskFilters,
     section,
     from,
     to,

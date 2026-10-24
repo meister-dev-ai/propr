@@ -75,6 +75,9 @@ public sealed record PullRequest(
     IReadOnlyList<LinkedItem>? LinkedItems = null,
     PullRequestAuthor? Author = null)
 {
+    /// <summary>The immutable source commit used to fetch changed-file content, when known.</summary>
+    public string? FetchedHeadSha { get; init; }
+
     /// <summary>
     ///     Full manifest of all files changed in the PR since the target branch (path + change type only).
     ///     On re-review passes this covers the entire PR scope; on first-pass it mirrors

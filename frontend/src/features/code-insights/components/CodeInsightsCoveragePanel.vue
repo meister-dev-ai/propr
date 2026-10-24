@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Coverage</p>
         <h3 id="insights-coverage-heading">What the collection knows about</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           Collection starts the day it is switched on, and nothing imports what ran before. Every other number
           here is silent about earlier reviews, and silence reads like a reviewer that found nothing. This is the
           difference, per repository, in the window above.

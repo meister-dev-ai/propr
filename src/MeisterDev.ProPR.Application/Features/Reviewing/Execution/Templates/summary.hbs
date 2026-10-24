@@ -1,0 +1,13 @@
+{{~#if HasFindings~}}
+**Findings to review**{{LineBreak~}}
+{{#each Entries~}}
+{{../LineBreak}}{{this}}{{../LineBreak~}}
+{{/each~}}
+{{#if OmittedActions~}}
+{{LineBreak}}{{OmittedActions}} additional finding actions omitted from this summary. See the full review record or individual finding comments when available.{{LineBreak~}}
+{{/if~}}
+{{LineBreak~}}
+{{/if~}}
+| Findings to report | Risk levels | Confidence levels |{{LineBreak~}}
+| --- | --- | --- |{{LineBreak~}}
+| {{FindingCount}} | {{RiskDistribution}} | {{ConfidenceDistribution}} |

@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Repeat findings</p>
         <h3 id="insights-survival-heading">Finding persistence</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           A problem raised once and never again told you little; one still reported three increments later is a
           durable statement about the code. Only pull requests reviewed more than once count here, because nothing
           in a single review had the chance to drop out.

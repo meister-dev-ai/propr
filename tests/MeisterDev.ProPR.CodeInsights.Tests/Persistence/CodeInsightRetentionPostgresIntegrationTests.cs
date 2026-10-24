@@ -84,6 +84,47 @@ public sealed class CodeInsightRetentionPostgresIntegrationTests(PostgresContain
     }
 
     [Fact]
+    public async Task ReviewClassificationIsAtomicAndRejectsAStaleTrackedFallbackOverPostgres()
+    {
+        var evt = this.CreateEvent();
+        await this._ingestion.HandleReviewFindingsProducedAsync(evt);
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, settings => settings.UseVector()).Options;
+        await using var stale = new MeisterProPRDbContext(options);
+        var staleStore = new CodeInsightFindingStore(stale, CreateCodec());
+        var pending = await stale.CodeInsightFindings.OrderBy(finding => finding.Ordinal).ToListAsync();
+        Assert.All(pending, finding => Assert.Null(finding.ClassifiedAt));
+        var typed = new FindingTypeClassification(
+            ["concurrency"], [], CodeInsightFindingLevel.Member,
+            CodeInsightFindingQualifier.Incorrect, 0.96, 1, FindingTypeClassification.ReviewSource);
+        await this._ingestion.HandleReviewFindingsProducedAsync(
+            evt with
+            {
+                Findings = evt.Findings.Select(finding => finding with { FindingClassification = typed }).ToList(),
+            });
+        foreach (var finding in pending)
+        {
+            await staleStore.ApplyClassificationAsync(
+                finding.Id,
+                new(["naming-clarity"], [], CodeInsightFindingLevel.Statement, CodeInsightFindingQualifier.Missing, 0.1, "finding-type-v1"));
+            await staleStore.RecordClassificationAttemptAsync(finding.Id);
+        }
+
+        this._dbContext.ChangeTracker.Clear();
+        var retained = await this._dbContext.CodeInsightFindings.OrderBy(finding => finding.Ordinal).ToListAsync();
+        Assert.Equal(pending.Select(finding => finding.Id), retained.Select(finding => finding.Id));
+        Assert.All(
+            retained, finding =>
+            {
+                Assert.NotNull(finding.ClassifiedAt);
+                Assert.Equal(0.96, finding.ClassificationConfidence);
+                Assert.Equal(0, finding.ClassificationAttempts);
+            });
+        Assert.Equal(["concurrency", "concurrency"], await this._dbContext.CodeInsightFindingTags.Select(tag => tag.CoreSlug).ToListAsync());
+        Assert.Empty(await this._store.ListUnclassifiedAsync(10, 3));
+    }
+
+    [Fact]
     public async Task CollectedFindings_RoundTripAndSurviveReprocessing_OverRealPostgres()
     {
         var key = this.NewKey();

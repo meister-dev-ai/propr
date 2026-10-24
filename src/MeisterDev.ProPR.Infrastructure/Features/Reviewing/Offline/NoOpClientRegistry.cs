@@ -70,6 +70,8 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult(false);
     }
 
+    public Task<FindingBadgeStyle> GetFindingBadgeStyleAsync(Guid clientId, CancellationToken ct = default) => Task.FromResult(FindingBadgeStyle.ShieldsIo);
+
     public Task<CommentSeverity> GetMinimumSeverityToPostAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult(CommentSeverity.Info);

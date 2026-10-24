@@ -310,7 +310,7 @@ public sealed class JobsController(
                 job.HeldUntil));
     }
 
-    /// <summary>Returns the review result (summary and comments) for a completed job.</summary>
+    /// <summary>Returns the summary, comments, and available impact, likelihood and confidence assessments for a completed job.</summary>
     /// <param name="id">The review job identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The review result, or 404 if the job has no result yet.</returns>
@@ -358,7 +358,8 @@ public sealed class JobsController(
                     job.Result.Summary,
                     job.Result.Comments
                         .Select(c => new ReviewCommentDto(
-                            c.FilePath, c.LineNumber, c.Severity, c.Message, c.OriginPassKind, c.ScopeRelation, c.OriginPassIndex, c.OriginPassLens))
+                            c.FilePath, c.LineNumber, c.Severity, c.Message, c.OriginPassKind, c.ScopeRelation, c.OriginPassIndex, c.OriginPassLens,
+                            c.RiskAssessment))
                         .ToArray())));
     }
 

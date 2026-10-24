@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Select a repository</p>
         <h3 id="insights-directory-heading">Repositories</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           Everything past this point describes one codebase. Repositories differ in size, language, age and in how
           much of them a review looks at, so their numbers are comparable only by volume. This list ranks by findings.
         </p>

@@ -46,7 +46,7 @@ where it is defined in full and kept up to date.
 | Complexity tier | Low, Medium or High, assigned to a changed file by triage. Which purpose reviews the file, and which extra passes apply to it, follow from it. | [Reviews](concepts/reviews.md) |
 | Thread memory | The record of how a comment thread was settled last time, kept so a point you already rejected is not raised again. | [Reviews](concepts/reviews.md) |
 | Publication gate | The deterministic last step before publication, also called the final gate. No finding reaches a pull request without passing it, and it records its reasoning. | [Why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted) |
-| Summary-only | A gate outcome: the finding is mentioned in the review summary but not posted as an inline comment. | [Why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted) |
+| Summary-only | A gate outcome: the finding stays in the ProPR review without an inline comment, and the published summary lists it when the pass that produced the finding wrote a summary line for it. | [Why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted) |
 | Review aggressiveness | Per client, `Calm`, `Balanced` or `Assertive` - how much of what the model produced passes the certainty gate. | [What you can tune](concepts/reviews.md#what-you-can-tune) |
 | Review temperature | An override of the model default, set per crawl or webhook configuration rather than per client, so two automation paths can behave differently. | [What you can tune](concepts/reviews.md#what-you-can-tune) |
 | Job protocol | The stored execution trace of one review, opened with **Protocol ↗** on a review row. | [Reviews](concepts/reviews.md) |

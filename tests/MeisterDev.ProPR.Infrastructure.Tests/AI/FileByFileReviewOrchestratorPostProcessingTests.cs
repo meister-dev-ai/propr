@@ -83,23 +83,23 @@ public class FileByFileReviewOrchestratorPostProcessingTests
     }
 
     [Fact]
-    public void ApplyConfidenceFloor_ErrorBelowFloor_DowngradesToWarning()
+    public void ApplyConfidenceFloor_ErrorBelowFloor_PreservesDefectClassification()
     {
         var result = MakeResult(MakeComment(CommentSeverity.Error, "Confirmed null ref."));
 
         var adjusted = FileByFileReviewOrchestrator.ApplyConfidenceFloor(result, 79, DefaultOpts());
 
-        Assert.Equal(CommentSeverity.Warning, adjusted.Comments[0].Severity);
+        Assert.Equal(CommentSeverity.Error, adjusted.Comments[0].Severity);
     }
 
     [Fact]
-    public void ApplyConfidenceFloor_WarningBelowFloor_DowngradesToSuggestion()
+    public void ApplyConfidenceFloor_WarningBelowFloor_PreservesDefectHypothesis()
     {
         var result = MakeResult(MakeComment(CommentSeverity.Warning, "Missing transaction boundary."));
 
         var adjusted = FileByFileReviewOrchestrator.ApplyConfidenceFloor(result, 59, DefaultOpts());
 
-        Assert.Equal(CommentSeverity.Suggestion, adjusted.Comments[0].Severity);
+        Assert.Equal(result.Comments[0].Severity, adjusted.Comments[0].Severity);
     }
 
     [Fact]
@@ -134,13 +134,13 @@ public class FileByFileReviewOrchestratorPostProcessingTests
         var adjusted = FileByFileReviewOrchestrator.ApplyConfidenceFloor(result, 0, DefaultOpts());
 
         // SUGGESTION is the lowest severity — no further downgrade exists
-        Assert.Equal(CommentSeverity.Suggestion, adjusted.Comments[0].Severity);
+        Assert.Equal(result.Comments[0].Severity, adjusted.Comments[0].Severity);
     }
 
     [Fact]
     public void ApplyConfidenceFloor_MixedComments_EachEvaluatedIndependently()
     {
-        // confidence=79 → ERRORs downgrade to WARNING; WARNINGs stay (79 >= 60)
+        // An aggregate file score cannot classify an individual issue.
         var result = MakeResult(
             MakeComment(CommentSeverity.Error, "Error comment."),
             MakeComment(CommentSeverity.Warning, "Warning comment."),
@@ -148,8 +148,8 @@ public class FileByFileReviewOrchestratorPostProcessingTests
 
         var adjusted = FileByFileReviewOrchestrator.ApplyConfidenceFloor(result, 79, DefaultOpts());
 
-        Assert.Equal(CommentSeverity.Warning, adjusted.Comments[0].Severity); // ERROR → WARNING
-        Assert.Equal(CommentSeverity.Warning, adjusted.Comments[1].Severity); // WARNING unchanged (79 >= 60)
+        Assert.Equal(CommentSeverity.Error, adjusted.Comments[0].Severity); // Confirmed defect.
+        Assert.Equal(CommentSeverity.Warning, adjusted.Comments[1].Severity); // Unresolved defect context.
         Assert.Equal(CommentSeverity.Suggestion, adjusted.Comments[2].Severity); // SUGGESTION unchanged
     }
 }

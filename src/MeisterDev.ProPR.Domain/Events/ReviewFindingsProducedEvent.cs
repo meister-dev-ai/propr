@@ -98,4 +98,6 @@ public sealed record ReviewFindingProduced(
     string? DuplicateVerificationSource = null,
     double? DuplicateVerificationConfidence = null,
     DateTimeOffset? DuplicateVerifiedAt = null,
-    string ProviderScope = "");
+    string ProviderScope = "",
+    FindingRiskAssessment? RiskAssessment = null,
+    FindingTypeClassification? FindingClassification = null);

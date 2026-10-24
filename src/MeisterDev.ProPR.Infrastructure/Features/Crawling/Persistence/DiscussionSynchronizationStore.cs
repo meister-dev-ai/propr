@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
@@ -161,18 +162,36 @@ public sealed class DiscussionSynchronizationStore(
             }
 
             var fence = await db.DiscussionObservationFences.SingleOrDefaultAsync(row => row.Id == fenceId, ct);
-            if (fence is not null && (!fence.Completed || fence.OwnerStateId != state.Id))
+            var token = Guid.NewGuid();
+            if (fence is not null)
             {
+                var interrupted = !fence.Completed || fence.OwnerStateId != state.Id;
                 var unfinished = state.ReadProgress();
+                var checkpoint = fence.OwnerStateId == state.Id
+                    ? MemoryCheckpoint(fence.Token, state.CollectionGeneration, state.RetentionGeneration)
+                    : null;
+                var nextCheckpoint = MemoryCheckpoint(token, state.CollectionGeneration, state.RetentionGeneration);
                 foreach (var progress in unfinished.Values)
                 {
-                    progress.Consumers.Clear();
+                    var memory = checkpoint is not null && progress.MemoryCheckpoint == checkpoint
+                        ? progress.Consumers.GetValueOrDefault("memory")
+                        : null;
+                    if (interrupted)
+                    {
+                        progress.Consumers.Clear();
+                        if (memory is not null)
+                        {
+                            progress.Consumers["memory"] = memory;
+                        }
+                    }
+
+                    progress.MemoryCheckpoint = memory is not null ? nextCheckpoint : null;
                 }
 
                 state.ThreadProgressJson = JsonSerializer.Serialize(unfinished);
             }
 
-            state.LeaseToken = Guid.NewGuid();
+            state.LeaseToken = token;
             state.LeaseExpiresAt = now + leaseDuration;
             state.ObservationSequence = checked(state.ObservationSequence + 1);
             var observationTime = fence is null || fence.ObservedAt < now ? now : fence.ObservedAt.AddTicks(10);
@@ -201,6 +220,10 @@ public sealed class DiscussionSynchronizationStore(
             throw;
         }
     }
+
+    private static string MemoryCheckpoint(Guid token, long collectionGeneration, long retentionGeneration) =>
+        DiscussionThreadProgress.Fingerprint(
+            token.ToString("D"), collectionGeneration.ToString(CultureInfo.InvariantCulture), retentionGeneration.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>Uses PostgreSQL window ranking to preserve client fairness before the bounded batch limit.</summary>
     public async Task<IReadOnlyList<DiscussionSynchronizationState>> ListDueAsync(TimeSpan reconciliationInterval, int limit, CancellationToken ct = default)
@@ -282,6 +305,8 @@ public sealed class DiscussionSynchronizationStore(
         private readonly Guid _token = state.LeaseToken!.Value;
         private readonly long _generation = state.RequestedGeneration;
         private readonly long _sequence = state.ObservationSequence;
+        private readonly long _collectionGeneration = state.CollectionGeneration;
+        private readonly long _retentionGeneration = state.RetentionGeneration;
         private readonly SemaphoreSlim _operations = new(1, 1);
         private bool _completed;
         private bool _disposed;
@@ -331,6 +356,50 @@ public sealed class DiscussionSynchronizationStore(
             state.LeaseExpiresAt = renewed;
         }
 
+        public async Task CheckpointProgressAsync(string progressJson, CancellationToken ct = default)
+        {
+            await this._operations.WaitAsync(ct);
+            try
+            {
+                ObjectDisposedException.ThrowIf(this._disposed, this);
+                await using var transaction = await db.Database.BeginTransactionAsync(ct);
+                var fence = await db.DiscussionObservationFences
+                    .FromSqlInterpolated($"SELECT * FROM discussion_observation_fences WHERE id={fenceId} AND token={this._token} FOR UPDATE")
+                    .AsNoTracking().SingleOrDefaultAsync(ct);
+                var now = await nowAsync(db, ct);
+                if (this._completed || state.LeaseExpiresAt <= now || fence is null || fence.OwnerStateId != state.Id || fence.ExpiresAt <= now ||
+                    fence.Completed)
+                {
+                    throw new InvalidOperationException("The discussion observation is no longer current.");
+                }
+
+                var progress = JsonSerializer.Deserialize<Dictionary<string, DiscussionThreadProgress>>(progressJson) ?? [];
+                var checkpoint = MemoryCheckpoint(this._token, this._collectionGeneration, this._retentionGeneration);
+                foreach (var thread in progress.Values)
+                {
+                    thread.MemoryCheckpoint = thread.Consumers.ContainsKey("memory") ? checkpoint : null;
+                }
+
+                var checkpointJson = JsonSerializer.Serialize(progress);
+                var changed = await db.DiscussionSynchronizationStates.Where(row => row.Id == state.Id && row.LeaseToken == this._token &&
+                                                                                    row.ObservationSequence == this._sequence && row.LeaseExpiresAt > now &&
+                                                                                    row.CollectionGeneration == this._collectionGeneration &&
+                                                                                    row.RetentionGeneration == this._retentionGeneration)
+                    .ExecuteUpdateAsync(set => set.SetProperty(row => row.ThreadProgressJson, checkpointJson), ct);
+                if (changed != 1)
+                {
+                    throw new InvalidOperationException("The discussion observation or its consumer policies changed.");
+                }
+
+                await transaction.CommitAsync(ct);
+                state.ThreadProgressJson = checkpointJson;
+            }
+            finally
+            {
+                this._operations.Release();
+            }
+        }
+
         public async Task CompleteAsync(
             string progressJson, string reviewerSummariesJson, DateTimeOffset observedAt, bool completeEnumeration,
             bool allConsumersCurrent, bool closed, string? revision, TimeSpan reconciliationInterval, CancellationToken ct = default)
@@ -349,6 +418,19 @@ public sealed class DiscussionSynchronizationStore(
                 }
 
                 await this.EnsureCurrentCoreAsync(ct);
+                var progress = JsonSerializer.Deserialize<Dictionary<string, DiscussionThreadProgress>>(progressJson) ?? [];
+                var checkpointed = state.ReadProgress();
+                var checkpoint = MemoryCheckpoint(this._token, this._collectionGeneration, this._retentionGeneration);
+                foreach (var (threadId, thread) in progress)
+                {
+                    thread.MemoryCheckpoint = checkpointed.TryGetValue(threadId, out var previous) && previous.MemoryCheckpoint == checkpoint &&
+                                              thread.Consumers.TryGetValue("memory", out var acknowledgment) &&
+                                              previous.Consumers.GetValueOrDefault("memory") == acknowledgment
+                        ? checkpoint
+                        : null;
+                }
+
+                progressJson = JsonSerializer.Serialize(progress);
                 var now = await nowAsync(db, ct);
                 var fullObservedAt = completeEnumeration ? observedAt : state.LastFullReconciledAt;
                 var changed = await db.DiscussionSynchronizationStates.Where(row => row.Id == state.Id && row.LeaseToken == this._token &&
@@ -419,6 +501,7 @@ public sealed class DiscussionSynchronizationStore(
                             .ExecuteUpdateAsync(
                                 set => set.SetProperty(row => row.LeaseToken, (Guid?)null)
                                     .SetProperty(row => row.LeaseExpiresAt, (DateTimeOffset?)null)
+                                    .SetProperty(row => row.FullRefreshRequested, true)
                                     .SetProperty(row => row.NextAttemptAt, row => row.RequestedGeneration > this._generation ? now : retryAt),
                                 CancellationToken.None);
                     }

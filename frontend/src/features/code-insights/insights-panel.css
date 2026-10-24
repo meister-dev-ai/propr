@@ -39,7 +39,7 @@
   color: var(--color-text);
 }
 
-.panel-copy {
+.panel-description {
   margin: 0.35rem 0 0;
   max-width: 60ch;
   font-size: 0.85rem;

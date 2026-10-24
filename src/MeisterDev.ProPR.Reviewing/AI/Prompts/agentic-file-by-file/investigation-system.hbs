@@ -18,6 +18,7 @@ Schema:
     {
       "id": "candidate-001",
       "message": "<candidate message>",
+      "finding_classification": {"types":["<supported core or custom slug>"],"level":null,"qualifier":null,"confidence":null},
       "category": "per_file_comment|cross_cutting|configuration|robustness|test|documentation|non_actionable",
       "severity": "info|warning|error|suggestion",
       "confidence": { "concern": "<area>", "score": <0-100> },
@@ -32,3 +33,7 @@ Schema:
    ],
    "degraded": true|false
  }
+
+{{> finding-risk-assessment}}
+
+{{> finding-presentation}}

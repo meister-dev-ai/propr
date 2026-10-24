@@ -28,6 +28,18 @@ function stubVm(overrides: Partial<Record<string, unknown>> = {}): JobProtocolVi
 }
 
 describe('JobProtocolCommentGroups — origin badges', () => {
+    it('shows risk evidence independently of commercial finding classification metadata', () => {
+        const wrapper = mount(JobProtocolCommentGroups, { props: { vm: stubVm(), emptyMessage: 'none', groups: [{
+            directory: 'src/Test.cs', comments: [{ severity: 'error', message: 'An optional report is incorrect.',
+                riskAssessment: { impact: 'moderate', likelihood: 'unlikely', severity: 'low',
+                    impactReason: 'Only an optional report is affected.', likelihoodReason: 'Only empty imports take this path.',
+                    source: 'review-generation', rubricVersion: 'finding-risk-v1' } }],
+        }] } })
+        expect(wrapper.text()).toContain('Classification: ERROR')
+        expect(wrapper.text()).toContain('Risk severity: Low')
+        expect(wrapper.text()).toContain('Only empty imports take this path.')
+        expect(wrapper.find('[data-testid="insight-row"]').exists()).toBe(false)
+    })
     it('renders an origin badge with a mapped label when originPassKind is set', () => {
         const wrapper = mount(JobProtocolCommentGroups, {
             props: {

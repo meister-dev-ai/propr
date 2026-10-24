@@ -93,7 +93,7 @@ public sealed class WithheldReviewFindingRetentionTests
 
         Assert.Empty(result.Comments);
         var withheld = Assert.Single(result.WithheldFindings);
-        Assert.Same(comment, withheld.Comment);
+        Assert.Equal(comment, withheld.Comment);
         Assert.Equal(EvidenceJudgeDegradations.OutputLimit, withheld.ReasonCode);
     }
 

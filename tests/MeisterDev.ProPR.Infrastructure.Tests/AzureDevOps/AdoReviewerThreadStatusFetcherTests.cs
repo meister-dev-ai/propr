@@ -3,6 +3,7 @@
 
 using Azure.Core;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -19,6 +20,53 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 
 public sealed class AdoReviewerThreadStatusFetcherTests
 {
+    [Theory]
+    [InlineData(FindingBadgeStyle.ShieldsIo, false)]
+    [InlineData(FindingBadgeStyle.ShieldsIo, true)]
+    [InlineData(FindingBadgeStyle.Plain, true)]
+    public async Task BadgeHeaderDoesNotDisplaceTheFindingOrRepliesFromBoundedMemoryHistory(FindingBadgeStyle style, bool longNames)
+    {
+        var botId = Guid.NewGuid();
+        var finding = new ReviewComment("a.cs", 3, CommentSeverity.Error, "Leaks tenant data.")
+        {
+            RiskAssessment = new(
+                FindingImpact.Critical, FindingLikelihood.Likely, "Tenant data is deleted.", "Every request uses this query.",
+                "review_model", FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "The complete path is visible."),
+            FindingClassification = new(
+                ["logic-error"], Enumerable.Range(0, 63)
+                    .Select(index => new FindingCustomTypeAssignment(
+                        Guid.NewGuid(), $"custom-{index}", longNames ? new string('x', 120) + $"{index:00}" : $"A normal custom finding type {index:00}"))
+                    .ToList(),
+                null, null, null, FindingTypeTaxonomy.Version, FindingTypeClassification.ReviewSource),
+        };
+        var outbound = AdoFindingCommentRenderer.Format(finding, badgeStyle: style) + "\n\n*Configured publication marker*";
+        Assert.True(outbound.IndexOf(finding.Message, StringComparison.Ordinal) > 8_000);
+        var native = new GitPullRequestCommentThread
+        {
+            Id = 42, Status = CommentThreadStatus.Active,
+            Comments =
+            [
+                CreateComment("Bot", botId, outbound, commentId: 1), CreateComment("Dev", Guid.NewGuid(), "I verified the affected tenant.", commentId: 2)
+            ],
+        };
+        var git = MakeGitClient();
+        git.GetThreadsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns([native]);
+        var snapshot = await BuildSut(git, botId).ReadSnapshotAsync(
+            "https://dev.azure.com/org", "project", "repo", 1, ThreadOwnershipResolver.None, Guid.NewGuid());
+        var history = Assert.Single(snapshot.ReviewerThreads).CommentHistory;
+        Assert.Contains(finding.Message, history);
+        Assert.Contains("Tenant data is deleted.", history);
+        Assert.Contains("I verified the affected tenant.", history);
+        Assert.Contains("types omitted", history);
+        Assert.InRange(history.Length, 1, 8_000);
+        Assert.DoesNotContain("https://img.shields.io", history);
+        Assert.Equal(outbound, native.Comments[0].Content);
+        Assert.Equal(outbound, Assert.Single(snapshot.Threads).Comments[0].Content);
+        Assert.Equal("Leaks tenant data.", finding.Message);
+    }
+
     [Theory]
     [InlineData(false, "RIGHT", "original-head")]
     [InlineData(true, "LEFT", "original-common")]

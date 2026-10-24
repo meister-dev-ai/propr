@@ -123,12 +123,19 @@ internal sealed class ReviewerPerformanceCoverageContext(
         }
 
         var supported = scope.Models is null && grouping != "model" || scope.Models is not null && snapshot?.ModelEvidence is not null;
+        var riskRestricted = scope.HasRiskSelection || grouping is "impact" or "likelihood" or "riskSeverity" or "confidence";
+        supported = supported && !riskRestricted;
         var meetsMinimum = covered.Count >= policy.MinimumCoveredPullRequests
                            && (long)covered.Count * 100 >= (long)candidates * policy.MinimumCoveragePercentage;
         var limits = reasonCounts.Keys.Order(StringComparer.Ordinal).ToList();
-        if (!supported)
+        if (!supported && !riskRestricted)
         {
             limits.Add("miss-model-attribution-unavailable");
+        }
+
+        if (riskRestricted)
+        {
+            limits.Add("miss-risk-assessment-unavailable");
         }
 
         if (covered.Count < policy.MinimumCoveredPullRequests)

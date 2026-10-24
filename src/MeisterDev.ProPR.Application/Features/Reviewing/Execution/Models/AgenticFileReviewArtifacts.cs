@@ -95,6 +95,15 @@ public sealed record AgenticFileCandidateFinding(
     IReadOnlyDictionary<string, string>? InvariantCheckContext = null,
     string? SupportSource = null)
 {
+    /// <summary>Optional impact and likelihood evidence retained before final verification.</summary>
+    public FindingRiskAssessment? RiskAssessment { get; init; }
+
+    /// <summary>Types and analytics axes assigned while producing this finding.</summary>
+    public FindingTypeClassification? FindingClassification { get; init; }
+
+    /// <summary>Optional exact replacement retained independently of the claim.</summary>
+    public ReviewSuggestedFix? SuggestedFix { get; init; }
+
     /// <summary>
     ///     Converts the agentic file candidate finding to a candidate review finding by incorporating provenance, optional finding ID, and optional verification
     ///     outcome.
@@ -121,7 +130,7 @@ public sealed record AgenticFileCandidateFinding(
             this.EvidenceReference,
             this.CandidateSummaryText,
             this.InvariantCheckContext,
-            verificationOutcome);
+            verificationOutcome) { RiskAssessment = this.RiskAssessment, FindingClassification = this.FindingClassification, SuggestedFix = this.SuggestedFix };
     }
 }
 

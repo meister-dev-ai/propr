@@ -36,6 +36,7 @@ export type CommentResolutionBehavior = components['schemas']['CommentResolution
 export type BudgetConfig = components['schemas']['BudgetConfigDto']
 export type ReviewAdmissionPolicy = components['schemas']['ReviewAdmissionPolicyDto']
 export type CommentSeverity = components['schemas']['CommentSeverity']
+export type FindingBadgeStyle = components['schemas']['FindingBadgeStyle']
 
 export interface ClientDetailDto {
   id: string
@@ -54,6 +55,7 @@ export interface ClientDetailDto {
   baselineReasoningEffort?: ReviewReasoningEffort | null
   budgetConfig?: BudgetConfig | null
   admissionPolicy?: ReviewAdmissionPolicy | null
+  findingBadgeStyle?: FindingBadgeStyle | null
   minimumSeverityToPost?: CommentSeverity | null
   autoResolveSeverities?: CommentSeverity[] | null
   withholdOutOfScopeFindings?: boolean | null
@@ -94,6 +96,7 @@ export interface ClientDetailViewModel {
   editedOutputLanguage: Ref<string>
   editedReviewPasses: Ref<ReviewPassEntry[]>
   editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
+  editedFindingBadgeStyle: Ref<FindingBadgeStyle>
   editedMinimumSeverityToPost: Ref<CommentSeverity>
   editedAutoResolveSeverities: Ref<CommentSeverity[]>
   editedWithholdOutOfScopeFindings: Ref<boolean>
@@ -384,6 +387,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedOutputLanguage = ref(DEFAULT_OUTPUT_LANGUAGE)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
   const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
+  const editedFindingBadgeStyle = ref<FindingBadgeStyle>('shieldsIo')
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
   const editedWithholdOutOfScopeFindings = ref(false)
@@ -459,6 +463,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedOutputLanguage.value = nextClient.outputLanguage || DEFAULT_OUTPUT_LANGUAGE
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
     editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
+    editedFindingBadgeStyle.value = nextClient.findingBadgeStyle ?? 'shieldsIo'
     editedMinimumSeverityToPost.value = nextClient.minimumSeverityToPost ?? 'info'
     editedAutoResolveSeverities.value = [...(nextClient.autoResolveSeverities ?? [])]
     editedWithholdOutOfScopeFindings.value = Boolean(nextClient.withholdOutOfScopeFindings)
@@ -766,9 +771,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saving.value = true
     saveError.value = ''
     try {
-      // The post-configuration fields are patched together: the minimum-severity threshold, the auto-resolve
-      // severity set (an empty array clears the set), and whether out-of-scope findings are posted.
+      // All publication controls share one save operation.
       const result = await patchClientFn(clientId, {
+        findingBadgeStyle: editedFindingBadgeStyle.value,
         minimumSeverityToPost: editedMinimumSeverityToPost.value,
         autoResolveSeverities: editedAutoResolveSeverities.value,
         withholdOutOfScopeFindings: editedWithholdOutOfScopeFindings.value,
@@ -878,6 +883,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       !saving.value &&
       client.value !== null &&
       (
+        editedFindingBadgeStyle.value !== (client.value.findingBadgeStyle ?? 'shieldsIo') ||
         editedMinimumSeverityToPost.value !== (client.value.minimumSeverityToPost ?? 'info') ||
         !severitySetsEqual(editedAutoResolveSeverities.value, client.value.autoResolveSeverities ?? []) ||
         editedWithholdOutOfScopeFindings.value !== Boolean(client.value.withholdOutOfScopeFindings)
@@ -916,6 +922,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedOutputLanguage,
     editedReviewPasses,
     editedBaselineReasoningEffort,
+    editedFindingBadgeStyle,
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
     editedWithholdOutOfScopeFindings,

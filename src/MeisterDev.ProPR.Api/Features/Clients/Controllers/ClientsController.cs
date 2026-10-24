@@ -60,7 +60,8 @@ public sealed class ClientsController(
             client.OutputLanguage,
             client.ReviewEveryIncrementEnabled,
             client.WithholdOutOfScopeFindings,
-            client.AdmissionPolicyOrEmpty);
+            client.AdmissionPolicyOrEmpty,
+            client.FindingBadgeStyle);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -407,7 +408,8 @@ public sealed class ClientsController(
             request.ReviewEveryIncrementEnabled,
             request.WithholdOutOfScopeFindings,
             request.AdmissionPolicy,
-            ct);
+            ct,
+            request.FindingBadgeStyle);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
 }
@@ -438,7 +440,8 @@ public sealed record ClientResponse(
     string OutputLanguage = ReviewOutputLanguage.Default,
     bool ReviewEveryIncrementEnabled = false,
     bool WithholdOutOfScopeFindings = false,
-    ReviewAdmissionPolicyDto? AdmissionPolicy = null);
+    ReviewAdmissionPolicyDto? AdmissionPolicy = null,
+    FindingBadgeStyle FindingBadgeStyle = FindingBadgeStyle.ShieldsIo);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
@@ -526,4 +529,5 @@ public sealed record PatchClientRequest(
     bool? WithholdOutOfScopeFindings = null,
     ReviewAdmissionPolicyDto? AdmissionPolicy = null,
     bool? EnableEvidenceBackedVerification = null,
-    bool? EnableLanguageRobustScreening = null);
+    bool? EnableLanguageRobustScreening = null,
+    FindingBadgeStyle? FindingBadgeStyle = null);

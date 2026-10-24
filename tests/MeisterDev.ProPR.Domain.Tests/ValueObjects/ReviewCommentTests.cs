@@ -44,9 +44,7 @@ public sealed class ReviewCommentTests
     [Fact]
     public void AsPullRequestLevel_CopiesEveryPropertyExceptTheAnchorAndMessage()
     {
-        // A guard against the next property. Every rewrite site went through four values and silently lost the
-        // rest, so this asserts over the type's own surface rather than over a list somebody has to remember to
-        // extend: a new provenance property that AsPullRequestLevel forgets fails here.
+        // Every non-anchor property must survive conversion to a pull-request-level comment.
         var comment = BuildFullyPopulatedComment();
 
         var promoted = comment.AsPullRequestLevel("rewritten");
@@ -80,12 +78,20 @@ public sealed class ReviewCommentTests
             OriginPassIndex = 3,
             OriginPassLens = "security",
             OriginPassShadow = true,
+            ProducedWithRepositoryTools = true,
             ScopeRelation = ReviewCommentScopeRelation.OutsideChange,
             SourceReadGrounding = ReviewCommentReadGrounding.Covered,
             OriginModelId = "gpt-x",
             OriginLogicalModelName = "reviewer-default",
             OriginSymbolName = "DeleteAsync",
             OriginSymbolKind = "method",
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.High, FindingLikelihood.Likely, "Deletes data.", "Runs in routine use.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion),
+            FindingClassification = new FindingTypeClassification(
+                ["concurrency"], [], CodeInsightFindingLevel.Member, CodeInsightFindingQualifier.Incorrect, 0.9,
+                FindingTypeTaxonomy.Version, FindingTypeClassification.ReviewSource),
+            SuggestedFix = new ReviewSuggestedFix(244, 244, "Delete();", "await DeleteAsync();"),
         };
     }
 }

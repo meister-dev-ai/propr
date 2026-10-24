@@ -71,6 +71,7 @@ public interface IClientAdminService
     ///     When non-null, sets whether an automatic trigger reviews every pushed update to a pull request rather than
     ///     only the first revision it sees.
     /// </param>
+    /// <param name="findingBadgeStyle">When non-null, sets the metadata badge style for SCM finding comments.</param>
     /// <param name="withholdOutOfScopeFindings">
     ///     When non-null, sets whether findings in pre-existing code outside the pull request's changed lines are kept
     ///     off the pull request. They remain in the persisted review result either way.
@@ -96,7 +97,8 @@ public interface IClientAdminService
         bool? reviewEveryIncrementEnabled = null,
         bool? withholdOutOfScopeFindings = null,
         ReviewAdmissionPolicyDto? admissionPolicy = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        FindingBadgeStyle? findingBadgeStyle = null);
 
     /// <summary>
     ///     Deletes a client and all its crawl configurations.

@@ -36,7 +36,19 @@ public sealed class JsonEvaluationArtifactWriterTests
                 "per-file-shorter-user",
                 [PromptStageKeys.PerFileUser],
                 true),
-            new ReviewResult("summary", []),
+            new ReviewResult(
+                "summary", [
+                    new ReviewComment("src/Work.cs", 7, CommentSeverity.Error, "Unscoped delete.")
+                    {
+                        FindingClassification = new FindingTypeClassification(
+                            ["logic-error"], [], CodeInsightFindingLevel.Member,
+                            CodeInsightFindingQualifier.Incorrect, 0.93, 1, FindingTypeClassification.ReviewSource),
+                        SuggestedFix = new ReviewSuggestedFix(7, 7, "Delete();", "Delete(tenantId);", "head", "src/Work.cs", true, 7),
+                        RiskAssessment = new FindingRiskAssessment(
+                            FindingImpact.Critical, FindingLikelihood.Likely, "Deletes tenant data.", "Every delete uses this query.", "review_model",
+                            FindingRiskAssessment.CurrentRubricVersion),
+                    }
+                ]),
             [
                 new StageEvidenceRecord(
                     "src/Foo.cs",
@@ -83,6 +95,20 @@ public sealed class JsonEvaluationArtifactWriterTests
             await using var stream = File.OpenRead(outputPath);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: CancellationToken.None);
             var root = document.RootElement;
+
+            var risk = root.GetProperty("finalResult").GetProperty("comments")[0].GetProperty("riskAssessment");
+            Assert.Equal("critical", risk.GetProperty("severity").GetString());
+            Assert.Equal("critical", risk.GetProperty("impact").GetString());
+            Assert.Equal("likely", risk.GetProperty("likelihood").GetString());
+            Assert.Equal("Deletes tenant data.", risk.GetProperty("impactReason").GetString());
+            var classification = root.GetProperty("finalResult").GetProperty("comments")[0].GetProperty("findingClassification");
+            Assert.Equal("logic-error", classification.GetProperty("coreSlugs")[0].GetString());
+            Assert.Equal(0.93, classification.GetProperty("confidence").GetDouble());
+            Assert.Equal(FindingTypeClassification.ReviewSource, classification.GetProperty("source").GetString());
+            var fix = root.GetProperty("finalResult").GetProperty("comments")[0].GetProperty("suggestedFix");
+            Assert.Equal("Delete(tenantId);", fix.GetProperty("replacementText").GetString());
+            Assert.Equal("head", fix.GetProperty("sourceHeadSha").GetString());
+            Assert.Equal(7, fix.GetProperty("sourceAnchorLineNumber").GetInt32());
 
             Assert.Equal("per-file-shorter-user", root.GetProperty("configuration").GetProperty("variantName").GetString());
             Assert.True(root.GetProperty("configuration").GetProperty("usedPromptExperiment").GetBoolean());

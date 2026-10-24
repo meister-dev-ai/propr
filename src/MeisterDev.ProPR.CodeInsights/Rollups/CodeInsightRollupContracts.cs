@@ -57,7 +57,15 @@ public sealed record CodeInsightRollupQuery(
     DateOnly To,
     string? RepositoryId = null,
     long? PullRequestId = null,
-    string? FilePath = null);
+    string? FilePath = null,
+    FindingImpact? Impact = null,
+    FindingLikelihood? Likelihood = null,
+    FindingRiskSeverity? RiskSeverity = null,
+    FindingConfidence? Confidence = null)
+{
+    /// <summary>Whether the scope restricts findings by an independent risk dimension.</summary>
+    public bool HasRiskFilter => this.Impact is not null || this.Likelihood is not null || this.RiskSeverity is not null || this.Confidence is not null;
+}
 
 /// <summary>One point of a counted series.</summary>
 /// <param name="BucketStart">Start of the bucket: the day, the week's Monday, or the month's first.</param>

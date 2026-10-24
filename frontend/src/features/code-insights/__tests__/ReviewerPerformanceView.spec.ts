@@ -316,6 +316,36 @@ describe('ReviewerPerformanceView', () => {
     expect(byGrainMock.mock.calls.at(-1)![0].clientId).toBe('client-a')
   })
 
+  it('withholds unassessed human concerns under risk filters and restores them when cleared', async () => {
+    const wrapper = await mountView()
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Missed findings')!.trigger('click')
+    expect(wrapper.text()).toContain('alice: this drops the retry count')
+    await wrapper.get('[aria-label="Filter finding risk severity"]').setValue('critical')
+    await wrapper.get('.performance-filters').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Human concerns have no impact, likelihood or confidence assessment')
+    expect(wrapper.text()).not.toContain('alice: this drops the retry count')
+    expect(missesMock).toHaveBeenCalledTimes(1)
+
+    await wrapper.get('[aria-label="Filter finding risk severity"]').setValue('')
+    await wrapper.get('.performance-filters').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('alice: this drops the retry count')
+    expect(missesMock).toHaveBeenCalledTimes(2)
+    expect(missesMock.mock.calls[1]![0].riskSeverity).toBe('')
+  })
+
+  it('does not offer risk filters for collection coverage', async () => {
+    const wrapper = await mountView()
+    await wrapper.get('[aria-label="Filter finding impact"]').setValue('critical')
+    await wrapper.findAll('.section-tab').find(button => button.text() === 'Coverage')!.trigger('click')
+
+    expect(wrapper.find('[aria-label="Finding risk filters"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Collection coverage includes all risk levels')
+  })
+
   it('retries the client catalogue in legacy tabs without recalculating the statistics', async () => {
     clientsMock.mockRejectedValueOnce(new Error('Client catalogue unavailable'))
     const wrapper = await mountView()

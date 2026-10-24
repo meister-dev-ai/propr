@@ -70,6 +70,12 @@ public interface ICodeInsightFindingStore
         IReadOnlyList<CodeInsightFindingSnapshot> findings,
         CancellationToken ct = default);
 
+    /// <summary>Returns the jobs owning retained findings for one pull-request revision.</summary>
+    Task<IReadOnlyList<Guid>> GetFindingJobIdsForRevisionAsync(
+        CodeInsightPullRequestKey key,
+        string revisionKey,
+        CancellationToken ct = default);
+
     /// <summary>
     ///     Returns the materialised findings (with decrypted message text) for the pull request identified
     ///     by <paramref name="key" />, ordered by revision key then ordinal. Empty when nothing was

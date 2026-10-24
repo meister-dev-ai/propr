@@ -35,6 +35,9 @@ public interface IDiscussionSynchronizationLease : IAsyncDisposable
     bool CompletionIsCurrent => false;
     Task EnsureCurrentAsync(CancellationToken ct = default);
 
+    /// <summary>Persists successful consumer progress while retaining ownership and pending observation state.</summary>
+    Task CheckpointProgressAsync(string progressJson, CancellationToken ct = default);
+
     Task CompleteAsync(
         string progressJson, string reviewerSummariesJson, DateTimeOffset observedAt, bool completeEnumeration,
         bool allConsumersCurrent, bool closed, string? revision, TimeSpan reconciliationInterval, CancellationToken ct = default);

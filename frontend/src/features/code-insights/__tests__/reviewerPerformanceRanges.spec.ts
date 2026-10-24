@@ -40,7 +40,7 @@ describe('retained reviewer performance presentation', () => {
       ),
     ).toBe(true)
     expect(point?.overallPrecision?.scenarios?.some((scenario) => scenario.precision != null)).toBe(true)
-    expect(response.views?.[0]?.evidence?.projectionVersion).toBe(4)
+    expect(response.views?.[0]?.evidence?.projectionVersion).toBe(6)
   })
   it('breaks the band at unavailable periods without joining or extending them', () => {
     const points = [

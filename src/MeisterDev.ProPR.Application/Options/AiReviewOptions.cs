@@ -3,6 +3,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using MeisterDev.ProPR.CodeAnalysis;
+using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.Options;
 
@@ -119,6 +120,13 @@ public sealed class AiReviewOptions : IValidatableObject
     [Range(512, 32768, ErrorMessage = "EvidenceJudgeRetryMaxOutputTokens must be between 512 and 32768.")]
     public int EvidenceJudgeRetryMaxOutputTokens { get; set; } = 8000;
 
+    /// <summary>
+    ///     Reasoning effort that the evidence judge and both contradiction checks request on every model. With None, the
+    ///     judge requests low effort where the model supports it and the checks keep the provider's default.
+    ///     Bound to <c>AI_VERIFICATION_REASONING_EFFORT</c>.
+    /// </summary>
+    public ReviewReasoningEffort VerificationReasoningEffort { get; set; } = ReviewReasoningEffort.None;
+
     /// <summary>Whether both evidence-judge budgets are bounded and the retry budget exceeds the initial budget.</summary>
     public bool HasValidEvidenceJudgeOutputBudgets()
     {
@@ -193,16 +201,14 @@ public sealed class AiReviewOptions : IValidatableObject
     public int MaxReasoningSummaryChars { get; set; } = 4000;
 
     /// <summary>
-    ///     Minimum confidence score (0–100) required to post a comment at ERROR severity.
-    ///     Comments below this threshold are automatically downgraded to WARNING before posting.
+    ///     Compatibility setting for aggregate file confidence. Individual finding classification does not use it.
     ///     Bound to <c>AI_CONFIDENCE_FLOOR_ERROR</c>.
     /// </summary>
     [Range(0, 100, ErrorMessage = "ConfidenceFloorError must be between 0 and 100.")]
     public int ConfidenceFloorError { get; set; } = 80;
 
     /// <summary>
-    ///     Minimum confidence score (0–100) required to post a comment at WARNING severity.
-    ///     Comments below this threshold are automatically downgraded to SUGGESTION before posting.
+    ///     Compatibility setting for aggregate file confidence. Individual finding classification does not use it.
     ///     Bound to <c>AI_CONFIDENCE_FLOOR_WARNING</c>.
     /// </summary>
     [Range(0, 100, ErrorMessage = "ConfidenceFloorWarning must be between 0 and 100.")]

@@ -289,7 +289,7 @@ public sealed class DiscussionSynchronizationService(
         var memoryConfiguration = memory is not null && scan is not null && aiVersions is not null
             ? await aiVersions.ReadAsync(request.ClientId, [AiPurpose.EmbeddingDefault, AiPurpose.MemoryReconsideration], ct)
             : "";
-        var memoryVersion = DiscussionThreadProgress.Fingerprint("memory-v2", revision ?? "", scan?.Id.ToString() ?? "", memoryConfiguration);
+        var memoryVersion = DiscussionThreadProgress.Fingerprint("memory-v2", scan?.Id.ToString() ?? "", memoryConfiguration);
         var unverifiable = ThreadOwnershipResolver.Create(sourceOrigins?.Unverifiable ?? [], ThreadOwnerIdentity.None, commentScope);
         var priorReviewerIds = (JsonSerializer.Deserialize<PrThreadStatusEntry[]>(state.ReviewerSummariesJson) ?? [])
             .Where(thread => thread.ThreadId is not null).Select(thread => thread.ThreadId!).ToHashSet(StringComparer.Ordinal);
@@ -315,7 +315,7 @@ public sealed class DiscussionSynchronizationService(
                 prepared.Batch is not null && dispositions is not null && state.Needs("disposition", state.SourceFingerprint, prepared.Versions.Disposition!) ||
                 prepared.Batch is not null && misses is not null && state.Needs("miss", state.SourceFingerprint, prepared.Versions.Miss!) ||
                 prepared.Versions.ModelEvidence is not null && state.Needs("modelEvidence", state.SourceFingerprint, prepared.Versions.ModelEvidence) ||
-                memory is not null && prepared.Scan is not null && prepared.PriorReviewerIds.Contains(entry.Key) &&
+                memory is not null && prepared.Scan is not null && (prepared.PriorReviewerIds.Contains(entry.Key) || state.MemoryPending) &&
                 state.Needs("memory", state.SourceFingerprint, prepared.Versions.Memory);
         });
         var targeted = !fullDue && !catchUp && pendingThreadIds.Length > 0;
@@ -635,17 +635,28 @@ public sealed class DiscussionSynchronizationService(
         var status = observed.ReviewerStatus;
         var digest = observed.Fingerprint;
         if (memory is not null && scans is not null && context.Prepared.Scan is not null &&
-            (status is not null || context.Prepared.PriorReviewerIds.Contains(observed.Event.ThreadId) || state.Consumers.ContainsKey("memory")) &&
+            (status is not null || context.Prepared.PriorReviewerIds.Contains(observed.Event.ThreadId) || state.Consumers.ContainsKey("memory") ||
+             state.MemoryPending) &&
             state.Needs("memory", digest, context.Prepared.Versions.Memory))
         {
+            state.MemoryPending = true;
+            if (context.Request.DeferMemoryProcessing && context.Request.PullRequestStatus == PrStatus.Active)
+            {
+                context.AllCurrent = false;
+                return;
+            }
+
             await context.Lease.EnsureCurrentAsync(ct);
+            state.Consumers.Remove("memory");
+            state.MemoryCheckpoint = null;
+            await context.Lease.CheckpointProgressAsync(JsonSerializer.Serialize(context.Prepared.Progress), ct);
+            var retainedMemory = true;
             try
             {
                 var before = context.Prepared.Scan.Threads.FirstOrDefault(stored => stored.ThreadId == observed.Event.ThreadId)?.LastSeenStatus;
                 var intent = providers.GetCodeReviewPreparationPolicy(context.Request.Provider).InterpretThreadResolution(status?.Status);
                 var resolved = ThreadResolutionStatusInterpreter.IsResolved(intent);
                 var wasResolved = ThreadResolutionStatusInterpreter.IsResolved(providers.CompatibilityCodec.DecodeStoredThreadResolution(before));
-                var retainedMemory = true;
                 if (resolved && status is not null && visible.Comments.Count > 0)
                 {
                     retainedMemory = await memory.ObserveResolvedAsync(
@@ -663,16 +674,6 @@ public sealed class DiscussionSynchronizationService(
                             context.Prepared.Scan.ProjectId, context.Prepared.Scan.RepositoryId, context.Request.PullRequestId, observed.Event.ThreadId,
                             context.Snapshot.ObservedAt), ct);
                 }
-
-                if (retainedMemory)
-                {
-                    context.StatusUpdates[observed.Event.ThreadId] = status?.Status;
-                    context.MemoryAcknowledgments.Add((state, digest));
-                }
-                else
-                {
-                    context.AllCurrent = false;
-                }
             }
             catch (Exception exception) when (!ct.IsCancellationRequested)
             {
@@ -680,7 +681,18 @@ public sealed class DiscussionSynchronizationService(
                 logger.LogWarning(
                     "Discussion memory observation failed for PR {PullRequestId}: {ExceptionType}, code {ErrorCode}.", context.Request.PullRequestId,
                     exception.GetType().Name, exception.HResult);
+                return;
             }
+
+            if (!retainedMemory)
+            {
+                context.AllCurrent = false;
+                return;
+            }
+
+            context.StatusUpdates[observed.Event.ThreadId] = status?.Status;
+            context.MemoryAcknowledgments.Add((state, digest));
+            await this.PersistMemoryStatusesAsync(context, ct);
         }
     }
 
@@ -727,7 +739,12 @@ public sealed class DiscussionSynchronizationService(
             foreach (var (state, digest) in context.MemoryAcknowledgments)
             {
                 state.Acknowledge("memory", digest, context.Prepared.Versions.Memory);
+                state.MemoryPending = false;
             }
+
+            await context.Lease.CheckpointProgressAsync(JsonSerializer.Serialize(context.Prepared.Progress), ct);
+            context.StatusUpdates.Clear();
+            context.MemoryAcknowledgments.Clear();
         }
     }
 
@@ -789,11 +806,9 @@ public sealed class DiscussionSynchronizationService(
     {
         try
         {
-            await context.Lease.CompleteAsync(
-                JsonSerializer.Serialize(context.Prepared.Progress),
-                JsonSerializer.Serialize(MergeReviewerSummaries(context.Snapshot, context.Lease.State.ReviewerSummariesJson)),
-                context.Snapshot.ObservedAt, context.Snapshot.EnumerationComplete, false, context.Request.PullRequestStatus != PrStatus.Active,
-                context.Revision, context.Interval, CancellationToken.None);
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await this.PersistMemoryStatusesAsync(context, cleanup.Token);
+            await context.Lease.CheckpointProgressAsync(JsonSerializer.Serialize(context.Prepared.Progress), cleanup.Token);
         }
         catch (Exception exception)
         {

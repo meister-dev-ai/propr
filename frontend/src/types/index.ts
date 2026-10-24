@@ -9613,6 +9613,14 @@ export interface paths {
                     pullRequestId?: number;
                     /** @description Narrows to one file. */
                     filePath?: string;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -9692,6 +9700,14 @@ export interface paths {
                     repositoryId?: string;
                     /** @description Narrows to one pull request, for the view embedded in a review. */
                     pullRequestId?: number;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -9766,6 +9782,14 @@ export interface paths {
                     to?: string;
                     /** @description Narrows to one client the caller may already see. */
                     clientId?: string;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -9854,6 +9878,14 @@ export interface paths {
                     groupBy?: string;
                     /** @description How many rows to return. Clamped to 1–200. */
                     topN?: number;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -9936,6 +9968,14 @@ export interface paths {
                     pullRequestId?: number;
                     /** @description How many pull requests to break out. Clamped to 1–50. */
                     topN?: number;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -10019,6 +10059,14 @@ export interface paths {
                     limit?: number;
                     /** @description Number of matching findings to skip. Negative values are treated as zero. */
                     offset?: number;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -10049,6 +10097,91 @@ export interface paths {
                     };
                 };
                 /** @description Caller has no client access, lacks the licence, or asked for a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/code-quality/risk-over-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the finding distribution over time by impact, likelihood, derived risk severity, or correctness confidence. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description impact, likelihood, riskSeverity, or confidence. */
+                    dimension?: string;
+                    /** @description Inclusive start of the review-date window. */
+                    from?: string;
+                    /** @description Inclusive end of the review-date window. */
+                    to?: string;
+                    /** @description day, week, or month. */
+                    bucket?: string;
+                    /** @description Authorized client selection. */
+                    clientId?: string;
+                    /** @description Repository selection. */
+                    repositoryId?: string;
+                    /** @description Pull-request selection. */
+                    pullRequestId?: number;
+                    /** @description File selection. */
+                    filePath?: string;
+                    /** @description Independent impact selection. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The risk distribution, including Unknown historical assessments. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightTypeSeriesResponse"];
+                        "application/json": components["schemas"]["CodeInsightTypeSeriesResponse"];
+                        "text/json": components["schemas"]["CodeInsightTypeSeriesResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller cannot access the selected client or the licensed capability. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -10955,7 +11088,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the review result (summary and comments) for a completed job. */
+        /** Returns the summary, comments, and available impact, likelihood and confidence assessments for a completed job. */
         get: {
             parameters: {
                 query?: never;
@@ -11018,7 +11151,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the review result (summary and comments) for a completed job. */
+        /** Returns the summary, comments, and available impact, likelihood and confidence assessments for a completed job. */
         get: {
             parameters: {
                 query?: never;
@@ -13885,6 +14018,14 @@ export interface paths {
                     clientId?: string;
                     /** @description Narrows to one repository. */
                     repositoryId?: string;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -13968,6 +14109,14 @@ export interface paths {
                     clientId?: string;
                     /** @description Narrows to one repository. */
                     repositoryId?: string;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -14128,6 +14277,14 @@ export interface paths {
                      *     implies its outcome, so it needs no disposition beside it.
                      */
                     rejectionReason?: string;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -14207,6 +14364,14 @@ export interface paths {
                     clientId?: string;
                     /** @description Narrows to one repository. */
                     repositoryId?: string;
+                    /** @description Independent impact selection, including Unknown. */
+                    impact?: string;
+                    /** @description Independent occurrence-likelihood selection, including Unknown and NotApplicable. */
+                    likelihood?: string;
+                    /** @description Derived risk-severity selection, including Unknown. */
+                    riskSeverity?: string;
+                    /** @description Independent correctness-confidence selection, including Unknown for unassessed findings. */
+                    confidence?: string;
                 };
                 header?: never;
                 path?: never;
@@ -14948,7 +15113,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns a review result only when the specified client owns the job. */
+        /** Returns a review result with available impact, likelihood and confidence assessments when the specified client owns the job. */
         get: {
             parameters: {
                 query?: never;
@@ -22104,6 +22269,7 @@ export interface components {
             reviewEveryIncrementEnabled?: boolean;
             withholdOutOfScopeFindings?: boolean;
             admissionPolicy?: components["schemas"]["ReviewAdmissionPolicyDto"];
+            findingBadgeStyle?: components["schemas"]["FindingBadgeStyle"];
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -22407,7 +22573,7 @@ export interface components {
              * @description Start of the bucket: the day, the week's Monday, or the month's first.
              */
             bucketStart?: string;
-            /** @description The core type slug, or the empty string for a plain total. */
+            /** @description The counted dimension value, such as a core type or risk axis, or empty for a plain total. */
             key?: string | null;
             /**
              * Format: int32
@@ -22599,6 +22765,7 @@ export interface components {
              * @description The classifier's confidence, when classified.
              */
             confidence?: number | null;
+            riskAssessment?: components["schemas"]["FindingRiskAssessment"];
         };
         /**
          * @description The level of code a finding concerns: the highest one it reaches. This is the granularity axis the
@@ -22667,6 +22834,7 @@ export interface components {
              *     judged. A caller must show that as unknown rather than as any particular reason.
              */
             rejectionReason?: string | null;
+            riskAssessment?: components["schemas"]["FindingRiskAssessment"];
         };
         /** @description Which files keep producing findings, with the totals the per-file rows sit inside. */
         CodeInsightHotspotResponse: {
@@ -22872,6 +23040,7 @@ export interface components {
              *     `CoveredTruePositives` this reproduces the reported `Recall` exactly.
              */
             coveredMisses?: number;
+            unavailableReason?: string | null;
         };
         /** @description One harvested human thread, with all three judgements, including the threads that did not qualify. */
         CodeInsightMissResponse: {
@@ -23190,7 +23359,7 @@ export interface components {
              */
             periods?: number;
         };
-        /** @description The counted series behind the "what kinds of problem, over time" question. */
+        /** @description A counted distribution over time for the requested finding dimension. */
         CodeInsightTypeSeriesResponse: {
             /** @description The series. Empty when nothing was collected in the window. */
             points?: components["schemas"]["CodeInsightCountPointResponse"][] | null;
@@ -23199,7 +23368,7 @@ export interface components {
              * @description Findings in the window and scope, whether or not they carry a type yet.
              */
             totalFindings?: number;
-            /** @description The distinct type slugs present, so a caller can build a stable legend. */
+            /** @description The distinct dimension values present, for a stable legend. */
             keys?: string[] | null;
         };
         /**
@@ -23632,6 +23801,69 @@ export interface components {
             availability?: string | null;
             /** @description Human-readable explanation when the diff is not available. */
             availabilityMessage?: string | null;
+        };
+        /**
+         * @description Controls metadata badges in published SCM finding comments.
+         * @enum {string}
+         */
+        FindingBadgeStyle: "shieldsIo" | "plain";
+        /**
+         * @description Strength of the evidence that a finding is correct.
+         * @enum {string}
+         */
+        FindingConfidence: "unknown" | "low" | "medium" | "high" | "certain";
+        /** @description A stable custom assignment and the label displayed by the producing review. */
+        FindingCustomTypeAssignment: {
+            /** Format: uuid */
+            id?: string;
+            slug?: string | null;
+            displayName?: string | null;
+        };
+        /**
+         * @description Consequence of an assessed finding when its occurrence scenario happens.
+         * @enum {string}
+         */
+        FindingImpact: "unknown" | "low" | "moderate" | "high" | "critical";
+        /**
+         * @description Occurrence likelihood of a finding's scenario, independent of correctness confidence.
+         * @enum {string}
+         */
+        FindingLikelihood: "unknown" | "unlikely" | "possible" | "likely" | "notApplicable";
+        /** @description Evidence-based impact, occurrence likelihood and correctness confidence with versioned risk derivation. */
+        FindingRiskAssessment: {
+            impact?: components["schemas"]["FindingImpact"];
+            likelihood?: components["schemas"]["FindingLikelihood"];
+            confidence?: components["schemas"]["FindingConfidence"];
+            /** @description Evidence and unresolved assumptions supporting correctness confidence. */
+            confidenceReason?: string | null;
+            /** @description Producer of the confidence. It equals Source unless a separate step, such as verification, set the confidence. */
+            confidenceSource?: string | null;
+            /** @description Evidence explaining the assessed consequence. */
+            impactReason?: string | null;
+            /** @description Evidence explaining the occurrence scenario and its likelihood. */
+            likelihoodReason?: string | null;
+            /** @description Assessment producer recorded by the server. */
+            source?: string | null;
+            /** @description Version of the risk rubric. */
+            rubricVersion?: string | null;
+            severity?: components["schemas"]["FindingRiskSeverity"];
+        };
+        /**
+         * @description Risk priority derived from impact and occurrence likelihood.
+         * @enum {string}
+         */
+        FindingRiskSeverity: "unknown" | "low" | "medium" | "high" | "critical";
+        /** @description Finding types and the independent analytics axes assigned by its producing review. */
+        FindingTypeClassification: {
+            coreSlugs?: string[] | null;
+            customTags?: components["schemas"]["FindingCustomTypeAssignment"][] | null;
+            level?: components["schemas"]["CodeInsightFindingLevel"];
+            qualifier?: components["schemas"]["CodeInsightFindingQualifier"];
+            /** Format: double */
+            confidence?: number | null;
+            /** Format: int32 */
+            taxonomyVersion?: number;
+            source?: string | null;
         };
         /** @description The records an identity erasure changed. */
         IdentityErasureResult: {
@@ -24476,6 +24708,7 @@ export interface components {
             admissionPolicy?: components["schemas"]["ReviewAdmissionPolicyDto"];
             enableEvidenceBackedVerification?: boolean | null;
             enableLanguageRobustScreening?: boolean | null;
+            findingBadgeStyle?: components["schemas"]["FindingBadgeStyle"];
         };
         /** @description Patch payload for the installation's premium capability overrides. */
         PatchLicensingOverridesRequest: {
@@ -25429,6 +25662,7 @@ export interface components {
             originSymbolName?: string | null;
             /** @description What kind of definition that is (method, class, function, …). */
             originSymbolKind?: string | null;
+            riskAssessment?: components["schemas"]["FindingRiskAssessment"];
         };
         /** @description Visibility for one tool-result evidence bounding or refresh action. */
         ProtocolToolEvidenceDto: {
@@ -25933,6 +26167,11 @@ export interface components {
             severity?: components["schemas"]["CommentSeverity"];
             /** @description Comment message text. */
             message?: string | null;
+            riskAssessment?: components["schemas"]["FindingRiskAssessment"];
+            /** @description Whether the original producing pass could read repository code through tools, when recorded. */
+            producedWithRepositoryTools?: boolean | null;
+            findingClassification?: components["schemas"]["FindingTypeClassification"];
+            suggestedFix?: components["schemas"]["ReviewSuggestedFix"];
             /**
              * @description The `ReviewPassKind` name of the review pass that produced this finding (e.g.
              *     `"Baseline"`, `"MultiPassUnion"`), when known. Provenance metadata only:
@@ -26002,6 +26241,7 @@ export interface components {
             /** Format: int32 */
             originPassIndex?: number | null;
             originPassLens?: string | null;
+            riskAssessment?: components["schemas"]["FindingRiskAssessment"];
         };
         /**
          * @description Whether the reviewer read the actual source at a finding's cited location while producing it.
@@ -26338,6 +26578,22 @@ export interface components {
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
             workspace?: components["schemas"]["ReviewWorkspaceStatusDto"];
         };
+        /** @description An optional replacement for a contiguous range in the reviewed file. */
+        ReviewSuggestedFix: {
+            /** Format: int32 */
+            startLine?: number;
+            /** Format: int32 */
+            endLine?: number;
+            originalText?: string | null;
+            replacementText?: string | null;
+            sourceHeadSha?: string | null;
+            sourceFilePath?: string | null;
+            isSourceValidated?: boolean;
+            /** Format: int32 */
+            sourceAnchorLineNumber?: number | null;
+            isAnchorRemapped?: boolean;
+            rejectionReason?: string | null;
+        };
         /** @description DTO representing local review workspace adoption and fallback visibility. */
         ReviewWorkspaceStatusDto: {
             attempted?: boolean;
@@ -26422,6 +26678,7 @@ export interface components {
             /** Format: int32 */
             pendingSourceAggregates?: number;
             modelEvidenceSchema?: string | null;
+            riskRubricVersions?: string[] | null;
         };
         /** @description Captured exclusion identity and bounded recovery metadata, including queued, active and completed collection; source URLs may be unavailable. */
         ReviewerPerformanceExclusion: {
@@ -26473,6 +26730,10 @@ export interface components {
             models?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
             types?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
             qualifiers?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+            impacts?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+            likelihoods?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+            riskSeverities?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
+            confidences?: components["schemas"]["ReviewerPerformanceFacet"][] | null;
         };
         ReviewerPerformanceMatrixCell: {
             rowId?: string | null;
@@ -26649,6 +26910,11 @@ export interface components {
             models?: string[] | null;
             types?: string[] | null;
             qualifiers?: string[] | null;
+            impacts?: string[] | null;
+            likelihoods?: string[] | null;
+            riskSeverities?: string[] | null;
+            /** @description Correctness confidence selections, including Unknown for unassessed findings. */
+            confidences?: string[] | null;
         };
         ReviewerPerformanceViewResponse: {
             scope?: components["schemas"]["ReviewerPerformanceViewQuery"];
@@ -26853,6 +27119,20 @@ export interface components {
             withheldFindings?: components["schemas"]["WithheldReviewFinding"][] | null;
             modelEvidence?: components["schemas"]["ModelReviewEvidence"];
             modelEvidenceFragment?: components["schemas"]["ModelReviewProofFragment"];
+        };
+        /** @description One active custom finding type offered by the control plane. */
+        RunnerFindingCustomTypeDefinition: {
+            /** Format: uuid */
+            id?: string;
+            slug?: string | null;
+            displayName?: string | null;
+            definition?: string | null;
+        };
+        /** @description Finding type vocabulary captured for an executor without database access. */
+        RunnerFindingTypeVocabulary: {
+            /** Format: int32 */
+            version?: number;
+            customTypes?: components["schemas"]["RunnerFindingCustomTypeDefinition"][] | null;
         };
         /** @description One chunk of a findings submission. */
         RunnerFindingsRequest: {
@@ -27306,6 +27586,7 @@ export interface components {
             overrides?: {
                 [key: string]: string;
             } | null;
+            findingTypeVocabulary?: components["schemas"]["RunnerFindingTypeVocabulary"];
         };
         /** @description A host asking to become a runner. */
         RunnerRegisterRequest: {

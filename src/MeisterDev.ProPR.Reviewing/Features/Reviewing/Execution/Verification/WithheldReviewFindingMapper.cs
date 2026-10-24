@@ -34,6 +34,7 @@ internal static class WithheldReviewFindingMapper
             .Select(finding => new WithheldReviewFinding(
                 new ReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message)
                 {
+                    RiskAssessment = finding.RiskAssessment, FindingClassification = finding.FindingClassification, SuggestedFix = finding.SuggestedFix,
                     OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
                     OriginPassIndex = finding.Provenance.UnionPassIndex,
                     OriginPassLens = finding.Provenance.UnionLens,

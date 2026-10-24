@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Options;
@@ -14,6 +16,48 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 
 internal static partial class ReviewPrompts
 {
+    private static readonly JsonSerializerOptions RiskAssessmentJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
+    };
+
+    private static string FormatSuggestedFix(ReviewSuggestedFix? fix) => fix is null
+        ? "(none)"
+        : System.Text.Json.JsonSerializer.Serialize(
+            new
+            {
+                start_line = fix.StartLine, end_line = fix.EndLine, original_text = fix.OriginalText, replacement_text = fix.ReplacementText,
+            });
+
+    private static string FormatRiskAssessment(FindingRiskAssessment? assessment) =>
+        assessment is null ? "unassessed" : JsonSerializer.Serialize(assessment, RiskAssessmentJsonOptions).Replace("|", "\\|");
+
+    private static string FormatFindingClassification(FindingTypeClassification? classification)
+    {
+        var normalized = FindingTypeClassification.Merge([classification]);
+        return normalized is null
+            ? "unclassified"
+            : JsonSerializer.Serialize(
+                new
+                {
+                    types = normalized.CoreSlugs.Concat(normalized.CustomTags.Select(tag => tag.Slug)),
+                    level = normalized.Level?.ToString(), qualifier = normalized.Qualifier?.ToString(), confidence = normalized.Confidence,
+                }).Replace("|", "\\|");
+    }
+
+    private static string AppendFindingClassification(string prompt, ReviewSystemContext? context)
+    {
+        var vocabulary = context?.FindingTypeVocabulary ?? FindingTypeVocabulary.Core;
+        var vocabularyJson = JsonSerializer.Serialize(
+            new
+            {
+                core = FindingTypeTaxonomy.All.Select(type => new { slug = type.Slug, definition = type.Definition }),
+                custom = vocabulary.CustomTypes.Select(type => new { slug = type.Slug, definition = type.Definition }),
+            });
+        return prompt + "\n\n" + PromptTemplateRuntime.RenderTemplateFile("shared/partials/finding-classification.hbs", new { vocabularyJson });
+    }
+
     internal static string OutputKeyReminder => PromptTemplateRuntime.ReadSharedPartial("output-key-reminder").Trim();
 
     internal static string SystemPrompt => PromptTemplateRuntime.ReadSharedPartial("system-prompt").Trim();
@@ -140,20 +184,23 @@ internal static partial class ReviewPrompts
     }
 
     /// <summary>
-    ///     System prompt for the cross-file quality-filter AI pass (IMP-08).
+    ///     System prompt for the cross-file quality-filter AI pass.
     ///     Instructs the model to discard low-quality comments and return the survivors as JSON.
     ///     When <paramref name="context" /> has <see cref="ReviewAggressiveness.Assertive" /> posture,
     ///     rules 1 and 3 are relaxed to demote rather than discard.
     /// </summary>
     internal static string BuildQualityFilterSystemPrompt(ReviewSystemContext? context)
     {
+        var identityGuidance = PromptTemplateRuntime.RenderTemplateFile("shared/quality-filter-source-identity.hbs", new { });
         if (context?.PromptOverrides.TryGetValue("QualityFilterSystemPrompt", out var overrideText) == true)
         {
-            return overrideText!;
+            return AppendFindingClassification(overrideText! + "\n\n" + identityGuidance, context);
         }
 
         var assertive = context?.Aggressiveness == ReviewAggressiveness.Assertive;
-        return PromptTemplateRuntime.RenderStage("quality_filter_system", new PromptTemplateModels.QualityFilterSystemModel(assertive));
+        return AppendFindingClassification(
+            PromptTemplateRuntime.RenderStage("quality_filter_system", new PromptTemplateModels.QualityFilterSystemModel(assertive))
+            + "\n\n" + identityGuidance, context);
     }
 
     /// <summary>
@@ -167,30 +214,39 @@ internal static partial class ReviewPrompts
             new PromptTemplateModels.QualityFilterUserModel(
                 comments.Select((comment, index) => new PromptTemplateModels.PromptQualityFilterCommentModel(
                     index + 1,
+                    QualityFilterSourceId(index),
                     comment.FilePath ?? "(none)",
                     comment.LineNumber?.ToString() ?? "-",
                     comment.Severity.ToString().ToLowerInvariant(),
-                    comment.Message.Replace("|", @"\|"))).ToList()));
+                    comment.Message.Replace("|", @"\|"),
+                    FormatRiskAssessment(comment.RiskAssessment), FormatFindingClassification(comment.FindingClassification))).ToList()));
     }
+
+    internal static string QualityFilterSourceId(int index) => string.Create(CultureInfo.InvariantCulture, $"finding-filter-{index + 1:D3}");
 
     private static string ComposePrompt(
         ReviewSystemContext? context,
         string stageKey,
         PromptStageRole promptRole,
-        string defaultText)
+        string defaultText, bool includeFindingClassification = true)
     {
-        if (context?.PromptExperiment?.TryGetVariant(stageKey, promptRole, out var variant) != true || variant is null)
+        var composed = defaultText;
+        if (context?.PromptExperiment?.TryGetVariant(stageKey, promptRole, out var variant) == true && variant is not null)
         {
-            return defaultText;
+            composed = variant.CompositionMode switch
+            {
+                PromptCompositionMode.Replace => variant.Content,
+                PromptCompositionMode.Prepend => string.Concat(variant.Content, Environment.NewLine, Environment.NewLine, defaultText),
+                PromptCompositionMode.Append => string.Concat(defaultText, Environment.NewLine, Environment.NewLine, variant.Content),
+                _ => defaultText,
+            };
         }
 
-        return variant.CompositionMode switch
-        {
-            PromptCompositionMode.Replace => variant.Content,
-            PromptCompositionMode.Prepend => string.Concat(variant.Content, Environment.NewLine, Environment.NewLine, defaultText),
-            PromptCompositionMode.Append => string.Concat(defaultText, Environment.NewLine, Environment.NewLine, variant.Content),
-            _ => defaultText,
-        };
+        return includeFindingClassification && promptRole == PromptStageRole.System && stageKey is
+            "global_system" or "agentic_file_investigation_system" or "pr_wide_investigation_system"
+            or "pr_wide_synthesis_system" or "synthesis_system" or "memory_reconsideration_system"
+            ? AppendFindingClassification(composed, context)
+            : composed;
     }
 
     /// <summary>

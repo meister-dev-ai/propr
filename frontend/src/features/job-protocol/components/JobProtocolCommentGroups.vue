@@ -13,7 +13,7 @@
                     :class="`severity-${comment.severity}`"
                 >
                     <div class="comment-header">
-                        <strong class="comment-sev">{{ (comment.severity ?? 'note').toUpperCase() }}</strong>
+                        <strong class="comment-sev">Classification: {{ (comment.severity ?? 'note').toUpperCase() }}</strong>
                         <span class="monospace-value">{{ comment.filePath ?? comment.file_path }}:L{{ comment.lineNumber ?? comment.line_number }}</span>
                         <button
                             v-if="showDismiss && vm.canDismissFindings"
@@ -28,6 +28,7 @@
                     <div class="comment-msg-container markdown-content">
                         <div v-html="vm.renderMarkdown(comment.message)"></div>
                     </div>
+                    <FindingRiskAssessmentView :assessment="comment.riskAssessment" />
                     <div
                         v-if="
                             (showOrigin &&
@@ -134,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+import FindingRiskAssessmentView from '@/components/findings/FindingRiskAssessmentView.vue'
 import type { CodeInsightFindingClassification } from '@/services/codeInsightFindingsService'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 import type { CommentGroupComment } from '../types'

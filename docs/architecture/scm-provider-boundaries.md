@@ -107,6 +107,17 @@ Native review preparation runs before publication policy evaluation and result p
 SCM comments retains internal review results and diagnostics. Source identity bytes, duplicate keys,
 advisory-lock keys, captured scope and incremental carry-forward remain owned by their existing workflows.
 
+Publication adapters render findings for each provider using shared safe Markdown primitives and a finite set
+of embedded Handlebars templates prepared once. Clients select Shields.io or inline-code badges, with finding
+types last and assessment evidence collapsed. Provider limits preserve finding text, safe markup and attribution.
+
+Summaries order actions by recorded risk and identify the highest-risk confirmed defect first. Formatting preserves
+raw findings and publication identities used by persistence, deduplication and discussion memory.
+
+Applicable fixes require an exact source range and a confirmed current revision. Azure DevOps, GitHub and GitLab
+receive native suggestions where supported. Forgejo and unsupported or stale cases receive labelled,
+syntax-highlighted code blocks. Invalid or identical replacements are omitted without discarding the finding.
+
 Provider identity policies supply observed native account facts. Licensing retains its fixed global
 automation-account decision, exclusions and author-count enforcement. Reviewed-code security analysis
 and documentation URLs are separate from SCM integration.

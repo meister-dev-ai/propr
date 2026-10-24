@@ -1,6 +1,10 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Security.Cryptography;
+using System.Text;
 using MeisterDev.ProPR.CodeInsights.Http;
 using MeisterDev.ProPR.CodeInsights.Metrics;
 using MeisterDev.ProPR.CodeInsights.Persistence;
@@ -13,6 +17,82 @@ namespace MeisterDev.ProPR.CodeInsights.Tests.Persistence;
 
 public sealed class ReviewerPerformanceReportStoreTests
 {
+    [Fact]
+    public async Task RiskSelectionsAndCapturedFacetsSurviveEvidenceChanges()
+    {
+        await using var db = Db();
+        var client = Guid.NewGuid();
+        var cell = Cell(client);
+        cell.Impact = FindingImpact.High;
+        cell.Likelihood = FindingLikelihood.Likely;
+        cell.RiskSeverity = FindingRiskSeverity.High;
+        cell.Confidence = FindingConfidence.Certain;
+        db.Add(cell);
+        await db.SaveChangesAsync();
+        var request = Request([client]);
+        request = request with
+        {
+            Query = request.Query with
+            {
+                Views = [request.Query.Views[0] with { Impacts = ["High"], Likelihoods = ["Likely"], RiskSeverities = ["High"], Confidences = ["Certain"] }]
+            }
+        };
+        var store = new ReviewerPerformanceReportStore(db, new(db));
+        await store.SaveAsync(request, [client]);
+        cell.Impact = FindingImpact.Low;
+        cell.Confidence = FindingConfidence.Low;
+        await db.SaveChangesAsync();
+        var opened = await store.GetAsync(request.Id, [client]);
+        Assert.Equal("High", Assert.Single(opened!.Response.Query.Views[0].Impacts!));
+        Assert.Equal("High", Assert.Single(opened.Response.Views[0].Facets.Impacts!).Id);
+        Assert.Equal("Certain", Assert.Single(opened.Response.Query.Views[0].Confidences!));
+        Assert.Equal("Certain", Assert.Single(opened.Response.Views[0].Facets.Confidences!).Id);
+        Assert.Equal(2, opened.Response.Views[0].Series[0].Points[0].OverallPrecision!.Counts.Outcomes.Positive);
+    }
+
+    [Fact]
+    public async Task LegacyRequestRetryAndPayloadRemainCompatibleWithoutRiskFields()
+    {
+        await using var db = Db();
+        var client = Guid.NewGuid();
+        db.Add(Cell(client));
+        await db.SaveChangesAsync();
+        var request = Request([client]);
+        var store = new ReviewerPerformanceReportStore(db, new(db));
+        var saved = await store.SaveAsync(request, [client]);
+        var row = await db.ReviewerPerformanceReports.SingleAsync();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var legacyRequest = JsonNode.Parse(JsonSerializer.Serialize(request, jsonOptions))!;
+        foreach (var view in legacyRequest["query"]!["views"]!.AsArray())
+        {
+            foreach (var property in new[] { "impacts", "likelihoods", "riskSeverities", "confidences" })
+            {
+                view!.AsObject().Remove(property);
+            }
+        }
+
+        row.RequestFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(legacyRequest.ToJsonString(jsonOptions))));
+        var legacyPayload = JsonNode.Parse(row.Payload)!;
+        foreach (var view in legacyPayload["views"]!.AsArray())
+        {
+            foreach (var property in new[] { "impacts", "likelihoods", "riskSeverities", "confidences" })
+            {
+                view!["facets"]!.AsObject().Remove(property);
+            }
+
+            view!["evidence"]!.AsObject().Remove("riskRubricVersions");
+        }
+
+        row.Payload = legacyPayload.ToJsonString(jsonOptions);
+        var payload = row.Payload;
+        await db.SaveChangesAsync();
+        var retried = await store.SaveAsync(request, [client]);
+        Assert.Equal(saved.Response.CapturedAt, retried.Response.CapturedAt);
+        Assert.Null(retried.Response.Views[0].Facets.Impacts);
+        Assert.Null(retried.Response.Views[0].Facets.Confidences);
+        Assert.Equal(payload, (await db.ReviewerPerformanceReports.SingleAsync()).Payload);
+    }
+
     [Fact]
     public async Task SavedResponseRemainsIdenticalWhenLiveEvidenceChangesAndRetryReturnsOriginal()
     {

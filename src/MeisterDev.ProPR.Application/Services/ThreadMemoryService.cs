@@ -8,6 +8,7 @@ using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
@@ -1039,7 +1040,7 @@ public sealed partial class ThreadMemoryService(
                 response,
                 ct);
 
-            return ParseReconsiderationResponse(text, draftResult);
+            return ParseReconsiderationResponse(text, draftResult, reviewContext?.FindingTypeVocabulary);
         }
         catch (Exception ex)
         {
@@ -1079,12 +1080,30 @@ public sealed partial class ThreadMemoryService(
             new
             {
                 summary = draftResult.Summary,
-                comments = draftResult.Comments.Select(c => new
+                comments = draftResult.Comments.Select((c, index) => new
                 {
+                    finding_id = $"finding-{index}",
                     file_path = c.FilePath,
                     line_number = c.LineNumber,
                     severity = c.Severity.ToString().ToLowerInvariant(),
                     message = c.Message,
+                    risk_assessment = c.RiskAssessment,
+                    finding_classification = c.FindingClassification is { } types
+                        ? new
+                        {
+                            types = types.CoreSlugs.Concat(types.CustomTags.Select(tag => tag.Slug)), level = types.Level?.ToString(),
+                            qualifier = types.Qualifier?.ToString(), confidence = types.Confidence
+                        }
+                        : null,
+                    suggested_fix = c.SuggestedFix is { } fix
+                        ? new
+                        {
+                            start_line = fix.StartLine,
+                            end_line = fix.EndLine,
+                            original_text = fix.OriginalText,
+                            replacement_text = fix.ReplacementText,
+                        }
+                        : null,
                 }),
             });
 
@@ -1140,7 +1159,7 @@ public sealed partial class ThreadMemoryService(
 
     private readonly record struct ResolvedChatClient(IChatClient ChatClient, string ModelId, string? LogicalModelName = null);
 
-    private static ReviewResult? ParseReconsiderationResponse(string json, ReviewResult draftResult)
+    private static ReviewResult? ParseReconsiderationResponse(string json, ReviewResult draftResult, FindingTypeVocabulary? vocabulary = null)
     {
         try
         {
@@ -1152,11 +1171,32 @@ public sealed partial class ThreadMemoryService(
                 : draftResult.Summary;
 
             var comments = new List<ReviewComment>();
+            var retainedSources = new HashSet<int>();
             if (root.TryGetProperty("comments", out var commentsEl))
             {
                 foreach (var commentEl in commentsEl.EnumerateArray())
                 {
-                    comments.Add(ParseReconsideredComment(commentEl));
+                    var parsed = ParseReconsideredComment(commentEl, vocabulary);
+                    var index = FindReconsideredSource(commentEl, parsed, draftResult.Comments);
+                    if (index >= 0)
+                    {
+                        if (!retainedSources.Add(index))
+                        {
+                            return null;
+                        }
+
+                        var original = draftResult.Comments[index];
+                        comments.Add(original.WithMessage(parsed.Message));
+                    }
+                    else
+                    {
+                        if (draftResult.Comments.Count > 0)
+                        {
+                            return null;
+                        }
+
+                        comments.Add(FindingRiskAssessmentParser.PreserveUnchangedEvidence(parsed, draftResult.Comments, commentEl));
+                    }
                 }
             }
 
@@ -1168,7 +1208,32 @@ public sealed partial class ThreadMemoryService(
         }
     }
 
-    private static ReviewComment ParseReconsideredComment(JsonElement commentEl)
+    private static int FindReconsideredSource(JsonElement response, ReviewComment parsed, IReadOnlyList<ReviewComment> originals)
+    {
+        if (response.TryGetProperty("finding_id", out var id) && id.ValueKind == JsonValueKind.String
+                                                              && id.GetString() is { } key && key.StartsWith("finding-", StringComparison.Ordinal)
+                                                              && int.TryParse(key.AsSpan("finding-".Length), out var index) && index >= 0 &&
+                                                              index < originals.Count
+                                                              && key == $"finding-{index}")
+        {
+            var original = originals[index];
+            return original.LineNumber == parsed.LineNumber
+                   && string.Equals(CanonicalizeFilePath(original.FilePath), CanonicalizeFilePath(parsed.FilePath), StringComparison.Ordinal)
+                ? index
+                : -1;
+        }
+
+        var anchored = originals.Select((original, ordinal) => (Original: original, Ordinal: ordinal))
+            .Where(item => item.Original.LineNumber == parsed.LineNumber
+                           && string.Equals(
+                               CanonicalizeFilePath(item.Original.FilePath), CanonicalizeFilePath(parsed.FilePath),
+                               StringComparison.Ordinal))
+            .ToArray();
+        var exact = anchored.Where(item => item.Original.Message == parsed.Message).Take(2).ToArray();
+        return exact.Length == 1 ? exact[0].Ordinal : anchored.Length == 1 ? anchored[0].Ordinal : -1;
+    }
+
+    private static ReviewComment ParseReconsideredComment(JsonElement commentEl, FindingTypeVocabulary? vocabulary)
     {
         var filePath = commentEl.TryGetProperty("file_path", out var fp) ? fp.GetString() : null;
         int? lineNumber = commentEl.TryGetProperty("line_number", out var ln) &&
@@ -1181,7 +1246,12 @@ public sealed partial class ThreadMemoryService(
             ? parsed
             : CommentSeverity.Warning;
 
-        return new ReviewComment(filePath, lineNumber, severity, message);
+        return new ReviewComment(filePath, lineNumber, severity, message)
+        {
+            RiskAssessment = FindingRiskAssessmentParser.ParseFinding(commentEl),
+            FindingClassification = FindingTypeClassificationParser.ParseFinding(commentEl, vocabulary),
+            SuggestedFix = ReviewSuggestedFixValidator.Parse(commentEl),
+        };
     }
 
     private static string BuildCompositeText(

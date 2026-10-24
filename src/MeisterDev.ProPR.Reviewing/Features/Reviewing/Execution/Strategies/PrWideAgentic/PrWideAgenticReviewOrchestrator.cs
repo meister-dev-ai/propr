@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -564,6 +565,26 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
             var (investigation, inputTokens, outputTokens, aiCalls, cachedInputTokens, cacheWriteTokens, reasoningTokens) =
                 await this.RunSingleInvestigationAsync(pr, baseContext, plan, task, overrideClient, ct);
+            var taskOrdinal = results.Count + 1;
+            var candidateIdentityMappings = investigation.CandidateFindings.Select((candidate, index) => new
+            {
+                localId = candidate.Id,
+                id = string.Create(CultureInfo.InvariantCulture, $"candidate-investigation-{taskOrdinal:D3}-{index + 1:D3}"),
+            }).ToList();
+            var unambiguousLocalIds = candidateIdentityMappings.GroupBy(mapping => mapping.localId, StringComparer.Ordinal)
+                .Where(group => group.Count() == 1).ToDictionary(group => group.Key, group => group.Single().id, StringComparer.Ordinal);
+            investigation = investigation with
+            {
+                CandidateFindings = investigation.CandidateFindings.Select((candidate, index) => candidate with
+                {
+                    Id = candidateIdentityMappings[index].id,
+                    EvidenceReference = candidate.EvidenceReference is { } evidence
+                        ? new EvidenceReference(
+                            evidence.SupportingFindingIds.Select(id => unambiguousLocalIds.GetValueOrDefault(id, id)).ToList(),
+                            evidence.SupportingFiles, evidence.EvidenceResolutionState, evidence.EvidenceSource)
+                        : candidate.EvidenceReference!,
+                }).ToList(),
+            };
             results.Add(investigation);
             totalInputTokens += inputTokens;
             totalOutputTokens += outputTokens;
@@ -583,12 +604,14 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     stage = "investigation",
                     jobId = job.Id,
                     taskId = investigation.TaskId,
+                    taskOrdinal,
                     status = investigation.Status,
                 },
                 new
                 {
                     evidenceCount = investigation.Evidence.Count,
                     candidateIssueCount = investigation.CandidateFindings.Count,
+                    candidateIdentityMappings,
                     toolUsage = investigation.ToolUsage,
                     degraded = investigation.Degraded,
                 },
@@ -678,7 +701,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 var cacheWriteTokens = usage.CacheWriteTokens;
                 var reasoningTokens = usage.ReasoningTokens;
 
-                if (PrWideArtifactParser.TryParseInvestigationResult(response.Text, task, boundedTools.Attempts.ToList(), out var parsed) && parsed is not null)
+                if (PrWideArtifactParser.TryParseInvestigationResult(
+                        response.Text, task, boundedTools.Attempts.ToList(), out var parsed, baseContext.FindingTypeVocabulary) && parsed is not null)
                 {
                     await ObserveGenerationAsync(
                         baseContext, stage, started,
@@ -1039,8 +1063,26 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 var cacheWriteTokens = usage.CacheWriteTokens;
                 var reasoningTokens = usage.ReasoningTokens;
 
-                if (PrWideArtifactParser.TryParseSynthesisResult(response.Text, out var parsed) && parsed is not null)
+                if (PrWideArtifactParser.TryParseSynthesisResult(response.Text, out var parsed, baseContext.FindingTypeVocabulary) && parsed is not null)
                 {
+                    var sources = investigations.SelectMany(result => result.CandidateFindings).ToList();
+                    parsed = parsed with
+                    {
+                        CandidateFindings = parsed.CandidateFindings.Select(finding =>
+                        {
+                            var unchanged = sources.Where(source => source.Message == finding.Message && source.FilePath == finding.FilePath
+                                                                                                      && source.LineNumber == finding.LineNumber).Take(2)
+                                .ToList();
+                            return finding with
+                            {
+                                FindingClassification = FindingTypeClassificationPreserver.Preserve(
+                                    finding.FindingClassification, unchanged.Count == 1 ? unchanged[0].FindingClassification : null,
+                                    sources.Where(source =>
+                                            finding.EvidenceReference?.SupportingFindingIds?.Contains(source.Id, StringComparer.Ordinal) == true)
+                                        .Select(source => source.FindingClassification)),
+                            };
+                        }).ToList(),
+                    };
                     await ObserveGenerationAsync(
                         baseContext, stage, started,
                         IsCompleteCandidateArray(response.Text, parsed.CandidateFindings.Count)
@@ -1185,11 +1227,41 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 new CandidateFindingProvenance(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, "pr_wide_synthesis")))
             .ToList();
 
+        var challenges = synthesis.FindingChallenges.ToDictionary(challenge => challenge.FindingId, StringComparer.Ordinal);
+        candidateFindings = candidateFindings.Select(candidate => candidate with
+        {
+            VerificationChallenge = challenges.GetValueOrDefault(candidate.FindingId),
+            ProducedWithRepositoryTools = baseContext.ReviewTools is not null,
+        }).ToList();
+        var beforeVerification = candidateFindings.ToDictionary(candidate => candidate.FindingId, StringComparer.Ordinal);
+
         candidateFindings = await this.VerifyCandidateFindingsAsync(candidateFindings, baseContext, pr, job.ClientId, ct);
+        if (baseContext.ActiveProtocolId is { } protocolId && baseContext.ProtocolRecorder is { } recorder)
+        {
+            foreach (var challenge in synthesis.FindingChallenges)
+            {
+                var before = beforeVerification.GetValueOrDefault(challenge.FindingId);
+                var after = candidateFindings.SingleOrDefault(candidate => candidate.FindingId == challenge.FindingId);
+                await recorder.RecordVerificationEventAsync(
+                    protocolId, "synthesis_finding_reconsideration",
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            challenge.FindingId, challenge.Reason, challenge.Counterevidence,
+                            status = before is null ? "unknown_finding_id" : "verified_after_synthesis"
+                        }),
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            confidenceBefore = before?.RiskAssessment, confidenceAfter = after?.RiskAssessment,
+                            outcome = after?.VerificationOutcome
+                        }), null, ct);
+            }
+        }
 
         var gateDecisions = await this._deterministicReviewFindingGate!.EvaluateAsync(candidateFindings, this._reviewInvariantFacts, ct);
         var reconciliation = ReviewSummaryGrounding.Ground(
-            this._summaryReconciliationService!.Reconcile(synthesis.Summary, candidateFindings, gateDecisions),
+            this._summaryReconciliationService!.Reconcile(synthesis.Summary, candidateFindings, gateDecisions, synthesis.SummaryFindingIds),
             candidateFindings,
             gateDecisions);
 
@@ -1364,7 +1436,35 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             return finding;
         }
 
-        return await this.VerifyCrossFileClaimAsync(finding, claim, baseContext, pr, verificationContext, ct);
+        var crossOutcomes = new List<VerificationOutcome>();
+        var crossEvidence = new List<EvidenceReference>();
+        var crossFinding = finding;
+        foreach (var currentClaim in claims)
+        {
+            crossFinding = await this.VerifyCrossFileClaimAsync(finding, currentClaim, baseContext, pr, verificationContext, ct);
+            if (crossFinding.VerificationOutcome is { } currentOutcome)
+            {
+                crossOutcomes.Add(currentOutcome);
+            }
+
+            if (crossFinding.Evidence is { } currentEvidence)
+            {
+                crossEvidence.Add(currentEvidence);
+            }
+        }
+
+        var combinedEvidence = crossEvidence.Count == 0
+            ? finding.Evidence
+            : new EvidenceReference(
+                crossEvidence.SelectMany(evidence => evidence.SupportingFindingIds).Distinct(StringComparer.Ordinal).ToArray(),
+                crossEvidence.SelectMany(evidence => evidence.SupportingFiles).Distinct(StringComparer.Ordinal).ToArray(),
+                crossEvidence.All(evidence => evidence.EvidenceResolutionState == EvidenceReference.ResolvedState) ? EvidenceReference.ResolvedState
+                : crossEvidence.Any(evidence => evidence.EvidenceResolutionState != EvidenceReference.MissingState) ? EvidenceReference.PartialState
+                : EvidenceReference.MissingState, "independent_claim_verification");
+        return WithVerificationOutcome(finding, SelectPrimaryOutcome(crossOutcomes, finding.FindingId), crossOutcomes) with
+        {
+            Evidence = combinedEvidence
+        };
     }
 
     private async Task<CandidateReviewFinding> VerifyLocalClaimAsync(
@@ -1382,7 +1482,14 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 currentClaim.Stage,
                 VerificationWorkItem.AnchorOnlyScope,
                 false,
-                finding.Evidence))
+                finding.Evidence)
+            {
+                RequiresCertaintyCheck = finding.RiskAssessment?.Confidence == FindingConfidence.Certain,
+                ProposedConfidence = ReviewFindingConfidence.ProposedConfidence(finding.RiskAssessment),
+                SuggestedFix = finding.SuggestedFix,
+                ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools,
+                Challenge = finding.VerificationChallenge,
+            })
             .ToList();
 
         IReadOnlyList<VerificationOutcome> outcomes;
@@ -1438,7 +1545,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             }
         }
 
-        return WithVerificationOutcome(finding, SelectPrimaryOutcome(outcomes, finding.FindingId));
+        return WithVerificationOutcome(finding, SelectPrimaryOutcome(outcomes, finding.FindingId), outcomes);
     }
 
     private async Task<CandidateReviewFinding> VerifyCrossFileClaimAsync(
@@ -1539,7 +1646,14 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             claim.Stage,
             VerificationWorkItem.CrossFileScope,
             true,
-            updatedEvidence);
+            updatedEvidence)
+        {
+            RequiresCertaintyCheck = finding.RiskAssessment?.Confidence == FindingConfidence.Certain,
+            ProposedConfidence = ReviewFindingConfidence.ProposedConfidence(finding.RiskAssessment),
+            SuggestedFix = finding.SuggestedFix,
+            ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools,
+            Challenge = finding.VerificationChallenge,
+        };
         var outcome = SelectPrimaryOutcome(
             await this._reviewFindingVerifier!.VerifyAsync([evidenceBackedWorkItem], this._reviewInvariantFacts, verificationContext, ct),
             finding.FindingId);
@@ -1563,7 +1677,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         return new CandidateReviewFinding(
             finding.FindingId,
             finding.Provenance,
-            finding.Severity,
+            ReviewFindingClassification.Resolve(finding.Severity, [outcome]),
             finding.Message,
             finding.Category,
             finding.FilePath,
@@ -1571,7 +1685,12 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             updatedEvidence,
             finding.CandidateSummaryText,
             finding.InvariantCheckContext,
-            outcome);
+            outcome)
+        {
+            RiskAssessment = ReviewFindingConfidence.Resolve(finding.RiskAssessment, [outcome]),
+            FindingClassification = finding.FindingClassification, SuggestedFix = finding.SuggestedFix,
+            ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools, VerificationChallenge = finding.VerificationChallenge
+        };
     }
 
     private List<CandidateReviewFinding> ApplyDeterministicScreening(
@@ -1606,7 +1725,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
         foreach (var finding in normalizedFindings)
         {
-            var comment = new ReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message);
+            var comment = new ReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message)
+                { RiskAssessment = finding.RiskAssessment, FindingClassification = finding.FindingClassification, SuggestedFix = finding.SuggestedFix };
             var hardGuardDecision = EvaluateDeterministicHardGuards(comment);
             if (hardGuardDecision is not null)
             {
@@ -1852,17 +1972,22 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             finding.VerificationOutcome,
             finding.ScopeRelation)
         {
+            RiskAssessment = finding.RiskAssessment, FindingClassification = finding.FindingClassification, SuggestedFix = finding.SuggestedFix,
             ReadGrounding = finding.ReadGrounding,
             MergedFinding = finding.MergedFinding,
+            ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools,
+            VerificationChallenge = finding.VerificationChallenge,
         };
     }
 
-    private static CandidateReviewFinding WithVerificationOutcome(CandidateReviewFinding finding, VerificationOutcome outcome)
+    private static CandidateReviewFinding WithVerificationOutcome(
+        CandidateReviewFinding finding, VerificationOutcome outcome,
+        IReadOnlyList<VerificationOutcome>? allOutcomes = null)
     {
         return new CandidateReviewFinding(
             finding.FindingId,
             finding.Provenance,
-            finding.Severity,
+            ReviewFindingClassification.Resolve(finding.Severity, allOutcomes ?? [outcome]),
             finding.Message,
             finding.Category,
             finding.FilePath,
@@ -1873,6 +1998,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             outcome,
             finding.ScopeRelation)
         {
+            RiskAssessment = ReviewFindingConfidence.Resolve(finding.RiskAssessment, allOutcomes ?? [outcome]),
+            FindingClassification = finding.FindingClassification, SuggestedFix = finding.SuggestedFix,
+            ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools,
+            VerificationChallenge = finding.VerificationChallenge,
             ReadGrounding = finding.ReadGrounding,
             MergedFinding = finding.MergedFinding,
         };
@@ -1974,7 +2103,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         return candidateFindings
             .Where(finding => decisionsById.TryGetValue(finding.FindingId, out var decision)
                               && string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
-            .Select(finding => new ReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
+            .Select(finding => new ReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message)
+            {
+                RiskAssessment = ReviewFindingConfidence.Resolve(finding.RiskAssessment, []), FindingClassification = finding.FindingClassification,
+                SuggestedFix = finding.SuggestedFix, ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools
+            })
             .ToList();
     }
 

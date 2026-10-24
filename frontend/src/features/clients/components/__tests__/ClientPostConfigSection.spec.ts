@@ -9,12 +9,14 @@ import { ClientDetailVmKey, type CommentSeverity } from '@/features/clients/view
 
 function mountSection(options: { enabled?: boolean } = {}) {
   const savePostConfiguration = vi.fn()
+  const editedFindingBadgeStyle = ref('shieldsIo')
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
   const editedWithholdOutOfScopeFindings = ref(false)
   const vm = {
     client: ref({ id: 'c1' }),
     saveError: ref(''),
+    editedFindingBadgeStyle,
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
     editedWithholdOutOfScopeFindings,
@@ -28,6 +30,20 @@ function mountSection(options: { enabled?: boolean } = {}) {
 }
 
 describe('ClientPostConfigSection', () => {
+  it('offers image and plain gray finding badges', () => {
+    const { wrapper } = mountSection()
+    expect(wrapper.find('#findingBadgeStyle').exists()).toBe(true)
+    expect(wrapper.findAll('#findingBadgeStyle option').map(option => option.text()))
+      .toEqual(['Image badges (Shields.io)', 'Plain gray badges'])
+  })
+
+  it('binds the plain badge choice to the view-model', async () => {
+    const { wrapper, vm } = mountSection()
+    await wrapper.find('#findingBadgeStyle').setValue('plain')
+    expect(vm.editedFindingBadgeStyle.value).toBe('plain')
+    expect(wrapper.find('#findingBadgeStyle').attributes('aria-describedby')).toBe('findingBadgeStyleHelp')
+  })
+
   it('renders the minimum-severity select with all four severities and the auto-resolve checkboxes', () => {
     const { wrapper } = mountSection()
     expect(wrapper.findAll('#minimumSeverityToPost option')).toHaveLength(4)

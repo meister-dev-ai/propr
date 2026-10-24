@@ -71,7 +71,8 @@ public sealed partial class ReviewOrchestrationService(
     ITenantReasoningCapturePolicyProvider? reasoningCapturePolicies = null,
     IReviewAdmissionNotice? admissionNotice = null,
     IExecutionScopeAccessor? executionScopeAccessor = null,
-    IExecutionAdmission? executionAdmission = null) : IReviewJobProcessor, IReviewResultPublisher
+    IExecutionAdmission? executionAdmission = null,
+    IFindingTypeVocabularyProvider? findingTypeVocabularyProvider = null) : IReviewJobProcessor, IReviewResultPublisher
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -386,6 +387,7 @@ public sealed partial class ReviewOrchestrationService(
             }
 
             var result = await this.DispatchFileReviewAsync(job, pr, systemContext, overrideChatClient, ct);
+            result = ReviewSuggestedFixValidator.Bind(result, pr, job.ReviewRevisionReference?.HeadSha);
 
             if (this.IsJobStopped(job))
             {
@@ -816,6 +818,7 @@ public sealed partial class ReviewOrchestrationService(
         var pr = await this.FetchPullRequestAsync(job, null, null, null, ct)
                  ?? throw new InvalidOperationException($"Review job {jobId} cannot be published because its pull request could not be read.");
 
+        result = ReviewSuggestedFixValidator.Bind(result, pr, job.ReviewRevisionReference?.HeadSha);
         await this.PublishReviewResultAsync(job, pr, result, null, ct);
     }
 
@@ -885,11 +888,29 @@ public sealed partial class ReviewOrchestrationService(
             {
                 var publicationRevision = await this.ResolvePublicationReviewRevisionAsync(job, ct);
                 var publicationContext = BuildPublicationContext(
-                    job,
-                    pr,
-                    publicationRevision,
-                    publicationIdentity,
-                    compareToIterationId);
+                        job,
+                        pr,
+                        publicationRevision,
+                        publicationIdentity,
+                        compareToIterationId) with
+                    {
+                        FindingBadgeStyle = await clientRegistry.GetFindingBadgeStyleAsync(job.ClientId, ct).ConfigureAwait(false),
+                    };
+                if (publishResult.Comments.Any(comment => comment.SuggestedFix is not null))
+                {
+                    try
+                    {
+                        var latest = await providerRegistry.GetCodeReviewQueryService(job.Provider)
+                            .GetLatestRevisionAsync(job.ClientId, job.CodeReviewReference, ct);
+                        publicationContext = publicationContext with { CurrentHeadSha = latest?.HeadSha };
+                    }
+                    catch (Exception ex) when (!ct.IsCancellationRequested)
+                    {
+                        logger.LogWarning(
+                            ex, "Could not confirm the current revision for suggested fixes in job {JobId}; replacements will be ordinary code.", job.Id);
+                    }
+                }
+
                 diagnostics = await providerRegistry.GetCodeReviewPublicationService(job.Provider)
                     .PublishReviewAsync(
                         job.ClientId,
@@ -1262,6 +1283,7 @@ public sealed partial class ReviewOrchestrationService(
 
         var systemContext = new ReviewSystemContext(customSystemMessage, relevantInstructions, reviewTools)
         {
+            FindingTypeVocabulary = await FindingTypeVocabularyLoader.LoadAsync(findingTypeVocabularyProvider, job.ClientId, logger, ct),
             DefaultReviewChatClient = chatClient,
             DefaultReviewModelId = job.AiModel,
             LogicalModelName = defaultReviewLogicalModelName,

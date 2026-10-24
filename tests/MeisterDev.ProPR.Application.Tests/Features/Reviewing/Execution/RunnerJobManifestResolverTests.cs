@@ -18,6 +18,7 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Runner.Contracts;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -26,6 +27,19 @@ namespace MeisterDev.ProPR.Application.Tests.Features.Reviewing.Execution;
 
 public sealed class RunnerJobManifestResolverTests
 {
+    [Fact]
+    public async Task ManifestCapturesClientVocabularyOnce()
+    {
+        var vocabulary = Substitute.For<IFindingTypeVocabularyProvider>();
+        var id = Guid.NewGuid();
+        vocabulary.GetVocabularyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new FindingTypeVocabulary(1, [new(id, "tenant-boundary", "Tenant boundary", "Definition")]));
+        var job = JobWithRevision();
+        var manifest = (await this.CreateResolver(findingVocabulary: vocabulary).ResolveAsync(RequestFor(job))).Manifest!;
+        Assert.Equal(id, Assert.Single(manifest.Prompts.FindingTypeVocabulary!.CustomTypes).Id);
+        await vocabulary.Received(1).GetVocabularyAsync(job.ClientId, Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -140,7 +154,7 @@ public sealed class RunnerJobManifestResolverTests
         IReviewJobExecutionStore? executionStore = null,
         ITenantReasoningCapturePolicyProvider? reasoningCapturePolicies = null,
         IClientScmConnectionRepository? scmConnections = null,
-        IReviewFileResultStore? resultStore = null)
+        IReviewFileResultStore? resultStore = null, IFindingTypeVocabularyProvider? findingVocabulary = null)
     {
         return new RunnerJobManifestResolver(
             this._clients,
@@ -158,7 +172,7 @@ public sealed class RunnerJobManifestResolverTests
             executionStore: executionStore,
             reasoningCapturePolicies: reasoningCapturePolicies,
             scmConnections: scmConnections,
-            resultStore: resultStore);
+            resultStore: resultStore, findingTypeVocabularyProvider: findingVocabulary);
     }
 
     [Fact]

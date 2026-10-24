@@ -9,7 +9,21 @@
         <div class="section-card-body section-card-body--compact">
             <div class="inline-field-row review-publication-row">
                 <div class="form-field flex-1 review-publication-field">
-                    <label for="minimumSeverityToPost">Minimum severity to post</label>
+                    <label for="findingBadgeStyle">Finding badges</label>
+                    <select id="findingBadgeStyle" v-model="editedFindingBadgeStyle" name="findingBadgeStyle"
+                        aria-describedby="findingBadgeStyleHelp">
+                        <option value="shieldsIo">Image badges (Shields.io)</option>
+                        <option value="plain">Plain gray badges</option>
+                    </select>
+                    <p id="findingBadgeStyleHelp" class="muted review-publication-copy">
+                        Image badges load from Shields.io. Plain gray badges use inline code without external images.
+                        This setting applies to finding comments on every SCM provider.
+                    </p>
+                </div>
+            </div>
+            <div class="inline-field-row review-publication-row">
+                <div class="form-field flex-1 review-publication-field">
+                    <label for="minimumSeverityToPost">Minimum classification to post</label>
                     <select id="minimumSeverityToPost" v-model="editedMinimumSeverityToPost"
                         name="minimumSeverityToPost">
                         <option v-for="option in MIN_SEVERITY_OPTIONS" :key="option.value" :value="option.value">
@@ -17,16 +31,16 @@
                         </option>
                     </select>
                     <p class="muted review-publication-copy">
-                        Findings below this severity are not posted to the pull request. They stay visible in the
-                        ProPR review — only the pull request comment is suppressed. Severity order (high to low):
-                        Error, Warning, Suggestion, Info.
+                        Findings below this classification are not posted to the pull request. They stay visible
+                        in the ProPR review. Classification order: Error, Warning, Suggestion, Info.
+                        Risk severity, impact, likelihood and confidence do not change this publication setting.
                     </p>
                 </div>
             </div>
 
             <div class="inline-field-row review-publication-row">
                 <div class="form-field flex-1 review-publication-field">
-                    <span class="post-config-group-label">Auto-resolve severities</span>
+                    <span class="post-config-group-label">Auto-resolve classifications</span>
                     <label v-for="option in SEVERITY_OPTIONS" :key="option.value"
                         class="checkbox-field auto-resolve-option" :for="`autoResolve-${option.value}`">
                         <input :id="`autoResolve-${option.value}`" v-model="editedAutoResolveSeverities"
@@ -34,9 +48,8 @@
                         <strong>{{ option.label }}</strong>
                     </label>
                     <p class="muted review-publication-copy">
-                        Comments of the selected severities are posted and then immediately resolved, with a note
-                        that they were auto-resolved by ProPR. Use this to surface correct-but-low-priority
-                        findings without adding manual resolution work.
+                        Comments of the selected classifications are posted and then immediately resolved, with
+                        a note that they were auto-resolved by ProPR.
                     </p>
                 </div>
             </div>
@@ -75,6 +88,7 @@ const vm = inject(ClientDetailVmKey)!;
 const {
     client,
     saveError,
+    editedFindingBadgeStyle,
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
     editedWithholdOutOfScopeFindings,

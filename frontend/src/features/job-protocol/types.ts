@@ -4,6 +4,7 @@
 
 import type { components } from '@/services/generated/openapi'
 import type { CodeInsightFindingClassification } from '@/services/codeInsightFindingsService'
+import type { FindingRiskAssessment } from '@/features/reviews/findingRisk'
 
 export type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 export type ProtocolEventDto = components['schemas']['ProtocolEventDto']
@@ -100,6 +101,7 @@ export interface CommentRelevanceEventDetails {
 }
 
 export interface CommentRelevanceDiscardedComment {
+    riskAssessment?: FindingRiskAssessment | null
     filePath?: string
     lineNumber?: number | null
     severity?: string
@@ -232,6 +234,7 @@ export interface AgenticInvestigationOutputRecord {
 }
 
 export type ReviewCommentRecord = {
+    riskAssessment?: FindingRiskAssessment | null
     filePath?: string | null
     lineNumber?: number | null
     severity?: string | null
@@ -253,6 +256,7 @@ export type ReviewCommentRecord = {
  * aliases defensively.
  */
 export interface CommentGroupComment {
+    riskAssessment?: FindingRiskAssessment | null
     filePath?: string | null
     file_path?: string | null
     lineNumber?: number | null

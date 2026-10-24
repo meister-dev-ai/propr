@@ -14,6 +14,28 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 public class AgentAiReviewCoreTests
 {
+    [Fact]
+    public async Task ReviewAsync_ProducedTypesArePublishedWithoutChangingTheClaimOrSeverity()
+    {
+        const string json = """
+                            {"summary":"A defect","comments":[{"filePath":"a.cs","lineNumber":3,"severity":"error","message":"The supplied zero count divides by zero.",
+                            "finding_classification":{"types":["logic-error","data-validation"],"level":"member","qualifier":"incorrect","confidence":0.92}}]}
+                            """;
+        var client = Substitute.For<IChatClient>();
+        client.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(CreateChatResponse(json));
+        var result = await CreateCore(client).ReviewAsync(CreatePullRequest(), EmptyContext());
+        var finding = Assert.Single(result.Comments);
+        var formatted = MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services.ReviewFindingTextFormatter.Format(finding);
+        Assert.Contains("Type: Logic error", formatted);
+        Assert.Contains("Type: Data validation", formatted);
+        Assert.Equal(CommentSeverity.Error, finding.Severity);
+        Assert.Equal("The supplied zero count divides by zero.", finding.Message);
+        Assert.Equal(
+            "ERROR: " + finding.Message,
+            MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services.ReviewFindingTextFormatter.StripAssessment(formatted));
+    }
+
     private static ChatResponse CreateChatResponse(string content)
     {
         var message = new ChatMessage(ChatRole.Assistant, content);

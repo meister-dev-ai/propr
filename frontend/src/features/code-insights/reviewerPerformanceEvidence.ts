@@ -21,6 +21,10 @@ export interface EvidencePresentation {
 const METRICS: readonly PerformanceMetric[] = ['precision', 'recall', 'f1']
 
 const UNAVAILABLE_REASON_LABELS: Record<string, string> = {
+  'miss-risk-assessment-unavailable':
+    'Observed recall / F1 unavailable: assessment filters and groups require compatible independent human concern impact, likelihood and confidence assessments. Precision uses the selected finding evidence.',
+  'sealed-risk-filter-unavailable':
+    'Correctness is unavailable for this risk scope: historical whole pull request scores do not retain risk-level measurements.',
   'miss-collection-coverage-unavailable':
     'Observed recall / F1 unavailable: a complete human-thread enumeration has not been retained for the population.',
   'miss-observation-provisional':

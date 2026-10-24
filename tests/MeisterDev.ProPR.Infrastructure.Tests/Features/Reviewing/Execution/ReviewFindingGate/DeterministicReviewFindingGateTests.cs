@@ -348,6 +348,39 @@ public sealed class DeterministicReviewFindingGateTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_ChallengeLeftOpen_AssignsSummaryOnlyWithoutSummaryText()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var outcome = new VerificationOutcome(
+            "finding-pf-001:claim:001",
+            "finding-pf-001",
+            VerificationOutcome.InsufficientEvidenceKind,
+            FinalGateDecision.SummaryOnlyDisposition,
+            ["insufficient_context"],
+            [],
+            VerificationOutcome.WeakEvidence,
+            "The excerpt did not show the assignment.",
+            VerificationOutcome.AiMicroVerifierEvaluator,
+            false);
+        var finding = CreateFinding(
+                "finding-pf-001",
+                "The loop ignores the latest update.",
+                CandidateReviewFinding.PerFileCommentCategory,
+                filePath: "src/Foo.cs",
+                lineNumber: 12,
+                verificationOutcome: outcome) with
+            {
+                VerificationChallenge = new FindingVerificationChallenge("finding-pf-001", "Check the assignment.", "The accumulator includes the new value."),
+            };
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, decision.Disposition);
+        Assert.Equal("synthesis_challenge_unresolved", Assert.Single(decision.ReasonCodes));
+        Assert.Null(decision.SummaryText);
+    }
+
+    [Fact]
     public async Task EvaluateAsync_CrossCuttingWithoutResolvedMultiFileEvidence_AssignsSummaryOnly()
     {
         var sut = new DeterministicReviewFindingGate();

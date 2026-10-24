@@ -326,6 +326,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("client_id");
 
+                    b.Property<short>("Confidence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<int>("Count")
                         .HasColumnType("integer")
                         .HasColumnName("count");
@@ -346,9 +351,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("file_path");
 
+                    b.Property<short>("Impact")
+                        .HasColumnType("smallint");
+
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");
+
+                    b.Property<short>("Likelihood")
+                        .HasColumnType("smallint");
 
                     b.Property<long>("PullRequestId")
                         .HasColumnType("bigint")
@@ -359,6 +370,14 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
                         .HasColumnName("repository_id");
+
+                    b.Property<string>("RiskRubricVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<short>("RiskSeverity")
+                        .HasColumnType("smallint");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -375,7 +394,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "BucketDate")
                         .HasDatabaseName("ix_code_insight_daily_counts_repo_pr_bucket");
 
-                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "FilePath", "JobId", "BucketDate", "Dimension", "DimensionKey")
+                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "FilePath", "JobId", "BucketDate", "Dimension", "DimensionKey", "Impact", "Likelihood", "RiskSeverity", "Confidence", "RiskRubricVersion")
                         .IsUnique()
                         .HasDatabaseName("uq_code_insight_daily_counts_key");
 
@@ -489,6 +508,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("code_insight_pull_request_id");
 
+                    b.Property<short>("Confidence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -528,6 +552,9 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("encrypted_message");
 
+                    b.Property<string>("EncryptedRiskAssessment")
+                        .HasColumnType("text");
+
                     b.Property<string>("FilePath")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -537,6 +564,9 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("finding_chain_id");
 
+                    b.Property<short>("Impact")
+                        .HasColumnType("smallint");
+
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");
@@ -544,6 +574,9 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<short?>("Level")
                         .HasColumnType("smallint")
                         .HasColumnName("level");
+
+                    b.Property<short>("Likelihood")
+                        .HasColumnType("smallint");
 
                     b.Property<int?>("LineNumber")
                         .HasColumnType("integer")
@@ -647,6 +680,14 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("revision_key");
+
+                    b.Property<string>("RiskRubricVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<short>("RiskSeverity")
+                        .HasColumnType("smallint");
 
                     b.Property<short?>("ScopeRelation")
                         .HasColumnType("smallint")
@@ -3433,10 +3474,18 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<Guid>("CodeInsightPullRequestId")
                         .HasColumnType("uuid");
 
+                    b.Property<short>("Confidence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<long>("Count")
                         .HasColumnType("bigint");
 
                     b.Property<short>("DuplicateState")
+                        .HasColumnType("smallint");
+
+                    b.Property<short>("Impact")
                         .HasColumnType("smallint");
 
                     b.Property<bool>("IsClassified")
@@ -3444,6 +3493,9 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.Property<bool>("IsMiss")
                         .HasColumnType("boolean");
+
+                    b.Property<short>("Likelihood")
+                        .HasColumnType("smallint");
 
                     b.Property<string>("LogicalModelName")
                         .IsRequired()
@@ -3480,6 +3532,14 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
+
+                    b.Property<string>("RiskRubricVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<short>("RiskSeverity")
+                        .HasColumnType("smallint");
 
                     b.Property<string>("TypeMembership")
                         .IsRequired()
@@ -4965,6 +5025,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("enable_multi_pass_union");
+
+                    b.Property<int>("FindingBadgeStyle")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("finding_badge_style");
 
                     b.Property<bool>("IncludeLinkedItemsInContext")
                         .ValueGeneratedOnAdd()

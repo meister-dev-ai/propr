@@ -44,8 +44,10 @@ public sealed class AdoCodeReviewPublicationServiceTests
         Assert.IsType<AdoCodeReviewPublicationService>(publicationService);
     }
 
-    [Fact]
-    public async Task PublishReviewAsync_PassesCompareIterationContextToCommentPoster()
+    [Theory]
+    [InlineData(FindingBadgeStyle.ShieldsIo)]
+    [InlineData(FindingBadgeStyle.Plain)]
+    public async Task PublishReviewAsync_PassesCompareIterationContextToCommentPoster(FindingBadgeStyle style)
     {
         var clientId = Guid.NewGuid();
         var repositoryId = Guid.NewGuid().ToString("D");
@@ -67,7 +69,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
             revision,
             reviewer,
             existingThreads,
-            new AzureDevOpsPublicationContext(3));
+            new AzureDevOpsPublicationContext(3)) { FindingBadgeStyle = style };
 
         var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
         connectionRepository.GetByClientIdAsync(clientId, Arg.Any<CancellationToken>())
@@ -122,7 +124,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
                 Arg.Is<AzureDevOpsPublicationContext?>(ctx => ctx!.CompareToIterationId == 3),
                 Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
                 false,
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), style)
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
 
         var sut = new AdoCodeReviewPublicationService(
@@ -146,7 +148,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
                 Arg.Is<AzureDevOpsPublicationContext?>(ctx => ctx!.CompareToIterationId == 3),
                 Arg.Is<ReviewerIdentity?>(identity => identity == reviewer),
                 false,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(), style);
     }
 
     [Fact]

@@ -29,7 +29,11 @@ public static class CodeInsightQueries
         DateOnly? to,
         string? repositoryId = null,
         long? pullRequestId = null,
-        string? filePath = null)
+        string? filePath = null,
+        string? impact = null,
+        string? likelihood = null,
+        string? riskSeverity = null,
+        string? confidence = null)
     {
         var (start, end) = ResolveWindow(from, to);
         return new CodeInsightRollupQuery(
@@ -38,7 +42,8 @@ public static class CodeInsightQueries
             end,
             Trimmed(repositoryId),
             pullRequestId,
-            Trimmed(filePath));
+            Trimmed(filePath), ParseRisk<FindingImpact>(impact), ParseRisk<FindingLikelihood>(likelihood), ParseRisk<FindingRiskSeverity>(riskSeverity),
+            ParseRisk<FindingConfidence>(confidence));
     }
 
     public static CodeInsightBrowseQuery BuildBrowseQuery(
@@ -53,7 +58,11 @@ public static class CodeInsightQueries
         int limit,
         string? symbolName = null,
         CodeInsightRejectionReason? rejectionReason = null,
-        int offset = 0)
+        int offset = 0,
+        string? impact = null,
+        string? likelihood = null,
+        string? riskSeverity = null,
+        string? confidence = null)
     {
         var (start, end) = ResolveWindow(from, to);
         return new CodeInsightBrowseQuery(
@@ -68,8 +77,13 @@ public static class CodeInsightQueries
             Math.Clamp(limit, 1, 200),
             Trimmed(symbolName),
             rejectionReason,
-            Math.Max(0, offset));
+            Math.Max(0, offset), ParseRisk<FindingImpact>(impact), ParseRisk<FindingLikelihood>(likelihood), ParseRisk<FindingRiskSeverity>(riskSeverity),
+            ParseRisk<FindingConfidence>(confidence));
     }
+
+    /// <summary>Parses a risk selection; unrecognized values select Unknown.</summary>
+    public static T? ParseRisk<T>(string? value) where T : struct, Enum =>
+        value is null ? null : Enum.TryParse<T>(value, true, out var parsed) && Enum.IsDefined(parsed) ? parsed : default(T);
 
     /// <summary>
     ///     Resolves the window, defaulting to the last thirty days and repairing a reversed range rather than
@@ -179,6 +193,7 @@ public static class CodeInsightQueries
             Discussed: inputs.Discussed,
             CoveredSampleSize: result.CoveredSampleSize,
             CoveredTruePositives: result.CoveredInputs.TruePositives,
-            CoveredMisses: result.CoveredInputs.Misses);
+            CoveredMisses: result.CoveredInputs.Misses,
+            UnavailableReason: result.UnavailableReason);
     }
 }

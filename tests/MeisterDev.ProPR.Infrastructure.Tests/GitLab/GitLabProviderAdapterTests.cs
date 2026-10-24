@@ -617,7 +617,8 @@ public sealed class GitLabCodeReviewPublicationServiceTests
         TestPostedCommentComposer.AssertMarkedOnce(overview, TestPostedCommentComposer.DistinctiveMarker);
 
         Assert.Equal(
-            "Warning: Guard this null case.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            "![Severity: Warning](https://img.shields.io/badge/Severity-Warning-64748b?style=flat-square)\n\nGuard this null case.\n\n" +
+            TestPostedCommentComposer.DistinctiveMarker,
             GitLabTestHelpers.ReadMultipartField(postedBodies[1].Body, "body"));
         Assert.Contains("position[new_path]", postedBodies[1].Body, StringComparison.Ordinal);
         Assert.Contains("src/file.ts", postedBodies[1].Body, StringComparison.Ordinal);
@@ -693,7 +694,7 @@ public sealed class GitLabCodeReviewPublicationServiceTests
     }
 
     [Fact]
-    public async Task PublishReviewAsync_HtmlEncodesDiscussionBodiesBeforePosting()
+    public async Task PublishReviewAsync_NeutralizesMarkupWithoutEncodingCode()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
@@ -748,7 +749,7 @@ public sealed class GitLabCodeReviewPublicationServiceTests
         Assert.Equal(2, postedBodies.Count);
         Assert.Contains("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;", postedBodies[0], StringComparison.Ordinal);
         Assert.DoesNotContain("<script>alert('xss')</script>", postedBodies[0], StringComparison.Ordinal);
-        Assert.Contains("Guard &lt;b&gt;this&lt;/b&gt; null case.", postedBodies[1], StringComparison.Ordinal);
+        Assert.Contains("Guard <\u200Bb>this<\u200B/b> null case.", postedBodies[1], StringComparison.Ordinal);
         Assert.DoesNotContain("Guard <b>this</b> null case.", postedBodies[1], StringComparison.Ordinal);
     }
 

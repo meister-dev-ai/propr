@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -28,7 +29,8 @@ public sealed partial class NoOpAdoCommentPoster(ILogger<NoOpAdoCommentPoster> l
         AzureDevOpsPublicationContext? publicationContext = null,
         ReviewerIdentity? publicationIdentity = null,
         bool replyInExistingSummaryThread = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo)
     {
         LogSkippingCommentPost(logger, pullRequestId, result.Summary);
         foreach (var comment in result.Comments)

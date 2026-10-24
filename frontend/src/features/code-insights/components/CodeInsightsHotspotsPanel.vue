@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">History</p>
         <h3 id="insights-hotspots-heading">Hotspots</h3>
-        <p class="panel-copy">{{ copy }}</p>
+        <p class="panel-description">{{ copy }}</p>
       </div>
 
       <div class="hotspot-header-side">

@@ -14,6 +14,7 @@ import type {
   PerformanceExclusion,
 } from '@/services/reviewerPerformanceService'
 import type { components } from '@/types'
+import { riskLabel } from '@/features/reviews/findingRisk'
 type Counts = components['schemas']['ReviewerPerformanceCounts']
 type Outcomes = components['schemas']['ReviewerPerformanceOutcomeCounts']
 type Range = components['schemas']['ReviewerPerformanceRange']
@@ -51,6 +52,21 @@ const types = [
   { id: 'concurrency', label: 'Concurrency' },
 ]
 const qualifiers = ['Missing', 'Incorrect', 'Extraneous'].map((id) => ({ id, label: id }))
+const riskValues = [
+  { impact: 'Unknown', likelihood: 'Unknown', riskSeverity: 'Unknown', confidence: 'Unknown' },
+  { impact: 'Moderate', likelihood: 'Unlikely', riskSeverity: 'Low', confidence: 'Low' },
+  { impact: 'Critical', likelihood: 'Likely', riskSeverity: 'Critical', confidence: 'Certain' },
+  { impact: 'High', likelihood: 'Possible', riskSeverity: 'High', confidence: 'High' },
+  { impact: 'High', likelihood: 'Unlikely', riskSeverity: 'Medium', confidence: 'Medium' },
+  { impact: 'Low', likelihood: 'Possible', riskSeverity: 'Low', confidence: 'High' },
+  { impact: 'Moderate', likelihood: 'NotApplicable', riskSeverity: 'Unknown', confidence: 'Medium' },
+]
+const riskFacets = (dimension: 'impact' | 'likelihood' | 'riskSeverity' | 'confidence') =>
+  [...new Set(riskValues.map(value => value[dimension]))].map(id => ({ id, label: riskLabel(id) }))
+const hasRiskScope = (scope: PerformanceScope, dimension: string, _query: PerformanceQuery) =>
+  scope.impacts != null || scope.likelihoods != null || scope.riskSeverities != null || scope.confidences != null ||
+  ['impact', 'likelihood', 'riskSeverity', 'confidence'].includes(dimension)
+const withoutRisk = (scope: PerformanceScope): PerformanceScope => ({ ...scope, impacts: null, likelihoods: null, riskSeverities: null, confidences: null })
 const provider = 'AzureDevOps:https://dev.azure.com/example'
 const repoId = (scope: (typeof scopes)[number]) =>
   btoa(JSON.stringify([scope.client, provider, scope.repo]))
@@ -186,6 +202,10 @@ function score(
   }
 }
 type Cell = {
+  impact: string
+  likelihood: string
+  riskSeverity: string
+  confidence: string
   date: string
   client: string
   repository: string
@@ -265,6 +285,7 @@ function cells(from: string, to: string): Cell[] {
             const issue = `${aggregateId}/${type.id}/${qualifier.id}`
             const detectedBy = (day + s) % 5 !== 0 && day >= today - 13 ? [models[2]!.id] : []
             result.push({
+              ...riskValues[(day + s + m + t + k) % riskValues.length]!,
               modelCovered: modelReason == null, modelReason,
               concerns: noConcerns ? [] : [{ id: `${issue}/X`, acted: true, detectedBy }, { id: `${issue}/Y`, acted: t === 0, detectedBy: [] }],
               date: new Date(day * 86400000).toISOString().slice(0, 10),
@@ -288,7 +309,11 @@ const matches = (cell: Cell, scope: PerformanceScope) =>
   (scope.repositories == null || scope.repositories.includes(cell.repository)) &&
   (scope.models == null || scope.models.includes(cell.model)) &&
   (scope.types == null || scope.types.includes(cell.type)) &&
-  (scope.qualifiers == null || scope.qualifiers.includes(cell.qualifier))
+  (scope.qualifiers == null || scope.qualifiers.includes(cell.qualifier)) &&
+  (scope.impacts == null || scope.impacts.includes(cell.impact)) &&
+  (scope.likelihoods == null || scope.likelihoods.includes(cell.likelihood)) &&
+  (scope.riskSeverities == null || scope.riskSeverities.includes(cell.riskSeverity)) &&
+  (scope.confidences == null || scope.confidences.includes(cell.confidence))
 const key = (cell: Cell, dimension: string) =>
   ({
     client: cell.client,
@@ -296,6 +321,10 @@ const key = (cell: Cell, dimension: string) =>
     model: cell.model,
     type: cell.type,
     qualifier: cell.qualifier,
+    impact: cell.impact,
+    likelihood: cell.likelihood,
+    riskSeverity: cell.riskSeverity,
+    confidence: cell.confidence,
   })[dimension as 'client'] ?? 'all'
 const label = (id: string, dimension: string) =>
   ({
@@ -307,6 +336,10 @@ const label = (id: string, dimension: string) =>
     model: models,
     type: types,
     qualifier: qualifiers,
+    impact: riskFacets('impact'),
+    likelihood: riskFacets('likelihood'),
+    riskSeverity: riskFacets('riskSeverity'),
+    confidence: riskFacets('confidence'),
   })[dimension as 'client']?.find((item) => item.id === id)?.label ?? 'All selected evidence'
 function bucketStart(date: string, bucket: string): string {
   const value = new Date(`${date}T00:00:00Z`)
@@ -338,12 +371,14 @@ function measurement(
   dimension: string,
   observed = true,
   exclusions: PerformanceExclusion[] = [],
+  coverageRows = rows,
 ): PerformancePoint {
   const modelScope = scope.models != null || dimension === 'model'
+  const riskScope = hasRiskScope(scope, dimension, query)
   const counts = emptyCounts()
   for (const row of rows) add(counts, row.counts)
-  const sources = [...new Map(rows.map((row) => [row.aggregateId, row])).values()].map((row) => {
-    const members = rows.filter((member) => member.aggregateId === row.aggregateId)
+  const sources = [...new Map(coverageRows.map((row) => [row.aggregateId, row])).values()].map((row) => {
+    const members = coverageRows.filter((member) => member.aggregateId === row.aggregateId)
     const failed = members.find((member) => modelScope ? !member.modelCovered : !member.covered)
     return { ...row, covered: !failed, exclusionReason: modelScope ? failed?.modelReason : failed?.exclusionReason }
   })
@@ -371,7 +406,7 @@ function measurement(
   const hasObservation = (query.aggregation === 'period' ? observed : rows.length > 0) &&
     ((counts.generated ?? 0) > 0 || (coveredCounts.harvestedThreads ?? 0) > 0)
   const result = score(coveredCounts, false)
-  if (covered === 0) {
+  if (covered === 0 || riskScope) {
     result.summary = { precision: result.summary?.precision }
     result.scenarios = result.scenarios?.map((item) => ({ ...item, falseNegatives: null, recall: null, f1: null }))
   }
@@ -438,10 +473,11 @@ function measurement(
     overallPrecision: { counts: overall.counts, summary: overall.summary?.precision, scenarios: overall.scenarios?.map(({ id, truePositives, falsePositives, excluded, precision }) => ({ id, truePositives, falsePositives, excluded, precision })) },
     coverage: {
       candidatePullRequests: sources.length, coveredPullRequests: covered, excludedPullRequests: excluded.length,
-      percentage: sources.length ? 100 * covered / sources.length : null, meetsMinimum, recallSupported: true,
+      percentage: sources.length ? 100 * covered / sources.length : null, meetsMinimum, recallSupported: !riskScope,
       reasons: exclusionReasons.map((reason) => ({ reason, pullRequests: excluded.filter((row) => row.exclusionReason === reason).length })), exclusionIds: ids,
     },
     unavailableReasons: [
+      ...(riskScope ? ['miss-risk-assessment-unavailable'] : []),
       ...exclusionReasons,
       ...(covered < 1 ? ['insufficient-covered-pull-requests'] : []),
       ...(sources.length > 0 && covered * 100 < sources.length * 80 ? ['coverage-below-minimum'] : []),
@@ -476,6 +512,10 @@ export function mockPerformanceResponse(query: PerformanceQuery): PerformanceRes
       models,
       types,
       qualifiers,
+      impacts: riskFacets('impact'),
+      likelihoods: riskFacets('likelihood'),
+      riskSeverities: riskFacets('riskSeverity'),
+      confidences: riskFacets('confidence'),
     }
     const keys =
       grouping === 'none'
@@ -506,6 +546,9 @@ export function mockPerformanceResponse(query: PerformanceQuery): PerformanceRes
               cell.date <= periodEnd,
           ),
           exclusionCatalog,
+          hasRiskScope(scope, grouping, query) ? raw.filter(cell => matches(cell, withoutRisk(scope)) &&
+            (grouping === 'none' || ['impact', 'likelihood', 'riskSeverity', 'confidence'].includes(grouping) || key(cell, grouping) === id) &&
+            cell.date <= periodEnd && (query.aggregation !== 'period' || cell.date >= date)) : rows,
         )
       }),
     }))
@@ -529,6 +572,10 @@ export function mockPerformanceResponse(query: PerformanceQuery): PerformanceRes
                 ? [axes.rows === 'model' ? rowId : columnId]
                 : scope.models,
           }
+          for (const [axis, id] of [[axes.rows, rowId], [axes.columns, columnId]]) {
+            const selection = { impact: 'impacts', likelihood: 'likelihoods', riskSeverity: 'riskSeverities', confidence: 'confidences' }[axis ?? '']
+            if (selection) Object.assign(scoped, { [selection]: [id] })
+          }
           breakdown.push({
             rowId,
             rowLabel: label(rowId, axes.rows!),
@@ -542,6 +589,10 @@ export function mockPerformanceResponse(query: PerformanceQuery): PerformanceRes
               grouping,
               intersection.length > 0,
               exclusionCatalog,
+              hasRiskScope(scoped, grouping, query) ? raw.filter(cell => matches(cell, withoutRisk(scoped)) &&
+                (['impact', 'likelihood', 'riskSeverity', 'confidence'].includes(axes.rows!) || key(cell, axes.rows!) === rowId) &&
+                (['impact', 'likelihood', 'riskSeverity', 'confidence'].includes(axes.columns!) || key(cell, axes.columns!) === columnId) &&
+                cell.date <= periodEnd && (query.aggregation !== 'period' || cell.date >= date)) : intersection,
             ),
           })
         }
@@ -556,7 +607,7 @@ export function mockPerformanceResponse(query: PerformanceQuery): PerformanceRes
       evidence: {
         oldestProjectionAt: new Date().toISOString(),
         newestProjectionAt: new Date().toISOString(),
-        projectionVersion: 4,
+        projectionVersion: 6,
         modelEvidenceSchema: scope.models != null || grouping === 'model' || axes?.rows === 'model' || axes?.columns === 'model' ? 'model-opportunity-v1' : undefined,
         pendingSourceAggregates: 0,
       },
@@ -612,7 +663,7 @@ export function reviewerPerformanceHandlers(base: string) {
     http.post(`${base}/reviewer-performance/reports`, async ({ request }) => {
       const body =
         (await request.json()) as components['schemas']['ReviewerPerformanceSaveReportRequest']
-      const requestKey = JSON.stringify(body)
+      const requestKey = JSON.stringify(body, (key, value: unknown) => key === 'confidences' && value === null ? undefined : value)
       const existing = reports.get(body.id!)
       if (existing)
         return existing.request === requestKey

@@ -107,7 +107,10 @@ internal sealed class GitHubPullRequestFetcher(
             existingThreads,
             isDeltaReview ? allChangedFileSummaries : null,
             AuthorizedIdentityName: context.AuthenticatedActorLogin,
-            Author: ToPullRequestAuthor(host, pullRequest));
+            Author: ToPullRequestAuthor(host, pullRequest))
+        {
+            FetchedHeadSha = pullRequest.Head?.Sha,
+        };
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(
@@ -239,7 +242,10 @@ internal sealed class GitHubPullRequestFetcher(
             existingThreads,
             changedFileManifest,
             AuthorizedIdentityName: context.AuthenticatedActorLogin,
-            Author: ToPullRequestAuthor(host, pullRequest));
+            Author: ToPullRequestAuthor(host, pullRequest))
+        {
+            FetchedHeadSha = pullRequest.Head?.Sha,
+        };
     }
 
     public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(

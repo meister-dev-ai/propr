@@ -2,9 +2,10 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import type { CodeInsightFinding } from '@/services/codeInsightsAnalyticsService'
+import { matchesFindingRisk, type FindingRiskFilters } from '@/features/reviews/findingRisk'
 import type { RetainedComment, RetainedFile, RetainedThread } from '@/features/reviews/composables/useRetainedPrData'
 
-export interface BrowserFileFilters {
+export interface BrowserFileFilters extends FindingRiskFilters {
     query: string
     presence: string
     kind: string
@@ -90,10 +91,11 @@ export function filterBrowserFiles(
         if (filters.presence === 'findings' && !hasFindings) return false
         if (filters.presence === 'withoutFindings' && hasFindings) return false
         if (filters.presence === 'comments' && !ownThreads.some(thread => thread.comments?.length)) return false
-        if (!filters.kind && !filters.severity && !filters.outcome) return true
+        if (!filters.kind && !filters.severity && !filters.outcome && !filters.impact && !filters.likelihood && !filters.riskSeverity && !filters.confidence) return true
         return ownFindings.some(finding =>
             (!filters.kind || finding.coreTags.includes(filters.kind))
             && (!filters.severity || finding.severity.toLowerCase() === filters.severity)
+            && matchesFindingRisk(finding.riskAssessment, filters)
             && (!filters.outcome || findingOutcome(finding) === filters.outcome
                 || finding.disposition?.toLowerCase() === filters.outcome),
         )

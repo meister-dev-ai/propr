@@ -5,6 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import CodeQualityWorkspace from '@/features/code-insights/components/CodeQualityWorkspace.vue'
 import type { CodeInsightScope } from '@/services/codeInsightsAnalyticsService'
+import FindingRiskFilters from '@/components/findings/FindingRiskFilters.vue'
 
 vi.mock('vue-chartjs', () => ({
   Bar: { name: 'BarChartStub', template: '<div class="bar-chart-stub" />' },
@@ -29,6 +30,7 @@ const concentrationMock = vi.fn()
 const findingsMock = vi.fn()
 const survivalMock = vi.fn()
 const hotspotsMock = vi.fn()
+const riskMock = vi.fn()
 
 vi.mock('@/services/codeInsightsAnalyticsService', () => ({
   fetchTypesOverTime: (...args: unknown[]) => typesMock(...args),
@@ -36,6 +38,7 @@ vi.mock('@/services/codeInsightsAnalyticsService', () => ({
   fetchFindings: (...args: unknown[]) => findingsMock(...args),
   fetchSurvival: (...args: unknown[]) => survivalMock(...args),
   fetchHotspots: (...args: unknown[]) => hotspotsMock(...args),
+  fetchRiskOverTime: (...args: unknown[]) => riskMock(...args),
 }))
 
 const TYPES = {
@@ -65,9 +68,27 @@ async function mountPinned() {
 }
 
 describe('CodeQualityWorkspace pinned to one pull request', () => {
+  it('filters pinned PR charts and drilldowns with the same independent risk scope', async () => {
+    const wrapper = await mountPinned()
+    wrapper.getComponent(FindingRiskFilters).vm.$emit('update:modelValue', {
+      impact: 'critical', likelihood: 'likely', riskSeverity: 'critical', confidence: 'certain',
+    })
+    await flushPromises()
+    for (const mock of [typesMock, concentrationMock, survivalMock, hotspotsMock]) {
+      expect(mock.mock.lastCall?.[0]).toMatchObject({ pullRequestId: 4821,
+        impact: 'critical', likelihood: 'likely', riskSeverity: 'critical', confidence: 'certain' })
+    }
+    await wrapper.findAll('.type-drill')[0].trigger('click')
+    await flushPromises()
+    expect(findingsMock.mock.lastCall?.[0]).toMatchObject({ impact: 'critical', likelihood: 'likely', riskSeverity: 'critical', confidence: 'certain' })
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     typesMock.mockResolvedValue(TYPES)
+    riskMock.mockResolvedValue({ totalFindings: 2, keys: ['Unknown', 'Critical'], points: [
+      { bucketStart: '2026-10-01', key: 'Unknown', count: 1 }, { bucketStart: '2026-10-01', key: 'Critical', count: 1 },
+    ] })
     concentrationMock.mockResolvedValue(FILES)
     findingsMock.mockResolvedValue([])
     survivalMock.mockResolvedValue({
@@ -93,6 +114,18 @@ describe('CodeQualityWorkspace pinned to one pull request', () => {
       expect(scope.repositoryId).toBe('4')
       expect(scope.clientId).toBe('client-a')
     }
+  })
+
+  it('loads server risk distributions and preserves both axis filters when drilling Unassessed', async () => {
+    const wrapper = await mountPinned()
+    wrapper.getComponent(FindingRiskFilters).vm.$emit('update:modelValue', { impact: 'critical', likelihood: 'likely' })
+    await flushPromises()
+    await wrapper.findAll('.section-tab').find(tab => tab.text() === 'Risk assessment')!.trigger('click')
+    await flushPromises()
+    expect(riskMock.mock.lastCall).toEqual([expect.objectContaining({ pullRequestId: 4821, impact: 'critical', likelihood: 'likely' }), 'day', 'riskSeverity'])
+    await wrapper.get('.risk-drills button').trigger('click')
+    await flushPromises()
+    expect(findingsMock.mock.lastCall?.[0]).toMatchObject({ pullRequestId: 4821, impact: 'critical', likelihood: 'likely', riskSeverity: 'Unknown' })
   })
 
   it('never ranks repositories, because the one being looked at is already known', async () => {

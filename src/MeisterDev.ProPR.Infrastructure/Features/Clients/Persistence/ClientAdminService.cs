@@ -121,7 +121,8 @@ public sealed class ClientAdminService(
         bool? reviewEveryIncrementEnabled = null,
         bool? withholdOutOfScopeFindings = null,
         ReviewAdmissionPolicyDto? admissionPolicy = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        FindingBadgeStyle? findingBadgeStyle = null)
     {
         var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
         var client = await dbContext.Clients
@@ -154,6 +155,7 @@ public sealed class ClientAdminService(
             outputLanguage,
             reviewEveryIncrementEnabled,
             withholdOutOfScopeFindings);
+        ApplyIfHasValue(findingBadgeStyle, value => client.FindingBadgeStyle = value);
         ReplaceReviewPassesIfProvided(client, reviewPasses);
         ReplaceBudgetCapsIfProvided(client, budgetConfig);
         ReplaceAutoResolveSeveritiesIfProvided(client, autoResolveSeverities);
@@ -529,7 +531,8 @@ public sealed class ClientAdminService(
                 client.AdmissionMaxChangedLines,
                 client.AdmissionMaxDiffBytes,
                 client.AdmissionMaxReviewsPerPullRequestPerHour,
-                client.AdmissionMaxRepositoryMegabytes));
+                client.AdmissionMaxRepositoryMegabytes),
+            client.FindingBadgeStyle);
     }
 
     // Without the licensing module there is no installation state to read, which a deployment with no

@@ -97,6 +97,24 @@ async function openCollectionDetails(wrapper: VueWrapper) {
 }
 
 describe('reviewer performance workspace', () => {
+  it.each(['impact', 'confidence'])('drills %s matrix cells into exact scope facet IDs while preserving other filters', async (dimension) => {
+    query.mockImplementation(async request => ({ ...response, query: request,
+      views: request.views.map((scope: unknown) => ({ ...view, scope })) }))
+    const wrapper = mount(ReviewerPerformanceWorkspace)
+    await flushPromises()
+    const filters = wrapper.getComponent(ReviewerPerformanceScopeFilters)
+    filters.vm.$emit('update:scope', { ...filters.props('scope'), likelihoods: ['Likely'], types: ['logic-error'] })
+    filters.vm.$emit('apply')
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'Explore dimensions')!.trigger('click')
+    await flushPromises()
+    wrapper.getComponent(ReviewerPerformanceExplorer).vm.$emit('axes', dimension, 'riskSeverity')
+    await flushPromises()
+    wrapper.getComponent(ReviewerPerformanceExplorer).vm.$emit('drill', { rowId: dimension === 'confidence' ? 'Certain' : 'Critical', columnId: 'Unknown', measurement: point })
+    await flushPromises()
+    expect(query.mock.lastCall?.[0].views[0]).toMatchObject({ [dimension === 'confidence' ? 'confidences' : 'impacts']: [dimension === 'confidence' ? 'Certain' : 'Critical'], riskSeverities: ['Unknown'], likelihoods: ['Likely'], types: ['logic-error'] })
+    wrapper.unmount()
+  })
   it('inspects the latest v2 point and filters exclusions by captured IDs including zero', async () => {
     const earlier = { ...point, coverage: { candidatePullRequests: 1, coveredPullRequests: 1, meetsMinimum: true, recallSupported: true, exclusionIds: [] } }
     const later = { date: '2026-09-02', score: { summary: {} }, coverage: { candidatePullRequests: 2, coveredPullRequests: 1, excludedPullRequests: 1, meetsMinimum: false, recallSupported: true, exclusionIds: [0] } }
@@ -610,7 +628,9 @@ describe('reviewer performance workspace', () => {
     const facets = filters.findAllComponents({ name: 'VAutocomplete' })
 
     expect(filters.props('clientsLoading')).toBe(true)
-    expect(facets.map((facet) => facet.props('loading'))).toEqual([true, false, false, false, false])
+    expect(facets).toHaveLength(9)
+    expect(facets[0]!.props('loading')).toBe(true)
+    expect(facets.slice(1).every(facet => !facet.props('loading'))).toBe(true)
     finishClients([{ id: 'demo-client', label: 'Demo client' }])
     await flushPromises()
     expect(filters.props('clientsLoading')).toBe(false)
@@ -1854,7 +1874,7 @@ describe('reviewer performance workspace', () => {
     ).toContain('Committed capture')
   })
   it('preserves a saved independent comparison scope through live comparison toggles', async () => {
-    const b = { ...view, scope: { ...view.scope, models: ['captured-b'] } }
+    const b = { ...view, scope: { ...view.scope, models: ['captured-b'], impacts: ['Critical'], likelihoods: [], riskSeverities: ['Unknown'], confidences: ['Certain'] } }
     list.mockResolvedValue([{ id: 'stored', name: 'Compared' }])
     open.mockResolvedValue({
       report: { id: 'stored' },
@@ -1876,6 +1896,7 @@ describe('reviewer performance workspace', () => {
     await wrapper.get('[data-test="comparison"] input[type="checkbox"]').setValue(true)
     await flushPromises()
     expect(query.mock.calls.at(-1)![0].views[1].models).toEqual(['captured-b'])
+    expect(query.mock.calls.at(-1)![0].views[1]).toMatchObject({ impacts: ['Critical'], likelihoods: [], riskSeverities: ['Unknown'], confidences: ['Certain'] })
   })
   it('keeps the originating B date when exploring nonoverlapping calendar windows', async () => {
     query.mockImplementation(async (q) => ({

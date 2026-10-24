@@ -20,7 +20,11 @@ internal static class ReviewerPerformanceDimensions
 
         return (scope.Models is null || scope.Models.Contains(ReviewerPerformanceIdentity.ModelKey(row)))
                && MatchesTypes(row, scope.Types)
-               && (scope.Qualifiers is null || scope.Qualifiers.Contains(row.Qualifier));
+               && (scope.Qualifiers is null || scope.Qualifiers.Contains(row.Qualifier))
+               && (scope.Impacts is null || scope.Impacts.Contains(row.Impact.ToString()))
+               && (scope.Likelihoods is null || scope.Likelihoods.Contains(row.Likelihood.ToString()))
+               && (scope.RiskSeverities is null || scope.RiskSeverities.Contains(row.RiskSeverity.ToString()))
+               && (scope.Confidences is null || scope.Confidences.Contains(row.Confidence.ToString()));
     }
 
     private static bool MatchesTypes(ReviewerPerformanceDailyCount row, IReadOnlyList<string>? types)
@@ -56,7 +60,18 @@ internal static class ReviewerPerformanceDimensions
         "type" => (row.TypeMembership.Length == 0 ? new[] { "unclassified" } : row.TypeMembership.Split('|')).Select(type =>
             new ReviewerPerformanceFacet(type, type)),
         "qualifier" => [new(row.Qualifier, row.Qualifier.Length == 0 ? "Kind attribution unavailable" : row.Qualifier)],
+        "impact" => [new(row.Impact.ToString(), RiskLabel(row.Impact.ToString()))],
+        "likelihood" => [new(row.Likelihood.ToString(), RiskLabel(row.Likelihood.ToString()))],
+        "riskSeverity" => [new(row.RiskSeverity.ToString(), RiskLabel(row.RiskSeverity.ToString()))],
+        "confidence" => [new(row.Confidence.ToString(), RiskLabel(row.Confidence.ToString()))],
         _ => [],
+    };
+
+    private static string RiskLabel(string value) => value switch
+    {
+        "Unknown" => "Unassessed",
+        "NotApplicable" => "Not applicable",
+        _ => value,
     };
 
     internal static IReadOnlyList<ReviewerPerformanceFacet> FacetItems(List<ReviewerPerformanceDailyCount> cells, string dimension)
@@ -68,6 +83,10 @@ internal static class ReviewerPerformanceDimensions
             "model" => cells.DistinctBy(row => (row.ModelId, row.LogicalModelName)),
             "type" => cells.DistinctBy(row => row.TypeMembership),
             "qualifier" => cells.DistinctBy(row => row.Qualifier),
+            "impact" => cells.DistinctBy(row => row.Impact),
+            "likelihood" => cells.DistinctBy(row => row.Likelihood),
+            "riskSeverity" => cells.DistinctBy(row => row.RiskSeverity),
+            "confidence" => cells.DistinctBy(row => row.Confidence),
             _ => [],
         };
         return representatives.SelectMany(row => Keys(row, dimension)).DistinctBy(item => item.Id).OrderBy(item => item.Label).ToList();
@@ -80,7 +99,11 @@ internal static class ReviewerPerformanceDimensions
             FacetItems(cells, "client"), FacetItems(cells, "repository"), FacetItems(
                 cells.Where(row => !row.IsMiss
                                    && (!ReviewerPerformanceMeasurement.IsCoverage(row) || row.Outcome == "collectionModelOpportunity")).ToList(), "model"),
-            FacetItems(source, "type"), FacetItems(source, "qualifier"));
+            FacetItems(source, "type"), FacetItems(source, "qualifier"),
+            FacetItems(source.Where(row => !row.IsMiss).ToList(), "impact"),
+            FacetItems(source.Where(row => !row.IsMiss).ToList(), "likelihood"),
+            FacetItems(source.Where(row => !row.IsMiss).ToList(), "riskSeverity"),
+            FacetItems(source.Where(row => !row.IsMiss).ToList(), "confidence"));
     }
 
     internal static List<ReviewerPerformanceDailyCount> Coalesce(List<ReviewerPerformanceDailyCount> cells)
@@ -97,6 +120,7 @@ internal static class ReviewerPerformanceDimensions
             row.LogicalModelName,
             row.TypeMembership,
             row.Qualifier,
+            row.Impact, row.Likelihood, row.RiskSeverity, row.Confidence, row.RiskRubricVersion,
             row.Outcome,
             row.IsMiss,
             row.IsClassified,
@@ -120,6 +144,11 @@ internal static class ReviewerPerformanceDimensions
             LogicalModelName = representative.LogicalModelName,
             TypeMembership = representative.TypeMembership,
             Qualifier = representative.Qualifier,
+            Impact = representative.Impact,
+            Likelihood = representative.Likelihood,
+            RiskSeverity = representative.RiskSeverity,
+            Confidence = representative.Confidence,
+            RiskRubricVersion = representative.RiskRubricVersion,
             Outcome = representative.Outcome,
             IsMiss = representative.IsMiss,
             IsClassified = representative.IsClassified,

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Services;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
@@ -12,6 +13,54 @@ namespace MeisterDev.ProPR.Application.Tests.Services;
 /// </summary>
 public class FindingDeduplicatorTests
 {
+    [Theory]
+    [InlineData(FindingConfidence.Medium)]
+    [InlineData(FindingConfidence.Unknown)]
+    public void Deduplicate_AgreedCrossFileRiskRetainsWeakestConfidence(FindingConfidence weakest)
+    {
+        var strong = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Possible, "Data loss.", "Input zero.", "review_model",
+            FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "Both checks confirm the write.",
+            ReviewFindingConfidence.VerificationSource);
+        var weak = new FindingRiskAssessment(
+            strong.Impact, strong.Likelihood, strong.ImpactReason, strong.LikelihoodReason, strong.Source, strong.RubricVersion,
+            weakest, "The input contract remains unverified.", ReviewFindingConfidence.VerificationSource);
+
+        var merged = Assert.Single(
+            FindingDeduplicator.Deduplicate(
+            [
+                new ReviewComment("a.cs", 1, CommentSeverity.Error, "Input zero reaches the unchecked write.") { RiskAssessment = strong },
+                new ReviewComment("b.cs", 1, CommentSeverity.Error, "Input zero reaches the unchecked write.") { RiskAssessment = weak },
+            ]));
+
+        Assert.Equal(FindingRiskSeverity.High, merged.RiskAssessment!.Severity);
+        Assert.Equal(weakest, merged.RiskAssessment.Confidence);
+        Assert.Contains(weak.ConfidenceReason!, merged.RiskAssessment.ConfidenceReason!);
+        Assert.Equal(ReviewFindingConfidence.VerificationSource, merged.RiskAssessment.ConfidenceSource);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Deduplicate_DisagreeingCrossFileRiskRemainsUnassessed(bool missingAssessment)
+    {
+        var first = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Possible, "Data loss.", "Input zero.", "review_model", FindingRiskAssessment.CurrentRubricVersion);
+        var other = missingAssessment
+            ? null
+            : new FindingRiskAssessment(
+                FindingImpact.Low, FindingLikelihood.Possible, "Limited effect.", "Input zero.", "review_model", FindingRiskAssessment.CurrentRubricVersion);
+
+        var merged = Assert.Single(
+            FindingDeduplicator.Deduplicate(
+            [
+                new ReviewComment("a.cs", 1, CommentSeverity.Error, "Input zero reaches the unchecked write.") { RiskAssessment = first },
+                new ReviewComment("b.cs", 1, CommentSeverity.Error, "Input zero reaches the unchecked write.") { RiskAssessment = other },
+            ]));
+
+        Assert.Null(merged.RiskAssessment);
+    }
+
     // T008 — Identical messages across different files → merged into one comment (FilePath=null)
     [Fact]
     public void Deduplicate_IdenticalMessagesAcrossFiles_MergesIntoSingle()

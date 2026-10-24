@@ -3,6 +3,8 @@
 
 using System.Net;
 using System.Text.Json;
+using Markdig;
+using Markdig.Extensions.Tables;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -27,8 +29,113 @@ public sealed class GitHubCodeReviewPublicationServiceTests
     private const string ReviewCommentsUri =
         "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments?per_page=100";
 
+    [Theory]
+    [InlineData("```")]
+    [InlineData("<div>\n```")]
+    [InlineData("Conclusion.")]
+    public void BuildPayload_IsolatesConclusionAndCompleteFindingFenceContexts(string conclusion)
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base...head");
+        var reviewer = new ReviewerIdentity(host, "99", "bot", "Bot\n```", true);
+        var first = new ReviewComment(null, null, CommentSeverity.Warning, "```\nFirst description.");
+        var second = new ReviewComment(null, null, CommentSeverity.Warning, "```\n<details>Hidden</details>\n```")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Possible, "The state is lost.", "On retry.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion),
+        };
+        var result = new ReviewResult(conclusion, [first, second]) { ContextSkippedFilePaths = ["src/Path\n```\n.cs"] };
+
+        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, reviewer, TestPostedCommentComposer.Default);
+        var html = Markdown.ToHtml(payload.Body, new MarkdownPipelineBuilder().UsePipeTables(new PipeTableOptions { UseGfmRules = true }).Build());
+
+        Assert.DoesNotContain("<details>Hidden</details>", html, StringComparison.Ordinal);
+        Assert.Contains("&lt;details&gt;Hidden&lt;/details&gt;", html, StringComparison.Ordinal);
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("Findings to report", html, StringComparison.Ordinal);
+        Assert.Contains("src/Path ``` .cs", payload.Body, StringComparison.Ordinal);
+        Assert.StartsWith("## Bot ``` Review\n", payload.Body, StringComparison.Ordinal);
+        Assert.Equal("```\nFirst description.", first.Message);
+        TestPostedCommentComposer.AssertMarkedOnce(payload.Body, TestPostedCommentComposer.Default.Text);
+    }
+
     [Fact]
-    public async Task PublishReviewAsync_PostsSummaryAndInlineCommentsToGitHubReviewApi()
+    public void BuildPayload_PreservesDescriptionCodeAndAutolinksInInlineAndCompleteSummaryFindings()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "bot", "Review Bot", true);
+        const string description = "Use `Task<T>` after reading <https://example.com/x> or contact <reviewer@example.com>.";
+        var finding = new ReviewComment("src/Work.cs", 7, CommentSeverity.Warning, description);
+        var result = new ReviewResult("Conclusion.", [finding, finding.AsPullRequestLevel(description)]);
+
+        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, reviewer, TestPostedCommentComposer.Default);
+
+        Assert.StartsWith("![Severity: Warning]", Assert.Single(payload.Comments).Body);
+        Assert.Contains("\n\n" + description + "\n\n" + TestPostedCommentComposer.Default.Text, Assert.Single(payload.Comments).Body);
+        Assert.Contains("![Severity: Warning]", payload.Body, StringComparison.Ordinal);
+        Assert.Contains("\n\n" + description, payload.Body, StringComparison.Ordinal);
+        Assert.Equal(description, finding.Message);
+    }
+
+    [Fact]
+    public void BuildPayload_RendersInlineAndUnanchoredFindingsWithSafeClosedDetails()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "bot", "    Bot </details><script>bad</script>", true);
+        var finding = new ReviewComment("src/</details>.cs", 7, CommentSeverity.Warning, "Guard `a | b`. </details><script>bad</script>")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Possible, "Fails `a\\|b`. </details>", "On retry.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Medium, "The caller is visible."),
+        };
+        var result = new ReviewResult(
+            "Conclusion </details><script>bad</script>.", [finding, finding.AsPullRequestLevel("Check the shared invariant. </details>")])
+        {
+            BudgetSoftCapped = true,
+            BudgetSoftCapSkippedFilePaths = ["```src/</details><script>budget</script>.cs"],
+            ContextDegradedFilePaths = ["src/</details><script>degraded</script>.cs"],
+            ContextSkippedFilePaths = ["src/</details><script>skipped</script>.cs"],
+        };
+        var composer = TestPostedCommentComposer.With("Generated </details><script>marker</script>.");
+
+        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, reviewer, composer);
+
+        var inline = Assert.Single(payload.Comments).Body;
+        Assert.StartsWith("![Severity: Warning]", inline);
+        Assert.Contains("![Risk: Medium]", inline);
+        Assert.Contains("\n\nGuard `a | b`.", inline);
+        foreach (var body in new[] { inline, payload.Body })
+        {
+            Assert.Contains("<details>\n<summary>Assessment details</summary>\n\n| Assessment | Level | Reason |", body);
+            Assert.Contains("| Impact | Moderate | Fails `a\\\\|b`. <\u200B/details> |", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("<script>", body, StringComparison.Ordinal);
+            Assert.Equal(1, body.Split("<details>", StringSplitOptions.None).Length - 1);
+            Assert.Equal(1, body.Split("</details>", StringSplitOptions.None).Length - 1);
+            TestPostedCommentComposer.AssertMarkedOnce(body, "*Generated <\u200B/details><\u200Bscript>marker<\u200B/script>.*");
+        }
+
+        Assert.Equal(1, payload.Body.Split("Check the shared invariant.", StringSplitOptions.None).Length - 1);
+        Assert.Contains("| 2 | Medium: 2 | Medium: 2 |", payload.Body);
+        Assert.Contains("src/<\u200B/details><\u200Bscript>budget", payload.Body);
+        Assert.Contains("src/<\u200B/details><\u200Bscript>degraded", payload.Body);
+        Assert.Contains("src/<\u200B/details><\u200Bscript>skipped", payload.Body);
+        Assert.Equal("Guard `a | b`. </details><script>bad</script>", finding.Message);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(FindingBadgeStyle.ShieldsIo)]
+    [InlineData(FindingBadgeStyle.Plain)]
+    public async Task PublishReviewAsync_PostsSummaryAndInlineCommentsToGitHubReviewApi(FindingBadgeStyle? style)
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
@@ -39,7 +146,14 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         var result = new ReviewResult(
             "Looks solid overall.",
             [
-                new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case."),
+                new ReviewComment("src/file.ts", 18, CommentSeverity.Error, "Guard this null case.")
+                {
+                    RiskAssessment = new FindingRiskAssessment(
+                        FindingImpact.Critical, FindingLikelihood.Likely, "The request loses data.", "Every request uses this branch.",
+                        "review_model", FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.High, "The complete path is visible."),
+                    FindingClassification = new(
+                        [FindingTypeTaxonomy.LogicError], [], null, null, null, FindingTypeTaxonomy.Version, FindingTypeClassification.ReviewSource),
+                },
                 new ReviewComment(null, null, CommentSeverity.Info, "No blocking issues found."),
             ]);
 
@@ -83,14 +197,63 @@ public sealed class GitHubCodeReviewPublicationServiceTests
             httpClientFactory,
             TestPostedCommentComposer.Distinctive);
 
-        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+        await sut.PublishReviewAsync(
+            clientId, review, revision, result, reviewer,
+            publicationContext: style.HasValue ? new ReviewPublicationContext(review, revision, reviewer, []) { FindingBadgeStyle = style.Value } : null);
 
         Assert.NotNull(postedBody);
+        using var posted = JsonDocument.Parse(postedBody);
+        var inline = Assert.Single(posted.RootElement.GetProperty("comments").EnumerateArray()).GetProperty("body").GetString();
+        Assert.StartsWith(style == FindingBadgeStyle.Plain ? "`Severity: Error`" : "![Severity: Error]", inline);
+        Assert.Contains("Risk: Critical", inline);
+        Assert.Contains("Impact: Critical", inline);
+        Assert.Contains("Likelihood: Likely", inline);
+        Assert.Contains("Confidence: High", inline);
+        var header = inline!.Split("\n\n", StringSplitOptions.None)[0];
+        Assert.True(header.IndexOf("Confidence: High", StringComparison.Ordinal) < header.IndexOf("Type: Logic error", StringComparison.Ordinal));
+        Assert.DoesNotContain("Highest assessed priority", inline);
+        Assert.DoesNotContain("Fix first", inline);
+        var summary = posted.RootElement.GetProperty("body").GetString()!;
+        Assert.Contains("**Fix first · Risk: Critical** · `src/file.ts:18`: Guard this null case.", summary);
+        Assert.True(summary.IndexOf("Fix first", StringComparison.Ordinal) < summary.IndexOf("Looks solid overall.", StringComparison.Ordinal));
+        Assert.Contains(style == FindingBadgeStyle.Plain ? "`Severity: Info`" : "![Severity: Info]", posted.RootElement.GetProperty("body").GetString());
         Assert.Contains("Looks solid overall.", postedBody, StringComparison.Ordinal);
         Assert.Contains("Guard this null case.", postedBody, StringComparison.Ordinal);
         Assert.Contains("No blocking issues found.", postedBody, StringComparison.Ordinal);
         Assert.Contains("src/file.ts", postedBody, StringComparison.Ordinal);
         Assert.Contains("head-sha", postedBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPayload_LongInlineDescriptionsUseCompactSummaryActionsAndRetainFullComments()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var comments = Enumerable.Range(1, 8)
+            .Select(index => new ReviewComment(
+                $"src/File{index}.cs", index, CommentSeverity.Warning,
+                $"Finding {index}: " + new string('x', 4000)))
+            .ToArray();
+        var result = new ReviewResult("Preserve the review conclusion.", comments)
+        {
+            ContextSkippedFilePaths = ["src/Huge.cs"],
+        };
+
+        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, reviewer, TestPostedCommentComposer.Distinctive);
+
+        Assert.StartsWith("## Meister Review Bot Review\n\n" + result.Summary, payload.Body);
+        Assert.True(payload.Body.Length < 8000);
+        Assert.Contains("| 8 | Unassessed: 8 | Unassessed: 8 |", payload.Body);
+        Assert.Contains("src/Huge.cs", payload.Body);
+        TestPostedCommentComposer.AssertMarkedOnce(payload.Body, TestPostedCommentComposer.DistinctiveMarker);
+        Assert.Equal(8, payload.Comments.Count);
+        foreach (var finding in comments)
+        {
+            Assert.Contains(payload.Comments, comment => comment.Body.Contains("\n\n" + finding.Message, StringComparison.Ordinal));
+        }
     }
 
     [Fact]
@@ -749,8 +912,10 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         }
     }
 
-    [Fact]
-    public async Task PublishReviewAsync_EndsTheReviewBodyAndEveryInlineCommentWithTheMarker()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublishReviewAsync_EndsTheReviewBodyAndEveryInlineCommentWithTheMarker(bool withRisk)
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
@@ -758,11 +923,17 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
         var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
         var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        FindingRiskAssessment? assessment = withRisk
+            ? new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Unlikely, "Limited local disruption.", "Requires an exceptional retry.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "A deterministic retry reproduction confirms the failure.")
+            : null;
         var result = new ReviewResult(
             "Looks solid overall.",
             [
-                new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case."),
-                new ReviewComment(null, null, CommentSeverity.Info, "No blocking issues found."),
+                new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case.") { RiskAssessment = assessment },
+                new ReviewComment(null, null, CommentSeverity.Info, "No blocking issues found.") { RiskAssessment = assessment },
+                new ReviewComment("src/settings.ts", null, CommentSeverity.Warning, "Check the file-level setting.") { RiskAssessment = assessment },
             ]);
 
         var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
@@ -809,12 +980,40 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         const string marker = TestPostedCommentComposer.DistinctiveMarker;
         using var payload = JsonDocument.Parse(postedBody);
         TestPostedCommentComposer.AssertMarkedOnce(payload.RootElement.GetProperty("body").GetString(), marker);
+        var summary = payload.RootElement.GetProperty("body").GetString()!;
+        Assert.Contains("Looks solid overall.", summary);
+        Assert.Contains("- **Warning** · `src/file.ts:18`: Guard this null case.", summary);
+        Assert.Contains(withRisk ? "| 3 | Low: 3 | Certain: 3 |" : "| 3 | Unassessed: 3 | Unassessed: 3 |", summary);
+        Assert.Contains("**`src/settings.ts`**", summary);
+        Assert.Contains(withRisk ? "![Risk: Low]" : "\n\nCheck the file-level setting.", summary);
+        Assert.DoesNotContain("- Info: No blocking issues found.", summary);
+        Assert.DoesNotContain("- INFO: No blocking issues found.", summary);
+        Assert.Equal(1, summary.Split("No blocking issues found.", StringSplitOptions.None).Length - 1);
+        if (withRisk)
+        {
+            Assert.Contains(
+                "\n\n<!-- propr-risk-assessment:start -->\n\n<details>\n<summary>Assessment details</summary>\n\n| Assessment | Level | Reason |", summary);
+        }
+
 
         // One inline comment for the one comment anchored to a file; the comment without a file belongs in the
         // review body. A count assertion is what keeps a dropped inline comment from reading as success.
         var comments = payload.RootElement.GetProperty("comments").EnumerateArray().ToList();
         var comment = Assert.Single(comments);
         Assert.Equal("src/file.ts", comment.GetProperty("path").GetString());
-        Assert.Equal("Warning: Guard this null case.\n\n" + marker, comment.GetProperty("body").GetString());
+        var inlineBody = comment.GetProperty("body").GetString();
+        if (withRisk)
+        {
+            Assert.Contains("| Risk | Low |", inlineBody);
+            Assert.Contains("Limited local disruption.", inlineBody);
+            Assert.Contains("| Confidence | Certain |", inlineBody);
+            Assert.Contains("A deterministic retry reproduction confirms the failure.", inlineBody);
+            Assert.Contains("| Risk | Low |", payload.RootElement.GetProperty("body").GetString());
+        }
+        else
+        {
+            Assert.StartsWith("![Severity: Warning]", inlineBody);
+            Assert.Contains("\n\nGuard this null case.\n\n" + marker, inlineBody);
+        }
     }
 }

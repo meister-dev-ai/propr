@@ -11,6 +11,16 @@ The default bounds are eight operations globally, four per provider host, and on
 An operation has a 90-second deadline. Failed operations retain pending work and retry after 15 seconds.
 Unavailable connections retry at the reconciliation interval.
 
+Active review admission reads current discussion and pull-request evidence without waiting for
+resolution-memory generation. The discussion worker processes pending memory under its existing
+deadline. Completed memory work survives cancellation of a later thread. Discussion edits, resolution
+or grounding changes, and AI configuration changes can require memory processing; an unrelated
+commit does not regenerate unchanged memory. Closed observations still require final consumer evidence.
+
+An admitted review can fail before making a model call if its configured AI provider is unavailable on
+the API host. Inspect the job error and the provider add-in inventory. Local launches must supply
+`AI_PLUGIN_DIRECTORY` when an activated private provider is installed outside the default directory.
+
 Provider load scales with the number of due pull requests and the pages needed to enumerate their
 discussions. Notifications can add reads between reconciliations. Providers with native thread reads
 can fetch only identified threads when a full reconciliation is current. Other refreshes enumerate

@@ -37,7 +37,12 @@ internal sealed record ReviewerPerformanceFindingEvidence(
     string? NativeStatus,
     CodeInsightDisposition? CurrentDisposition,
     string? CurrentClassifierVersion,
-    double? CurrentClassifierConfidence);
+    double? CurrentClassifierConfidence,
+    FindingImpact Impact,
+    FindingLikelihood Likelihood,
+    FindingRiskSeverity RiskSeverity,
+    FindingConfidence Confidence,
+    string RiskRubricVersion);
 
 internal sealed record ReviewerPerformanceMissEvidence(
     DateTimeOffset HarvestedAt,

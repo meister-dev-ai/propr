@@ -57,7 +57,7 @@ public sealed class AiRuntimeFactory(
             endpoint,
             model.ToProviderModel(),
             binding.ProtocolMode).ToReviewCapabilities();
-        var wrapped = this.WrapChatClient(client, driver, connection, model, logicalModelName);
+        var wrapped = this.WrapChatClient(client, driver, connection, model, logicalModelName, capabilities.SupportsPromptCacheRouting);
         return new ResolvedAiChatRuntime(connection, model, binding, wrapped, capabilities)
         {
             LogicalModelName = logicalModelName,
@@ -162,13 +162,15 @@ public sealed class AiRuntimeFactory(
         IAiProviderDriver driver,
         AiConnectionDto connection,
         AiConfiguredModelDto model,
-        string? logicalModelName)
+        string? logicalModelName,
+        bool supportsPromptCacheRouting)
     {
         var policy = this.RetryPolicy();
         var decorators = new List<IProviderChatClientDecorator>
         {
             new ProviderRetryChatClientDecorator(driver, policy, connection.DisplayName, timeProvider, logger),
             new ReasoningModelSamplingDecorator(driver),
+            new PromptCacheRoutingDecorator(supportsPromptCacheRouting),
 
             // Innermost, so the budget and telemetry stages outside it price and record the counters the family
             // mapped. Neither of those stages holds a driver, and neither reads a vendor's field names.

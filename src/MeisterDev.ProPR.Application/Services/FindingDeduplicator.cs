@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Application.Services;
@@ -167,8 +168,31 @@ public static class FindingDeduplicator
             ? anchor.ScopeRelation
             : null;
 
-        return anchor.AsPullRequestLevel(consolidatedMessage) with { ScopeRelation = agreedScopeRelation };
+        return anchor.AsPullRequestLevel(consolidatedMessage) with
+        {
+            ScopeRelation = agreedScopeRelation,
+            RiskAssessment = ConsolidateRiskAssessment(anchor.RiskAssessment, group),
+            FindingClassification = FindingTypeClassification.Merge(group.Select(comment => comment.FindingClassification)),
+        };
     }
+
+    private static FindingRiskAssessment? ConsolidateRiskAssessment(FindingRiskAssessment? anchor, List<ReviewComment> group)
+    {
+        if (group.All(comment => comment.RiskAssessment == anchor))
+        {
+            return anchor;
+        }
+
+        var commonRisk = WithoutConfidence(anchor);
+        return group.All(comment => WithoutConfidence(comment.RiskAssessment) == commonRisk)
+            ? ReviewFindingConfidence.Consolidate(commonRisk, group.Select(comment => comment.RiskAssessment))
+            : null;
+    }
+
+    private static FindingRiskAssessment? WithoutConfidence(FindingRiskAssessment? risk) =>
+        risk is null
+            ? null
+            : new FindingRiskAssessment(risk.Impact, risk.Likelihood, risk.ImpactReason, risk.LikelihoodReason, risk.Source, risk.RubricVersion);
 
     /// <summary>
     ///     Collapses near-identical findings anchored to the SAME file into a single comment, keeping the
@@ -227,15 +251,23 @@ public static class FindingDeduplicator
             removed.Add(comment);
         }
 
-        if (merges is not null)
+        var result = new List<ReviewComment>(kept.Count);
+        foreach (var survivor in kept)
         {
-            foreach (var survivor in kept.Where(absorbed.ContainsKey))
+            if (!absorbed.TryGetValue(survivor, out var removed))
             {
-                merges.Add(new FindingMergeRecord([survivor], absorbed[survivor], FindingDeduplicationResult.TokenSimilarityReason));
+                result.Add(survivor);
+                continue;
             }
+
+            var classification = FindingTypeClassification.Merge(
+                new[] { survivor.FindingClassification }.Concat(removed.Select(comment => comment.FindingClassification)));
+            var retained = classification is null ? survivor : survivor with { FindingClassification = classification };
+            result.Add(retained);
+            merges?.Add(new FindingMergeRecord([retained], removed, FindingDeduplicationResult.TokenSimilarityReason));
         }
 
-        return kept.AsReadOnly();
+        return result.AsReadOnly();
     }
 
     /// <summary>

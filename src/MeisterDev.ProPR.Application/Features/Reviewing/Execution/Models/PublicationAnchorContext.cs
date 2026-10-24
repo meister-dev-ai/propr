@@ -13,7 +13,9 @@ public sealed record PublicationAnchorContext(
     int? ResolvedLineNumber,
     PublicationAnchorPrecision AnchorPrecision,
     string? ProviderTrackingReference = null,
-    string? CompareRevisionReference = null);
+    string? CompareRevisionReference = null,
+    int? ResolvedEndLineNumber = null,
+    int? ResolvedEndOffset = null);
 
 /// <summary>
 ///     Precision level that can be trusted for a provider-native comment anchor.

@@ -53,6 +53,39 @@ public sealed class CodeInsightBrowseReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task RiskBrowseIntersectsAxesAndReturnsProtectedAssessmentAfterPaging()
+    {
+        var key = new CodeInsightPullRequestKey(ClientA, "repo", 8);
+        var risk = new FindingRiskAssessment(
+            FindingImpact.Moderate, FindingLikelihood.Unlikely,
+            "Limited result error", "Only an uncommon input triggers it", "review-generation", FindingRiskAssessment.CurrentRubricVersion,
+            FindingConfidence.Certain, "The uncommon input deterministically produces an incorrect result.");
+
+        CodeInsightFindingSnapshot Finding(int ordinal, FindingRiskAssessment? assessment) => new(
+            ordinal, "a.cs", 10, CommentSeverity.Error, $"Finding {ordinal}", "Baseline", null, null, false,
+            null, null, null, null, RiskAssessment: assessment);
+
+        await this._store.MaterialiseFindingsAsync(
+            key, Guid.NewGuid(), "risk", ReviewedAt,
+            [Finding(0, risk), Finding(1, risk with { }), Finding(2, null)]);
+        var eligibleIds = await this._dbContext.CodeInsightFindings
+            .Where(finding => finding.RiskSeverity == FindingRiskSeverity.Low)
+            .OrderBy(finding => finding.Id).Select(finding => finding.Id).ToArrayAsync();
+        var query = this.Query(ClientA) with
+        {
+            Impact = FindingImpact.Moderate, Likelihood = FindingLikelihood.Unlikely,
+            RiskSeverity = FindingRiskSeverity.Low, Confidence = FindingConfidence.Certain, Offset = 1, Limit = 1
+        };
+        var row = Assert.Single(await this._reader.ListFindingsAsync(query));
+        Assert.Equal(eligibleIds[1], row.Id);
+        Assert.Equal(risk, row.RiskAssessment);
+        Assert.Null(Assert.Single(await this._reader.ListFindingsAsync(this.Query(ClientA) with { Impact = FindingImpact.Unknown })).RiskAssessment);
+        Assert.Empty(await this._reader.ListFindingsAsync(query with { RiskSeverity = FindingRiskSeverity.Critical }));
+        Assert.Empty(await this._reader.ListFindingsAsync(query with { Confidence = FindingConfidence.Low }));
+        Assert.Empty(await this._reader.ListFindingsAsync(query with { ClientIds = [ClientB] }));
+    }
+
+    [Fact]
     public async Task AFindingComesBackWithItsScopeItsTextAndItsOutcome()
     {
         var key = await this.SeedAsync(ClientA, "repo-1", 7, ["a.cs", "b.cs"]);

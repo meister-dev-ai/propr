@@ -413,7 +413,7 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
         return new ProtocolReviewCommentDto(
             comment.FilePath, comment.LineNumber, comment.Severity, comment.Message, comment.OriginPassKind, comment.ScopeRelation, comment.OriginPassIndex,
             comment.OriginPassLens, comment.OriginModelId, comment.OriginLogicalModelName, comment.OriginSymbolName,
-            comment.OriginSymbolKind);
+            comment.OriginSymbolKind, comment.RiskAssessment);
     }
 
     private static string ResolveProviderProjectKey(ReviewJob job)

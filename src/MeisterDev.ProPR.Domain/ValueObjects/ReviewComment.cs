@@ -75,20 +75,54 @@ public sealed record ReviewComment
             OriginLogicalModelName = this.OriginLogicalModelName,
             OriginSymbolName = this.OriginSymbolName,
             OriginSymbolKind = this.OriginSymbolKind,
+            RiskAssessment = this.RiskAssessment, FindingClassification = this.FindingClassification,
+            ProducedWithRepositoryTools = this.ProducedWithRepositoryTools,
+            SuggestedFix = this.SuggestedFix,
         };
     }
 
     /// <summary>Optional file path the comment refers to.</summary>
-    public string? FilePath { get; }
+    public string? FilePath { get; private init; }
 
     /// <summary>Optional line number within the file.</summary>
-    public int? LineNumber { get; }
+    public int? LineNumber { get; private init; }
 
     /// <summary>Severity of the comment.</summary>
-    public CommentSeverity Severity { get; }
+    public CommentSeverity Severity { get; private init; }
 
     /// <summary>Comment message text.</summary>
-    public string Message { get; }
+    public string Message { get; private init; }
+
+    /// <summary>Rephrases a retained finding while preserving its classification and provenance.</summary>
+    public ReviewComment WithMessage(string message)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(message);
+        return this with { Message = message };
+    }
+
+    /// <summary>Optional assessed impact and likelihood. Null for unassessed and historical findings.</summary>
+    public FindingRiskAssessment? RiskAssessment { get; init; }
+
+    /// <summary>Whether the original producing pass could read repository code through tools, when recorded.</summary>
+    public bool? ProducedWithRepositoryTools { get; init; }
+
+    /// <summary>Types and analytics axes assigned while producing this finding.</summary>
+    public FindingTypeClassification? FindingClassification { get; init; }
+
+    /// <summary>Optional exact replacement. An unbound fix is displayed as ordinary code.</summary>
+    public ReviewSuggestedFix? SuggestedFix { get; init; }
+
+    /// <summary>Copies the comment while preserving metadata when a processing step changes classification or anchor.</summary>
+    public ReviewComment WithAnchorAndSeverity(string? filePath, int? lineNumber, CommentSeverity severity) =>
+        this with
+        {
+            FilePath = filePath,
+            LineNumber = lineNumber,
+            Severity = severity,
+            SuggestedFix = this.SuggestedFix is { } fix && (this.FilePath != filePath || this.LineNumber != lineNumber)
+                ? fix with { IsSourceValidated = false, IsAnchorRemapped = true }
+                : this.SuggestedFix,
+        };
 
     /// <summary>
     ///     The <c>ReviewPassKind</c> name of the review pass that produced this finding (e.g.

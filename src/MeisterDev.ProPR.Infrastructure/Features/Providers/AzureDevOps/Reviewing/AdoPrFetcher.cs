@@ -193,7 +193,10 @@ public sealed partial class AdoPrFetcher(
             ExistingThreads: existingThreads,
             AllChangedFileSummaries: allChangedFileSummaries,
             AuthorizedIdentityId: authorizedIdentityId,
-            Author: ToPullRequestAuthor(host, pr.CreatedBy));
+            Author: ToPullRequestAuthor(host, pr.CreatedBy))
+        {
+            FetchedHeadSha = workspace is null || workspace.Lease?.HeadSha == sourceCommit ? sourceCommit : null,
+        };
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(

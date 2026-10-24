@@ -38,9 +38,9 @@
                                         <option v-for="kind in kinds" :key="kind" :value="kind">{{ findingLabel(kind) }}</option>
                                     </select>
                                 </label>
-                                <label>Severity
+                                <label>Classification
                                     <select v-model="filters.severity" aria-label="Filter finding severity" :disabled="metadataLoading || !!metadataError">
-                                        <option value="">All severities</option>
+                                        <option value="">All classifications</option>
                                         <option value="error">Error</option>
                                         <option value="warning">Warning</option>
                                         <option value="suggestion">Suggestion</option>
@@ -61,6 +61,7 @@
                                 </label>
                             </template>
                         </div>
+                        <FindingRiskFilters v-if="showFindingFilters" :model-value="filters" :disabled="metadataLoading || !!metadataError" @update:model-value="Object.assign(filters, $event)" />
                         <button v-if="hasFilters" type="button" class="browser-clear" data-testid="browser-clear-filters" @click="clearFilters">Clear filters</button>
                         <p v-if="metadataLoading" class="browser-metadata-notice" role="status">
                             {{ findings.length ? 'Refreshing finding details…' : 'Loading finding details…' }}
@@ -115,6 +116,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import FindingRiskFilters from '@/components/findings/FindingRiskFilters.vue'
 import JobProtocolDiffViewer, { type InlineDiffThread } from '@/features/job-protocol/components/JobProtocolDiffViewer.vue'
 import RetainedFileList from './RetainedFileList.vue'
 import RetainedThreadPanel from './RetainedThreadPanel.vue'
@@ -133,7 +135,7 @@ const props = withDefaults(defineProps<{
     onRetryMetadata?: () => void
 }>(), { findings: () => [], showFindingFilters: false, metadataLoading: false, metadataError: null })
 
-const filters = reactive<BrowserFileFilters>({ query: '', presence: 'all', kind: '', severity: '', outcome: '' })
+const filters = reactive<BrowserFileFilters>({ query: '', presence: 'all', kind: '', severity: '', outcome: '', impact: '', likelihood: '', riskSeverity: '', confidence: '' })
 const mobileFilesOpen = ref(false)
 const selectedFilePath = ref<string | null>(null)
 const selectedRevisionKey = ref<string | null>(null)
@@ -145,7 +147,7 @@ let diffRequest = 0
 
 const filteredFiles = computed(() => filterBrowserFiles(props.retained.files.value, props.retained.threads.value, props.findings, filters))
 const kinds = computed(() => [...new Set(props.findings.flatMap(finding => finding.coreTags))].sort())
-const hasFilters = computed(() => !!filters.query.trim() || filters.presence !== 'all' || !!filters.kind || !!filters.severity || !!filters.outcome)
+const hasFilters = computed(() => !!filters.query.trim() || filters.presence !== 'all' || !!filters.kind || !!filters.severity || !!filters.outcome || !!filters.impact || !!filters.likelihood || !!filters.riskSeverity || !!filters.confidence)
 const selectedFileThreads = computed(() => !selectedFilePath.value ? [] : props.retained.threads.value.filter(
     thread => normalizeFilePath(thread.filePath) === normalizeFilePath(selectedFilePath.value),
 ))
@@ -154,7 +156,7 @@ function countFindings(path: string): number {
     return findingCountForFile(path, props.retained.threads.value, props.findings)
 }
 function clearFilters(): void {
-    Object.assign(filters, { query: '', presence: 'all', kind: '', severity: '', outcome: '' })
+    Object.assign(filters, { query: '', presence: 'all', kind: '', severity: '', outcome: '', impact: '', likelihood: '', riskSeverity: '', confidence: '' })
 }
 function threadKey(thread: RetainedThread, index: number): string { return thread.threadId ?? 'thread-' + index }
 const inlineThreads = computed<InlineDiffThread<RetainedThread>[]>(() => selectedFileThreads.value.map((thread, index) => ({ id: threadKey(thread, index), line: thread.line, payload: thread })))
@@ -207,7 +209,7 @@ watch(filteredFiles, files => {
     }
 })
 watch(() => props.showFindingFilters, available => {
-    if (!available) Object.assign(filters, { kind: '', severity: '', outcome: '' })
+    if (!available) Object.assign(filters, { kind: '', severity: '', outcome: '', impact: '', likelihood: '', riskSeverity: '', confidence: '' })
 })
 watch(() => props.retained, () => {
     clearSelection()

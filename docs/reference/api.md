@@ -14,9 +14,24 @@ Code Insights capability. Scope the read with `clientId`, `repositoryId`, and `p
 
 `limit` is clamped to 1–200. `offset` skips matching rows and treats negative values as zero. Rows are
 ordered by review observation time descending and finding ID ascending. Read successive pages until a
-page contains fewer than `limit` rows. Each row includes the provider thread ID, severity, classified
-core tags, disposition, and nullable `rejectionReason`. An absent rejection reason represents an unknown
+page contains fewer than `limit` rows. Each row includes the provider thread ID, legacy severity classification,
+nullable `riskAssessment`, classified core tags, disposition and nullable `rejectionReason`. An absent rejection reason represents an unknown
 or inapplicable reason.
+
+`riskAssessment` contains `impact`, `likelihood`, `confidence`, derived `severity`, `impactReason`, `likelihoodReason`, `confidenceReason`,
+`source` and `rubricVersion`. HTTP enum values use lower camel case; Unknown serializes as `unknown` and
+Not applicable as `notApplicable`. Missing assessments remain null. The
+[finding risk rubric](../concepts/reviews.md#finding-risk) defines severity and incomplete evidence.
+Confidence uses `low`, `medium`, `high` and `certain`; `unknown` is the unassessed state. Confidence
+requires a bounded rationale and does not change the severity matrix or numeric classifier confidence.
+Review status, completed results and protocol finding DTOs carry the same optional assessment.
+
+Code Quality reads accept independent `impact`, `likelihood`, `confidence` and `riskSeverity` query selections. Omit a
+selection to include all values; use `Unknown` for unassessed evidence. Names are case-insensitive and
+unrecognized selections select Unknown. These filters also apply to findings drill-through and the
+legacy reviewer-performance metric reads. `GET /api/code-quality/risk-over-time` returns bucketed counts
+with `dimension=impact`, `likelihood`, `confidence` or `riskSeverity` (default), using the existing type-series response
+shape. It accepts the same date, client, repository, PR, file and risk scope and `bucket=day|week|month`.
 
 ## Admin authentication
 
@@ -695,7 +710,11 @@ views under a consistent database snapshot:
       "repositories": null,
       "models": null,
       "types": null,
-      "qualifiers": null
+      "qualifiers": null,
+      "impacts": null,
+      "likelihoods": null,
+      "riskSeverities": null,
+      "confidences": null
     }
   ],
   "breakdown": { "rows": "type", "columns": "qualifier", "date": "2026-09-30", "viewIndex": 0 }
@@ -703,7 +722,7 @@ views under a consistent database snapshot:
 ```
 
 `bucket` accepts `day`, `week` or `month`; `aggregation` accepts `cumulative` or `period`. Grouping accepts
-`none`, `client`, `repository`, `model`, `type` or `qualifier`. Matrix axes use two distinct dimensions from
+`none`, `client`, `repository`, `model`, `type`, `qualifier`, `impact`, `likelihood`, `confidence` or `riskSeverity`. Matrix axes use two distinct dimensions from
 that list, excluding `none`. Matrix date selects a bucket in its zero-based `viewIndex`; the response
 displays the clipped measurement window.
 
@@ -714,6 +733,16 @@ series, 2,000 timeline points and 12 values per matrix axis. Source identity rem
 Each view permits 100,000 distinct retained source coordinates for optional link resolution, 100,000
 exclusion catalog entries and 1,000,000 exclusion references across timeline and matrix points. Exceeded
 limits return 400 without truncating counts or exclusions. Unauthorized selected clients return 403.
+
+Assessment selections use returned facet IDs, such as `Critical`, `Certain`, `Unknown` and `NotApplicable`. These IDs use
+the retained enum names; they differ from the lower-camel-case enum values in nested `riskAssessment`.
+Null or absent assessment selections include every value; empty arrays select no observations. Assessment dimensions
+use the same union-within-dimension and intersection-across-dimensions semantics as the other selections.
+`view.evidence.riskRubricVersions` captures versions observed in the retained source population.
+Risk restrictions, grouping and matrix axes make recall/F1 unavailable with
+`miss-risk-assessment-unavailable` until independently assessed human concerns are available. Supported
+overall precision remains available. Legacy risk-filtered whole-PR correctness returns
+`sealed-risk-filter-unavailable` instead of reusing an unfiltered score.
 
 Each response includes calculation version, capture time, database evidence revision, authorized display
 facets, counts, all premise tuples, summaries, measurement windows and evidence limits. Projection timestamps

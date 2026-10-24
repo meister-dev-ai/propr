@@ -21,6 +21,19 @@ namespace MeisterDev.ProPR.CodeInsights.Tests.Controllers;
 public sealed class ReviewerPerformanceControllerTests
 {
     [Fact]
+    public async Task EveryLegacyFindingMetricCarriesTheIndependentConfidenceScope()
+    {
+        var harness = new CodeInsightAudienceHarness(tenantAdmin: true);
+        await harness.ReviewerPerformance.GetQuality(confidence: "Certain");
+        await harness.ReviewerPerformance.GetByGrain(confidence: "Certain");
+        await harness.ReviewerPerformance.GetFindings(confidence: "Certain");
+        await harness.ReviewerPerformance.GetRejectionReasons(confidence: "Certain");
+        Assert.NotEmpty(harness.RequestedMetricScopes);
+        Assert.All(harness.RequestedMetricScopes, scope => Assert.Equal(FindingConfidence.Certain, scope.Confidence));
+        Assert.All(harness.RequestedBrowseScopes, scope => Assert.Equal(FindingConfidence.Certain, scope.Confidence));
+    }
+
+    [Fact]
     public async Task AClientUserIsRefusedEveryRead()
     {
         // The split is an authorisation boundary, not a presentation choice. Holding client roles (even

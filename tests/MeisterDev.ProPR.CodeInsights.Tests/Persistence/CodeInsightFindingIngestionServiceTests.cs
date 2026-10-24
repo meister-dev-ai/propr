@@ -19,6 +19,43 @@ public sealed class CodeInsightFindingIngestionServiceTests
     private static readonly Guid JobId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     [Fact]
+    public async Task ReviewClassificationIsCollectedEvenWhenPublicationIsDisabled()
+    {
+        var store = Substitute.For<ICodeInsightFindingStore>();
+        var sut = new CodeInsightFindingIngestionService(store, OpenGate(), NullLogger<CodeInsightFindingIngestionService>.Instance);
+        var classification = new FindingTypeClassification(
+            ["logic-error"], [], CodeInsightFindingLevel.Member,
+            CodeInsightFindingQualifier.Incorrect, 0.94, 1, FindingTypeClassification.ReviewSource);
+        var finding = CreateFindings()[0] with { FindingClassification = classification, PublicationState = CodeInsightPublicationState.PostingDisabled };
+        await sut.HandleReviewFindingsProducedAsync(CreateEvent(DateTimeOffset.UtcNow, [finding]));
+        await store.Received(1).MaterialiseFindingsAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(),
+            Arg.Is<IReadOnlyList<CodeInsightFindingSnapshot>>(rows => rows.Count == 1 && rows[0].FindingClassification == classification
+                                                                                      && rows[0].PublicationState ==
+                                                                                      CodeInsightPublicationState.PostingDisabled),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RiskAssessmentIsCollectedForPostingDisabledFindings()
+    {
+        var store = Substitute.For<ICodeInsightFindingStore>();
+        var sut = new CodeInsightFindingIngestionService(store, OpenGate(), NullLogger<CodeInsightFindingIngestionService>.Instance);
+        var risk = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Unlikely, "A transaction fails",
+            "Only conflicting inputs trigger it", "review-generation", FindingRiskAssessment.CurrentRubricVersion);
+        var finding = CreateFindings()[0] with { RiskAssessment = risk, PublicationState = CodeInsightPublicationState.PostingDisabled };
+        await sut.HandleReviewFindingsProducedAsync(CreateEvent(DateTimeOffset.UtcNow, [finding]));
+        await store.Received().MaterialiseFindingsAsync(
+            Arg.Any<CodeInsightPullRequestKey>(), Arg.Any<Guid>(), Arg.Any<string>(),
+            Arg.Any<DateTimeOffset>(), Arg.Is<IReadOnlyList<CodeInsightFindingSnapshot>>(rows => rows.Count == 1 &&
+                                                                                                 rows[0].RiskAssessment == risk &&
+                                                                                                 rows[0].PublicationState ==
+                                                                                                 CodeInsightPublicationState.PostingDisabled),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task HandleReviewFindingsProducedAsync_TouchesThePullRequestAndMapsEveryFindingField()
     {
         var store = Substitute.For<ICodeInsightFindingStore>();

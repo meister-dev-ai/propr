@@ -89,6 +89,7 @@ public static class CodeInsightsModuleServiceCollectionExtensions
         // The taxonomy service serves an admin surface rather than a best-effort side-write, so it uses the
         // shared request-scoped context like every other configuration repository.
         services.AddScoped<ICodeInsightTaxonomyService, CodeInsightTaxonomyService>();
+        services.AddScoped<IFindingTypeVocabularyProvider, CodeInsightTaxonomyService>();
 
         // Post-hoc type classification. The classifier resolves its model through the shared AI runtime
         // resolver, so it is configured wherever every other purpose is.

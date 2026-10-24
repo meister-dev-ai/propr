@@ -26,7 +26,7 @@ flowchart LR
 
 | Evidence | Retained information |
 |---|---|
-| Reviewer findings | ProPR records the producing model, finding type and kind, publication, outcome and duplicate evidence. |
+| Reviewer findings | ProPR records the producing model, finding type and kind, impact, likelihood, correctness confidence, derived risk, publication, outcome and duplicate evidence. |
 | Human concerns | ProPR records the discussion, substantive and acted-on judgments, scope, classification and collection coverage. |
 | Model opportunities | Versioned checkpoints retain source, revision, assigned file/range, actual model/pass, candidate completeness, terminal disposition and first durable server acceptance. |
 
@@ -34,7 +34,16 @@ Evidence is associated with its client, provider host or organization, repositor
 Repeated observations of one publication count once; suppressed repeats receive no additional publication
 credit. Connection edits do not change a captured source identity.
 
+Finding types are assigned during review from the core vocabulary and the client's captured custom tags.
+Synthesis and analytics ingestion preserve supported classifications. Background classification fills missing
+types without replacing review-produced assignments. Invalid or missing type metadata does not discard findings.
+
 Missing source identity, classification or judgment remains visible as unknown.
+
+Finding assessments retain impact, likelihood, correctness confidence, derived risk and supporting evidence.
+Evidence text is protected; scalar values support filtering. The server derives risk from its rubric and records
+confidence provenance independently. Combined findings retain supported risk and the weakest material confidence.
+Raw findings remain independent of publication formatting, and missing assessments remain unassessed.
 
 Verification-withheld candidates retain their original comment, model and pass provenance, scope,
 grounding and withholding reason separately from publishable comments. File checkpoints store this
@@ -71,12 +80,25 @@ Discussion consumers share one provider observation. PostgreSQL records independ
 so failed consumers can retry without repeating completed work. Collection and archive policies still
 apply, and immutable measurements require acknowledged final evidence.
 
+Active review admission defers resolution-memory generation to durable discussion refreshes. Memory
+acknowledgments are checkpointed after successful processing, and interrupted replacements invalidate
+their previous acknowledgment before writing new memory. Final close observations retain complete
+consumer processing before evidence is sealed.
+
 ## Measurements
 
 Performance measurements apply scoring premises to stored counts. Counts refresh as evidence is collected,
 and background catch-up recovers missed updates. Filtering and range calculations reuse those counts.
 Side-by-side views use a consistent set of evidence. Each view shows its latest evidence update time and
 pending-update status separately from the response capture time.
+
+Quality and performance measurements support combined assessment filters and keep unassessed findings separate.
+Reprocessing preserves known evidence and rebuilds affected counts. Unreadable optional evidence remains
+unassessed without interrupting projection of other findings.
+
+Risk-specific recall and F1 require compatible independent human assessments. When those assessments are
+unavailable, coverage records the limitation while publication precision uses the selected findings.
+Persistence measurements use the first assessment in the requested window to define the cohort.
 
 The catch-up worker projects findings and seals eligible pull requests before refreshing retained
 provider evidence, including closed pull requests and reviews with no findings. Durable claims and
@@ -188,7 +210,7 @@ The [API reference](../reference/api.md#reviewer-performance) defines query limi
 ## Saved reports and deletion
 
 A saved report captures its scope, counts, scoring premises, results, coverage policy, exclusion catalog and
-evidence cutoff. Opening the report uses that captured response without recalculation. Its evidence update
+evidence cutoff, including risk selections and observed rubric versions. Opening the report uses that captured response without recalculation. Its evidence update
 time and pending-update status
 describe the capture. Older reports retain their stored scoring version and identify absent coverage
 metadata. Recovery actions are available only for current evidence. Every report operation requires access

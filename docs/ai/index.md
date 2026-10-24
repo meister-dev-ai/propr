@@ -75,6 +75,12 @@ standing brief is identical on every file of every pull request.
 | `meisterdev/liteLlm`, `meisterdev/openAiCompatible` | No. A gateway request carries no cache breakpoint, so a Claude model reached this way pays full input price on every call |
 | `meisterdev/awsBedrock` | No. A Bedrock cache breakpoint is a content block, and the AWS interface ProPR calls through offers no way to place one - so Bedrock does not cache here, native or fronted |
 
+A provider caches a conversation's earlier turns only on the cache that served them. When a provider family
+accepts a cache routing hint, ProPR sends one routing key per conversation: the agentic review of one file, each
+verification lookup and the synthesis pass. ProPR derives the key from the conversation's first system message and
+first user message, so every turn of the conversation reaches the cache that holds the turns before it. None of the
+families in the table accepts a routing hint yet; an add-in family can declare that it does.
+
 Where a provider reports cache reads in its usage payload, ProPR records them whatever the family: cached input
 tokens and cache-write tokens are stored per model call alongside the ordinary input and output counts.
 

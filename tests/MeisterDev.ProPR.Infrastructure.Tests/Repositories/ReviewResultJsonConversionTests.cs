@@ -20,6 +20,27 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 public sealed class ReviewResultJsonConversionTests
 {
     [Fact]
+    public void DurableReviewAndFileCheckpointConverters_PreserveRiskEvidence()
+    {
+        var assessment = new FindingRiskAssessment(
+            FindingImpact.Moderate, FindingLikelihood.Unlikely, "Limited user disruption.", "Requires an exceptional retry.", "review_model",
+            FindingRiskAssessment.CurrentRubricVersion);
+        var comment = new ReviewComment("src/Work.cs", 7, CommentSeverity.Error, "Retry fails.") { RiskAssessment = assessment };
+        var result = new ReviewResult("Review.", [comment]) { WithheldFindings = [new WithheldReviewFinding(comment, "verification_withheld")] };
+        var resultConverter = GetResultConverter();
+        var restored = (ReviewResult)resultConverter.ConvertFromProvider(resultConverter.ConvertToProvider(result))!;
+        Assert.Equal(assessment, Assert.Single(restored.Comments).RiskAssessment);
+        Assert.Equal(assessment, Assert.Single(restored.WithheldFindings).Comment.RiskAssessment);
+
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>().UseNpgsql(
+            "Host=localhost;Database=unused;Username=unused;Password=unused", provider => provider.UseVector()).Options;
+        using var context = new MeisterProPRDbContext(options);
+        var fileConverter = context.Model.FindEntityType(typeof(ReviewFileResult))!.FindProperty(nameof(ReviewFileResult.Comments))!.GetValueConverter()!;
+        var checkpoint = (IReadOnlyList<ReviewComment>)fileConverter.ConvertFromProvider(fileConverter.ConvertToProvider(new List<ReviewComment> { comment }))!;
+        Assert.Equal(assessment, Assert.Single(checkpoint).RiskAssessment);
+    }
+
+    [Fact]
     public void EfConverter_SerializesReviewResult_WithPascalCaseSummaryKey()
     {
         var converter = GetResultConverter();

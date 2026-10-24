@@ -37,7 +37,8 @@ internal static class ReviewFindingPublicationMapper
                     comment.OriginModelId, comment.OriginLogicalModelName, comment.OriginSymbolName, comment.OriginSymbolKind,
                     state, suppressed?.ReasonCode ?? state.ToString(), suppressed?.MatchedProviderThreadId,
                     suspect is null ? CodeInsightDuplicateState.Unknown : CodeInsightDuplicateState.Suspected,
-                    suspect?.MatchedProviderThreadId, suspect is null ? null : "publication-near-match", suspect?.MatchScore, null, providerScope));
+                    suspect?.MatchedProviderThreadId, suspect is null ? null : "publication-near-match", suspect?.MatchScore, null, providerScope,
+                    comment.RiskAssessment, comment.FindingClassification));
         }
 
         // Negative ordinals keep retained evidence separate from publication candidates even when their count
@@ -66,7 +67,7 @@ internal static class ReviewFindingPublicationMapper
                     comment.Message, comment.OriginPassKind, comment.OriginPassIndex, comment.OriginPassLens, comment.OriginPassShadow,
                     comment.ScopeRelation, comment.SourceReadGrounding, null, null, comment.OriginModelId, comment.OriginLogicalModelName,
                     comment.OriginSymbolName, comment.OriginSymbolKind, CodeInsightPublicationState.PolicyWithheld, finding.ReasonCode,
-                    ProviderScope: providerScope));
+                    ProviderScope: providerScope, RiskAssessment: comment.RiskAssessment, FindingClassification: comment.FindingClassification));
         }
 
         return produced;

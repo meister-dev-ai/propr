@@ -33,8 +33,10 @@ public sealed class SummaryReconciliationService : ISummaryReconciliationService
             .Where(decision => string.Equals(decision.Disposition, FinalGateDecision.DropDisposition, StringComparison.Ordinal))
             .Select(decision => decision.FindingId)
             .ToArray();
+        // The published summary lists a summary-only finding when its decision carries summary text.
         var summaryOnlyFindingIds = decisions
-            .Where(decision => string.Equals(decision.Disposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal))
+            .Where(decision => string.Equals(decision.Disposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal)
+                               && decision.SummaryText is not null)
             .Select(decision => decision.FindingId)
             .ToArray();
 

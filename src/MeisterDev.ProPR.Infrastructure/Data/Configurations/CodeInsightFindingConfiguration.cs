@@ -13,6 +13,12 @@ internal sealed class CodeInsightFindingConfiguration : IEntityTypeConfiguration
     public void Configure(EntityTypeBuilder<CodeInsightFinding> builder)
     {
         builder.ToTable("code_insight_findings");
+        builder.Property(row => row.EncryptedRiskAssessment).HasColumnType("text");
+        builder.Property(row => row.Impact).HasConversion<short>();
+        builder.Property(row => row.Likelihood).HasConversion<short>();
+        builder.Property(row => row.RiskSeverity).HasConversion<short>();
+        builder.Property(row => row.Confidence).HasConversion<short>().HasDefaultValue(MeisterDev.ProPR.Domain.Enums.FindingConfidence.Unknown);
+        builder.Property(row => row.RiskRubricVersion).HasMaxLength(128);
         builder.Property(row => row.OutcomeSourceFingerprint).HasMaxLength(64);
 
         builder.Property(row => row.PublicationState).HasConversion<short>();

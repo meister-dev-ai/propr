@@ -10,6 +10,8 @@ using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -45,7 +47,7 @@ internal sealed class ForgejoCodeReviewPublicationService(
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
         await this.DeletePendingReviewsAsync(review, reviewer, context.Connection.Secret, ct);
-        var payload = BuildPayload(revision, result, reviewer, composer);
+        var payload = BuildPayload(revision, result, reviewer, composer, publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo);
         using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
             ForgejoConnectionVerifier.BuildApiUri(
                 review.Repository.Host,
@@ -207,12 +209,18 @@ internal sealed class ForgejoCodeReviewPublicationService(
         ReviewRevision revision,
         ReviewResult result,
         ReviewerIdentity author,
-        IPostedCommentComposer composer)
+        IPostedCommentComposer composer, FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo)
     {
         var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {author.DisplayName} Review");
+        summaryBuilder.AppendLine($"## {ForgejoFindingCommentRenderer.RenderText(author.DisplayName.ReplaceLineEndings(" "))} Review");
         summaryBuilder.AppendLine();
-        summaryBuilder.AppendLine(result.Summary);
+        summaryBuilder.Append(ReviewFindingPriority.FormatLead(result, ForgejoFindingCommentRenderer.RenderText));
+        summaryBuilder.AppendLine(ReviewFindingTextFormatter.CloseOpenFences(ForgejoFindingCommentRenderer.RenderText(result.Summary)));
+        summaryBuilder.AppendLine();
+        summaryBuilder.AppendLine(
+            ReviewSummaryTextFormatter.Format(
+                result, includeFilelessFindingDetails: true, findingRenderer: comment => ForgejoFindingCommentRenderer.Format(comment, badgeStyle: badgeStyle),
+                renderText: ForgejoFindingCommentRenderer.RenderText));
 
         var inlineComments = new List<ForgejoCreatePullReviewComment>();
         foreach (var comment in result.Comments)
@@ -222,22 +230,19 @@ internal sealed class ForgejoCodeReviewPublicationService(
             {
                 inlineComments.Add(
                     new ForgejoCreatePullReviewComment(
-                        composer.Append($"{FormatSeverity(comment.Severity)}: {comment.Message}"),
+                        composer.AppendRendered(
+                            ForgejoFindingCommentRenderer.Format(comment, badgeStyle),
+                            ForgejoFindingCommentRenderer.RenderText),
                         NormalizePath(comment.FilePath),
                         comment.LineNumber.Value,
                         0));
             }
-            else
-            {
-                summaryBuilder.AppendLine();
-                summaryBuilder.AppendLine($"- {FormatSeverity(comment.Severity)}: {comment.Message}");
-            }
         }
 
-        ContextBudgetSummarySections.Append(summaryBuilder, result);
+        ContextBudgetSummarySections.Append(summaryBuilder, result, ForgejoFindingCommentRenderer.RenderText);
 
         return new ForgejoCreatePullReviewRequest(
-            composer.Append(summaryBuilder.ToString().Trim()),
+            composer.AppendRendered(summaryBuilder.ToString().Trim(), ForgejoFindingCommentRenderer.RenderText),
             LooksLikeCommitSha(revision.HeadSha) ? revision.HeadSha : null,
             "COMMENT",
             inlineComments.Count == 0 ? null : inlineComments);
@@ -272,16 +277,6 @@ internal sealed class ForgejoCodeReviewPublicationService(
         return path.Trim().TrimStart('/');
     }
 
-    private static string FormatSeverity(CommentSeverity severity)
-    {
-        return severity switch
-        {
-            CommentSeverity.Error => "Error",
-            CommentSeverity.Warning => "Warning",
-            CommentSeverity.Suggestion => "Suggestion",
-            _ => "Info",
-        };
-    }
 
     private static string BuildFailureMessage(string message, string? responseBody)
     {

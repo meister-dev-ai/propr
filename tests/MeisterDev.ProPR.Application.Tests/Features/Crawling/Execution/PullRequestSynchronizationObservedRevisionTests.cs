@@ -32,7 +32,7 @@ public sealed class PullRequestSynchronizationObservedRevisionTests
             ReviewRevision = new ReviewRevision("head-1", "base", null, "1", null),
         };
         var discussions = Substitute.For<IDiscussionSynchronizationService>();
-        discussions.ObserveAsync(request, Arg.Any<CancellationToken>()).Returns(
+        discussions.ObserveAsync(request with { DeferMemoryProcessing = true }, Arg.Any<CancellationToken>()).Returns(
             new PullRequestThreadSnapshot(DateTimeOffset.UtcNow, [], [])
             {
                 ObservedPullRequestStatus = PrStatus.Active, ObservedReviewRevision = current,

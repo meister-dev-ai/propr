@@ -78,6 +78,15 @@ public sealed record PrWideCandidateFinding(
     string? CandidateSummaryText = null,
     IReadOnlyDictionary<string, string>? InvariantCheckContext = null)
 {
+    /// <summary>Optional impact and likelihood evidence retained before final verification.</summary>
+    public FindingRiskAssessment? RiskAssessment { get; init; }
+
+    /// <summary>Types and analytics axes assigned while producing this finding.</summary>
+    public FindingTypeClassification? FindingClassification { get; init; }
+
+    /// <summary>Optional exact replacement retained independently of the claim.</summary>
+    public ReviewSuggestedFix? SuggestedFix { get; init; }
+
     public CandidateReviewFinding ToCandidateReviewFinding(
         CandidateFindingProvenance provenance,
         string? findingId = null,
@@ -98,7 +107,7 @@ public sealed record PrWideCandidateFinding(
             this.CandidateSummaryText,
             this.InvariantCheckContext,
             verificationOutcome,
-            scopeRelation);
+            scopeRelation) { RiskAssessment = this.RiskAssessment, FindingClassification = this.FindingClassification, SuggestedFix = this.SuggestedFix };
     }
 }
 
@@ -107,7 +116,14 @@ public sealed record PrWideCandidateFinding(
 /// <param name="CandidateFindings">Normalized candidate findings emitted by Stage C.</param>
 public sealed record PrWideSynthesisResult(
     string Summary,
-    IReadOnlyList<PrWideCandidateFinding> CandidateFindings);
+    IReadOnlyList<PrWideCandidateFinding> CandidateFindings)
+{
+    /// <summary>Bounded doubts that the independent verifier must resolve against the source.</summary>
+    public IReadOnlyList<FindingVerificationChallenge> FindingChallenges { get; init; } = [];
+
+    /// <summary>Retained finding IDs supporting the draft narrative.</summary>
+    public IReadOnlyList<string> SummaryFindingIds { get; init; } = [];
+}
 
 /// <summary>Verification and final-gate disposition for a PR-wide candidate.</summary>
 /// <param name="CandidateId">Candidate identifier.</param>

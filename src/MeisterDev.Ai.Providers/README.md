@@ -190,6 +190,12 @@ provider-managed sessions, background responses, prompt caching, cache routing. 
 only when the client it just built exercises it. Reaching Claude through an OpenAI-compatible proxy loses
 cache-control breakpoints, so that route reports `SupportsPromptCaching` as false.
 
+A driver that reports `SupportsPromptCacheRouting` receives a routing key on every call, in
+`ChatOptions.AdditionalProperties` under `ProviderPromptCacheRouting.OptionName`. All calls of one conversation carry
+the same key. The driver sends the key under its vendor's field name, for example `prompt_cache_key` on the OpenAI
+Responses API, and removes the entry before its vendor client builds the request. A driver that does not report the
+capability never receives the entry.
+
 ### Failure classification belongs to the driver
 
 `IAiProviderDriver.ClassifyRuntimeFailure` has a default implementation that reads the HTTP status, and is

@@ -47,7 +47,7 @@
         :data-test="`scope-${dimension.facet}`"
         :label="dimension.label"
         :selection="scope[dimension.selection] ?? null"
-        :items="facets[dimension.facet] ?? []"
+        :items="facetItems(dimension.facet)"
         :disabled="disabled"
         :loading="dimension.facet === 'clients' && clientsLoading"
         @update:selection="patch({ [dimension.selection]: $event })"
@@ -68,6 +68,7 @@ import { useId } from 'vue'
 import type { PerformanceScope, PerformanceFacets } from '@/services/reviewerPerformanceService'
 import ReviewerPerformanceFacet from './ReviewerPerformanceFacet.vue'
 import '../performance-controls.css'
+import { riskLabel } from '@/features/reviews/findingRisk'
 
 const props = defineProps<{
   scope: PerformanceScope
@@ -80,8 +81,8 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:scope': [scope: PerformanceScope]; apply: [] }>()
 const id = `performance-scope-${useId()}`
 
-type Selection = 'clientIds' | 'repositories' | 'models' | 'types' | 'qualifiers'
-type FacetKey = 'clients' | 'repositories' | 'models' | 'types' | 'qualifiers'
+type Selection = 'clientIds' | 'repositories' | 'models' | 'types' | 'qualifiers' | 'impacts' | 'likelihoods' | 'riskSeverities' | 'confidences'
+type FacetKey = 'clients' | 'repositories' | 'models' | 'types' | 'qualifiers' | 'impacts' | 'likelihoods' | 'riskSeverities' | 'confidences'
 
 const dimensions: { facet: FacetKey; selection: Selection; label: string }[] = [
   { facet: 'clients', selection: 'clientIds', label: 'Clients' },
@@ -89,7 +90,18 @@ const dimensions: { facet: FacetKey; selection: Selection; label: string }[] = [
   { facet: 'models', selection: 'models', label: 'Models' },
   { facet: 'types', selection: 'types', label: 'Finding types' },
   { facet: 'qualifiers', selection: 'qualifiers', label: 'Kind' },
+  { facet: 'riskSeverities', selection: 'riskSeverities', label: 'Risk severity' },
+  { facet: 'impacts', selection: 'impacts', label: 'Impact' },
+  { facet: 'likelihoods', selection: 'likelihoods', label: 'Likelihood' },
+  { facet: 'confidences', selection: 'confidences', label: 'Confidence' },
 ]
+
+function facetItems(key: FacetKey) {
+  const items = props.facets[key] ?? []
+  return ['impacts', 'likelihoods', 'riskSeverities', 'confidences'].includes(key)
+    ? items.map(item => ({ ...item, label: riskLabel(item.id ?? item.label) }))
+    : items
+}
 
 function patch(changes: Partial<PerformanceScope>): void {
   emit('update:scope', { ...props.scope, ...changes })
@@ -111,7 +123,7 @@ function patch(changes: Partial<PerformanceScope>): void {
 
 .scope-dimensions {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   align-items: end;
   gap: 0.75rem;
 }
@@ -181,7 +193,7 @@ function patch(changes: Partial<PerformanceScope>): void {
   }
 
   .scope-filters--horizontal .scope-dimensions {
-    grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   }
 
   .scope-filters--horizontal .scope-apply {

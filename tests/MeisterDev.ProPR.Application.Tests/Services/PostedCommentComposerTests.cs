@@ -13,6 +13,46 @@ namespace MeisterDev.ProPR.Application.Tests.Services;
 public sealed class PostedCommentComposerTests
 {
     [Fact]
+    public void AppendRendered_EncodesOnlyTheSignatureAndPreservesTrustedBodyMarkupOnce()
+    {
+        var composer = Composer("Generated </details><script>bad</script> & reviewed.");
+        const string body = "<details><summary>Assessment details</summary>Evidence.</details>";
+        const string marker = "*Generated &lt;/details&gt;&lt;script&gt;bad&lt;/script&gt; &amp; reviewed.*";
+
+        var marked = composer.AppendRendered(body, System.Net.WebUtility.HtmlEncode);
+
+        Assert.Equal(body + "\n\n" + marker, marked);
+        Assert.Equal(marked, composer.AppendRendered(marked, System.Net.WebUtility.HtmlEncode));
+        Assert.Equal(body, composer.StripRendered(marked, System.Net.WebUtility.HtmlEncode));
+        Assert.Equal(body, composer.StripRendered(composer.Append(body), System.Net.WebUtility.HtmlEncode));
+        Assert.Equal("Generated </details><script>bad</script> & reviewed.", composer.Text[1..^1]);
+    }
+
+    [Fact]
+    public void StripRendered_PreservesQuotedSignaturesAndRecognizesTheDefaultSignature()
+    {
+        var composer = Composer("Configured.");
+        var posted = Composer(null).AppendRendered("Finding.", System.Net.WebUtility.HtmlEncode);
+        Assert.Equal("Finding.", composer.StripRendered(posted, System.Net.WebUtility.HtmlEncode));
+        var quoted = "Quoted:\n\n> " + System.Net.WebUtility.HtmlEncode(composer.Text);
+        Assert.Equal(quoted, composer.StripRendered(quoted, System.Net.WebUtility.HtmlEncode));
+    }
+
+    [Fact]
+    public void AppendRendered_MultilineConfiguredWordingKeepsOneSafeFinalSignature()
+    {
+        var composer = Composer("Generated\r\n</details><b>automatically</b>.");
+        const string marker = "*Generated &lt;/details&gt;&lt;b&gt;automatically&lt;/b&gt;.*";
+
+        var marked = composer.AppendRendered("Finding.", System.Net.WebUtility.HtmlEncode);
+
+        Assert.Equal("Finding.\n\n" + marker, marked);
+        Assert.Equal(marked, composer.AppendRendered(marked, System.Net.WebUtility.HtmlEncode));
+        Assert.Equal(marked, composer.AppendRendered(composer.Append("Finding."), System.Net.WebUtility.HtmlEncode));
+        Assert.Equal("Finding.", composer.StripRendered(marked, System.Net.WebUtility.HtmlEncode));
+    }
+
+    [Fact]
     public void Text_WithoutConfiguredWording_IsTheDefaultWordingEmphasized()
     {
         var composer = Composer(null);

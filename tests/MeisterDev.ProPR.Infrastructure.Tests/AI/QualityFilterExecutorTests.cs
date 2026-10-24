@@ -66,7 +66,7 @@ public sealed class QualityFilterExecutorTests
                 return new ChatResponse(
                     new ChatMessage(
                         ChatRole.Assistant,
-                        "{\"comments\":[{\"file_path\":\"src/Foo.cs\",\"line_number\":4,\"severity\":\"error\",\"message\":\"Filtered issue.\"}]}"));
+                        "{\"comments\":[{\"source_finding_ids\":[\"finding-filter-001\"],\"file_path\":\"src/Foo.cs\",\"line_number\":4,\"severity\":\"error\",\"message\":\"Filtered issue.\"}]}"));
             });
 
         var sut = CreateSut();

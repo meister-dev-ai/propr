@@ -60,11 +60,53 @@ Guided crawl, webhook, mention and ProCursor configuration starts with a saved c
 The connection supplies its accessible scopes, native hierarchy and source capabilities. ProCursor
 knowledge-source creation is available for connections with a registered knowledge-source capability.
 
+Active review admission leaves resolution-memory generation pending for the durable discussion worker.
+Completed memory processing survives interrupted refreshes; final close evidence still requires the
+discussion consumers to complete. See [discussion synchronization](docs/operate/discussion-synchronization.md).
+
 ## Documentation
 
 Open a pull request from **Reviews** to inspect its review history, discussion, and retained diffs. The
 **Browser** tab fills the content area with independently scrolling file and diff panes, file search, and
 finding filters. See [the PR review screen](docs/concepts/reviews.md#pr-review-screen).
+
+Findings carry impact, occurrence likelihood and correctness confidence with supporting reasons. ProPR derives risk severity
+independently of the Error, Warning, Suggestion or Info classification. Review screens, Code Quality and
+Code Insights use the same assessment; missing evidence remains Unassessed. Published findings start with
+severity, risk, impact, likelihood and confidence badges, then finding types and the description. Each client
+chooses Image badges (Shields.io), the default, or Plain gray badges under Post configuration. Plain badges
+use inline code without external image requests. Assessment details
+expand to show the full evidence table. ProPR starts review summaries with a **Fix first** entry for the highest
+assessed confirmed defect, followed by the conclusion, finding excerpts ordered by risk and totals for findings
+offered to the provider. Ties preserve the recorded finding order. Error means a confirmed defect; Suggestion means a
+concrete improvement. A file's investigation confidence does not change that classification.
+
+Published correctness confidence comes from independent verification evidence. Generated confidence is provisional.
+Source quotes must cover complete substantive lines; fragments do not establish confidence. A negative verdict
+removes a claim only with grounded counterevidence; otherwise the claim remains unresolved.
+Certain requires a source-grounded trigger, consequence and resolved counterevidence, followed by a separate bounded
+contradiction check. The same check runs for every confirmed Error or Warning, for a confirmation after the verifier's
+last repository lookup and for a finding that states its trigger is not established. When the check does not confirm
+such a finding, the check's verdict decides its publication. A confirmed Error or Warning that would still be published
+at Medium or below, or Unassessed, goes to a second check on the High effort model. Missing confidence metadata leaves
+an otherwise supported finding Unassessed. Synthesis can challenge a retained finding by stable ID; ProPR resolves that
+challenge before publishing the claim.
+
+The review assigns finding types such as Logic error, Concurrency and Security from the fixed taxonomy and any
+active client custom types while producing each finding. Code Insights uses that same classification, including
+code level, qualifier and separate numeric type confidence. Historical or unclassified findings retain bounded
+background classification. Missing type metadata never removes a finding.
+Per-file passes, including inventory passes, use the captured vocabulary. Synthesis preserves the types of
+unchanged findings and combines the supported types of explicitly identified source findings. The quality filter
+identifies retained or reworded findings by source IDs, preserving their classification and evidence.
+Combined findings retain the highest supported source risk and confidence no stronger than their weakest material
+source. Incompatible replacements keep the original findings.
+
+When evidence supports an exact local replacement, Azure DevOps, GitHub and GitLab comments offer an applicable
+suggestion for the validated source range and revision. Forgejo displays the proposed replacement under
+**Suggested change** in an ordinary code block. ProPR uses the same format when source evidence is missing or
+stale or the anchor is unsuitable. Supported source languages enable syntax highlighting. ProPR retains findings
+independently of fix availability. See [finding risk](docs/concepts/reviews.md#finding-risk).
 
 All documentation is under [docs/](docs/index.md), which maps every page and gives a reading order.
 Start at one of these:

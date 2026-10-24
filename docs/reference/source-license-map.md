@@ -44,6 +44,7 @@ Do not edit it manually.
 | `frontend/src/features/code-insights/components/CodeInsightsMissesPanel.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/code-insights/components/CodeInsightsQualityPanel.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/code-insights/components/CodeInsightsRejectionReasonsPanel.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/code-insights/components/CodeInsightsRiskPanel.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/code-insights/components/CodeInsightsSurvivalPanel.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/code-insights/components/CodeInsightsTypesPanel.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/code-insights/components/CodeQualityRepositoryDirectory.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -472,6 +473,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.CodeInsights/Persistence/CodeInsightPerformanceEvidenceStore.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights/Persistence/CodeInsightProviderScopeLookup.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights/Persistence/CodeInsightPullRequestPersistence.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.CodeInsights/Persistence/CodeInsightRiskAssessmentProtection.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights/Persistence/CodeInsightTaxonomyService.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights/Persistence/ReviewerPerformanceReportStore.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.CodeInsights/Ports/CodeInsightHistoricalRecoveryPolicy.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |

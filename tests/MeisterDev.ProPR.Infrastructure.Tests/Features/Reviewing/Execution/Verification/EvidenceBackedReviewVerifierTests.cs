@@ -163,11 +163,18 @@ public sealed partial class EvidenceBackedReviewVerifierTests
     }
 
     [Fact]
-    public async Task NotConfirmedVerdict_IsWithheld_AndRecordsVerdictKind()
+    public async Task NotConfirmedVerdict_IsDropped_AndRecordsVerdictKind()
     {
-        var outcome = await VerifyWithVerdictAsync("{\"verdict\":\"not_confirmed\",\"reason\":\"key is checked at line 1\"}");
+        const string source = "public string Lookup(string key)\n{\n    return _map[key]?.ToString() ?? string.Empty;\n}";
+        var outcome = await VerifyWithVerdictAsync(
+            ConfidenceVerdict(
+                "not_confirmed", "low", "return _map[key]?.ToString() ?? string.Empty;", "The lookup returns a null value.",
+                "The method returns string.Empty without dereferencing that value.", "Conditional access skips ToString for a null lookup value.",
+                "src/Big.cs"),
+            source: source);
 
-        AssertWithheld(outcome);
+        Assert.Equal(FinalGateDecision.DropDisposition, outcome.RecommendedDisposition);
+        Assert.Equal(VerificationOutcome.ContradictedKind, outcome.OutcomeKind);
         Assert.Equal(EvidenceJudgeVerdicts.NotConfirmed, outcome.JudgeVerdict);
     }
 
@@ -595,7 +602,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         // After the gate opens, the first claims answer last, so a result in completion order would be reversed.
         var tools = Substitute.For<IReviewContextTools>();
         tools.GetFileContentAsync(Arg.Any<string>(), "source", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns("public string Lookup(string? key)\n{\n    return _map[key].ToString();\n}");
+            .Returns("public string Lookup(string? key)\n{\n    return key ?? string.Empty;\n}");
         var running = 0;
         var maxRunning = 0;
         var fourRunning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -615,8 +622,12 @@ public sealed partial class EvidenceBackedReviewVerifierTests
                 await Task.WhenAny(fourRunning.Task, Task.Delay(TimeSpan.FromSeconds(5)));
                 await Task.Delay(TimeSpan.FromMilliseconds(20 * (8 - index)));
                 Interlocked.Decrement(ref running);
-                var verdict = index % 2 == 0 ? "confirmed" : "not_confirmed";
-                return new ChatResponse(new ChatMessage(ChatRole.Assistant, $"{{\"verdict\":\"{verdict}\",\"reason\":\"claim {index}\"}}"));
+                var answer = index % 2 == 0
+                    ? $"{{\"verdict\":\"confirmed\",\"reason\":\"claim {index}\"}}"
+                    : ConfidenceVerdict(
+                        "not_confirmed", "low", "return key ?? string.Empty;", "A null key selects string.Empty.",
+                        "The null input returns safely.", "Null coalescing excludes the asserted dereference.", "src/Big.cs");
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant, answer));
             });
         var workItems = Enumerable.Range(0, 8)
             .Select(index => CreateWorkItem("src/Big.cs", 3, $"claim-{index}", $"The method `lookup` has defect number {index}.")).ToList();
@@ -631,7 +642,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.All(
             outcomes.Select((outcome, index) => (outcome, index)),
             entry => Assert.Equal(
-                entry.index % 2 == 0 ? FinalGateDecision.PublishDisposition : FinalGateDecision.SummaryOnlyDisposition,
+                entry.index % 2 == 0 ? FinalGateDecision.PublishDisposition : FinalGateDecision.DropDisposition,
                 entry.outcome.RecommendedDisposition));
         Assert.Equal(4, maxRunning);
     }
@@ -1479,11 +1490,11 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         return messages![1].Text;
     }
 
-    private static async Task<VerificationOutcome> VerifyWithVerdictAsync(string response, bool passReviewedWithRepositoryTools = true)
+    private static async Task<VerificationOutcome> VerifyWithVerdictAsync(string response, bool passReviewedWithRepositoryTools = true, string? source = null)
     {
         var tools = Substitute.For<IReviewContextTools>();
         tools.GetFileContentAsync(Arg.Any<string>(), "source", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns("public string Lookup(string? key)\n{\n    return _map[key].ToString();\n}");
+            .Returns(source ?? "public string Lookup(string? key)\n{\n    return _map[key].ToString();\n}");
         var judge = Substitute.For<IChatClient>();
         judge.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, response)));
@@ -1593,7 +1604,8 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         string anchorFilePath,
         int? anchorLineNumber,
         string claimId = "claim-1",
-        string claimText = "The method `lookup` dereferences a value that may be null.")
+        string claimText = "The method `lookup` dereferences a value that may be null.",
+        CommentSeverity severity = CommentSeverity.Suggestion)
     {
         var claim = new ClaimDescriptor(
             claimId,
@@ -1601,7 +1613,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
             ClaimDescriptor.LocalStage,
             CandidateReviewFinding.ReviewCommentMessageNullableClaimKind,
             claimText,
-            CommentSeverity.Warning,
+            severity,
             ClaimDescriptor.DeterministicOnlyMode,
             ClaimDescriptor.ApiOrSymbolUsageFamily,
             subjectIdentifier: "lookup",

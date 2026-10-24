@@ -4,9 +4,11 @@
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
@@ -58,11 +60,18 @@ internal sealed class LocalReviewVerificationExecutor(
     {
         if (reviewClaimExtractor is null || reviewFindingVerifier is null || result.Comments.Count == 0)
         {
-            return new LocalVerificationApplicationResult(result, []);
+            return new LocalVerificationApplicationResult(fileResult.IsCarriedForward ? result : ReviewFindingConfidence.ClearUnverified(result), []);
         }
 
         // The judge decides every finding by truth, intent and contradiction. A finding is never published on the
         // strength of its wording or its claim family alone.
+        result = result with
+        {
+            Comments = result.Comments.Select(comment => comment with
+            {
+                ProducedWithRepositoryTools = verificationContext?.PassReviewedWithRepositoryTools ?? comment.ProducedWithRepositoryTools
+            }).ToList()
+        };
         var commentFindings = BuildCandidateFindings(result, fileResult, enrichedCandidateFindings)
             .Select(pair => (pair.Comment, Finding: RequireEvidenceVerification(pair.Finding)))
             .ToList();
@@ -76,7 +85,13 @@ internal sealed class LocalReviewVerificationExecutor(
                     finding.Provenance,
                     claim.Stage,
                     VerificationWorkItem.AnchorOnlyScope,
-                    false)))
+                    false)
+                {
+                    RequiresCertaintyCheck = finding.RiskAssessment?.Confidence == FindingConfidence.Certain,
+                    ProposedConfidence = ReviewFindingConfidence.ProposedConfidence(finding.RiskAssessment),
+                    SuggestedFix = finding.SuggestedFix,
+                    ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools,
+                }))
             .ToList();
 
         await this.RecordExtractedClaimsAsync(protocolId, candidateFindings, claimsByFindingId, ct);
@@ -114,7 +129,7 @@ internal sealed class LocalReviewVerificationExecutor(
         if (withheldFindingIds.Count == 0)
         {
             return new LocalVerificationApplicationResult(
-                result,
+                result with { Comments = commentFindings.Select(pair => ClassifyComment(pair.Comment, pair.Finding.FindingId, outcomesByFindingId)).ToList() },
                 candidateFindings.Select(finding => AttachVerificationOutcome(finding, outcomesByFindingId)).ToList());
         }
 
@@ -127,7 +142,7 @@ internal sealed class LocalReviewVerificationExecutor(
         // the model and the symbol attribution they carry reach synthesis and the trace unchanged.
         var verifiedComments = commentFindings
             .Where(pair => !withheldFindingIds.Contains(pair.Finding.FindingId))
-            .Select(pair => pair.Comment)
+            .Select(pair => ClassifyComment(pair.Comment, pair.Finding.FindingId, outcomesByFindingId))
             .ToList();
         var verifiedSummary = RewriteLocalVerificationSummary(candidateFindings, verifiedFindings, outcomesByFindingId);
         if (judgeUnavailableForFile)
@@ -145,7 +160,8 @@ internal sealed class LocalReviewVerificationExecutor(
                     .. result.WithheldFindings, .. commentFindings
                         .Where(pair => withheldFindingIds.Contains(pair.Finding.FindingId))
                         .Select(pair => new WithheldReviewFinding(
-                            pair.Comment, WithheldReviewFindingMapper.Reason(SelectBlockingOutcome(outcomesByFindingId[pair.Finding.FindingId]))))
+                            ClassifyComment(pair.Comment, pair.Finding.FindingId, outcomesByFindingId),
+                            WithheldReviewFindingMapper.Reason(SelectBlockingOutcome(outcomesByFindingId[pair.Finding.FindingId]))))
                 ],
             },
             candidateFindings.Select(finding => AttachVerificationOutcome(finding, outcomesByFindingId)).ToList());
@@ -173,7 +189,11 @@ internal sealed class LocalReviewVerificationExecutor(
                     comment.Message,
                     FileByFileReviewOrchestrator.DetermineCategory(comment),
                     comment.FilePath,
-                    FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber))))
+                    FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber))
+                {
+                    RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix,
+                    ProducedWithRepositoryTools = comment.ProducedWithRepositoryTools
+                }))
                 .ToList();
         }
 
@@ -196,7 +216,11 @@ internal sealed class LocalReviewVerificationExecutor(
             var signature = CreateCommentSignature(comment);
             if (enrichedBySignature.TryGetValue(signature, out var queue) && queue.Count > 0)
             {
-                candidateFindings.Add((comment, ElevateProRvOnlyFinding(queue.Dequeue())));
+                candidateFindings.Add(
+                    (comment, ElevateProRvOnlyFinding(queue.Dequeue()) with
+                    {
+                        ProducedWithRepositoryTools = comment.ProducedWithRepositoryTools
+                    }));
             }
         }
 
@@ -264,13 +288,13 @@ internal sealed class LocalReviewVerificationExecutor(
     {
         if (!outcomesByFindingId.TryGetValue(finding.FindingId, out var outcomes) || outcomes.Count == 0)
         {
-            return finding;
+            return finding with { RiskAssessment = ReviewFindingConfidence.Resolve(finding.RiskAssessment, []) };
         }
 
         return new CandidateReviewFinding(
             finding.FindingId,
             finding.Provenance,
-            finding.Severity,
+            ReviewFindingClassification.Resolve(finding.Severity, outcomes),
             finding.Message,
             finding.Category,
             finding.FilePath,
@@ -281,8 +305,21 @@ internal sealed class LocalReviewVerificationExecutor(
             SelectBlockingOutcome(outcomes) ?? outcomes[0],
             finding.ScopeRelation)
         {
+            RiskAssessment = ReviewFindingConfidence.Resolve(finding.RiskAssessment, outcomes), FindingClassification = finding.FindingClassification,
+            SuggestedFix = finding.SuggestedFix,
             ReadGrounding = finding.ReadGrounding,
             MergedFinding = finding.MergedFinding,
+            ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools,
+        };
+    }
+
+    private static ReviewComment ClassifyComment(
+        ReviewComment comment, string findingId, IReadOnlyDictionary<string, IReadOnlyList<VerificationOutcome>> outcomes)
+    {
+        var severity = outcomes.TryGetValue(findingId, out var evidence) ? ReviewFindingClassification.Resolve(comment.Severity, evidence) : comment.Severity;
+        return comment.WithAnchorAndSeverity(comment.FilePath, comment.LineNumber, severity) with
+        {
+            RiskAssessment = ReviewFindingConfidence.Resolve(comment.RiskAssessment, evidence ?? []),
         };
     }
 
@@ -426,6 +463,16 @@ internal sealed class LocalReviewVerificationExecutor(
                 JsonSerializer.Serialize(outcome, FinalGateJsonOptions),
                 null,
                 ct);
+        }
+
+        foreach (var group in outcomes.GroupBy(outcome => outcome.FindingId, StringComparer.Ordinal))
+        {
+            var risk = findingsById.GetValueOrDefault(group.Key)?.RiskAssessment;
+            await protocolRecorder.RecordVerificationEventAsync(
+                protocolId.Value, "verification_confidence",
+                JsonSerializer.Serialize(new { findingId = group.Key, stage = ClaimDescriptor.LocalStage }),
+                JsonSerializer.Serialize(new { before = risk, after = ReviewFindingConfidence.Resolve(risk, group.ToArray()) }, FinalGateJsonOptions),
+                null, ct);
         }
     }
 

@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using System.Net;
@@ -281,7 +282,7 @@ internal sealed class GitHubReviewThreadStatusProvider(
 
             builder.Append(comment.Author?.Login ?? "Unknown");
             builder.Append(": ");
-            builder.Append(comment.Body ?? string.Empty);
+            builder.Append(ReviewFindingTextFormatter.CompactBadgeHeaderForHistory(comment.Body ?? string.Empty));
         }
 
         return builder.ToString();

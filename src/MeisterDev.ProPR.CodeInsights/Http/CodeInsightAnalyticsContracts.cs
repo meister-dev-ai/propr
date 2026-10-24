@@ -3,6 +3,7 @@ using MeisterDev.ProPR.CodeInsights.Http;
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
+using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.CodeInsights.Http;
 
@@ -68,14 +69,14 @@ public sealed record CodeInsightTrendResponse(
 
 /// <summary>One point of a counted series.</summary>
 /// <param name="BucketStart">Start of the bucket: the day, the week's Monday, or the month's first.</param>
-/// <param name="Key">The core type slug, or the empty string for a plain total.</param>
+/// <param name="Key">The counted dimension value, such as a core type or risk axis, or empty for a plain total.</param>
 /// <param name="Count">How many findings fell in this bucket for this key.</param>
 public sealed record CodeInsightCountPointResponse(DateOnly BucketStart, string Key, int Count);
 
-/// <summary>The counted series behind the "what kinds of problem, over time" question.</summary>
+/// <summary>A counted distribution over time for the requested finding dimension.</summary>
 /// <param name="Points">The series. Empty when nothing was collected in the window.</param>
 /// <param name="TotalFindings">Findings in the window and scope, whether or not they carry a type yet.</param>
-/// <param name="Keys">The distinct type slugs present, so a caller can build a stable legend.</param>
+/// <param name="Keys">The distinct dimension values present, for a stable legend.</param>
 public sealed record CodeInsightTypeSeriesResponse(
     IReadOnlyList<CodeInsightCountPointResponse> Points,
     int TotalFindings,
@@ -136,7 +137,8 @@ public sealed record CodeInsightMetricResponse(
     int Discussed = 0,
     int CoveredSampleSize = 0,
     int CoveredTruePositives = 0,
-    int CoveredMisses = 0);
+    int CoveredMisses = 0,
+    string? UnavailableReason = null);
 
 /// <summary>One bucket of a metric series.</summary>
 /// <param name="BucketStart">Start of the bucket.</param>
@@ -410,7 +412,8 @@ public sealed record CodeInsightFindingResponse(
     string? Disposition,
     string? ProviderThreadId,
     DateTimeOffset ObservedAt,
-    string? RejectionReason = null);
+    string? RejectionReason = null,
+    FindingRiskAssessment? RiskAssessment = null);
 
 /// <summary>
 ///     Why the rejections in a window were rejected, and how many carried no reason.

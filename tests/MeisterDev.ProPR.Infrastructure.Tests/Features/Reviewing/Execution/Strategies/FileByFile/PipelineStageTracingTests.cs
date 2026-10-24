@@ -73,7 +73,7 @@ public sealed class PipelineStageTracingTests
     }
 
     [Fact]
-    public async Task ConfidenceFloor_EmitsSeverityDowngradedTracePerDowngrade()
+    public async Task ConfidenceFloor_DoesNotEmitReclassificationFromAggregateScore()
     {
         var recorder = Substitute.For<IProtocolRecorder>();
         var metrics = new ReviewLoopMetrics(0, null, null, 50, 0, 0, 1);
@@ -83,16 +83,9 @@ public sealed class PipelineStageTracingTests
 
         var result = await stage.ExecuteAsync(context, CancellationToken.None);
 
-        Assert.Equal(CommentSeverity.Warning, result.ReviewResult!.Comments[0].Severity);
-        await recorder.Received(1).RecordReviewStrategyEventAsync(
-            ProtocolId,
-            Arg.Is<string>(name => name == ReviewProtocolEventNames.CommentSeverityDowngraded),
-            Arg.Is<string?>(details => details != null
-                                       && details.Contains("\"fromSeverity\":\"Error\"", StringComparison.Ordinal)
-                                       && details.Contains("\"toSeverity\":\"Warning\"", StringComparison.Ordinal)),
-            Arg.Is<string?>(output => output == null),
-            Arg.Is<string?>(error => error == null),
-            Arg.Any<CancellationToken>());
+        Assert.Equal(CommentSeverity.Error, result.ReviewResult!.Comments[0].Severity);
+        await recorder.DidNotReceive().RecordReviewStrategyEventAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

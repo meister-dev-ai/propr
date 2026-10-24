@@ -1,7 +1,7 @@
 Review the following comments and apply the quality-filter rules:
 
-| # | File | Line | Severity | Message |
-|---|------|------|----------|---------|
+| # | Source finding ID | File | Line | Severity | Message | Risk assessment | Finding classification |
+|---| --- |------|------|----------|---------| --- | --- |
 {{#each comments}}
-| {{index}} | {{filePath}} | {{line}} | {{severity}} | {{message}} |
+| {{index}} | {{sourceFindingId}} | {{filePath}} | {{line}} | {{severity}} | {{message}} | {{{riskAssessment}}} | {{{findingClassification}}} |
 {{/each}}

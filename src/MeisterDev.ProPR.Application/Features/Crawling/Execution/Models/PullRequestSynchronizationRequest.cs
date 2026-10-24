@@ -66,6 +66,9 @@ public sealed record PullRequestSynchronizationRequest
     /// <summary>Refreshes discussions and thread-pass scheduling without admitting a file review.</summary>
     public bool DiscussionOnly { get; init; }
 
+    /// <summary>Leaves memory generation pending for the discussion worker while an active review is admitted.</summary>
+    public bool DeferMemoryProcessing { get; init; }
+
     /// <summary>
     ///     When true, a revision that has already been reviewed, or that a prior review failed at, is queued
     ///     again anyway. Those two guards exist to stop the automatic loop repeating itself and burning cost;

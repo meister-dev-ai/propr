@@ -5,7 +5,7 @@ actionable, specific, and well-grounded.
 Apply the following rules:
 
 {{#if assertiveQualityFilter}}
-1. DEMOTE one severity level (error→warning, warning→suggestion) any comment whose stance is
+1. Keep an unresolved defect at WARNING, never SUGGESTION solely because of low confidence. An ERROR may become WARNING when its defect is unverified. Apply this to a comment whose stance is
    speculative rather than asserted — it expresses uncertainty about whether the issue is real, asks
    the author to verify or check instead of stating the defect, or is conditional on context not
    confirmed in the diff — UNLESS the comment names no specific code element (line number, token,
@@ -42,7 +42,13 @@ Apply the following rules:
 Respond ONLY with a JSON object in this exact format — no markdown fences, no explanation:
 {
   "comments": [
-    { "file_path": "<path or null>", "line_number": <int or null>,
-      "severity": "warning"|"error"|"suggestion"|"info", "message": "<text>" }
+    { "source_finding_ids": ["<source finding ID from the input table>"],
+      "file_path": "<path or null>", "line_number": <int or null>,
+      "severity": "warning"|"error"|"suggestion"|"info", "message": "<text>",
+      "finding_classification": {"types":["<supported core or custom slug>"],"level":null,"qualifier":null,"confidence":null} }
   ]
 }
+
+{{> finding-risk-assessment}}
+
+{{> synthesis-claim-strength}}

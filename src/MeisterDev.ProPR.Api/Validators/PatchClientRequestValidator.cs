@@ -59,6 +59,11 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .WithMessage("BaselineReasoningEffort must be one of none, low, medium, high.")
             .When(r => r.BaselineReasoningEffort.HasValue);
 
+        this.RuleFor(r => r.FindingBadgeStyle)
+            .Must(style => Enum.IsDefined(style!.Value))
+            .WithMessage("FindingBadgeStyle must be shieldsIo or plain.")
+            .When(r => r.FindingBadgeStyle.HasValue);
+
         this.RuleFor(r => r.MinimumSeverityToPost)
             .Must(severity => Enum.IsDefined(severity!.Value))
             .WithMessage("MinimumSeverityToPost must be one of info, warning, error, suggestion.")

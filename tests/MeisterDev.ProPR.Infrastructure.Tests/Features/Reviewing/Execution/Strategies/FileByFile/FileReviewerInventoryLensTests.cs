@@ -8,6 +8,7 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
@@ -39,6 +40,8 @@ public sealed class FileReviewerInventoryLensTests
     // Active lens and tool availability observed on each aiCore review call, in call order.
     private readonly List<string?> _observedLenses = [];
     private readonly List<bool> _observedHasTools = [];
+    private readonly List<FindingTypeVocabulary> _observedVocabularies = [];
+    private Func<ReviewSystemContext, ReviewComment, ReviewComment>? _enrichComment;
     private int _aiCallCount;
     private ReviewFileResult? _persistedResult;
 
@@ -74,10 +77,12 @@ public sealed class FileReviewerInventoryLensTests
                 ctx.LoopMetrics = new ReviewLoopMetrics(0, null, null, 90, 100, 10, 1);
                 this._observedLenses.Add(ctx.ActiveLens);
                 this._observedHasTools.Add(ctx.ReviewTools is not null);
+                this._observedVocabularies.Add(ctx.FindingTypeVocabulary);
                 this._aiCallCount++;
                 var filePath = ctx.PerFileHint?.FilePath ?? "Program.cs";
                 // Distinct anchor per call so the union preserves each pass's finding through per-file filtering.
                 var comment = new ReviewComment(filePath, 10 + (this._aiCallCount * 10), CommentSeverity.Warning, $"Concrete defect {this._aiCallCount}.");
+                comment = this._enrichComment?.Invoke(ctx, comment) ?? comment;
                 return new ReviewResult("summary", [comment]);
             });
 
@@ -106,6 +111,42 @@ public sealed class FileReviewerInventoryLensTests
         var resolver = Substitute.For<IAiRuntimeResolver>();
         resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(runtime);
         return resolver;
+    }
+
+    [Fact]
+    public async Task BaselineAndInventoryDispatchUseTheCapturedCustomVocabulary()
+    {
+        var customId = Guid.NewGuid();
+        var vocabulary = new FindingTypeVocabulary(1, [new(customId, "tenant-boundary", "Tenant boundary", "Cross-tenant access.")]);
+        this._enrichComment = (context, comment) =>
+        {
+            using var payload = JsonDocument.Parse(
+                """
+                {"finding_classification":{"types":["logic-error","tenant-boundary"]}}
+                """);
+            return comment with { FindingClassification = FindingTypeClassificationParser.ParseFinding(payload.RootElement, context.FindingTypeVocabulary) };
+        };
+        var reviewer = this.CreateReviewer(ResolverForModel("inventory-model"));
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+        var context = new ReviewSystemContext(null, [], Substitute.For<IReviewContextTools>())
+        {
+            FindingTypeVocabulary = vocabulary,
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            ModelId = "gpt-5.3-codex",
+            ReviewPasses = [new ReviewPassSpec(Guid.NewGuid(), ReviewPassLens.Inventory)],
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, context, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Equal(2, this._observedVocabularies.Count);
+        Assert.All(this._observedVocabularies, observed => Assert.Same(vocabulary, observed));
+        Assert.Equal([true, false], this._observedHasTools);
+        Assert.NotNull(this._persistedResult);
+        Assert.NotNull(this._persistedResult.Comments);
+        Assert.Equal(2, this._persistedResult.Comments.Count);
+        Assert.All(this._persistedResult.Comments, comment => Assert.Equal(customId, Assert.Single(comment.FindingClassification!.CustomTags).Id));
     }
 
     // A resolver that also binds the low-effort purpose to the given judge client, so the evidence verifier judges on
@@ -180,6 +221,11 @@ public sealed class FileReviewerInventoryLensTests
             .Do(ci => decisions.Add(ci.ArgAt<string?>(3) ?? string.Empty));
         return decisions;
     }
+
+    // The judge and the independent check run on the same low-effort client. A check call carries the check's system
+    // prompt, so a count of judge calls leaves it out.
+    private static bool IsJudgeCall(IEnumerable<ChatMessage> messages) =>
+        messages.First().Text != EvidenceBackedReviewVerifier.BuildContradictionSystemPrompt();
 
     private static IChatClient JudgeReturning(string verdictJson)
     {
@@ -262,7 +308,13 @@ public sealed class FileReviewerInventoryLensTests
         var userMessages = new List<string>();
         var judge = Substitute.For<IChatClient>();
         judge.GetResponseAsync(
-                Arg.Do<IEnumerable<ChatMessage>>(messages => userMessages.Add(messages.Last().Text)),
+                Arg.Do<IEnumerable<ChatMessage>>(messages =>
+                {
+                    if (IsJudgeCall(messages))
+                    {
+                        userMessages.Add(messages.Last().Text);
+                    }
+                }),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"visible at line 3\"}")));
@@ -405,7 +457,7 @@ public sealed class FileReviewerInventoryLensTests
         // One judge call per pass: the baseline finding and the inventory finding were both judged on the low-effort
         // model.
         await judge.Received(2).GetResponseAsync(
-            Arg.Any<IEnumerable<ChatMessage>>(),
+            Arg.Is<IEnumerable<ChatMessage>>(messages => IsJudgeCall(messages)),
             Arg.Is<ChatOptions?>(o => o != null && o.ModelId == "low-effort-model"),
             Arg.Any<CancellationToken>());
         await tools.Received(2).GetFileContentAsync("Program.cs", "feature/x", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
@@ -430,7 +482,9 @@ public sealed class FileReviewerInventoryLensTests
             job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, baselineClient,
             CancellationToken.None);
 
-        await baselineClient.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        // Each Warning finding receives one judge call, one independent check and, because the confirmation carries no
+        // confidence evidence, one escalation check. All three fall back to the baseline client.
+        await baselineClient.Received(6).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         await passClient.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
         Assert.NotNull(this._persistedResult);
         Assert.Contains(this._persistedResult!.Comments!, c => c.OriginPassLens == ReviewPassLens.Inventory);
@@ -457,7 +511,9 @@ public sealed class FileReviewerInventoryLensTests
         // Both passes reviewed with tools and without a lens.
         Assert.Equal(new[] { true, true }, this._observedHasTools.ToArray());
         Assert.Equal(new string?[] { null, null }, this._observedLenses.ToArray());
-        await baselineClient.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        // Each Warning finding receives one judge call, one independent check and, because the confirmation carries no
+        // confidence evidence, one escalation check. All three fall back to the baseline client.
+        await baselineClient.Received(6).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         await passClient.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
         Assert.NotNull(this._persistedResult);
         Assert.Equal(2, this._persistedResult!.Comments!.Count);
@@ -533,7 +589,8 @@ public sealed class FileReviewerInventoryLensTests
             job, pr, file, 1, 1, InventoryLensContext(ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
-        await judge.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        await judge.Received(2).GetResponseAsync(
+            Arg.Is<IEnumerable<ChatMessage>>(messages => IsJudgeCall(messages)), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         Assert.Equal(2, decisions.Count);
         Assert.All(decisions, decision => Assert.Contains(VerificationOutcome.AiMicroVerifierEvaluator, decision, StringComparison.Ordinal));
         Assert.NotNull(this._persistedResult);
@@ -568,7 +625,13 @@ public sealed class FileReviewerInventoryLensTests
         var userMessages = new List<string>();
         var judge = Substitute.For<IChatClient>();
         judge.GetResponseAsync(
-                Arg.Do<IEnumerable<ChatMessage>>(messages => userMessages.Add(messages.Last().Text)),
+                Arg.Do<IEnumerable<ChatMessage>>(messages =>
+                {
+                    if (IsJudgeCall(messages))
+                    {
+                        userMessages.Add(messages.Last().Text);
+                    }
+                }),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"visible\"}")));
@@ -680,7 +743,8 @@ public sealed class FileReviewerInventoryLensTests
             job, pr, file, 1, 1, UnionContext(null, ToolsWithAnchorSource()), null, Substitute.For<IChatClient>(),
             CancellationToken.None);
 
-        await judge.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        await judge.Received(2).GetResponseAsync(
+            Arg.Is<IEnumerable<ChatMessage>>(messages => IsJudgeCall(messages)), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         Assert.NotNull(this._persistedResult);
         Assert.Equal(2, this._persistedResult!.Comments!.Count);
         // The second review call is the resample pass; its finding is published as union pass 2.

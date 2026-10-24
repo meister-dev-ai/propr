@@ -35,6 +35,16 @@ function mountModal(parsedInputResult: unknown) {
 }
 
 describe('JobProtocolEventModal suppressed findings', () => {
+    it('keeps trusted numeric risk evidence visible for an internally retained suppression', () => {
+        const wrapper = mountModal({ suppressedCount: 1, findings: [{ filePath: 'src/Test.cs',
+            riskAssessment: { impact: 4, likelihood: 3, severity: 4, confidence: 4, confidenceReason: 'The complete deletion path confirms the loss.', impactReason: 'Stored records are lost.',
+                likelihoodReason: 'Every import executes this branch.', source: 'review-generation', rubricVersion: 'finding-risk-v1' },
+        }] })
+        expect(wrapper.text()).toContain('Risk severity: Critical')
+        expect(wrapper.text()).toContain('Stored records are lost.')
+        expect(wrapper.text()).toContain('Confidence: Certain')
+        expect(wrapper.text()).toContain('The complete deletion path confirms the loss.')
+    })
     it('shows each withheld finding with the thread it repeated and the match score', () => {
         const wrapper = mountModal({
             suppressedCount: 1,

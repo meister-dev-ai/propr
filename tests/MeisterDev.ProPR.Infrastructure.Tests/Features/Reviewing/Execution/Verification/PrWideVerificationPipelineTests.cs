@@ -20,7 +20,7 @@ using NSubstitute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Verification;
 
-public sealed class PrWideVerificationPipelineTests
+public sealed partial class PrWideVerificationPipelineTests
 {
     [Fact]
     public async Task ReviewAsync_UnresolvedPrWideFinding_BecomesSummaryOnlyWithoutDelegatingToFileByFile()
@@ -241,7 +241,7 @@ public sealed class PrWideVerificationPipelineTests
     }
 
     [Fact]
-    public async Task ReviewAsync_LocalInvariantContradiction_BecomesSummaryOnlyAfterNativeVerification()
+    public async Task ReviewAsync_LocalInvariantContradiction_IsDroppedAfterNativeVerification()
     {
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
         var protocolRecorder = CreateProtocolRecorder();
@@ -322,7 +322,7 @@ public sealed class PrWideVerificationPipelineTests
             context.ActiveProtocolId.Value,
             ReviewProtocolEventNames.PrWideFinalGateDecision,
             Arg.Is<string?>(details => details != null && details.Contains("candidate-001", StringComparison.Ordinal)),
-            Arg.Is<string?>(output => output != null && output.Contains("\"finalDisposition\":\"SummaryOnly\"", StringComparison.Ordinal)),
+            Arg.Is<string?>(output => output != null && output.Contains("\"finalDisposition\":\"Drop\"", StringComparison.Ordinal)),
             Arg.Is<string?>(error => error == null),
             Arg.Any<CancellationToken>());
 
@@ -332,8 +332,8 @@ public sealed class PrWideVerificationPipelineTests
             Arg.Any<string?>(),
             Arg.Is<string?>(output =>
                 output != null
-                && output.Contains("\"summaryOnlyCount\":1", StringComparison.Ordinal)
-                && output.Contains("\"droppedCount\":0", StringComparison.Ordinal)),
+                && output.Contains("\"summaryOnlyCount\":0", StringComparison.Ordinal)
+                && output.Contains("\"droppedCount\":1", StringComparison.Ordinal)),
             Arg.Is<string?>(error => error == null),
             Arg.Any<CancellationToken>());
     }

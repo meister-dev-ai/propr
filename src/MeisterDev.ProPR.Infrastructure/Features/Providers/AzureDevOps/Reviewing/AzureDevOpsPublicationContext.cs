@@ -4,4 +4,8 @@
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 
 /// <summary>Contains the captured iteration comparison used to recreate the reviewed diff.</summary>
-public sealed record AzureDevOpsPublicationContext(int? CompareToIterationId);
+public sealed record AzureDevOpsPublicationContext(int? CompareToIterationId)
+{
+    /// <summary>The server-captured source revision used by validated replacements.</summary>
+    public string? SourceHeadSha { get; init; }
+}

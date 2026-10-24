@@ -98,6 +98,10 @@ public sealed class CodeInsightSurvivalReader(
                         finding.FindingChainId,
                         finding.RevisionKey,
                         finding.ObservedAt,
+                        finding.Impact,
+                        finding.Likelihood,
+                        finding.RiskSeverity,
+                        finding.Confidence,
                     })
                     .ToListAsync(ct);
 
@@ -147,6 +151,16 @@ public sealed class CodeInsightSurvivalReader(
                             .ThenByDescending(finding => finding.Id)
                             .First();
 
+                        // Select the cohort at its first observation in the window; later observations establish continuation.
+                        var origin = chain.OrderBy(finding => finding.ObservedAt).ThenBy(finding => finding.Id).First();
+                        if (query.Impact is { } impact && origin.Impact != impact ||
+                            query.Likelihood is { } likelihood && origin.Likelihood != likelihood ||
+                            query.RiskSeverity is { } riskSeverity && origin.RiskSeverity != riskSeverity ||
+                            query.Confidence is { } confidence && origin.Confidence != confidence)
+                        {
+                            continue;
+                        }
+
                         if (string.Equals(newest.RevisionKey, scope.LatestRevisionKey, StringComparison.Ordinal))
                         {
                             persisted++;
@@ -159,6 +173,11 @@ public sealed class CodeInsightSurvivalReader(
                         {
                             dropped++;
                         }
+                    }
+
+                    if (persisted + resolved + dropped == 0)
+                    {
+                        continue;
                     }
 
                     results.Add(

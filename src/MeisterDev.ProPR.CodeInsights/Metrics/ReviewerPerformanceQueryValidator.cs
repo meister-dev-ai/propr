@@ -11,7 +11,15 @@ internal static class ReviewerPerformanceQueryValidator
 {
     private const int MaximumSelectionValues = 128;
     private const int MaximumDimensionIdentityCharacters = 2048;
-    private static readonly string[] Dimensions = ["client", "repository", "model", "type", "qualifier"];
+    private static readonly string[] Dimensions = ["client", "repository", "model", "type", "qualifier", "impact", "likelihood", "riskSeverity", "confidence"];
+
+    private static void ValidateRisk<T>(IReadOnlyList<string>? values) where T : struct, Enum
+    {
+        if (values?.Any(value => !Enum.GetNames<T>().Contains(value, StringComparer.Ordinal)) == true)
+        {
+            throw new ArgumentException("Unsupported risk selection.");
+        }
+    }
 
     internal static void Validate(ReviewerPerformanceQuery query, IReadOnlyCollection<Guid> clients)
     {
@@ -64,10 +72,16 @@ internal static class ReviewerPerformanceQueryValidator
 
             if (scope.ClientIds?.Count > MaximumSelectionValues || Invalid(scope.Repositories, MaximumRepositoryIdentityLength) ||
                 Invalid(scope.Models, MaximumModelIdentityLength)
-                || Invalid(scope.Types, MaximumDimensionIdentityCharacters) || Invalid(scope.Qualifiers, MaximumDimensionIdentityCharacters))
+                || Invalid(scope.Types, MaximumDimensionIdentityCharacters) || Invalid(scope.Qualifiers, MaximumDimensionIdentityCharacters)
+                || Invalid(scope.Impacts, 32) || Invalid(scope.Likelihoods, 32) || Invalid(scope.RiskSeverities, 32) || Invalid(scope.Confidences, 32))
             {
                 throw new ArgumentException("Selections exceed the query limits.");
             }
+
+            ValidateRisk<MeisterDev.ProPR.Domain.Enums.FindingImpact>(scope.Impacts);
+            ValidateRisk<MeisterDev.ProPR.Domain.Enums.FindingLikelihood>(scope.Likelihoods);
+            ValidateRisk<MeisterDev.ProPR.Domain.Enums.FindingRiskSeverity>(scope.RiskSeverities);
+            ValidateRisk<MeisterDev.ProPR.Domain.Enums.FindingConfidence>(scope.Confidences);
         }
     }
 }

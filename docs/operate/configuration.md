@@ -510,6 +510,9 @@ Which files land in which complexity tier is decided per review - see
 
 The evidence judge requests `low` reasoning effort when the bundled catalog advertises it for the exact
 model and the selected transport supports it. Unknown or incompatible bindings use provider defaults.
+`AI_VERIFICATION_REASONING_EFFORT` sets one effort for the judge and both contradiction checks on every
+model. Set it only for models that accept a reasoning effort, because a model that does not accept one
+rejects the request, and the output ceilings include the reasoning tokens.
 The output ceiling includes reasoning tokens. An output-limit response, or an unusable verdict at the
 measured ceiling, receives one larger retry. Completed tool results remain available; the retry permits
 no further lookups and shares the claim's 120-second deadline. Both attempts are recorded and charged.
@@ -520,6 +523,7 @@ ceiling withholds the finding with `judge_output_limit`.
 |---|---|---|---|---|
 | `AI_EVIDENCE_JUDGE_MAX_OUTPUT_TOKENS` | Initial reasoning-inclusive output ceiling per judge call | `4000` | 512–32768 | no |
 | `AI_EVIDENCE_JUDGE_RETRY_MAX_OUTPUT_TOKENS` | Output ceiling for the single recovery attempt | `8000` | 512–32768; greater than the initial ceiling | no |
+| `AI_VERIFICATION_REASONING_EFFORT` | Reasoning effort the judge and both contradiction checks request | `none` | `none`, `low`, `medium`, `high` | no |
 
 Both the control plane and runner read these installation settings. A parsable value outside these
 bounds, or a retry ceiling no greater than the initial ceiling, fails startup. Unparsable values use
@@ -531,8 +535,8 @@ judge model's supported completion limit.
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
 | `AI_CONFIDENCE_THRESHOLD` | Confidence at which the reviewer stops investigating a concern | `70` | 0–100 | no |
-| `AI_CONFIDENCE_FLOOR_ERROR` | Minimum confidence to post at error severity; below it the finding is downgraded to warning | `80` | 0–100 | yes |
-| `AI_CONFIDENCE_FLOOR_WARNING` | Minimum confidence to post at warning severity; below it the finding is downgraded to suggestion | `60` | 0–100 | yes |
+| `AI_CONFIDENCE_FLOOR_ERROR` | Inactive compatibility setting; file confidence does not change finding classification | `80` | 0–100 | yes |
+| `AI_CONFIDENCE_FLOOR_WARNING` | Inactive compatibility setting; file confidence does not change finding classification | `60` | 0–100 | yes |
 | `AI_QUALITY_FILTER_THRESHOLD` | Total comment count across all files below which the cross-file quality pass is skipped | `20` | 1–500 | yes |
 
 A finding that clears these thresholds still goes through the publication gate - see

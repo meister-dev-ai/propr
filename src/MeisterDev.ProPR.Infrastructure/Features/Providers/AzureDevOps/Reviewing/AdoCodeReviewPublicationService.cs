@@ -62,6 +62,12 @@ internal sealed class AdoCodeReviewPublicationService(
                     revision,
                     ct);
 
+                var adoContext = publicationContext?.GetProviderSpecificContext<AzureDevOpsPublicationContext>();
+                if (publicationContext?.CurrentHeadSha == revision.HeadSha)
+                {
+                    adoContext = (adoContext ?? new AzureDevOpsPublicationContext(null)) with { SourceHeadSha = revision.HeadSha };
+                }
+
                 return await commentPoster.PostAsync(
                     organizationUrl,
                     projectId,
@@ -71,10 +77,11 @@ internal sealed class AdoCodeReviewPublicationService(
                     result,
                     clientId,
                     publicationContext?.ExistingThreads,
-                    publicationContext?.GetProviderSpecificContext<AzureDevOpsPublicationContext>(),
+                    adoContext,
                     publicationContext?.AuthorizedPublicationIdentity,
                     publicationContext?.ReplyInExistingSummaryThread ?? false,
-                    ct);
+                    ct,
+                    publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {

@@ -3,6 +3,11 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Data;
+using System.Security.Cryptography;
+using System.Text.Json;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.CodeInsights.Persistence;
 using MeisterDev.ProPR.Infrastructure.Data;
@@ -17,13 +22,14 @@ public sealed partial class ReviewerPerformanceCountProjector(
     MeisterProPRDbContext dbContext,
     ICodeInsightsCollectionGate gate,
     ILogger<ReviewerPerformanceCountProjector> logger,
-    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null)
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
+    ISecretProtectionCodec? secretProtectionCodec = null)
 {
     private const int MaximumBackfillAggregates = 500;
     private const int MaximumWriteAttempts = 3;
 
     /// <summary>Current joint projection schema.</summary>
-    public const int ProjectionVersion = 4;
+    public const int ProjectionVersion = 6;
 
     /// <summary>Refreshes the aggregate containing this job.</summary>
     public async Task ProjectJobAsync(Guid jobId, CancellationToken ct = default)
@@ -108,6 +114,7 @@ public sealed partial class ReviewerPerformanceCountProjector(
             await db.Entry(pr).ReloadAsync(ct);
         }
 
+        await this.RestoreQueryableConfidenceAsync(db, aggregateId, projectionCutoff, ct);
         var evidence = await ReviewerPerformanceProjectionEvidenceReader.LoadAsync(db, aggregateId, ct);
         var cells = ReviewerPerformanceProjectionBuilder.Build(pr, evidence, projectionCutoff);
         var stale = await db.ReviewerPerformanceDailyCounts.Where(row => row.CodeInsightPullRequestId == aggregateId).ToListAsync(ct);
@@ -131,6 +138,59 @@ public sealed partial class ReviewerPerformanceCountProjector(
         {
             await transaction.CommitAsync(ct);
         }
+    }
+
+    private async Task RestoreQueryableConfidenceAsync(MeisterProPRDbContext db, Guid aggregateId, DateTimeOffset updatedAt, CancellationToken ct)
+    {
+        if (secretProtectionCodec is null)
+        {
+            return;
+        }
+
+        var candidates = await db.CodeInsightFindings
+            .Where(finding => finding.CodeInsightPullRequestId == aggregateId && finding.Confidence == FindingConfidence.Unknown
+                                                                              && finding.EncryptedRiskAssessment != null).ToListAsync(ct);
+        var jobs = new HashSet<Guid>();
+        foreach (var finding in candidates)
+        {
+            FindingRiskAssessment? assessment;
+            try
+            {
+                assessment = CodeInsightRiskAssessmentProtection.Read(finding.EncryptedRiskAssessment, secretProtectionCodec);
+            }
+            catch (Exception exception) when (exception is CryptographicException or JsonException)
+            {
+                LogConfidenceEvidenceUnavailable(logger, finding.Id);
+                continue;
+            }
+
+            if (assessment is not { Confidence: not FindingConfidence.Unknown } risk)
+            {
+                continue;
+            }
+
+            finding.Confidence = risk.Confidence;
+            finding.PerformanceEvidenceUpdatedAt = updatedAt;
+            jobs.Add(finding.JobId);
+        }
+
+        if (jobs.Count == 0)
+        {
+            return;
+        }
+
+        // Restored source metadata invalidates the owning quality cells so bounded catch-up rebuilds them.
+        var staleQuality = db.CodeInsightDailyCounts.Where(cell => jobs.Contains(cell.JobId));
+        if (db.Database.IsRelational())
+        {
+            await staleQuality.ExecuteDeleteAsync(ct);
+        }
+        else
+        {
+            db.CodeInsightDailyCounts.RemoveRange(await staleQuality.ToListAsync(ct));
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task WithDbAsync(Func<MeisterProPRDbContext, Task> action, CancellationToken ct)
@@ -172,6 +232,10 @@ public sealed partial class ReviewerPerformanceCountProjector(
             LogProjectionFailed(logger, ex);
         }
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning, Message = "Finding confidence evidence could not be read during projection. Finding {FindingId} remains unassessed.")]
+    private static partial void LogConfidenceEvidenceUnavailable(ILogger logger, Guid findingId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Reviewer performance count projection failed; retained source evidence is available for catch-up.")]
     private static partial void LogProjectionFailed(ILogger logger, Exception exception);

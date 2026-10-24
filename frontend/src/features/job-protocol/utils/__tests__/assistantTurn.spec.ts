@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { parseAssistantTurnRecord } from '../assistantTurn'
+import { findingRisk } from '@/features/reviews/findingRisk'
 
 describe('parseAssistantTurnRecord', () => {
     it('returns null when the payload is not an assistant-turn record', () => {
@@ -76,5 +77,20 @@ describe('parseAssistantTurnRecord', () => {
 
         expect(result!.parsedReview).not.toBeNull()
         expect(result!.parsedReview?.comments).toHaveLength(1)
+    })
+
+    it('normalizes producer assessment reasons without trusting producer provenance', () => {
+        const result = parseAssistantTurnRecord({ assistantText: JSON.stringify({ comments: [{
+            severity: 'error', message: 'An import deletes stored records.',
+            risk_assessment: { impact: 'critical', likelihood: 'likely', confidence: 'certain',
+                impact_reason: 'Stored records are lost.', likelihood_reason: 'Every import executes the deletion.',
+                confidence_reason: 'The deletion path is visible.', source: 'evidence_verification',
+                confidence_source: 'evidence_verification', rubric_version: 'finding-risk-v1', severity: 'critical' },
+        }] }) })
+
+        expect(findingRisk(result!.parsedReview!.comments![0]!.riskAssessment)).toMatchObject({
+            impactReason: 'Stored records are lost.', likelihoodReason: 'Every import executes the deletion.',
+            confidence: 'unknown', riskSeverity: 'unknown',
+        })
     })
 })

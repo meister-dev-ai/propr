@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Text;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -20,8 +21,10 @@ public static class ContextBudgetSummarySections
     /// </summary>
     /// <param name="builder">The summary builder to append to.</param>
     /// <param name="result">The review result carrying the budget and context-window outcomes.</param>
-    public static void Append(StringBuilder builder, ReviewResult result)
+    /// <param name="renderText">The provider's safe rendering of file paths.</param>
+    public static void Append(StringBuilder builder, ReviewResult result, Func<string, string>? renderText = null)
     {
+        renderText ??= ReviewFindingTextFormatter.RenderPlainText;
         if (result.BudgetSoftCapped)
         {
             builder.AppendLine();
@@ -31,7 +34,7 @@ public static class ContextBudgetSummarySections
                 builder.AppendLine();
                 foreach (var path in result.BudgetSoftCapSkippedFilePaths)
                 {
-                    builder.AppendLine($"- {path}");
+                    builder.AppendLine($"- {renderText(path.ReplaceLineEndings(" "))}");
                 }
             }
         }
@@ -44,7 +47,7 @@ public static class ContextBudgetSummarySections
             builder.AppendLine();
             foreach (var path in result.ContextDegradedFilePaths)
             {
-                builder.AppendLine($"- {path}");
+                builder.AppendLine($"- {renderText(path.ReplaceLineEndings(" "))}");
             }
         }
 
@@ -55,7 +58,7 @@ public static class ContextBudgetSummarySections
             builder.AppendLine();
             foreach (var path in result.ContextSkippedFilePaths)
             {
-                builder.AppendLine($"- {path}");
+                builder.AppendLine($"- {renderText(path.ReplaceLineEndings(" "))}");
             }
         }
     }

@@ -86,6 +86,8 @@
         <span>{{ vm.loading.value ? 'Loading…' : 'Apply' }}</span>
       </button>
     </form>
+    <FindingRiskFilters v-if="vm.section.value !== 'ranges' && vm.section.value !== 'coverage'" v-model="vm.riskFilters.value" :disabled="vm.loading.value" />
+    <p v-if="vm.section.value === 'coverage'" class="page-copy">Collection coverage includes all risk levels.</p>
 
     <div v-if="vm.section.value !== 'ranges' && catalogue.error.value" class="page-error performance-catalogue-error" role="alert">
       <span>{{ catalogue.error.value }}</span>
@@ -165,6 +167,9 @@
         />
       </template>
 
+      <p v-else-if="vm.hasRiskFilter.value" class="page-copy" role="status">
+        Human concerns have no impact, likelihood or confidence assessment. Clear the assessment filters to view missed findings.
+      </p>
       <CodeInsightsMissesPanel v-else :misses="vm.misses.value" />
     </template>
 
@@ -181,6 +186,7 @@
 </template>
 
 <script setup lang="ts">
+import FindingRiskFilters from '@/components/findings/FindingRiskFilters.vue'
 import { computed, onMounted } from 'vue'
 import ReviewerPerformanceSelect from '../components/ReviewerPerformanceSelect.vue'
 import { useReviewerPerformanceClients } from '../composables/useReviewerPerformanceClients'

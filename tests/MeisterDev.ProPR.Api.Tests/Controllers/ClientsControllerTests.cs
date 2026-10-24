@@ -47,6 +47,50 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 {
     private const string ValidAdminKey = "admin-key-min-16-chars-ok";
 
+    [Theory]
+    [InlineData("plain")]
+    [InlineData("shieldsIo")]
+    public async Task FindingBadgeStyleRoundTripsThroughPatchAndGet(string selected)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var owner = await db.Clients.AsNoTracking().SingleAsync(record => record.Id == factory.ClientId);
+        var first = new ClientRecord
+            { Id = Guid.NewGuid(), TenantId = owner.TenantId, DisplayName = "Badge style", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        var second = new ClientRecord
+            { Id = Guid.NewGuid(), TenantId = owner.TenantId, DisplayName = "Other badge style", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        db.Clients.AddRange(first, second);
+        await db.SaveChangesAsync();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        using var response = await client.PatchAsJsonAsync($"/clients/{first.Id}", new { findingBadgeStyle = selected });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var patched = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(selected, patched.RootElement.GetProperty("findingBadgeStyle").GetString());
+        using var omitted = await client.PatchAsJsonAsync($"/clients/{first.Id}", new { displayName = "Renamed badge style" });
+        Assert.Equal(HttpStatusCode.OK, omitted.StatusCode);
+        using var loaded = JsonDocument.Parse(await client.GetStringAsync($"/clients/{first.Id}"));
+        Assert.Equal(selected, loaded.RootElement.GetProperty("findingBadgeStyle").GetString());
+        using var isolated = JsonDocument.Parse(await client.GetStringAsync($"/clients/{second.Id}"));
+        Assert.Equal("shieldsIo", isolated.RootElement.GetProperty("findingBadgeStyle").GetString());
+        db.ChangeTracker.Clear();
+        Assert.Equal(
+            selected == "plain" ? FindingBadgeStyle.Plain : FindingBadgeStyle.ShieldsIo,
+            (await db.Clients.SingleAsync(record => record.Id == first.Id)).FindingBadgeStyle);
+    }
+
+    [Theory]
+    [InlineData("{\"findingBadgeStyle\":99}")]
+    [InlineData("{\"findingBadgeStyle\":\"unsupported\"}")]
+    public async Task UndefinedFindingBadgeStyleIsRejected(string json)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var response = await client.PatchAsync($"/clients/{factory.ClientId}", content);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
 
     [Fact]
     public async Task DeleteAdoCredentials_LegacyEndpoint_Returns404()

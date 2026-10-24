@@ -69,7 +69,9 @@ public sealed record CodeInsightFindingSnapshot(
     string? DuplicateVerificationSource = null,
     double? DuplicateVerificationConfidence = null,
     DateTimeOffset? DuplicateVerifiedAt = null,
-    string ProviderScope = "");
+    string ProviderScope = "",
+    FindingRiskAssessment? RiskAssessment = null,
+    FindingTypeClassification? FindingClassification = null);
 
 /// <summary>
 ///     A collected finding still awaiting type classification, with everything the classifier needs and
@@ -276,7 +278,8 @@ public sealed record CodeInsightFindingClassificationView(
     IReadOnlyList<string> CustomTags,
     CodeInsightFindingLevel? Level,
     CodeInsightFindingQualifier? Qualifier,
-    double? Confidence);
+    double? Confidence,
+    FindingRiskAssessment? RiskAssessment = null);
 
 /// <summary>
 ///     A materialised finding as the store returns it. The message is decrypted; <paramref name="Id" /> is
@@ -311,4 +314,5 @@ public sealed record CodeInsightFindingView(
     string ProviderScope = "",
     string? OutcomeSourceFingerprint = null,
     string? ProviderCommentId = null,
-    DateTimeOffset? CreatedAt = null);
+    DateTimeOffset? CreatedAt = null,
+    FindingRiskAssessment? RiskAssessment = null);

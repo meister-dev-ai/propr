@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Correctness</p>
         <h3 id="insights-quality-heading">Quality trend</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           Correctness over the pull requests that closed in each period. A finding is counted as correct when a
           human addressed, acknowledged, or dismissed it, and as missed when a human raised something the
           reviewer should have caught.
@@ -64,7 +64,8 @@
       </span>
     </p>
 
-    <p v-if="!hasEnoughSample" class="insufficient-note" role="note">
+    <p v-if="quality.correctnessTotal.unavailableReason" class="insufficient-note" role="note">{{ exclusionReasonLabel(quality.correctnessTotal.unavailableReason) }}</p>
+    <p v-else-if="!hasEnoughSample" class="insufficient-note" role="note">
       <i class="fi fi-rr-triangle-warning" aria-hidden="true"></i>
       <span>
         Not enough closed pull requests to report correctness yet:
@@ -113,6 +114,7 @@ import AccessibleChart from '@/features/code-insights/components/AccessibleChart
 import EstimateNotice from '@/features/code-insights/components/EstimateNotice.vue'
 import { buildMetricChartData, createRatioOptions, formatRatio } from '@/features/code-insights/chartData'
 import type { CodeInsightDisposition, CodeInsightQuality } from '@/services/codeInsightsAnalyticsService'
+import { exclusionReasonLabel } from '../reviewerPerformanceEvidence'
 
 const props = defineProps<{
   quality: CodeInsightQuality

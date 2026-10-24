@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 
@@ -182,7 +183,14 @@ public sealed record CandidateReviewFinding
     /// <summary>
     ///     Gets the stable identifier for the finding.
     /// </summary>
-    public string FindingId { get; }
+    public string FindingId { get; private init; }
+
+    /// <summary>Assigns an identity to a synthesized finding while preserving all recorded metadata.</summary>
+    public CandidateReviewFinding WithFindingId(string findingId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(findingId);
+        return this with { FindingId = findingId };
+    }
 
     /// <summary>
     ///     Gets the provenance describing how the finding was generated.
@@ -198,6 +206,21 @@ public sealed record CandidateReviewFinding
     ///     Gets the human-readable finding message.
     /// </summary>
     public string Message { get; }
+
+    /// <summary>Optional impact and likelihood assessment retained independently of verification confidence.</summary>
+    public FindingRiskAssessment? RiskAssessment { get; init; }
+
+    /// <summary>Original producing pass's repository access, retained for later reconsideration.</summary>
+    public bool? ProducedWithRepositoryTools { get; init; }
+
+    /// <summary>Optional bounded synthesis challenge resolved before final publication.</summary>
+    public FindingVerificationChallenge? VerificationChallenge { get; init; }
+
+    /// <summary>Types and analytics axes assigned while producing this finding.</summary>
+    public FindingTypeClassification? FindingClassification { get; init; }
+
+    /// <summary>Optional exact replacement retained independently of the claim.</summary>
+    public ReviewSuggestedFix? SuggestedFix { get; init; }
 
     /// <summary>
     ///     Gets the category describing the finding scope.
@@ -217,7 +240,7 @@ public sealed record CandidateReviewFinding
     /// <summary>
     ///     Gets the evidence snapshot supporting the finding when available.
     /// </summary>
-    public EvidenceReference? Evidence { get; }
+    public EvidenceReference? Evidence { get; init; }
 
     /// <summary>
     ///     Gets the candidate summary text captured before final gating.
@@ -232,7 +255,7 @@ public sealed record CandidateReviewFinding
     /// <summary>
     ///     Gets the verification result associated with the finding when available.
     /// </summary>
-    public VerificationOutcome? VerificationOutcome { get; }
+    public VerificationOutcome? VerificationOutcome { get; init; }
 
     /// <summary>
     ///     Gets the deterministic classification of this finding's anchor line relative to the pull

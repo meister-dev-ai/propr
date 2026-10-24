@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Finding mix</p>
         <h3 id="insights-types-heading">Finding types over time</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           Findings by core type, so the mix is comparable across clients. A finding carrying two types counts
           under both.
         </p>

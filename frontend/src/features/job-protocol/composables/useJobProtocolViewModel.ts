@@ -26,6 +26,7 @@ import { useTokenTotals } from './useTokenTotals'
 import { useTraceSearch } from './useTraceSearch'
 import { parseTraceChipParam, serializeTraceChips } from './traceQuickFilters'
 import { formatFilesReviewed } from '@/utils/reviewProgress'
+import { findingRisk, matchesFindingRisk, riskSeverityRank, type FindingRiskFilters } from '@/features/reviews/findingRisk'
 import type {
     AgenticInvestigationOutputRecord,
     CommentGroupComment,
@@ -465,6 +466,12 @@ export function useJobProtocolViewModel() {
     const globalSearchQuery = ref('')
     const localSearchQuery = ref('')
     const localSeverities = ref<Set<string>>(new Set())
+    const riskFilters = ref<FindingRiskFilters>({})
+    const riskCounts = computed(() => {
+        const counts: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 }
+        for (const comment of reviewStatus.value?.result?.comments ?? []) counts[findingRisk(comment.riskAssessment).riskSeverity]!++
+        return counts
+    })
 
     const severityCounts = computed(() => {
         const counts = { error: 0, warning: 0, info: 0, suggestion: 0 }
@@ -563,7 +570,7 @@ export function useJobProtocolViewModel() {
 
         return allComments.filter(comment => {
             const matchesSeverity = severities.size === 0 || severities.has((comment.severity ?? '').toLowerCase())
-            if (!matchesSeverity) return false
+            if (!matchesSeverity || !matchesFindingRisk(comment.riskAssessment, riskFilters.value)) return false
             if (!query) return true
 
             const message = (comment.message ?? '').toLowerCase()
@@ -962,6 +969,8 @@ export function useJobProtocolViewModel() {
                 const pathA = left.filePath || left.file_path || ''
                 const pathB = right.filePath || right.file_path || ''
                 if (pathA !== pathB) return pathA.localeCompare(pathB)
+                const riskOrder = riskSeverityRank(left.riskAssessment) - riskSeverityRank(right.riskAssessment)
+                if (riskOrder) return riskOrder
                 return (left.lineNumber || left.line_number || 0) - (right.lineNumber || right.line_number || 0)
             }),
         }))
@@ -990,6 +999,8 @@ export function useJobProtocolViewModel() {
         return sortedKeys.map(path => ({
             directory: path,
             comments: [...groups[path]].sort((left, right) => {
+                const riskOrder = riskSeverityRank(left.riskAssessment) - riskSeverityRank(right.riskAssessment)
+                if (riskOrder) return riskOrder
                 const sevA = severityRank[(left.severity ?? '').toLowerCase()] ?? 9
                 const sevB = severityRank[(right.severity ?? '').toLowerCase()] ?? 9
                 if (sevA !== sevB) return sevA - sevB
@@ -2453,6 +2464,8 @@ export function useJobProtocolViewModel() {
         globalSearchQuery,
         localSearchQuery,
         localSeverities,
+        riskFilters,
+        riskCounts,
         severityCounts,
         filteredCommentsForTree,
         filteredCommentsForDetail,

@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Findings</p>
         <h3 id="insights-drill-heading">{{ title }}</h3>
-        <p class="panel-copy">The individual findings this number was computed from.</p>
+        <p class="panel-description">The individual findings this number was computed from.</p>
       </div>
       <button type="button" class="close-button" @click="emit('close')">
         <i class="fi fi-rr-cross-small" aria-hidden="true"></i>
@@ -26,7 +26,7 @@
       <li v-for="finding in findings" :key="finding.id" class="finding-item">
         <div class="finding-head">
           <span class="finding-severity" :class="`severity-${finding.severity.toLowerCase()}`">
-            {{ finding.severity }}
+            Classification: {{ finding.severity }}
           </span>
           <span class="finding-location">
             {{ finding.filePath ?? 'pull-request level'
@@ -41,6 +41,7 @@
              raw it shows its own fences and backticks, which is the least readable form of the most important
              text on the panel. Sanitised by the shared renderer, which is html-free and DOMPurified. -->
         <div class="finding-message markdown-body" v-html="renderMarkdown(finding.message)"></div>
+        <FindingRiskAssessmentView :assessment="finding.riskAssessment" />
 
         <div class="finding-footer">
           <span v-for="tag in finding.coreTags" :key="tag" class="finding-tag">{{ tag }}</span>
@@ -58,6 +59,7 @@
 
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import FindingRiskAssessmentView from '@/components/findings/FindingRiskAssessmentView.vue'
 import { renderMarkdown } from '@/features/job-protocol/utils/formatters'
 import type { CodeInsightFinding } from '@/services/codeInsightsAnalyticsService'
 

@@ -56,6 +56,12 @@ public sealed class DiscussionThreadProgress
     public string SourceFingerprint { get; set; } = "";
     public Dictionary<string, string> Consumers { get; set; } = new(StringComparer.Ordinal);
 
+    /// <summary>Identifies the fenced checkpoint that persisted the current memory acknowledgment.</summary>
+    public string? MemoryCheckpoint { get; set; }
+
+    /// <summary>Keeps memory cleanup retryable when a thread is removed before processing succeeds.</summary>
+    public bool MemoryPending { get; set; }
+
     public bool Needs(string consumer, string source, string dependencies) =>
         !this.Consumers.TryGetValue(consumer, out var completed) || completed != Fingerprint(source, dependencies);
 

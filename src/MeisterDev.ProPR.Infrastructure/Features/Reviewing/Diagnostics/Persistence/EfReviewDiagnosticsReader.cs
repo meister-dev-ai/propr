@@ -853,7 +853,7 @@ public sealed class EfReviewDiagnosticsReader(
             comment.OriginModelId,
             comment.OriginLogicalModelName,
             comment.OriginSymbolName,
-            comment.OriginSymbolKind);
+            comment.OriginSymbolKind, comment.RiskAssessment);
     }
 
     private static string ResolveProviderProjectKey(ReviewJob job)

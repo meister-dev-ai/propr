@@ -4,17 +4,19 @@
 
 <template>
     <div v-if="finding" class="finding-badges" data-testid="retained-finding-badges" role="group" aria-label="Finding details">
-        <span class="finding-badge" :class="`finding-severity-${finding.severity.toLowerCase()}`">{{ findingLabel(finding.severity) }}</span>
+        <span class="finding-badge" :class="`finding-severity-${finding.severity.toLowerCase()}`">Classification: {{ findingLabel(finding.severity) }}</span>
         <span v-for="kind in finding.coreTags" :key="kind" class="finding-badge finding-kind" :title="kind">{{ findingLabel(kind) }}</span>
         <span class="finding-badge">{{ finding.disposition ? findingLabel(finding.disposition) : 'Outcome pending' }}</span>
         <span v-if="finding.rejectionReason" class="finding-badge finding-reason" :title="`Recorded rejection reason: ${findingLabel(finding.rejectionReason)}`">
             {{ findingOutcome(finding) === 'duplicate' ? 'Duplicate' : findingLabel(finding.rejectionReason) }}
         </span>
     </div>
+    <FindingRiskAssessmentView v-if="finding" :assessment="finding.riskAssessment" />
 </template>
 
 <script setup lang="ts">
 import type { CodeInsightFinding } from '@/services/codeInsightsAnalyticsService'
+import FindingRiskAssessmentView from '@/components/findings/FindingRiskAssessmentView.vue'
 import { findingLabel, findingOutcome } from './reviewBrowserFindings'
 defineProps<{ finding: CodeInsightFinding | null }>()
 </script>

@@ -34,7 +34,8 @@ public sealed record ClientDto(
     string OutputLanguage = ReviewOutputLanguage.Default,
     bool ReviewEveryIncrementEnabled = false,
     bool WithholdOutOfScopeFindings = false,
-    ReviewAdmissionPolicyDto? AdmissionPolicy = null)
+    ReviewAdmissionPolicyDto? AdmissionPolicy = null,
+    FindingBadgeStyle FindingBadgeStyle = FindingBadgeStyle.ShieldsIo)
 {
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];

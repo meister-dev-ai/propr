@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.CodeInsights.Metrics;
 
@@ -31,6 +32,10 @@ namespace MeisterDev.ProPR.CodeInsights.Metrics;
 ///     <paramref name="Disposition" />, because a reason already implies its outcome.
 /// </param>
 /// <param name="Offset">Number of matching findings to skip before returning a bounded page.</param>
+/// <param name="Impact">Optional impact filter; Unknown selects unassessed impact.</param>
+/// <param name="Likelihood">Optional likelihood filter; Unknown selects unassessed likelihood.</param>
+/// <param name="RiskSeverity">Optional risk severity filter; Unknown selects findings without supported risk.</param>
+/// <param name="Confidence">Optional correctness confidence filter; Unknown selects unassessed confidence.</param>
 public sealed record CodeInsightBrowseQuery(
     IReadOnlyCollection<Guid> ClientIds,
     DateOnly From,
@@ -43,7 +48,11 @@ public sealed record CodeInsightBrowseQuery(
     int Limit = 100,
     string? SymbolName = null,
     CodeInsightRejectionReason? RejectionReason = null,
-    int Offset = 0);
+    int Offset = 0,
+    FindingImpact? Impact = null,
+    FindingLikelihood? Likelihood = null,
+    FindingRiskSeverity? RiskSeverity = null,
+    FindingConfidence? Confidence = null);
 
 /// <summary>One collected finding as a drill-through shows it, with its text decrypted.</summary>
 /// <param name="Id">Surrogate identity of the finding.</param>
@@ -63,6 +72,7 @@ public sealed record CodeInsightBrowseQuery(
 ///     Why it was rejected, when it was rejected and the reason could be judged. <c>null</c> otherwise, which a
 ///     caller must render as unknown rather than as any particular reason.
 /// </param>
+/// <param name="RiskAssessment">Recorded assessment, or null when no assessment was retained for the finding.</param>
 public sealed record CodeInsightFindingRow(
     Guid Id,
     Guid ClientId,
@@ -77,7 +87,8 @@ public sealed record CodeInsightFindingRow(
     CodeInsightDisposition? Disposition,
     string? ProviderThreadId,
     DateTimeOffset ObservedAt,
-    CodeInsightRejectionReason? RejectionReason = null);
+    CodeInsightRejectionReason? RejectionReason = null,
+    FindingRiskAssessment? RiskAssessment = null);
 
 /// <summary>
 ///     One harvested human thread as the misses list shows it, with its discussion decrypted and all three

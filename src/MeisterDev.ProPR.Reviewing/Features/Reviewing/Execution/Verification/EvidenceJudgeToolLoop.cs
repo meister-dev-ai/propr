@@ -89,7 +89,7 @@ internal static class EvidenceJudgeToolLoop
                     .ConfigureAwait(false);
                 if (retried)
                 {
-                    return new JudgeLoopResult(response, true);
+                    return new JudgeLoopResult(response, true, used);
                 }
 
                 // Retry from the complete conversation. Partial output is not evidence or a completed tool request.
@@ -100,7 +100,7 @@ internal static class EvidenceJudgeToolLoop
             if (calls.Count == 0 || !allowTools || HasErrorOrRefusal(response))
             {
                 await onModelCall(response, true).ConfigureAwait(false);
-                return new JudgeLoopResult(response, false);
+                return new JudgeLoopResult(response, false, used);
             }
 
             await onModelCall(response, false).ConfigureAwait(false);
@@ -115,9 +115,10 @@ internal static class EvidenceJudgeToolLoop
                 }
 
                 used++;
-                var (text, originalLength) = await InvokeAsync(toolsByName, call, ct).ConfigureAwait(false);
+                var (text, originalLength, succeeded) = await InvokeAsync(toolsByName, call, ct).ConfigureAwait(false);
                 results.Add(new FunctionResultContent(call.CallId, text));
-                await onToolCall(new JudgeToolCall(call.Name, SerializeArguments(call.Arguments), originalLength, originalLength > MaxToolResultChars))
+                await onToolCall(
+                        new JudgeToolCall(call.Name, SerializeArguments(call.Arguments), originalLength, originalLength > MaxToolResultChars, text, succeeded))
                     .ConfigureAwait(false);
             }
 
@@ -165,12 +166,13 @@ internal static class EvidenceJudgeToolLoop
         }
     }
 
-    private static async Task<(string Text, int OriginalLength)> InvokeAsync(
+    private static async Task<(string Text, int OriginalLength, bool Succeeded)> InvokeAsync(
         IReadOnlyDictionary<string, AIFunction> toolsByName,
         FunctionCallContent call,
         CancellationToken ct)
     {
         string text;
+        var succeeded = false;
         if (!toolsByName.TryGetValue(call.Name, out var tool))
         {
             text = JsonSerializer.Serialize(new { status = "not_run", reason = "unknown_tool", tool = call.Name });
@@ -181,6 +183,7 @@ internal static class EvidenceJudgeToolLoop
             {
                 var result = await tool.InvokeAsync(new AIFunctionArguments(call.Arguments), ct).ConfigureAwait(false);
                 text = result as string ?? JsonSerializer.Serialize(result);
+                succeeded = true;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -196,8 +199,8 @@ internal static class EvidenceJudgeToolLoop
 
         var originalLength = text.Length;
         return originalLength <= MaxToolResultChars
-            ? (text, originalLength)
-            : (string.Concat(text.AsSpan(0, MaxToolResultChars), EvidenceJudgeInput.TruncationMarker), originalLength);
+            ? (text, originalLength, succeeded)
+            : (string.Concat(text.AsSpan(0, MaxToolResultChars), EvidenceJudgeInput.TruncationMarker), originalLength, succeeded);
     }
 
     private static string SerializeArguments(IDictionary<string, object?>? arguments)
@@ -207,10 +210,18 @@ internal static class EvidenceJudgeToolLoop
     }
 }
 
-/// <summary>The final response and whether the judge exhausted its bounded output recovery.</summary>
+/// <summary>The final response, whether the judge exhausted its bounded output recovery, and the lookups it ran.</summary>
 /// <param name="Response">The last model response.</param>
 /// <param name="OutputLimitReached">Whether the final attempt exhausted its output budget.</param>
-internal sealed record JudgeLoopResult(ChatResponse Response, bool OutputLimitReached);
+/// <param name="ToolCallsUsed">The number of lookups that ran for the claim.</param>
+internal sealed record JudgeLoopResult(ChatResponse Response, bool OutputLimitReached, int ToolCallsUsed)
+{
+    /// <summary>
+    ///     Whether the judge ran every lookup it was allowed. Its answer then came from the forced final turn, after
+    ///     which no further code could be read.
+    /// </summary>
+    public bool UsedEveryLookup => this.ToolCallsUsed >= EvidenceJudgeToolLoop.MaxToolCallsPerClaim;
+}
 
 /// <summary>A capped model turn and the decision to retry it.</summary>
 /// <param name="ModelTurn">The model-turn number within the claim.</param>
@@ -224,7 +235,13 @@ internal sealed record JudgeOutputLimit(int ModelTurn, int MaxOutputTokens, Chat
 /// <param name="Arguments">The call arguments as JSON, cut to 500 characters.</param>
 /// <param name="ResultChars">The length of the tool result before it was cut.</param>
 /// <param name="ResultTruncated">Whether the judge received a cut result.</param>
-internal sealed record JudgeToolCall(string ToolName, string Arguments, int ResultChars, bool ResultTruncated);
+internal sealed record JudgeToolCall(
+    string ToolName,
+    string Arguments,
+    int ResultChars,
+    bool ResultTruncated,
+    string? ResultText = null,
+    bool Succeeded = false);
 
 /// <summary>The model call of the evidence judge failed at the provider.</summary>
 /// <param name="inner">The exception the chat client raised.</param>

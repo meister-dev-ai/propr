@@ -49,6 +49,10 @@ public sealed class CodeQualityController(
     /// <param name="repositoryId">Narrows to one repository: the usual case for this audience.</param>
     /// <param name="pullRequestId">Narrows to one pull request, for the view embedded in a review.</param>
     /// <param name="filePath">Narrows to one file.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The series, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -65,6 +69,10 @@ public sealed class CodeQualityController(
         [FromQuery] string? repositoryId = null,
         [FromQuery] long? pullRequestId = null,
         [FromQuery] string? filePath = null,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
@@ -78,7 +86,9 @@ public sealed class CodeQualityController(
             return this.Ok(new CodeInsightTypeSeriesResponse([], 0, []));
         }
 
-        var query = CodeInsightQueries.BuildRollupQuery(scope.ClientIds, from, to, repositoryId, pullRequestId, filePath);
+        var query = CodeInsightQueries.BuildRollupQuery(
+            scope.ClientIds, from, to, repositoryId, pullRequestId, filePath, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity,
+            confidence: confidence);
         var points = await rollupReader.GetSeriesAsync(
             query,
             CodeInsightCountDimension.CoreType,
@@ -113,6 +123,10 @@ public sealed class CodeQualityController(
     /// <param name="clientId">Narrows to one client the caller may already see.</param>
     /// <param name="repositoryId">Narrows to one repository, for drilling from a repository into its files.</param>
     /// <param name="pullRequestId">Narrows to one pull request, for the view embedded in a review.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The ranking, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -129,6 +143,10 @@ public sealed class CodeQualityController(
         [FromQuery] Guid? clientId = null,
         [FromQuery] string? repositoryId = null,
         [FromQuery] long? pullRequestId = null,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
@@ -143,7 +161,9 @@ public sealed class CodeQualityController(
         }
 
         var rows = await rollupReader.GetConcentrationAsync(
-            CodeInsightQueries.BuildRollupQuery(scope.ClientIds, from, to, repositoryId, pullRequestId),
+            CodeInsightQueries.BuildRollupQuery(
+                scope.ClientIds, from, to, repositoryId, pullRequestId, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity,
+                confidence: confidence),
             CodeInsightQueries.ParseGrain(grain),
             Math.Clamp(topN, 1, 100),
             ct);
@@ -176,6 +196,10 @@ public sealed class CodeQualityController(
     /// <param name="from">Inclusive start of the window, by review date. Defaults to 30 days ago.</param>
     /// <param name="to">Inclusive end of the window, by review date. Defaults to today.</param>
     /// <param name="clientId">Narrows to one client the caller may already see.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The directory, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -188,6 +212,10 @@ public sealed class CodeQualityController(
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
         [FromQuery] Guid? clientId = null,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
@@ -202,7 +230,8 @@ public sealed class CodeQualityController(
         }
 
         var directory = await rollupReader.GetRepositoryDirectoryAsync(
-            CodeInsightQueries.BuildRollupQuery(scope.ClientIds, from, to),
+            CodeInsightQueries.BuildRollupQuery(
+                scope.ClientIds, from, to, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity, confidence: confidence),
             ct);
 
         var names = await this.ResolveClientNamesAsync(
@@ -255,6 +284,10 @@ public sealed class CodeQualityController(
     ///     only findings the file's syntax placed are counted: the remainder comes back as <c>unplacedFindings</c>.
     /// </param>
     /// <param name="topN">How many rows to return. Clamped to 1–200.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The hotspots, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -271,6 +304,10 @@ public sealed class CodeQualityController(
         [FromQuery] long? filesFromPullRequestId = null,
         [FromQuery] string? groupBy = null,
         [FromQuery] int topN = 25,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
@@ -285,7 +322,8 @@ public sealed class CodeQualityController(
         }
 
         var report = await rollupReader.GetHotspotsAsync(
-            CodeInsightQueries.BuildRollupQuery(scope.ClientIds, from, to, repositoryId),
+            CodeInsightQueries.BuildRollupQuery(
+                scope.ClientIds, from, to, repositoryId, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity, confidence: confidence),
             filesFromPullRequestId,
             Math.Clamp(topN, 1, 200),
             CodeInsightQueries.ParseHotspotGrouping(groupBy),
@@ -326,6 +364,10 @@ public sealed class CodeQualityController(
     ///     reports nothing, for the reason above.
     /// </param>
     /// <param name="topN">How many pull requests to break out. Clamped to 1–50.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The survival counts, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -341,6 +383,10 @@ public sealed class CodeQualityController(
         [FromQuery] string? repositoryId = null,
         [FromQuery] long? pullRequestId = null,
         [FromQuery] int topN = 10,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
@@ -354,7 +400,8 @@ public sealed class CodeQualityController(
             return this.Ok(new CodeInsightSurvivalReport(ToSurvival(default), []));
         }
 
-        var query = CodeInsightQueries.BuildRollupQuery(scope.ClientIds, from, to, repositoryId, pullRequestId);
+        var query = CodeInsightQueries.BuildRollupQuery(
+            scope.ClientIds, from, to, repositoryId, pullRequestId, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity, confidence: confidence);
 
         var total = await survivalReader.GetSurvivalAsync(query, ct);
         var perPullRequest = await survivalReader.GetSurvivalByPullRequestAsync(query, Math.Clamp(topN, 1, 50), ct);
@@ -387,6 +434,10 @@ public sealed class CodeQualityController(
     /// <param name="disposition">Narrows to one outcome.</param>
     /// <param name="limit">Maximum rows. Clamped to 1–200.</param>
     /// <param name="offset">Number of matching findings to skip. Negative values are treated as zero.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The findings, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -407,6 +458,10 @@ public sealed class CodeQualityController(
         [FromQuery] string? disposition = null,
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
@@ -432,7 +487,7 @@ public sealed class CodeQualityController(
                 CodeInsightQueries.ParseDisposition(disposition),
                 limit,
                 symbolName,
-                offset: offset),
+                offset: offset, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity, confidence: confidence),
             ct);
 
         return this.Ok(
@@ -451,8 +506,73 @@ public sealed class CodeQualityController(
                     row.Disposition?.ToString(),
                     row.ProviderThreadId,
                     row.ObservedAt,
-                    row.RejectionReason?.ToString()))
+                    row.RejectionReason?.ToString(), row.RiskAssessment))
                 .ToList());
+    }
+
+    /// <summary>Returns the finding distribution over time by impact, likelihood, derived risk severity, or correctness confidence.</summary>
+    /// <param name="dimension">impact, likelihood, riskSeverity, or confidence.</param>
+    /// <param name="from">Inclusive start of the review-date window.</param>
+    /// <param name="to">Inclusive end of the review-date window.</param>
+    /// <param name="bucket">day, week, or month.</param>
+    /// <param name="clientId">Authorized client selection.</param>
+    /// <param name="repositoryId">Repository selection.</param>
+    /// <param name="pullRequestId">Pull-request selection.</param>
+    /// <param name="filePath">File selection.</param>
+    /// <param name="impact">Independent impact selection.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">The risk distribution, including Unknown historical assessments.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">The caller cannot access the selected client or the licensed capability.</response>
+    [HttpGet("risk-over-time")]
+    [ProducesResponseType(typeof(CodeInsightTypeSeriesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetRiskOverTime(
+        [FromQuery] string dimension = "riskSeverity",
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] string? bucket = null,
+        [FromQuery] Guid? clientId = null,
+        [FromQuery] string? repositoryId = null,
+        [FromQuery] long? pullRequestId = null,
+        [FromQuery] string? filePath = null,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
+        CancellationToken ct = default)
+    {
+        var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
+        if (scope.Denied is not null)
+        {
+            return scope.Denied;
+        }
+
+        if (rollupReader is null || scope.ClientIds.Count == 0)
+        {
+            return this.Ok(new CodeInsightTypeSeriesResponse([], 0, []));
+        }
+
+        var query = CodeInsightQueries.BuildRollupQuery(
+            scope.ClientIds, from, to, repositoryId, pullRequestId, filePath,
+            impact, likelihood, riskSeverity, confidence);
+        var axis = dimension switch
+        {
+            "impact" => CodeInsightCountDimension.Impact,
+            "likelihood" => CodeInsightCountDimension.Likelihood,
+            "confidence" => CodeInsightCountDimension.Confidence,
+            _ => CodeInsightCountDimension.RiskSeverity,
+        };
+        var points = await rollupReader.GetSeriesAsync(query, axis, CodeInsightQueries.ParseBucket(bucket), ct);
+        return this.Ok(
+            new CodeInsightTypeSeriesResponse(
+                points.Select(point => new CodeInsightCountPointResponse(point.BucketStart, point.DimensionKey, point.Count)).ToList(),
+                points.Sum(point => point.Count),
+                points.Select(point => point.DimensionKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList()));
     }
 
     private static CodeInsightSurvivalResponse ToSurvival(CodeInsightSurvivalCounts counts)

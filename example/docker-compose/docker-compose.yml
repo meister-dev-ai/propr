@@ -102,7 +102,7 @@ services:
       - AI_MAX_ITERATIONS_LOW=${AI_MAX_ITERATIONS_LOW:-}
       - AI_MAX_ITERATIONS_MEDIUM=${AI_MAX_ITERATIONS_MEDIUM:-}
       - AI_MAX_ITERATIONS_HIGH=${AI_MAX_ITERATIONS_HIGH:-}
-      # Confidence-floor severity downgrade thresholds (defaults: 80 / 60)
+      # Inactive compatibility settings; file confidence does not change finding classification
       - AI_CONFIDENCE_FLOOR_ERROR=${AI_CONFIDENCE_FLOOR_ERROR:-}
       - AI_CONFIDENCE_FLOOR_WARNING=${AI_CONFIDENCE_FLOOR_WARNING:-}
       # Minimum comment count that triggers the cross-file quality-filter AI pass (default: 20)

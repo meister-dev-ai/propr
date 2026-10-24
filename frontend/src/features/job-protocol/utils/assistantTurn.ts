@@ -1,12 +1,16 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+import type { FindingRiskAssessment } from '@/features/reviews/findingRisk'
+import { decodeProposedRiskAssessment } from './findingRiskDecoders'
+
 export interface AssistantTurnToolCallView {
     name: string
     arguments: unknown
 }
 
 export interface AssistantReviewCommentView {
+    riskAssessment?: FindingRiskAssessment | null
     severity?: string
     file_path?: string
     line_number?: number
@@ -54,7 +58,19 @@ export function parseAssistantTurnRecord(parsedOutput: unknown): AssistantTurnVi
             // Only treat the parsed JSON as a review when it carries a review-shaped field. Other structured
             // outputs (e.g. a synthesis body) are valid JSON objects too, but must fall through to the raw text.
             if (looksLikeReview(reviewJson)) {
-                parsedReview = reviewJson as AssistantReviewView
+                parsedReview = {
+                    summary: typeof reviewJson.summary === 'string' ? reviewJson.summary : undefined,
+                    comments: Array.isArray(reviewJson.comments) ? reviewJson.comments.map((comment: unknown) => {
+                        const value = comment !== null && typeof comment === 'object' ? comment as Record<string, unknown> : {}
+                        return {
+                            severity: typeof value.severity === 'string' ? value.severity : undefined,
+                            file_path: typeof value.file_path === 'string' ? value.file_path : undefined,
+                            line_number: typeof value.line_number === 'number' ? value.line_number : undefined,
+                            message: typeof value.message === 'string' ? value.message : undefined,
+                            riskAssessment: decodeProposedRiskAssessment(value.risk_assessment ?? value.riskAssessment),
+                        }
+                    }) : undefined,
+                }
             }
         } catch {
             parsedReview = null

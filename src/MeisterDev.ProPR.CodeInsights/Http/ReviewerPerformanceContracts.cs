@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.CodeInsights.Metrics;
+using System.Text.Json.Serialization;
 
 namespace MeisterDev.ProPR.CodeInsights.Http;
 
@@ -26,6 +27,23 @@ public sealed record ReviewerPerformanceViewQuery
     public IReadOnlyList<string>? Models { get; init; }
     public IReadOnlyList<string>? Types { get; init; }
     public IReadOnlyList<string>? Qualifiers { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Impacts { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Likelihoods { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? RiskSeverities { get; init; }
+
+    /// <summary>Correctness confidence selections, including Unknown for unassessed findings.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Confidences { get; init; }
+
+    /// <summary>Risk selections require independently assessed human concerns for recall.</summary>
+    [JsonIgnore]
+    public bool HasRiskSelection => this.Impacts is not null || this.Likelihoods is not null || this.RiskSeverities is not null || this.Confidences is not null;
 }
 
 /// <summary>Two dimensions for a bounded supplementary matrix.</summary>
@@ -39,7 +57,11 @@ public sealed record ReviewerPerformanceFacets(
     IReadOnlyList<ReviewerPerformanceFacet> Repositories,
     IReadOnlyList<ReviewerPerformanceFacet> Models,
     IReadOnlyList<ReviewerPerformanceFacet> Types,
-    IReadOnlyList<ReviewerPerformanceFacet> Qualifiers);
+    IReadOnlyList<ReviewerPerformanceFacet> Qualifiers,
+    IReadOnlyList<ReviewerPerformanceFacet>? Impacts = null,
+    IReadOnlyList<ReviewerPerformanceFacet>? Likelihoods = null,
+    IReadOnlyList<ReviewerPerformanceFacet>? RiskSeverities = null,
+    IReadOnlyList<ReviewerPerformanceFacet>? Confidences = null);
 
 /// <summary>A covered-population score with independently supported overall precision.</summary>
 public sealed record ReviewerPerformancePoint(
@@ -96,7 +118,8 @@ public sealed record ReviewerPerformanceEvidenceMetadata(
     DateTimeOffset? NewestProjectionAt,
     int ProjectionVersion,
     int PendingSourceAggregates,
-    string? ModelEvidenceSchema = null);
+    string? ModelEvidenceSchema = null,
+    IReadOnlyList<string>? RiskRubricVersions = null);
 
 public sealed record ReviewerPerformanceSeries(string Id, string Label, IReadOnlyList<ReviewerPerformancePoint> Points);
 

@@ -3,8 +3,11 @@
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+using NSubstitute;
 
 namespace MeisterDev.ProPR.Application.Tests.Services;
 
@@ -163,6 +166,98 @@ public sealed class SemanticFindingDeduplicatorTests
         Assert.Equal(2, result.Count);
         Assert.Contains(result, f => f.FindingId.StartsWith("impossible-http", StringComparison.Ordinal));
         Assert.Contains(result, f => f.FindingId.StartsWith("reject-empty", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(FindingConfidence.Low)]
+    [InlineData(FindingConfidence.Unknown)]
+    public async Task Merge_UnclassifiedCommentsRetainTheWeakestVerifiedConfidence(FindingConfidence confidence)
+    {
+        var judge = Substitute.For<IFindingMergeJudge>();
+        judge.AreSameDefectClassAsync(
+            Arg.Any<CandidateReviewFinding>(), Arg.Any<CandidateReviewFinding>(), Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>()).Returns(true);
+        var certainRisk = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Possible, "Data loss.", "Input zero.", "review_model",
+            FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "Both source checks support the mechanism.",
+            ReviewFindingConfidence.VerificationSource);
+        var weakerRisk = new FindingRiskAssessment(
+            FindingImpact.Low, FindingLikelihood.Possible, "Limited effect.", "Input zero.", "review_model",
+            FindingRiskAssessment.CurrentRubricVersion, confidence, "The caller's input is not established.", ReviewFindingConfidence.VerificationSource);
+        var first = new ReviewComment("a.cs", 10, CommentSeverity.Error, "Input zero reaches the unchecked write.") { RiskAssessment = certainRisk };
+        var second = new ReviewComment("a.cs", 10, CommentSeverity.Error, "The write has no guard for input zero.") { RiskAssessment = weakerRisk };
+
+        var result = await new SemanticFindingDeduplicator(judge).DeduplicateAsync([first, second], Guid.NewGuid());
+
+        var merged = Assert.Single(result.Comments);
+        Assert.Null(merged.FindingClassification);
+        Assert.Equal(CommentSeverity.Error, merged.Severity);
+        Assert.Equal(FindingRiskSeverity.High, merged.RiskAssessment!.Severity);
+        Assert.Equal(confidence, merged.RiskAssessment.Confidence);
+        Assert.Single(result.Merges);
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public async Task Merge_UnassessedRepresentativeRetainsSupportedMemberRisk(bool candidateEntryPoint, bool hasUnknownAssessment, bool reverse)
+    {
+        var judge = Substitute.For<IFindingMergeJudge>();
+        judge.AreSameDefectClassAsync(
+            Arg.Any<CandidateReviewFinding>(), Arg.Any<CandidateReviewFinding>(), Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>()).Returns(true);
+        var supported = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Possible, "The stored result is lost.", "Input zero reaches the write.", "review_model",
+            FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.High, "The source establishes this call.",
+            ReviewFindingConfidence.VerificationSource);
+        var representativeRisk = hasUnknownAssessment
+            ? ReviewFindingConfidence.Resolve(
+                null,
+                [
+                    new VerificationOutcome(
+                        "claim", "finding", VerificationOutcome.SupportedKind, FinalGateDecision.PublishDisposition,
+                        [], [], VerificationOutcome.ModerateEvidence, "Source checked.", VerificationOutcome.AiMicroVerifierEvaluator, false)
+                    {
+                        ConfidenceEvidence = new VerificationConfidenceEvidence(
+                            FindingConfidence.Low, "The call reaches the write.", "The stored result is lost.", "No guard excludes zero.", [], true, true)
+                    }
+                ])
+            : null;
+        var first = new ReviewComment("a.cs", 10, CommentSeverity.Error, "The unchecked write loses the stored result for the supplied zero input.")
+            { RiskAssessment = representativeRisk };
+        var second = new ReviewComment("a.cs", 10, CommentSeverity.Error, "The zero input loses the result.") { RiskAssessment = supported };
+        ReviewComment[] comments = reverse ? [second, first] : [first, second];
+        var sut = new SemanticFindingDeduplicator(judge);
+        FindingRiskAssessment? risk;
+        if (candidateEntryPoint)
+        {
+            var candidates = comments.Select(comment => Finding("same-write", comment.FilePath!, comment.LineNumber, comment.Severity, comment.Message) with
+            {
+                RiskAssessment = comment.RiskAssessment
+            }).ToArray();
+            var merged = Assert.Single(await sut.DeduplicateFindingsAsync(candidates, Guid.NewGuid()));
+            Assert.Equal(CommentSeverity.Error, merged.Severity);
+            risk = merged.RiskAssessment;
+        }
+        else
+        {
+            var merged = Assert.Single((await sut.DeduplicateAsync(comments, Guid.NewGuid())).Comments);
+            Assert.Equal(CommentSeverity.Error, merged.Severity);
+            risk = merged.RiskAssessment;
+        }
+
+        Assert.NotNull(risk);
+        Assert.Equal(supported.Impact, risk.Impact);
+        Assert.Equal(supported.Likelihood, risk.Likelihood);
+        Assert.Equal(supported.ImpactReason, risk.ImpactReason);
+        Assert.Equal(supported.LikelihoodReason, risk.LikelihoodReason);
+        Assert.Equal(hasUnknownAssessment ? FindingConfidence.Low : FindingConfidence.Unknown, risk.Confidence);
     }
 
     private static CandidateReviewFinding Finding(

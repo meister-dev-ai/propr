@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Net;
 using Microsoft.VisualStudio.Services.WebApi;
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Application.DTOs;
@@ -396,7 +397,7 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
                 c.CommentType.ToString(),
                 "system",
                 StringComparison.OrdinalIgnoreCase))
-            .Select(c => $"{c.Author?.DisplayName ?? "Unknown"}: {c.Content ?? ""}");
+            .Select(c => $"{c.Author?.DisplayName ?? "Unknown"}: {ReviewFindingTextFormatter.CompactBadgeHeaderForHistory(c.Content ?? "")}");
 
         var result = string.Join("\n", lines);
 

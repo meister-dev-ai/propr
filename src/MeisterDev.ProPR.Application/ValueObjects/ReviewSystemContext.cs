@@ -42,6 +42,9 @@ public sealed class ReviewSystemContext
     /// <summary>Optional custom AI system message configured for the client.</summary>
     public string? ClientSystemMessage { get; }
 
+    /// <summary>Assignable vocabulary captured once before finding-producing passes begin.</summary>
+    public FindingTypeVocabulary FindingTypeVocabulary { get; init; } = FindingTypeVocabulary.Core;
+
     /// <summary>Repository-specific instructions filtered for relevance to this pull request.</summary>
     public IReadOnlyList<RepositoryInstruction> RepositoryInstructions { get; }
 

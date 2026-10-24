@@ -35,7 +35,8 @@ public sealed record CodeInsightMetricResult(
     CodeInsightMetrics Metrics,
     int SampleSize,
     int CoveredSampleSize = 0,
-    CodeInsightMetricInputs CoveredInputs = default)
+    CodeInsightMetricInputs CoveredInputs = default,
+    string? UnavailableReason = null)
 {
     /// <summary>
     ///     Of <see cref="SampleSize" />, the pull requests whose recall inputs were fully settled.

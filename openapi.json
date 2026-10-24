@@ -13769,6 +13769,38 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13904,6 +13936,38 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14012,6 +14076,38 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -14148,6 +14244,38 @@
               "format": "int32",
               "default": 25
             }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14274,6 +14402,38 @@
               "type": "integer",
               "format": "int32",
               "default": 10
+            }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -14443,6 +14603,38 @@
               "format": "int32",
               "default": 0
             }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14497,6 +14689,179 @@
           },
           "403": {
             "description": "Caller has no client access, lacks the licence, or asked for a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-quality/risk-over-time": {
+      "get": {
+        "tags": [
+          "CodeQuality"
+        ],
+        "summary": "Returns the finding distribution over time by impact, likelihood, derived risk severity, or correctness confidence.",
+        "parameters": [
+          {
+            "name": "dimension",
+            "in": "query",
+            "description": "impact, likelihood, riskSeverity, or confidence.",
+            "schema": {
+              "type": "string",
+              "default": "riskSeverity"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the review-date window.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the review-date window.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "query",
+            "description": "day, week, or month.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Authorized client selection.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Repository selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Pull-request selection.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "filePath",
+            "in": "query",
+            "description": "File selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The risk distribution, including Unknown historical assessments.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTypeSeriesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTypeSeriesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTypeSeriesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot access the selected client or the licensed capability.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -15794,7 +16159,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns the review result (summary and comments) for a completed job.",
+        "summary": "Returns the summary, comments, and available impact, likelihood and confidence assessments for a completed job.",
         "parameters": [
           {
             "name": "id",
@@ -15876,7 +16241,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns the review result (summary and comments) for a completed job.",
+        "summary": "Returns the summary, comments, and available impact, likelihood and confidence assessments for a completed job.",
         "parameters": [
           {
             "name": "id",
@@ -20011,6 +20376,38 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -20124,6 +20521,38 @@
             "name": "repositoryId",
             "in": "query",
             "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
             "schema": {
               "type": "string"
             }
@@ -20405,6 +20834,38 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -20519,6 +20980,38 @@
             "name": "repositoryId",
             "in": "query",
             "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Independent impact selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "likelihood",
+            "in": "query",
+            "description": "Independent occurrence-likelihood selection, including Unknown and NotApplicable.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskSeverity",
+            "in": "query",
+            "description": "Derived risk-severity selection, including Unknown.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confidence",
+            "in": "query",
+            "description": "Independent correctness-confidence selection, including Unknown for unassessed findings.",
             "schema": {
               "type": "string"
             }
@@ -21528,7 +22021,7 @@
         "tags": [
           "ReviewJobs"
         ],
-        "summary": "Returns a review result only when the specified client owns the job.",
+        "summary": "Returns a review result with available impact, likelihood and confidence assessments when the specified client owns the job.",
         "parameters": [
           {
             "name": "clientId",
@@ -32348,6 +32841,9 @@
           },
           "admissionPolicy": {
             "$ref": "#/components/schemas/ReviewAdmissionPolicyDto"
+          },
+          "findingBadgeStyle": {
+            "$ref": "#/components/schemas/FindingBadgeStyle"
           }
         },
         "additionalProperties": false,
@@ -32943,7 +33439,7 @@
           },
           "key": {
             "type": "string",
-            "description": "The core type slug, or the empty string for a plain total.",
+            "description": "The counted dimension value, such as a core type or risk axis, or empty for a plain total.",
             "nullable": true
           },
           "count": {
@@ -33218,6 +33714,9 @@
             "description": "The classifier's confidence, when classified.",
             "format": "double",
             "nullable": true
+          },
+          "riskAssessment": {
+            "$ref": "#/components/schemas/FindingRiskAssessment"
           }
         },
         "additionalProperties": false,
@@ -33319,6 +33818,9 @@
             "type": "string",
             "description": "Why it was rejected, as its name, or `null` when it was not rejected or the reason could not be\njudged. A caller must show that as unknown rather than as any particular reason.",
             "nullable": true
+          },
+          "riskAssessment": {
+            "$ref": "#/components/schemas/FindingRiskAssessment"
           }
         },
         "additionalProperties": false,
@@ -33548,6 +34050,10 @@
             "type": "integer",
             "description": "Correctness only. The qualifying misses of the covered pull requests. With\n`CoveredTruePositives` this reproduces the reported `Recall` exactly.",
             "format": "int32"
+          },
+          "unavailableReason": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -34059,12 +34565,12 @@
             "items": {
               "type": "string"
             },
-            "description": "The distinct type slugs present, so a caller can build a stable legend.",
+            "description": "The distinct dimension values present, for a stable legend.",
             "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "The counted series behind the \"what kinds of problem, over time\" question."
+        "description": "A counted distribution over time for the requested finding dimension."
       },
       "CodeReviewPlatformKind": {
         "enum": [
@@ -35245,6 +35751,166 @@
         },
         "additionalProperties": false,
         "description": "Carries the unified diff for a single file that was reviewed in a review job.\nThe diff is re-fetched on demand from the source control provider."
+      },
+      "FindingBadgeStyle": {
+        "enum": [
+          "shieldsIo",
+          "plain"
+        ],
+        "type": "string",
+        "description": "Controls metadata badges in published SCM finding comments."
+      },
+      "FindingConfidence": {
+        "enum": [
+          "unknown",
+          "low",
+          "medium",
+          "high",
+          "certain"
+        ],
+        "type": "string",
+        "description": "Strength of the evidence that a finding is correct."
+      },
+      "FindingCustomTypeAssignment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A stable custom assignment and the label displayed by the producing review."
+      },
+      "FindingImpact": {
+        "enum": [
+          "unknown",
+          "low",
+          "moderate",
+          "high",
+          "critical"
+        ],
+        "type": "string",
+        "description": "Consequence of an assessed finding when its occurrence scenario happens."
+      },
+      "FindingLikelihood": {
+        "enum": [
+          "unknown",
+          "unlikely",
+          "possible",
+          "likely",
+          "notApplicable"
+        ],
+        "type": "string",
+        "description": "Occurrence likelihood of a finding's scenario, independent of correctness confidence."
+      },
+      "FindingRiskAssessment": {
+        "type": "object",
+        "properties": {
+          "impact": {
+            "$ref": "#/components/schemas/FindingImpact"
+          },
+          "likelihood": {
+            "$ref": "#/components/schemas/FindingLikelihood"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/FindingConfidence"
+          },
+          "confidenceReason": {
+            "type": "string",
+            "description": "Evidence and unresolved assumptions supporting correctness confidence.",
+            "nullable": true
+          },
+          "confidenceSource": {
+            "type": "string",
+            "description": "Producer of the confidence. It equals Source unless a separate step, such as verification, set the confidence.",
+            "nullable": true
+          },
+          "impactReason": {
+            "type": "string",
+            "description": "Evidence explaining the assessed consequence.",
+            "nullable": true
+          },
+          "likelihoodReason": {
+            "type": "string",
+            "description": "Evidence explaining the occurrence scenario and its likelihood.",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "description": "Assessment producer recorded by the server.",
+            "nullable": true
+          },
+          "rubricVersion": {
+            "type": "string",
+            "description": "Version of the risk rubric.",
+            "nullable": true
+          },
+          "severity": {
+            "$ref": "#/components/schemas/FindingRiskSeverity"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Evidence-based impact, occurrence likelihood and correctness confidence with versioned risk derivation."
+      },
+      "FindingRiskSeverity": {
+        "enum": [
+          "unknown",
+          "low",
+          "medium",
+          "high",
+          "critical"
+        ],
+        "type": "string",
+        "description": "Risk priority derived from impact and occurrence likelihood."
+      },
+      "FindingTypeClassification": {
+        "type": "object",
+        "properties": {
+          "coreSlugs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "customTags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindingCustomTypeAssignment"
+            },
+            "nullable": true
+          },
+          "level": {
+            "$ref": "#/components/schemas/CodeInsightFindingLevel"
+          },
+          "qualifier": {
+            "$ref": "#/components/schemas/CodeInsightFindingQualifier"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "taxonomyVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Finding types and the independent analytics axes assigned by its producing review."
       },
       "IdentityErasureResult": {
         "type": "object",
@@ -37030,6 +37696,9 @@
           "enableLanguageRobustScreening": {
             "type": "boolean",
             "nullable": true
+          },
+          "findingBadgeStyle": {
+            "$ref": "#/components/schemas/FindingBadgeStyle"
           }
         },
         "additionalProperties": false,
@@ -39213,6 +39882,9 @@
             "type": "string",
             "description": "What kind of definition that is (method, class, function, …).",
             "nullable": true
+          },
+          "riskAssessment": {
+            "$ref": "#/components/schemas/FindingRiskAssessment"
           }
         },
         "additionalProperties": false,
@@ -40256,6 +40928,20 @@
             "description": "Comment message text.",
             "nullable": true
           },
+          "riskAssessment": {
+            "$ref": "#/components/schemas/FindingRiskAssessment"
+          },
+          "producedWithRepositoryTools": {
+            "type": "boolean",
+            "description": "Whether the original producing pass could read repository code through tools, when recorded.",
+            "nullable": true
+          },
+          "findingClassification": {
+            "$ref": "#/components/schemas/FindingTypeClassification"
+          },
+          "suggestedFix": {
+            "$ref": "#/components/schemas/ReviewSuggestedFix"
+          },
           "originPassKind": {
             "type": "string",
             "description": "The `ReviewPassKind` name of the review pass that produced this finding (e.g.\n`\"Baseline\"`, `\"MultiPassUnion\"`), when known. Provenance metadata only:\nit does not participate in deduplication (which keys on message text) and is\nnull for legacy comments and comments with no recorded origin.",
@@ -40340,6 +41026,9 @@
           "originPassLens": {
             "type": "string",
             "nullable": true
+          },
+          "riskAssessment": {
+            "$ref": "#/components/schemas/FindingRiskAssessment"
           }
         },
         "additionalProperties": false,
@@ -40991,6 +41680,52 @@
         "additionalProperties": false,
         "description": "Detailed status response for a review job."
       },
+      "ReviewSuggestedFix": {
+        "type": "object",
+        "properties": {
+          "startLine": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "endLine": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "originalText": {
+            "type": "string",
+            "nullable": true
+          },
+          "replacementText": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceHeadSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceFilePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "isSourceValidated": {
+            "type": "boolean"
+          },
+          "sourceAnchorLineNumber": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "isAnchorRemapped": {
+            "type": "boolean"
+          },
+          "rejectionReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "An optional replacement for a contiguous range in the reviewed file."
+      },
       "ReviewWorkspaceStatusDto": {
         "type": "object",
         "properties": {
@@ -41200,6 +41935,13 @@
           "modelEvidenceSchema": {
             "type": "string",
             "nullable": true
+          },
+          "riskRubricVersions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -41362,6 +42104,34 @@
             "nullable": true
           },
           "qualifiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          },
+          "impacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          },
+          "likelihoods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          },
+          "riskSeverities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewerPerformanceFacet"
+            },
+            "nullable": true
+          },
+          "confidences": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ReviewerPerformanceFacet"
@@ -41861,6 +42631,35 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "impacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "likelihoods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "riskSeverities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "confidences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Correctness confidence selections, including Unknown for unassessed findings.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -42222,6 +43021,47 @@
         },
         "additionalProperties": false,
         "description": "The outcome of reviewing one file, as the resume checkpoint it becomes."
+      },
+      "RunnerFindingCustomTypeDefinition": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "definition": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One active custom finding type offered by the control plane."
+      },
+      "RunnerFindingTypeVocabulary": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "customTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerFindingCustomTypeDefinition"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Finding type vocabulary captured for an executor without database access."
       },
       "RunnerFindingsRequest": {
         "type": "object",
@@ -42932,6 +43772,9 @@
             },
             "description": "Prompt overrides by prompt key.",
             "nullable": true
+          },
+          "findingTypeVocabulary": {
+            "$ref": "#/components/schemas/RunnerFindingTypeVocabulary"
           }
         },
         "additionalProperties": false,

@@ -208,7 +208,7 @@ public sealed partial class PrCrawlService(
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                logger.LogWarning("Crawl pull-request operation timed out for configuration {ConfigurationId}.", config.Id);
+                LogPullRequestOperationTimedOut(logger, config.Id, pr.CodeReview.Number);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

@@ -47,7 +47,7 @@ public sealed partial class CodeInsightRollupProjector(
                             finding.CodeInsightPullRequestId,
                             finding.FilePath,
                             finding.ObservedAt,
-                            finding.OriginSymbolName))
+                            finding.OriginSymbolName, finding.Impact, finding.Likelihood, finding.RiskSeverity, finding.Confidence, finding.RiskRubricVersion))
                         .ToListAsync(ct);
 
                     if (findings.Count == 0)
@@ -134,6 +134,11 @@ public sealed partial class CodeInsightRollupProjector(
                                 BucketDate = key.BucketDate,
                                 Dimension = key.Dimension,
                                 DimensionKey = key.DimensionKey,
+                                Impact = key.Impact,
+                                Likelihood = key.Likelihood,
+                                RiskSeverity = key.RiskSeverity,
+                                Confidence = key.Confidence,
+                                RiskRubricVersion = key.RiskRubricVersion,
                                 Count = count,
                                 UpdatedAt = now,
                             });
@@ -267,12 +272,21 @@ public sealed partial class CodeInsightRollupProjector(
 
             // The review's own observation time is the anchor, so a late-arriving outcome still lands in the
             // bucket the review belongs to.
+            scope = scope with
+            {
+                Impact = finding.Impact, Likelihood = finding.Likelihood,
+                RiskSeverity = finding.RiskSeverity, Confidence = finding.Confidence, RiskRubricVersion = finding.RiskRubricVersion
+            };
             var bucket = DateOnly.FromDateTime(finding.ObservedAt.UtcDateTime);
 
             // The empty string stands for a pull-request-level finding: a real category, not missing data.
             var filePath = finding.FilePath ?? string.Empty;
 
             Add(cells, scope, filePath, bucket, CodeInsightCountDimension.FindingTotal, string.Empty);
+            Add(cells, scope, filePath, bucket, CodeInsightCountDimension.Impact, finding.Impact.ToString());
+            Add(cells, scope, filePath, bucket, CodeInsightCountDimension.Likelihood, finding.Likelihood.ToString());
+            Add(cells, scope, filePath, bucket, CodeInsightCountDimension.RiskSeverity, finding.RiskSeverity.ToString());
+            Add(cells, scope, filePath, bucket, CodeInsightCountDimension.Confidence, finding.Confidence.ToString());
 
             if (tagsByFinding.TryGetValue(finding.Id, out var slugs))
             {
@@ -326,7 +340,7 @@ public sealed partial class CodeInsightRollupProjector(
             filePath,
             bucket,
             dimension,
-            dimensionKey);
+            dimensionKey, scope.Impact, scope.Likelihood, scope.RiskSeverity, scope.Confidence, scope.RiskRubricVersion);
 
         cells[key] = cells.TryGetValue(key, out var existing) ? existing + 1 : 1;
     }
@@ -367,9 +381,22 @@ public sealed partial class CodeInsightRollupProjector(
         Guid PullRequestAggregateId,
         string? FilePath,
         DateTimeOffset ObservedAt,
-        string? SymbolName);
+        string? SymbolName,
+        FindingImpact Impact,
+        FindingLikelihood Likelihood,
+        FindingRiskSeverity RiskSeverity,
+        FindingConfidence Confidence,
+        string RiskRubricVersion);
 
-    private readonly record struct ScopeRow(Guid ClientId, string RepositoryId, long PullRequestId);
+    private readonly record struct ScopeRow(
+        Guid ClientId,
+        string RepositoryId,
+        long PullRequestId,
+        FindingImpact Impact = FindingImpact.Unknown,
+        FindingLikelihood Likelihood = FindingLikelihood.Unknown,
+        FindingRiskSeverity RiskSeverity = FindingRiskSeverity.Unknown,
+        FindingConfidence Confidence = FindingConfidence.Unknown,
+        string RiskRubricVersion = "");
 
     private readonly record struct CellKey(
         Guid ClientId,
@@ -378,5 +405,10 @@ public sealed partial class CodeInsightRollupProjector(
         string FilePath,
         DateOnly BucketDate,
         CodeInsightCountDimension Dimension,
-        string DimensionKey);
+        string DimensionKey,
+        FindingImpact Impact,
+        FindingLikelihood Likelihood,
+        FindingRiskSeverity RiskSeverity,
+        FindingConfidence Confidence,
+        string RiskRubricVersion);
 }

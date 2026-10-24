@@ -43,11 +43,19 @@ public sealed class CodeInsightMetricReader(
     ICodeInsightRollupReader rollupReader,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : ICodeInsightMetricReader
 {
+    private static CodeInsightMetricResult RiskUnavailable() =>
+        new(CodeInsightMetricCalculator.Compute(default), 0, UnavailableReason: "sealed-risk-filter-unavailable");
+
     public async Task<CodeInsightMetricResult> GetCorrectnessAsync(
         CodeInsightRollupQuery query,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(query);
+
+        if (query.HasRiskFilter)
+        {
+            return RiskUnavailable();
+        }
 
         var seals = await this.LoadSealsAsync(query, ct);
         return Summarise(seals);
@@ -69,7 +77,7 @@ public sealed class CodeInsightMetricReader(
                 group.Key.ClientId,
                 group.Key.RepositoryId,
                 group.Key.PullRequestId,
-                Summarise(group.ToList()),
+                query.HasRiskFilter ? RiskUnavailable() : Summarise(group.ToList()),
                 group.Key.RepositoryId is not null && names.TryGetValue((group.Key.ClientId, group.Key.RepositoryId), out var name)
                     ? name
                     : null))
@@ -84,6 +92,11 @@ public sealed class CodeInsightMetricReader(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(query);
+
+        if (query.HasRiskFilter && query.ClientIds.Count > 0)
+        {
+            return [new(CodeInsightRollupReader.BucketStart(query.From, bucketSize), RiskUnavailable())];
+        }
 
         var seals = await this.LoadSealsAsync(query, ct);
 
@@ -268,6 +281,26 @@ public sealed class CodeInsightMetricReader(
             findings = findings.Where(finding => finding.FilePath == query.FilePath);
         }
 
+        if (query.Impact is { } impact)
+        {
+            findings = findings.Where(finding => finding.Impact == impact);
+        }
+
+        if (query.Likelihood is { } likelihood)
+        {
+            findings = findings.Where(finding => finding.Likelihood == likelihood);
+        }
+
+        if (query.RiskSeverity is { } riskSeverity)
+        {
+            findings = findings.Where(finding => finding.RiskSeverity == riskSeverity);
+        }
+
+        if (query.Confidence is { } confidence)
+        {
+            findings = findings.Where(finding => finding.Confidence == confidence);
+        }
+
         return await findings
             .Join(
                 db.CodeInsightFindingDispositions.AsNoTracking(),
@@ -327,6 +360,26 @@ public sealed class CodeInsightMetricReader(
                 if (query.FilePath is not null)
                 {
                     findings = findings.Where(finding => finding.FilePath == query.FilePath);
+                }
+
+                if (query.Impact is { } impact)
+                {
+                    findings = findings.Where(finding => finding.Impact == impact);
+                }
+
+                if (query.Likelihood is { } likelihood)
+                {
+                    findings = findings.Where(finding => finding.Likelihood == likelihood);
+                }
+
+                if (query.RiskSeverity is { } riskSeverity)
+                {
+                    findings = findings.Where(finding => finding.RiskSeverity == riskSeverity);
+                }
+
+                if (query.Confidence is { } confidence)
+                {
+                    findings = findings.Where(finding => finding.Confidence == confidence);
                 }
 
                 return await findings

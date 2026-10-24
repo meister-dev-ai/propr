@@ -408,6 +408,163 @@ public class AdoCommentPosterTests
     }
 
     [Fact]
+    public async Task PostResolvedThreadsAsync_PreservesNarrativeAndPublishesActionsAndOfferedFindingTotals()
+    {
+        var messages = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            messages.Add(message);
+            return Task.FromResult(CreatedThread(messages.Count, message));
+        };
+        var risk = new FindingRiskAssessment(
+            FindingImpact.Moderate, FindingLikelihood.Possible,
+            "A request fails.", "Requires the enabled option.", "review_model", FindingRiskAssessment.CurrentRubricVersion,
+            FindingConfidence.High, "The failing branch is visible.");
+        var result = new ReviewResult(
+            "Preserve this conclusion and its withholding note.",
+            [
+                new ReviewComment("src/A.cs", 7, CommentSeverity.Warning, "Guard the request.") { RiskAssessment = risk },
+                new ReviewComment(null, null, CommentSeverity.Info, "Check the shared setting."),
+            ]) { ContextSkippedFilePaths = ["src/Huge.cs"] };
+
+        await PostAsync(result, factory);
+
+        var summary = Assert.Single(messages, message => message.StartsWith(SummaryPrefix, StringComparison.Ordinal));
+        Assert.StartsWith(SummaryPrefix + "\n\n" + result.Summary, summary);
+        Assert.Contains("- **Warning** · `src/A.cs:7`: Guard the request.", summary);
+        Assert.Contains("- **Info** · PR-level: Check the shared setting.", summary);
+        Assert.Contains("| 2 | Medium: 1, Unassessed: 1 | High: 1, Unassessed: 1 |", summary);
+        Assert.Contains("Skipped — exceeds model context window", summary);
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, summary);
+        var inline = Assert.Single(messages, message => message.StartsWith("![Severity: Warning]", StringComparison.Ordinal));
+        Assert.Contains("<tr><th>Assessment</th><th>Level</th><th>Reason</th></tr>", inline);
+        Assert.Contains("<tr><td>Confidence</td><td>High</td><td>The failing branch is visible.</td></tr>", inline);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_LongInlineDescriptionsDoNotTruncateSummaryTotalsOrCoverage()
+    {
+        var messages = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            var outbound = AdoCommentPoster.TruncateIfNeeded(message, TestPostedCommentComposer.Default);
+            messages.Add(outbound);
+            return Task.FromResult(CreatedThread(messages.Count, outbound));
+        };
+        var comments = Enumerable.Range(1, 8)
+            .Select(index => new ReviewComment(
+                $"src/File{index}.cs", index, CommentSeverity.Warning,
+                $"Finding {index}: " + new string('x', 4000)))
+            .ToArray();
+        var result = new ReviewResult("Preserve the complete review conclusion.", comments)
+        {
+            BudgetSoftCapped = true,
+            BudgetSoftCapThresholdUsd = 0.75m,
+            BudgetSoftCapSpentUsd = 0.80m,
+            BudgetSoftCapSkippedFilePaths = ["src/BudgetSkipped.cs"],
+            ContextDegradedFilePaths = ["src/DiffOnly.cs"],
+            ContextSkippedFilePaths = ["src/Huge.cs"],
+        };
+
+        await PostAsync(result, factory);
+
+        var summary = Assert.Single(messages, message => message.StartsWith(SummaryPrefix, StringComparison.Ordinal));
+        Assert.StartsWith(SummaryPrefix + "\n\n" + result.Summary, summary);
+        Assert.Contains("| 8 | Unassessed: 8 | Unassessed: 8 |", summary);
+        Assert.Contains("Budget soft cap reached", summary);
+        Assert.Contains("src/BudgetSkipped.cs", summary);
+        Assert.Contains("Reviewed diff-only", summary);
+        Assert.Contains("src/DiffOnly.cs", summary);
+        Assert.Contains("Skipped — exceeds model context window", summary);
+        Assert.Contains("src/Huge.cs", summary);
+        Assert.DoesNotContain("Review comment truncated", summary);
+        Assert.True(summary.Length < AdoCommentPoster.MaxCommentLength);
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, summary);
+        foreach (var finding in comments)
+        {
+            Assert.Contains(messages, message => message.Contains("\n\n" + finding.Message, StringComparison.Ordinal));
+        }
+    }
+
+    [Theory]
+    [InlineData(FindingBadgeStyle.ShieldsIo)]
+    [InlineData(FindingBadgeStyle.Plain)]
+    public async Task PostResolvedThreadsAsync_UsesBadgesInlineAndFixFirstInTheSummary(FindingBadgeStyle style)
+    {
+        var messages = new List<string>();
+        var contexts = new List<CommentThreadContext?>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, context, _, _) =>
+        {
+            messages.Add(message);
+            contexts.Add(context);
+            return Task.FromResult(CreatedThread(messages.Count, message));
+        };
+        var finding = new ReviewComment("src/A.cs", 7, CommentSeverity.Error, "The request loses tenant data.")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Critical, FindingLikelihood.Likely, "Tenant rows are deleted.", "Every request uses this query.",
+                "review_model", FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.High, "The complete query is visible."),
+            FindingClassification = new(
+                [FindingTypeTaxonomy.LogicError], [], null, null, null, FindingTypeTaxonomy.Version, FindingTypeClassification.ReviewSource),
+        };
+        var result = new ReviewResult("Preserve this conclusion.", [finding]);
+
+        var diagnostics = await PostAsync(result, factory, badgeStyle: style, changeTrackingIds: new Dictionary<string, int> { ["/src/A.cs"] = 1 });
+
+        var inline = Assert.Single(messages, message => !message.StartsWith(SummaryPrefix, StringComparison.Ordinal));
+        Assert.StartsWith(style == FindingBadgeStyle.Plain ? "`Severity: Error`" : "![Severity: Error]", inline);
+        var header = inline.Split("\n\n", StringSplitOptions.None)[0];
+        var positions = new[] { "Severity: Error", "Risk: Critical", "Impact: Critical", "Likelihood: Likely", "Confidence: High", "Type: Logic error" }
+            .Select(label => header.IndexOf(label, StringComparison.Ordinal)).ToArray();
+        Assert.All(positions, position => Assert.True(position >= 0));
+        Assert.Equal(positions.Order(), positions);
+        Assert.DoesNotContain("Highest assessed priority", inline);
+        Assert.DoesNotContain("Fix first", inline);
+        Assert.Contains("<tr><td>Risk</td><td>Critical</td>", inline);
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, inline);
+        var summary = Assert.Single(messages, message => message.StartsWith(SummaryPrefix, StringComparison.Ordinal));
+        Assert.StartsWith(SummaryPrefix + "\n\n**Fix first · Risk: Critical** · `src/A.cs:7`: " + finding.Message + "\n\n" + result.Summary, summary);
+        Assert.Contains("- **Error** · `src/A.cs:7`: " + finding.Message, summary);
+        Assert.Contains("| 1 | Critical: 1 | High: 1 |", summary);
+        Assert.EndsWith(TestPostedCommentComposer.Default.Text, summary);
+        Assert.Equal("/src/A.cs", contexts[1]!.FilePath);
+        Assert.Equal(7, contexts[1]!.RightFileStart.Line);
+        Assert.Equal(1, diagnostics.PostedCount);
+        Assert.Equal("The request loses tenant data.", finding.Message);
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public async Task PostResolvedThreadsAsync_ExistingAssessedFindingIsSuppressedAcrossLineEndings(string newline)
+    {
+        var finding = new ReviewComment("src/A.cs", 7, CommentSeverity.Error, "Guard the shared service before use.")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.High, FindingLikelihood.Possible,
+                "The request fails.", "The optional service can be absent.", "review_model", FindingRiskAssessment.CurrentRubricVersion,
+                FindingConfidence.High, "The dereference precedes validation."),
+        };
+        var body = AdoCommentPoster.FormatInlineCommentBody(finding, TestPostedCommentComposer.Default);
+        var existing = new List<PrCommentThread>(BotSummaryThread())
+        {
+            new("73", "/src/A.cs", 7, [new PrThreadComment("Meister Bot", body.Replace("\n", newline, StringComparison.Ordinal), PosterBotId)]),
+        };
+        var messages = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            messages.Add(message);
+            return Task.FromResult(CreatedThread(messages.Count, message));
+        };
+
+        var diagnostics = await PostAsync(new ReviewResult("Review.", [finding]), factory, existing);
+
+        Assert.Empty(messages);
+        Assert.Equal(0, diagnostics.PostedCount);
+        Assert.Equal(1, diagnostics.SuppressedCount);
+    }
+
+    [Fact]
     public void BuildSummaryText_QuotedShellVariables_RemainReadable()
     {
         var result = new ReviewResult(
@@ -449,8 +606,8 @@ public class AdoCommentPosterTests
     }
 
     [Theory]
-    [InlineData(CommentSeverity.Error, "ERROR")]
-    [InlineData(CommentSeverity.Warning, "WARNING")]
+    [InlineData(CommentSeverity.Error, "Error")]
+    [InlineData(CommentSeverity.Warning, "Warning")]
     public void FormatInlineCommentBody_UnsafeMarkup_IsNeutralizedWithoutEncodingQuotes(
         CommentSeverity severity,
         string expectedPrefix)
@@ -463,7 +620,7 @@ public class AdoCommentPosterTests
 
         var body = AdoCommentPoster.FormatInlineCommentBody(comment, TestPostedCommentComposer.Default);
 
-        Assert.StartsWith($"{expectedPrefix}: ", body, StringComparison.Ordinal);
+        Assert.StartsWith($"![Severity: {expectedPrefix}]", body, StringComparison.Ordinal);
         Assert.Contains("\"$ApiDll\"", body);
         Assert.DoesNotContain("&quot;", body);
         Assert.Equal(-1, body.IndexOf("<script>", StringComparison.Ordinal));
@@ -509,14 +666,178 @@ public class AdoCommentPosterTests
     }
 
     [Fact]
-    public void FormatInlineCommentBody_KeepsTheSeverityPrefixFirstAndTheMarkerLast()
+    public void FormatInlineCommentBody_KeepsTheClassificationFirstAndTheMarkerLast()
     {
         var comment = new ReviewComment("/src/Foo.cs", 7, CommentSeverity.Error, "Add a null check.");
 
         var body = AdoCommentPoster.FormatInlineCommentBody(comment, TestPostedCommentComposer.Default);
 
-        Assert.StartsWith("ERROR: ", body, StringComparison.Ordinal);
+        Assert.StartsWith("![Severity: Error]", body, StringComparison.Ordinal);
         Assert.EndsWith(TestPostedCommentComposer.Default.Text, body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatInlineCommentBody_AssessedFindingPutsSafeEvidenceInsideClosedDetails()
+    {
+        var comment = new ReviewComment("/src/Foo.cs", 7, CommentSeverity.Warning, "Guard the service. </details><script>bad</script>")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Possible, "Fails. </details>", "On retry.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Medium, "The caller is visible."),
+        };
+
+        var body = AdoCommentPoster.FormatInlineCommentBody(comment, TestPostedCommentComposer.Distinctive);
+
+        Assert.StartsWith("![Severity: Warning]", body);
+        Assert.Contains("![Risk: Medium]", body);
+        Assert.Contains("\n\nGuard the service.", body);
+        Assert.Contains(
+            "<!-- propr-risk-assessment:start -->\n\n<details><summary>Assessment details</summary><table><tr><th>Assessment</th><th>Level</th><th>Reason</th></tr>",
+            body);
+        Assert.Contains("<tr><td>Impact</td><td>Moderate</td><td>Fails. &lt;/details&gt;</td></tr>", body, StringComparison.Ordinal);
+        var section = body[body.IndexOf("<details>", StringComparison.Ordinal)..body.IndexOf("</details>", StringComparison.Ordinal)];
+        Assert.DoesNotContain('\n', section);
+        Assert.DoesNotContain('\r', section);
+        Assert.Contains("<\u200B/details>", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script>", body, StringComparison.Ordinal);
+        Assert.Equal(1, body.Split("<details>", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, body.Split("</details>", StringSplitOptions.None).Length - 1);
+        Assert.True(body.IndexOf("Guard the service.", StringComparison.Ordinal) < body.IndexOf("<details>", StringComparison.Ordinal));
+        Assert.True(body.IndexOf("</details>", StringComparison.Ordinal) < body.IndexOf(TestPostedCommentComposer.DistinctiveMarker, StringComparison.Ordinal));
+        TestPostedCommentComposer.AssertMarkedOnce(body, TestPostedCommentComposer.DistinctiveMarker);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TruncateIfNeeded_LargeAssessedFindingKeepsGeneratedWrappersAndSignatureBalanced(bool longMessage)
+    {
+        var largeText = string.Concat(Enumerable.Repeat("recorded evidence ", 12000));
+        var message = longMessage ? largeText : new string('x', AdoCommentPoster.MaxCommentLength - 600);
+        var comment = new ReviewComment("/src/Foo.cs", 7, CommentSeverity.Warning, message)
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.High, FindingLikelihood.Possible, new string('e', FindingRiskAssessment.MaxReasonLength), "On retry.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion),
+        };
+        var marked = AdoCommentPoster.FormatInlineCommentBody(comment, TestPostedCommentComposer.Distinctive);
+        Assert.True(marked.Length > AdoCommentPoster.MaxCommentLength);
+
+        var body = AdoCommentPoster.TruncateIfNeeded(marked, TestPostedCommentComposer.Distinctive);
+
+        Assert.True(body.Length <= AdoCommentPoster.MaxCommentLength);
+        Assert.Contains("truncated", body);
+        Assert.Equal(body.Split("<details>", StringSplitOptions.None).Length, body.Split("</details>", StringSplitOptions.None).Length);
+        Assert.Equal(
+            body.Split("<!-- propr-risk-assessment:start -->", StringSplitOptions.None).Length,
+            body.Split("<!-- propr-risk-assessment:end -->", StringSplitOptions.None).Length);
+        var originalAssessment =
+            marked[
+                marked.IndexOf("<!-- propr-risk-assessment:start -->", StringComparison.Ordinal)..marked.IndexOf(
+                    "<!-- propr-risk-assessment:end -->", StringComparison.Ordinal)]
+            + "<!-- propr-risk-assessment:end -->";
+        Assert.Contains(originalAssessment, body, StringComparison.Ordinal);
+
+        TestPostedCommentComposer.AssertMarkedOnce(body, TestPostedCommentComposer.DistinctiveMarker);
+    }
+
+    [Fact]
+    public void FormatInlineCommentBody_HtmlCellsPreserveInlineCodeAndBlockUnsafeMarkupAndUrls()
+    {
+        const string reason =
+            "Use `Task<T>` and `a\\|b`.\n</td></tr></table></details><script>bad</script> [bad](javascript:alert) ![bad](data:image/svg+xml,bad)";
+        var finding = new ReviewComment(null, null, CommentSeverity.Warning, "Preserve the complete PR-level finding.")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Possible, reason, "# Heading\n> Quote", "review_model", FindingRiskAssessment.CurrentRubricVersion,
+                FindingConfidence.Medium, "[reference](https://example.com/x)"),
+        };
+
+        var body = AdoCommentPoster.FormatInlineCommentBody(finding, TestPostedCommentComposer.Default);
+
+        Assert.Contains("<code>Task&lt;T&gt;</code>", body, StringComparison.Ordinal);
+        Assert.Contains("<code>a\\|b</code>", body, StringComparison.Ordinal);
+        Assert.Contains("&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/details&gt;&lt;script&gt;bad&lt;/script&gt;", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("href=\"javascript:", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("src=\"data:", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<script>", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<h1>", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<blockquote>", body, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://example.com/x\"", body, StringComparison.Ordinal);
+        Assert.Equal(reason, finding.RiskAssessment.ImpactReason);
+        TestPostedCommentComposer.AssertMarkedOnce(body, TestPostedCommentComposer.Default.Text);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_FilelessAssessedFindingUsesCompleteCompactHtml()
+    {
+        var messages = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            messages.Add(message);
+            return Task.FromResult(CreatedThread(messages.Count, message));
+        };
+        var finding = new ReviewComment(null, null, CommentSeverity.Warning, "Retain the PR-level finding.")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.High, FindingLikelihood.Possible, "Service fails.", "On retry.", "review_model", FindingRiskAssessment.CurrentRubricVersion),
+        };
+
+        await PostAsync(new ReviewResult("Conclusion.", [finding]) { ContextSkippedFilePaths = ["src/Huge.cs"] }, factory);
+
+        var findingBody = Assert.Single(messages, message => message.StartsWith("![Severity: Warning]", StringComparison.Ordinal));
+        Assert.Contains("Retain the PR-level finding.", findingBody);
+        Assert.Contains("<details><summary>Assessment details</summary><table>", findingBody, StringComparison.Ordinal);
+        Assert.Contains("<tr><td>Impact</td><td>High</td><td>Service fails.</td></tr>", findingBody, StringComparison.Ordinal);
+        Assert.Contains(messages, message => message.Contains("src/Huge.cs", StringComparison.Ordinal));
+        TestPostedCommentComposer.AssertMarkedOnce(findingBody, TestPostedCommentComposer.Default.Text);
+    }
+
+    [Fact]
+    public void FormatterTruncate_WholeHtmlAssessmentExceedingTheAvailableCapIsDropped()
+    {
+        var finding = new ReviewComment(null, null, CommentSeverity.Warning, "Keep the description.")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.High, FindingLikelihood.Possible, "Evidence.", "On retry.", "review_model", FindingRiskAssessment.CurrentRubricVersion),
+        };
+        var rendered = TestPostedCommentComposer.Default.Strip(AdoCommentPoster.FormatInlineCommentBody(finding, TestPostedCommentComposer.Default));
+
+        var body = MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services.ReviewFindingTextFormatter.Truncate(rendered, 180);
+
+        Assert.True(body.Length <= 180);
+        Assert.Contains("Keep the description.", body);
+        Assert.DoesNotContain("<details>", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("propr-risk-assessment", body, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TruncateIfNeeded_RechecksCodeSpansBeforeAppendingTheWholeHtmlAssessment(bool assessed)
+    {
+        var description = "Use `<details>Hidden</details> " + string.Concat(Enumerable.Repeat("recorded evidence ", 12000)) + "` after checking.";
+        var finding = new ReviewComment(null, null, CommentSeverity.Warning, description)
+        {
+            RiskAssessment = assessed
+                ? new FindingRiskAssessment(
+                    FindingImpact.High, FindingLikelihood.Possible, "Evidence.", "On retry.", "review_model", FindingRiskAssessment.CurrentRubricVersion)
+                : null,
+        };
+
+        var body = AdoCommentPoster.TruncateIfNeeded(
+            AdoCommentPoster.FormatInlineCommentBody(finding, TestPostedCommentComposer.Default), TestPostedCommentComposer.Default);
+        var html = Markdig.Markdown.ToHtml(body);
+
+        Assert.True(body.Length <= AdoCommentPoster.MaxCommentLength);
+        Assert.DoesNotContain("<details>Hidden</details>", html, StringComparison.Ordinal);
+        if (assessed)
+        {
+            Assert.Contains("<summary>Assessment details</summary><table>", html, StringComparison.Ordinal);
+            Assert.Contains("<tr><td>Confidence</td>", html, StringComparison.Ordinal);
+        }
+
+        TestPostedCommentComposer.AssertMarkedOnce(body, TestPostedCommentComposer.Default.Text);
     }
 
     [Fact]
@@ -612,10 +933,10 @@ public class AdoCommentPosterTests
     public async Task PostResolvedThreadsAsync_OneInlineOfThreeRejected_StillPostsTheOthers()
     {
         var invocations = new List<string>();
-        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        AdoCommentPoster.AdoThreadFactory factory = (message, threadContext, _, _) =>
         {
             invocations.Add(message);
-            return message.Contains("REJECT", StringComparison.Ordinal)
+            return threadContext?.FilePath == "/src/B.cs"
                 ? throw new InvalidOperationException("TF401027: the thread was rejected by the provider.")
                 : Task.FromResult(CreatedThread(invocations.Count, message));
         };
@@ -696,7 +1017,10 @@ public class AdoCommentPosterTests
         Assert.Empty(newThreads);
         var reply = Assert.Single(replies);
         Assert.Equal(4242, reply.ThreadId);
-        Assert.Equal(TestPostedCommentComposer.Default.Append(SummaryPrefix + "\n\n" + Refusal), reply.Message);
+        Assert.Equal(
+            TestPostedCommentComposer.Default.Append(
+                SummaryPrefix + "\n\n" + Refusal + "\n\n| Findings to report | Risk levels | Confidence levels |\n| --- | --- | --- |\n| 0 | None | None |"),
+            reply.Message);
         // The reply is recorded against the thread it joined, so the provenance row points at that thread.
         var posted = Assert.Single(diagnostics.PostedComments);
         Assert.Equal("4242", posted.ProviderThreadId);
@@ -773,7 +1097,9 @@ public class AdoCommentPosterTests
 
         Assert.False(replied);
         Assert.Equal(
-            TestPostedCommentComposer.Default.Append(SummaryPrefix + "\n\n" + OversizedRepository),
+            TestPostedCommentComposer.Default.Append(
+                SummaryPrefix + "\n\n" + OversizedRepository +
+                "\n\n| Findings to report | Risk levels | Confidence levels |\n| --- | --- | --- |\n| 0 | None | None |"),
             Assert.Single(newThreads));
     }
 
@@ -836,10 +1162,10 @@ public class AdoCommentPosterTests
         // A provider request timeout surfaces as TaskCanceledException (an OperationCanceledException) even
         // though the caller never cancelled — it must be isolated like any other rejection, not abort the pass.
         var invocations = new List<string>();
-        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        AdoCommentPoster.AdoThreadFactory factory = (message, threadContext, _, _) =>
         {
             invocations.Add(message);
-            return message.Contains("TIMEOUT", StringComparison.Ordinal)
+            return threadContext?.FilePath == "/src/B.cs"
                 ? throw new TaskCanceledException("The request timed out.")
                 : Task.FromResult(CreatedThread(invocations.Count, message));
         };
@@ -973,7 +1299,9 @@ public class AdoCommentPosterTests
         AdoCommentPoster.AdoThreadFactory factory,
         IReadOnlyList<PrCommentThread>? existingThreads = null,
         AdoCommentPoster.AdoReplyFactory? replyFactory = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo,
+        IReadOnlyDictionary<string, int>? changeTrackingIds = null)
     {
         var poster = new AdoCommentPoster(null!, null!, TestPostedCommentComposer.Default);
         return poster.PostResolvedThreadsAsync(
@@ -987,11 +1315,12 @@ public class AdoCommentPosterTests
             pullRequestId: 1,
             iterationId: 1,
             compareToIterationId: null,
-            changeTrackingIds: new Dictionary<string, int>(),
+            changeTrackingIds: changeTrackingIds ?? new Dictionary<string, int>(),
             existingThreads: existingThreads,
             publicationIdentity: null,
             replyFactory: replyFactory,
-            cancellationToken);
+            cancellationToken,
+            badgeStyle: badgeStyle);
     }
 
     private static IReadOnlyList<PrCommentThread> BotSummaryThread(string threadId = "4242")

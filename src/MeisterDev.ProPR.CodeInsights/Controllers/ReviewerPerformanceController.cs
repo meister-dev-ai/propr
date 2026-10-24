@@ -65,6 +65,10 @@ public sealed partial class ReviewerPerformanceController(
     /// <param name="bucket">Bucket size: <c>day</c>, <c>week</c>, or <c>month</c>. Defaults to week.</param>
     /// <param name="clientId">Narrows to one client the caller administers.</param>
     /// <param name="repositoryId">Narrows to one repository.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Both lenses, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -79,6 +83,10 @@ public sealed partial class ReviewerPerformanceController(
         [FromQuery] string? bucket = null,
         [FromQuery] Guid? clientId = null,
         [FromQuery] string? repositoryId = null,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, clientId, ct);
@@ -94,7 +102,8 @@ public sealed partial class ReviewerPerformanceController(
             return this.Ok(EmptyQuality(minimumSampleSize));
         }
 
-        var query = CodeInsightQueries.BuildRollupQuery(scope.ClientIds, from, to, repositoryId);
+        var query = CodeInsightQueries.BuildRollupQuery(
+            scope.ClientIds, from, to, repositoryId, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity, confidence: confidence);
         var bucketSize = CodeInsightQueries.ParseBucket(bucket, CodeInsightBucketSize.Week);
 
         var correctness = await metricReader.GetCorrectnessSeriesAsync(query, bucketSize, ct);
@@ -148,6 +157,10 @@ public sealed partial class ReviewerPerformanceController(
     /// <param name="to">Inclusive end of the window, by seal date. Defaults to today.</param>
     /// <param name="clientId">Narrows to one client the caller administers.</param>
     /// <param name="repositoryId">Narrows to one repository.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The grouped metrics, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -162,6 +175,10 @@ public sealed partial class ReviewerPerformanceController(
         [FromQuery] DateOnly? to = null,
         [FromQuery] Guid? clientId = null,
         [FromQuery] string? repositoryId = null,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, clientId, ct);
@@ -175,7 +192,8 @@ public sealed partial class ReviewerPerformanceController(
             return this.Ok(Array.Empty<CodeInsightScopedMetricResponse>());
         }
 
-        var query = CodeInsightQueries.BuildRollupQuery(scope.ClientIds, from, to, repositoryId);
+        var query = CodeInsightQueries.BuildRollupQuery(
+            scope.ClientIds, from, to, repositoryId, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity, confidence: confidence);
 
         if (CodeInsightQueries.IsModelGrain(grain))
         {
@@ -309,6 +327,10 @@ public sealed partial class ReviewerPerformanceController(
     ///     Narrows to one rejection reason: what a click on a reason in the distribution means. A reason already
     ///     implies its outcome, so it needs no <paramref name="disposition" /> beside it.
     /// </param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The findings, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -325,6 +347,10 @@ public sealed partial class ReviewerPerformanceController(
         [FromQuery] string? disposition = null,
         [FromQuery] int limit = 50,
         [FromQuery] string? rejectionReason = null,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, clientId, ct);
@@ -350,7 +376,8 @@ public sealed partial class ReviewerPerformanceController(
                 CodeInsightQueries.ParseDisposition(disposition),
                 limit,
                 symbolName: null,
-                CodeInsightQueries.ParseRejectionReason(rejectionReason)),
+                CodeInsightQueries.ParseRejectionReason(rejectionReason), impact: impact, likelihood: likelihood, riskSeverity: riskSeverity,
+                confidence: confidence),
             ct);
 
         return this.Ok(
@@ -369,7 +396,7 @@ public sealed partial class ReviewerPerformanceController(
                     row.Disposition?.ToString(),
                     row.ProviderThreadId,
                     row.ObservedAt,
-                    row.RejectionReason?.ToString()))
+                    row.RejectionReason?.ToString(), row.RiskAssessment))
                 .ToList());
     }
 
@@ -393,6 +420,10 @@ public sealed partial class ReviewerPerformanceController(
     /// <param name="to">Inclusive end of the window, by review date. Defaults to today.</param>
     /// <param name="clientId">Narrows to one client the caller administers.</param>
     /// <param name="repositoryId">Narrows to one repository.</param>
+    /// <param name="impact">Independent impact selection, including Unknown.</param>
+    /// <param name="likelihood">Independent occurrence-likelihood selection, including Unknown and NotApplicable.</param>
+    /// <param name="riskSeverity">Derived risk-severity selection, including Unknown.</param>
+    /// <param name="confidence">Independent correctness-confidence selection, including Unknown for unassessed findings.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The distribution, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -406,6 +437,10 @@ public sealed partial class ReviewerPerformanceController(
         [FromQuery] DateOnly? to = null,
         [FromQuery] Guid? clientId = null,
         [FromQuery] string? repositoryId = null,
+        [FromQuery] string? impact = null,
+        [FromQuery] string? likelihood = null,
+        [FromQuery] string? riskSeverity = null,
+        [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
         var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, clientId, ct);
@@ -420,7 +455,8 @@ public sealed partial class ReviewerPerformanceController(
         }
 
         var breakdown = await metricReader.GetRejectionReasonsAsync(
-            CodeInsightQueries.BuildRollupQuery(scope.ClientIds, from, to, repositoryId),
+            CodeInsightQueries.BuildRollupQuery(
+                scope.ClientIds, from, to, repositoryId, impact: impact, likelihood: likelihood, riskSeverity: riskSeverity, confidence: confidence),
             ct);
 
         return this.Ok(

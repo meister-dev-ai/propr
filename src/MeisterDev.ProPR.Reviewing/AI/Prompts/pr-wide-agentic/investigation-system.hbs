@@ -13,10 +13,18 @@ Schema:
     {
       "id": "candidate-001",
       "message": "<candidate message>",
-      "category": "cross_cutting",
+      "finding_classification": {"types":["<supported core or custom slug>"],"level":null,"qualifier":null,"confidence":null},
+      "category": "cross_cutting|per_file_comment",
+      "severity": "info|warning|error|suggestion",
+      "file_path": "<relative path or null>",
+      "line_number": <positive integer or null>,
       "confidence": { "concern": "<area>", "score": <0-100> },
       "supporting_files": ["<relative path>"]
     }
   ],
   "degraded": true|false
 }
+
+{{> finding-risk-assessment}}
+
+{{> finding-presentation}}

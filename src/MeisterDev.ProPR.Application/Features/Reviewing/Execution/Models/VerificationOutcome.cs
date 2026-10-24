@@ -193,12 +193,27 @@ public sealed record VerificationOutcome
     /// </summary>
     public string? JudgeVerdict { get; init; }
 
+    /// <summary>Explicit verified claim kind: defect or improvement. Null when the judge did not classify it.</summary>
+    public string? VerifiedFindingKind { get; init; }
+
     /// <summary>
     ///     Gets the reason why the evidence-backed judge could not decide the claim, one of the
     ///     <see cref="EvidenceJudgeDegradations" /> values, or <see langword="null" /> when the judge decided the claim or
     ///     the claim did not need the judge.
     /// </summary>
     public string? JudgeDegradation { get; init; }
+
+    /// <summary>Independent confidence evidence; absent on legacy verdicts.</summary>
+    public VerificationConfidenceEvidence? ConfidenceEvidence { get; init; }
+
+    /// <summary>The runtime that performed the initial evidence verification.</summary>
+    public VerificationRuntimeProvenance? Runtime { get; init; }
+
+    /// <summary>The runtime that performed the bounded contradiction check.</summary>
+    public VerificationRuntimeProvenance? ContradictionCheckRuntime { get; init; }
+
+    /// <summary>Outcome of the optional contradiction check, including unavailable or unresolved states.</summary>
+    public string? ContradictionCheckStatus { get; init; }
 
     /// <summary>
     ///     Gets a value indicating whether the recommended disposition blocks publication.

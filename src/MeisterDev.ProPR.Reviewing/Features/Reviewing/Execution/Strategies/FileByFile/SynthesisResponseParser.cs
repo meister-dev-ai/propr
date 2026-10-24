@@ -3,7 +3,9 @@
 
 using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
@@ -15,11 +17,64 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategie
 /// </summary>
 internal static class SynthesisResponseParser
 {
+    internal const int MaxFindingChallenges = 16;
+
+    /// <summary>Reads bounded reconsideration requests without invalidating the synthesis summary.</summary>
+    internal static IReadOnlyList<FindingVerificationChallenge> ParseChallenges(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(StripMarkdownCodeFences(text));
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("finding_challenges", out var challenges) || challenges.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var result = new List<FindingVerificationChallenge>();
+            foreach (var item in challenges.EnumerateArray())
+            {
+                if (result.Count >= MaxFindingChallenges)
+                {
+                    break;
+                }
+
+                if (item.ValueKind != JsonValueKind.Object || Text(item, "finding_id", 256) is not { } id
+                                                           || Text(item, "reason", 1024) is not { } reason || Text(item, "counterevidence", 1024) is not
+                                                               { } counterevidence
+                                                           || !seen.Add(id))
+                {
+                    continue;
+                }
+
+                result.Add(new FindingVerificationChallenge(id, reason, counterevidence));
+            }
+
+            return result;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+
+        static string? Text(JsonElement item, string key, int max) => item.TryGetProperty(key, out var value)
+                                                                      && value.ValueKind == JsonValueKind.String && value.GetString() is { } text
+                                                                      && !string.IsNullOrWhiteSpace(text) && text.Length <= max
+            ? text.Trim()
+            : null;
+    }
+
     public static bool TryParse(
         string? responseText,
         out string summary,
         out IReadOnlyList<CandidateReviewFinding> crossCuttingComments,
-        out IReadOnlyList<string> summaryFindingIds)
+        out IReadOnlyList<string> summaryFindingIds, FindingTypeVocabulary? vocabulary = null)
     {
         summary = string.Empty;
         crossCuttingComments = [];
@@ -44,7 +99,7 @@ internal static class SynthesisResponseParser
                 ? summaryEl.GetString() ?? string.Empty
                 : summaryEl.GetRawText();
             summaryFindingIds = ParseSummaryFindingIds(doc.RootElement);
-            crossCuttingComments = ParseCrossCuttingConcerns(trimmed);
+            crossCuttingComments = ParseCrossCuttingConcerns(trimmed, vocabulary);
             return true;
         }
         catch (JsonException)
@@ -119,7 +174,7 @@ internal static class SynthesisResponseParser
         return trimmed.Trim();
     }
 
-    private static IReadOnlyList<CandidateReviewFinding> ParseCrossCuttingConcerns(string? responseText)
+    private static IReadOnlyList<CandidateReviewFinding> ParseCrossCuttingConcerns(string? responseText, FindingTypeVocabulary? vocabulary)
     {
         if (string.IsNullOrWhiteSpace(responseText))
         {
@@ -138,7 +193,7 @@ internal static class SynthesisResponseParser
             var result = new List<CandidateReviewFinding>();
             foreach (var item in concernsEl.EnumerateArray())
             {
-                var finding = TryParseCrossCuttingConcern(item, result.Count + 1);
+                var finding = TryParseCrossCuttingConcern(item, result.Count + 1, vocabulary);
                 if (finding is not null)
                 {
                     result.Add(finding);
@@ -153,7 +208,7 @@ internal static class SynthesisResponseParser
         }
     }
 
-    private static CandidateReviewFinding? TryParseCrossCuttingConcern(JsonElement item, int ordinal)
+    private static CandidateReviewFinding? TryParseCrossCuttingConcern(JsonElement item, int ordinal, FindingTypeVocabulary? vocabulary)
     {
         var message = item.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : null;
         if (string.IsNullOrWhiteSpace(message))
@@ -195,7 +250,11 @@ internal static class SynthesisResponseParser
             message,
             category,
             evidence: evidence,
-            candidateSummaryText: summaryText);
+            candidateSummaryText: summaryText)
+        {
+            RiskAssessment = FindingRiskAssessmentParser.ParseFinding(item),
+            FindingClassification = FindingTypeClassificationParser.ParseFinding(item, vocabulary), SuggestedFix = ReviewSuggestedFixValidator.Parse(item)
+        };
     }
 
     private static EvidenceReference ParseEvidenceReference(JsonElement item)

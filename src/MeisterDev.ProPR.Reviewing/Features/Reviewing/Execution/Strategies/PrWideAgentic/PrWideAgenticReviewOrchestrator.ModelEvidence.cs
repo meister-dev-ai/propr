@@ -37,7 +37,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator
                     passContext.ModelEvidenceScope = scope;
                     var relevant = candidates.Where(candidate =>
                             candidate.FilePath == file.Path || candidate.RelatedFilePaths.Contains(file.Path, StringComparer.Ordinal))
-                        .Select(candidate => new ReviewComment(candidate.FilePath ?? file.Path, candidate.LineNumber, candidate.Severity, candidate.Message))
+                        .Select(candidate => new ReviewComment(candidate.FilePath ?? file.Path, candidate.LineNumber, candidate.Severity, candidate.Message)
+                        {
+                            RiskAssessment = candidate.RiskAssessment, FindingClassification = candidate.FindingClassification,
+                            SuggestedFix = candidate.SuggestedFix
+                        })
                         .ToArray();
                     var pass = ModelReviewCapture.Pass(passContext, ordinal, started, disposition, relevant, shadow, "pr-wide-generation");
                     var incoming = scope with { Passes = [pass] };

@@ -55,6 +55,25 @@ public sealed class CodeInsightSurvivalTests : IDisposable
     }
 
     [Fact]
+    public async Task RiskCohortRetainsLaterUnassessedContinuation()
+    {
+        var key = NewKey(ClientA, 7);
+        await this.MaterialiseAsync(key, "rev-1", FirstReview, [("a.cs", Retry)]);
+        var first = await this._dbContext.CodeInsightFindings.SingleAsync();
+        first.Impact = FindingImpact.Critical;
+        first.Likelihood = FindingLikelihood.Likely;
+        first.RiskSeverity = FindingRiskSeverity.Critical;
+        first.Confidence = FindingConfidence.Certain;
+        await this._dbContext.SaveChangesAsync();
+        await this.MaterialiseAsync(key, "rev-2", FirstReview.AddDays(1), [("a.cs", Retry)]);
+        var counts = await this._reader.GetSurvivalAsync(
+            this.Window(ClientA) with { RiskSeverity = FindingRiskSeverity.Critical, Confidence = FindingConfidence.Certain });
+        Assert.Equal(1, counts.Persisted);
+        Assert.Equal(0, counts.Dropped);
+        Assert.Equal(0, counts.Fixed);
+    }
+
+    [Fact]
     public async Task AProblemRestatedInTheNextIncrementCountsAsPersisting()
     {
         var key = NewKey(ClientA, 7);

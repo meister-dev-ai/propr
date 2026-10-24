@@ -13,8 +13,8 @@ jobs, thread passes, tokens, costs, and memory records.
 
 The Browser tab uses the available content height. The file list and diff scroll independently. Search
 matches file names and paths without regard to case. Finding filters select files with findings, without
-findings, or with comments. Code Insights adds filters for finding kind, severity, and outcome. Combined
-kind, severity, and outcome filters require recorded details and must match the same finding. Filtering
+findings, or with comments. Code Insights adds filters for finding kind, classification, risk severity,
+impact, likelihood, confidence and outcome. Combined filters require recorded details and must match the same finding. Filtering
 preserves the selected diff while its file and retained revision remain in the list. Excluding the selected
 file or replacing its retained revision clears the diff and comments.
 **Clear filters** restores the file list. On narrow screens, **Files** opens the file pane and selecting
@@ -23,7 +23,7 @@ a file returns to the diff.
 Retained user and ProPR comments appear next to their new-side lines in both Unified and Split layouts.
 Comments whose lines are absent from the diff appear under **Unanchored comments** in the diff pane.
 ProPR comments retain links to their originating review traces. When Code Insights collected metadata,
-the original finding comment displays severity, classified kinds, outcome, and a recorded rejection reason.
+the original finding comment displays classification, risk assessment, classified kinds, outcome and a recorded rejection reason.
 **Duplicate** means the recorded rejection reason is Redundant. Replies retain their own authorship and
 are not assigned the original finding's classification.
 Recorded thread IDs take precedence when matching comments to findings. Text matching can supply missing
@@ -46,12 +46,118 @@ An actionable license stage appears as a warning button in the application heade
 or grace-period message and the licensing link. On the PR view, other installation notices also open from
 the header. Escape or an outside click closes the disclosure.
 
+## Finding risk
+
+Each assessed finding carries three independent judgments and their reasons:
+
+| Dimension | Values and meaning |
+|---|---|
+| Impact | Low: local inconvenience or maintenance cost. Moderate: bounded disruption. High: substantial service, security, data or maintenance harm. Critical: catastrophic service, security or data harm. |
+| Likelihood | Unlikely: exceptional conditions. Possible: plausible conditions. Likely: routine conditions. The reason identifies the trigger or exposure. |
+| Confidence | Low: limited evidence with substantial assumptions. Medium: supporting evidence with relevant assumptions. High: strong evidence with minor uncertainty. Certain: direct deterministic evidence without relevant unresolved assumptions. The reason identifies evidence and remaining assumptions. |
+
+Likelihood describes the occurrence scenario. Finding confidence describes the strength of evidence that the finding is
+correct. It is independent of the numeric investigation, verification and classification confidence values. A confirmed Error can have Low risk when its consequence and exposure are limited. Maintenance
+findings use a concrete editing or operational scenario. Unknown means evidence is insufficient;
+Not applicable means there is no meaningful occurrence scenario.
+
+The `finding-risk-v1` rubric derives risk severity from impact and likelihood:
+
+| Impact | Unlikely | Possible | Likely |
+|---|---|---|---|
+| Low | Low | Low | Low |
+| Moderate | Low | Medium | Medium |
+| High | Medium | High | High |
+| Critical | High | High | Critical |
+
+Missing dimensions, reasons or provenance, unsupported rubric versions and Not applicable likelihood
+produce Unassessed risk. Known dimensions remain visible. Historical findings and output from custom
+prompts that omit assessments remain Unassessed; ProPR does not infer their risk from classification.
+
+ProPR resolves fresh correctness confidence from independent verification evidence. The generating model's assessment
+is provisional: verification can confirm or lower its confidence, not raise it. The verifier provides a reachable input
+or state sequence, its observable consequence, exact source excerpts and an explanation of relevant counterevidence.
+Certain requires complete evidence without unresolved material assumptions and a separate bounded contradiction check.
+ProPR runs the same check for every Error or Warning that the verifier confirms, for a confirmation after the verifier's
+last repository lookup, and for a finding that states that its trigger is not established. The last two conditions
+remain on the finding as assumptions and limit its confidence to Medium. The check uses the configured Low effort
+model, the verifier's repository lookups and its own time limit. A confirmed Error or Warning that would be published
+at Medium or below, or Unassessed, goes to a second check on the configured High effort model. Each check uses the
+reviewer runtime when its purpose is unavailable, recording the fallback.
+
+Missing or malformed confidence evidence leaves a supported finding Unassessed and preserves its impact, likelihood
+and classification. A check that fails, times out or answers unusably bounds confidence without removing an
+independently supported finding. A check that answers with another verdict than a confirmation gives the finding the
+disposition that verdict has for the verifier, so a claim the check finds not actionable or intended moves to the
+summary. Source refutation removes the false claim. Confidence reasons include unresolved assumptions and
+counterevidence; a combined finding cannot inherit stronger confidence from a single selected source. Historical
+carried-forward assessments retain their recorded values.
+
+Synthesis requests reconsideration with a retained finding ID, a specific doubt and counterevidence. ProPR verifies each
+challenged finding once, retaining the original producing pass's repository access and structured patch. A finding
+whose challenge stays unresolved becomes summary-only; a refuted claim is excluded from inline comments and verified
+summary claims.
+
+Published findings start with severity, risk, impact, likelihood and confidence badges, followed by all
+supported finding types. The original description
+appears in its own paragraph. Under a client's **Post configuration**, **Finding badges** selects
+**Image badges (Shields.io)**, the default, or **Plain gray badges**. Images use the flat-square style with
+risk colors, blue finding types and gray severity and other assessments. Image alternative text describes
+each value. Plain badges use inline code without requesting external images. The choice applies to all SCM
+providers and complete findings included in summaries.
+
+Assessment details expand to show a table with Assessment, Level and Reason columns and separate Risk,
+Impact, Likelihood and Confidence rows. Risk states its derivation from impact and likelihood; the other rows
+retain their recorded reasons. Findings without an assessment show severity, available finding types and description.
+
+Review summaries preserve the conclusion, list findings with their recorded descriptions and locations,
+and show a compact table of findings to report, risk levels and confidence levels. These counts describe
+findings offered to the provider after publication policy evaluation. Provider deduplication or individual
+posting failures can reduce the number posted. Missing evidence has an Unassessed bucket; an empty set
+shows zero findings and None for both distributions. Compact actions show up to 20 findings with
+320-character description excerpts and 160-character path excerpts; Unicode scalars remain intact.
+Compact action text is limited to 8,000 characters. An omission notice reports any additional actions;
+totals still count every offered finding. Complete finding comments retain their original descriptions.
+PR-level findings included in a summary use the same complete finding layout, including expandable
+assessment details.
+
+Review traces and retained finding details show the same evidence. Code Quality provides risk
+distributions and independent filters for each dimension. Reviewer Performance supports those filters,
+series and matrix axes; [its evidence limits](reviewer-performance.md#evidence-limits) explain score availability.
+
+ProPR starts review summaries with a **Fix first** entry for the highest assessed confirmed defect before the
+conclusion. The entry requires a confirmed defect with scored risk and uses the first recorded defect when
+several share that risk. ProPR orders finding actions by risk with stable ties. The stored comment order and
+publication ordinals do not change. Findings without a scored assessment remain Unassessed.
+
+Exact local fixes are optional. A fix specifies complete original and replacement lines in one contiguous source
+range, bound to the reviewed file and revision. Azure DevOps and GitHub publish matching native ranges; GitLab
+uses explicit offsets around its new-side comment line. Forgejo displays the replacement under
+**Suggested change** in an ordinary code block, with syntax highlighting for supported source languages.
+Structured fixes with unknown or stale source or an unsuitable anchor use the same labeled format.
+Unvalidated suggestion fences remain ordinary code.
+An original and replacement that are identical after line-ending normalization produce no suggested-change block.
+ProPR retains the finding and records the rejected patch independently. Indentation and internal whitespace remain
+significant when comparing code.
+The same finding remains available when no applicable fix can be offered. Code characters and indentation are
+preserved. Review and synthesis guidance asks for concrete evidenced inputs, configurations or call paths,
+keeps unverified preconditions explicit, and prevents a summary from strengthening its source claims.
+
+Error means a confirmed defect, Warning means evidence of a defect with unresolved context, and Suggestion
+means a concrete improvement. A confirmed defect remains Error when its risk is low; aggregate file investigation
+confidence cannot change it into an improvement. Verification promotes a finding only when it explicitly
+confirms a defect; confirmation of an actionable improvement preserves its improvement classification.
+
+Error, Warning, Suggestion and Info remain the finding classification. Minimum classification to post
+uses that classification. Risk assessment does not change verification, publication thresholds or
+thread resolution policy, and Low risk does not discard a finding.
+
 ## What happens during a review
 
 ```mermaid
 flowchart TD
     A["Fetch the pull request diff"] --> B["Review each changed file"]
-    B --> C["Discard low-confidence and malformed comments"]
+    B --> C["Validate comment structure"]
     C --> D["Relevance filter"]
     D --> E["Check against past thread decisions"]
     E --> F["Verify findings against the code"]
@@ -98,7 +204,9 @@ The ceilings are [installation settings](../operate/configuration.md#evidence-ju
 The judge can also answer that the code it needs to decide is not in
 its input. ProPR then publishes the finding if the pass that produced it read the repository with tools, and withholds
 it if the pass had no tools. The inventory lens reviews without tools. A finding from which ProPR extracts no claim is withheld
-without a verdict. When the judge cannot run, runs out of time or gives an unusable answer, the finding is withheld, and the
+without a verdict. ProPR reads the verdict from the JSON object in the judge's answer. If the end of that object is
+damaged, for example by a stray quotation mark after the last quoted source line, ProPR reads the members before the
+damage. When the judge cannot run, runs out of time or gives an unusable answer, the finding is withheld, and the
 job protocol records a `verification_degraded` event for the file with the number of affected findings and the
 reasons. Exhausting the retry records `judge_output_limit`. If the judge could decide none of a file's findings,
 the file summary states that verification could not run. The job protocol records the verdict, the reason
@@ -121,8 +229,9 @@ Manual review of an unchanged completed revision remains available.
 
 ## Why a finding did not get posted
 
-A deterministic gate runs last, before publication. Every finding ends as **published**, **summary-only**
-(mentioned in the summary but not posted inline), or **dropped**.
+A deterministic gate runs last, before publication. Every finding ends as **published**, **summary-only** or
+**dropped**. A summary-only finding stays in the ProPR review without an inline comment, and the published summary
+lists it when the pass that produced the finding wrote a summary line for it.
 
 | Outcome | Applies to |
 |---|---|
@@ -136,15 +245,16 @@ A deterministic gate runs last, before publication. Every finding ends as **publ
 | Published | Everything else |
 
 Three per-client filters run after the gate, all of them in [what you can tune](#what-you-can-tune): the
-**minimum severity to post**, whether findings outside the changed lines are posted, and whether outbound
+**minimum classification to post**, whether findings outside the changed lines are posted, and whether outbound
 SCM commenting is enabled at all. A finding the first two hold back stays in the ProPR review, and the
 published summary reports how many were held back and why. The summary links to the review once
 `MEISTER_PUBLIC_BASE_URL` gives the installation its address - see
 [public URL and browser origins](../operate/configuration.md#public-url-and-browser-origins).
 
 A dropped finding also has to leave the summary. ProPR writes the summary before the gate runs, so the
-summary can describe a finding the gate then rules out. Where that happens, ProPR replaces the narrative
-with a short note saying how many candidates were dropped.
+summary can describe a finding the gate then rules out. Where that happens, the synthesis model rewrites the
+summary without the dropped findings in one more call. If that call fails, ProPR replaces the narrative with a
+short note saying how many candidates were dropped.
 
 The client dashboard's 30-day finding count uses findings in persisted completed review results whose
 completion time is at or after the window start and before the window end. It does
@@ -171,7 +281,7 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Output language | Per client | The language the review writes in - see [Output language](#output-language) |
 | Linked work items and issues | Per client | Pulls the work items or issues linked to the pull request into the review context, so the change is judged against its intended direction. On by default |
 | Exclusion rules | Per repository | Glob patterns read from the repository - see [configuring ProPR from your repository](repository-configuration.md) |
-| Minimum severity to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review, and the published summary reports how many were held back. Order, high to low: error, warning, suggestion, info |
+| Minimum classification to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review, and the published summary reports how many were held back. Order, high to low: error, warning, suggestion, info |
 | Auto-resolve severities | Per client | Comments of the chosen severities are posted and then immediately resolved with a note. Azure DevOps, GitHub and GitLab; on Forgejo the setting is a no-op |
 | Do not post findings outside the changed lines | Per client | Keeps findings in pre-existing code away from the diff out of the pull request. They stay visible in the ProPR review. Off by default - see [findings outside your changes](#findings-outside-your-changes) |
 | Resolving comment threads | Per client | What ProPR does with its own threads once a finding is acted on: resolve quietly (default), resolve with an explanation, or leave them alone. On the first two a question you ask is answered; leaving them alone switches the pass off, so nothing is answered - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
@@ -259,7 +369,7 @@ installation.
 The **Output language** setting on the client's System tab is the language ProPR writes its review prose
 in. It is a language tag such as `en`, `de` or `pt-BR`, and it defaults to `en`.
 
-The setting reaches every place the model writes for a reader: the finding messages posted as threads,
+The setting reaches every place the model writes for a reader: the finding messages and assessment reasons posted as threads,
 the pull-request summary, the replies ProPR leaves when it closes or continues a thread, the answers to
 `@propr` mentions, and the thread-memory summaries a later review reads back. All of them use the
 configured language, so one review does not arrive part German and part English.
@@ -267,8 +377,9 @@ configured language, so one review does not arrive part German and part English.
 ProPR never guesses the language from the pull request. A change whose title, comments and code are in
 different languages would otherwise produce a different result on every call.
 
-The fixed text ProPR adds around the model's prose stays English whatever you configure: the severity
-label on each comment (`ERROR:`, `WARNING:`, `SUGGESTION:`, `INFO:`), the `**AI Review Summary**` heading,
+The fixed text ProPR adds around the model's prose stays English whatever you configure: the classification
+label on each comment (`ERROR:`, `WARNING:`, `SUGGESTION:`, `INFO:`), the risk dimension labels and values,
+the `**AI Review Summary**` heading,
 and the notes about verification, carried-forward files and budget caps. ProPR matches the severity prefix
 and the summary heading as data on pull requests it has already commented on. A re-review uses the prefix
 to recognise its own comment and avoid posting it twice, and the heading to keep ProPR's own summary out
@@ -323,7 +434,7 @@ The lens decides both the prompt and the files:
   Any complexity tier.
 - **Inventory** - the diff-only lens. The pass reads the file's diff text and works from that alone: it
   gets no repository tools and answers in one turn. It reports every plausible defect it can name, with
-  severity carrying the model's confidence, so what it produces is a candidate list that deduplication,
+  classification independent of confidence. It produces a candidate list that deduplication,
   verification and the publication gate then filter. This trades precision per comment for coverage of
   the changed lines. It runs on any text file with a diff, at any complexity tier, and skips binary files.
 

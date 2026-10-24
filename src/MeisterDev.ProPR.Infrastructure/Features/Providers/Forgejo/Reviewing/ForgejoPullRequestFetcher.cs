@@ -98,7 +98,10 @@ internal sealed class ForgejoPullRequestFetcher(
             existingThreads,
             isDeltaReview ? allChangedFileSummaries : null,
             AuthorizedIdentityName: context.AuthenticatedUsername,
-            Author: ToPullRequestAuthor(host, pullRequest));
+            Author: ToPullRequestAuthor(host, pullRequest))
+        {
+            FetchedHeadSha = pullRequest.Head?.Sha,
+        };
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(
@@ -341,7 +344,10 @@ internal sealed class ForgejoPullRequestFetcher(
             existingThreads,
             changedFileManifest,
             AuthorizedIdentityName: context.AuthenticatedUsername,
-            Author: ToPullRequestAuthor(host, pullRequest));
+            Author: ToPullRequestAuthor(host, pullRequest))
+        {
+            FetchedHeadSha = pullRequest.Head?.Sha,
+        };
     }
 
     private async Task<IReadOnlyList<ForgejoPullRequestFileResponse>?> TryGetDeltaFilesAsync(

@@ -43,10 +43,20 @@ public sealed class EvidenceJudgeReasoningCompatibilityTests
             [WorkItem()], [], new ReviewVerificationContext(tools, "source", chat, modelId, Guid.NewGuid(), resolver));
 
         Assert.Equal(FinalGateDecision.PublishDisposition, Assert.Single(outcomes).RecommendedDisposition);
-        using var request = JsonDocument.Parse(Assert.Single(handler.Requests));
-        var options = request.RootElement.GetProperty("options");
+        // The claim is a Warning, so the independent check follows the judge on the same relay. The confirmation carries no
+        // confidence evidence, so the escalation check follows as well. Both checks request the provider's default effort.
+        Assert.Equal(3, handler.Requests.Count);
+        using var judgeRequest = JsonDocument.Parse(handler.Requests[0]);
+        var options = judgeRequest.RootElement.GetProperty("options");
         Assert.Equal(supportsLow ? "low" : null, options.GetProperty("reasoningEffort").GetString());
         Assert.Equal(4000, options.GetProperty("maxOutputTokens").GetInt32());
+        Assert.All(
+            handler.Requests.Skip(1),
+            request =>
+            {
+                using var check = JsonDocument.Parse(request);
+                Assert.Null(check.RootElement.GetProperty("options").GetProperty("reasoningEffort").GetString());
+            });
     }
 
     [Fact]

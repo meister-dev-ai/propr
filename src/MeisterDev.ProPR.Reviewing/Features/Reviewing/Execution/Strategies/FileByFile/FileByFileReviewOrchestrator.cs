@@ -464,43 +464,9 @@ internal sealed partial class FileByFileReviewOrchestrator(
             : result with { Comments = filtered };
     }
 
-    /// <summary>
-    ///     Applies confidence-gated severity downgrade using the reviewer's final confidence score
-    ///     from the agentic loop.
-    ///     <list type="bullet">
-    ///         <item>confidence &lt; <see cref="AiReviewOptions.ConfidenceFloorError" /> → ERROR becomes WARNING</item>
-    ///         <item>confidence &lt; <see cref="AiReviewOptions.ConfidenceFloorWarning" /> → WARNING becomes SUGGESTION</item>
-    ///     </list>
-    ///     Downgrade is skipped when <paramref name="finalConfidence" /> is <see langword="null" />.
-    /// </summary>
+    /// <summary>Preserves per-finding classification independently of aggregate file investigation confidence.</summary>
     internal static ReviewResult ApplyConfidenceFloor(ReviewResult result, int? finalConfidence, AiReviewOptions opts)
     {
-        if (finalConfidence is null || result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var confidence = finalConfidence.Value;
-        var adjusted = result.Comments
-            .Select(c =>
-            {
-                var sev = c.Severity;
-                if (sev == CommentSeverity.Error && confidence < opts.ConfidenceFloorError)
-                {
-                    sev = CommentSeverity.Warning;
-                }
-                else if (sev == CommentSeverity.Warning && confidence < opts.ConfidenceFloorWarning)
-                {
-                    sev = CommentSeverity.Suggestion;
-                }
-
-                return sev == c.Severity ? c : CreateReviewComment(c.FilePath, c.LineNumber, sev, c.Message);
-            })
-            .ToList()
-            .AsReadOnly();
-
-        return adjusted.SequenceEqual(result.Comments)
-            ? result
-            : result with { Comments = adjusted };
+        return ReviewCommentProcessing.ApplyConfidenceFloor(result, finalConfidence, opts);
     }
 }

@@ -43,7 +43,7 @@ public sealed class GetReviewJobStatusHandler(IReviewJobIntakeStore intakeStore)
                             comment.FilePath,
                             comment.LineNumber,
                             comment.Severity,
-                            comment.Message))
+                            comment.Message, comment.RiskAssessment))
                         .ToArray()),
             job.ErrorMessage)
         {

@@ -20,6 +20,61 @@ namespace MeisterDev.ProPR.CodeInsights.Tests.Controllers;
 public sealed class CodeQualityControllerTests
 {
     [Fact]
+    public async Task RiskDistributionTotalUsesTheSamePopulationAsItsPoints()
+    {
+        var harness = new CodeInsightAudienceHarness();
+        harness.Rollups.GetSeriesAsync(
+                Arg.Any<CodeInsightRollupQuery>(), CodeInsightCountDimension.RiskSeverity,
+                Arg.Any<CodeInsightBucketSize>(), Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new CodeInsightSeriesPoint(new DateOnly(2026, 10, 1), "Critical", 2),
+                new CodeInsightSeriesPoint(new DateOnly(2026, 10, 1), "Unknown", 3),
+            ]);
+        harness.Rollups.GetTotalAsync(Arg.Any<CodeInsightRollupQuery>(), Arg.Any<CancellationToken>()).Returns(6);
+
+        var result = Assert.IsType<OkObjectResult>(await harness.CodeQuality.GetRiskOverTime());
+        var series = Assert.IsType<CodeInsightTypeSeriesResponse>(result.Value);
+
+        Assert.Equal(5, series.TotalFindings);
+        Assert.Equal(series.Points.Sum(point => point.Count), series.TotalFindings);
+    }
+
+    [Fact]
+    public async Task EveryQualityReadCarriesTheSameIndependentRiskScope()
+    {
+        var harness = new CodeInsightAudienceHarness();
+        harness.Rollups.GetRepositoryDirectoryAsync(Arg.Do<CodeInsightRollupQuery>(harness.RequestedRollupScopes.Add), Arg.Any<CancellationToken>())
+            .Returns(new CodeInsightRepositoryDirectory(0, 0, 0, null, []));
+        await harness.CodeQuality.GetTypesOverTime(impact: "Moderate", likelihood: "Unlikely", riskSeverity: "Low", confidence: "Certain");
+        await harness.CodeQuality.GetConcentration(impact: "Moderate", likelihood: "Unlikely", riskSeverity: "Low", confidence: "Certain");
+        await harness.CodeQuality.GetRepositories(impact: "Moderate", likelihood: "Unlikely", riskSeverity: "Low", confidence: "Certain");
+        await harness.CodeQuality.GetHotspots(impact: "Moderate", likelihood: "Unlikely", riskSeverity: "Low", confidence: "Certain");
+        await harness.CodeQuality.GetSurvival(impact: "Moderate", likelihood: "Unlikely", riskSeverity: "Low", confidence: "Certain");
+        await harness.CodeQuality.GetFindings(impact: "Moderate", likelihood: "Unlikely", riskSeverity: "Low", confidence: "Certain");
+        await harness.CodeQuality.GetRiskOverTime(dimension: "impact", impact: "Moderate", likelihood: "Unlikely", riskSeverity: "Low", confidence: "Certain");
+        Assert.NotEmpty(harness.RequestedRollupScopes);
+        Assert.NotEmpty(harness.RequestedSurvivalScopes);
+        Assert.NotEmpty(harness.RequestedBrowseScopes);
+        Assert.All(
+            harness.RequestedRollupScopes.Concat(harness.RequestedSurvivalScopes), scope =>
+            {
+                Assert.Equal(FindingImpact.Moderate, scope.Impact);
+                Assert.Equal(FindingLikelihood.Unlikely, scope.Likelihood);
+                Assert.Equal(FindingRiskSeverity.Low, scope.RiskSeverity);
+                Assert.Equal(FindingConfidence.Certain, scope.Confidence);
+            });
+        Assert.All(
+            harness.RequestedBrowseScopes, scope =>
+            {
+                Assert.Equal(FindingImpact.Moderate, scope.Impact);
+                Assert.Equal(FindingLikelihood.Unlikely, scope.Likelihood);
+                Assert.Equal(FindingRiskSeverity.Low, scope.RiskSeverity);
+                Assert.Equal(FindingConfidence.Certain, scope.Confidence);
+            });
+    }
+
+    [Fact]
     public async Task EveryReadIsScopedToExactlyTheClientsTheCallerHolds()
     {
         // The highest-cost defect in the feature, so all three reads are checked rather than one representative.

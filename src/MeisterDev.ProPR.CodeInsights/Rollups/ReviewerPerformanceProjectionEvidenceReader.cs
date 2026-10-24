@@ -27,7 +27,7 @@ internal static class ReviewerPerformanceProjectionEvidenceReader
                 row.NativeStatus,
                 row.CurrentDisposition,
                 row.CurrentClassifierVersion,
-                row.CurrentClassifierConfidence)).ToListAsync(ct);
+                row.CurrentClassifierConfidence, row.Impact, row.Likelihood, row.RiskSeverity, row.Confidence, row.RiskRubricVersion)).ToListAsync(ct);
         var ids = findings.Select(row => row.Id).ToList();
         var dispositions = await db.CodeInsightFindingDispositions.AsNoTracking().Where(row => ids.Contains(row.CodeInsightFindingId))
             .Select(row => new ReviewerPerformanceDispositionEvidence(

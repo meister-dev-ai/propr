@@ -191,6 +191,14 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<FindingBadgeStyle> GetFindingBadgeStyleAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var stored = await dbContext.Clients.Where(client => client.Id == clientId)
+            .Select(client => client.FindingBadgeStyle).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return Enum.IsDefined(stored) ? stored : FindingBadgeStyle.ShieldsIo;
+    }
+
+    /// <inheritdoc />
     public async Task<CommentSeverity> GetMinimumSeverityToPostAsync(Guid clientId, CancellationToken ct = default)
     {
         // A missing client yields default(CommentSeverity) == Info, i.e. publish everything.

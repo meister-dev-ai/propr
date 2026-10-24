@@ -306,7 +306,11 @@ public sealed class PullRequestSynchronizationService(
     {
         try
         {
-            return await discussions!.ObserveAsync(request, ct);
+            return await discussions!.ObserveAsync(
+                request with
+                {
+                    DeferMemoryProcessing = request.AllowReviewSubmission && !request.DiscussionOnly && request.PullRequestStatus == PrStatus.Active,
+                }, ct);
         }
         catch (DiscussionObservationUnavailableException exception) when (!ct.IsCancellationRequested)
         {

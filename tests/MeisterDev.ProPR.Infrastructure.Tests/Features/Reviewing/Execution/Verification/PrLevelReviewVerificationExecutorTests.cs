@@ -220,7 +220,9 @@ public sealed class PrLevelReviewVerificationExecutorTests
             .Where(call => call.GetMethodInfo().Name == nameof(IProtocolRecorder.RecordAiCallAsync))
             .Select(call => (string?)call.GetArguments()[8])
             .ToList();
-        Assert.Equal(["ai_call_evidence_verification"], callNames);
+        // The claim is a Warning, so the independent check runs after the judge. The confirmation carries no confidence
+        // evidence, so the escalation check follows, and both checks are recorded in the same way.
+        Assert.Equal(["ai_call_evidence_verification", "ai_call_confidence_contradiction_check", "ai_call_confidence_contradiction_check"], callNames);
     }
 
     [Theory]

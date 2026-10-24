@@ -18,7 +18,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.ThreadMemory;
 
 /// <summary>
 ///     Covers the single reconsideration prompt path: the shipped templates render the prompts the live
-///     reconsideration call sends, and a configured prompt override replaces the system prompt the model receives.
+///     reconsideration call sends. Overrides replace the client guidance and retain the required classification contract.
 /// </summary>
 public sealed class MemoryReconsiderationPromptTests
 {
@@ -37,14 +37,17 @@ public sealed class MemoryReconsiderationPromptTests
     }
 
     [Fact]
-    public void BuildSystemPrompt_WithConfiguredOverride_ReturnsOverrideText()
+    public void BuildSystemPrompt_WithConfiguredOverride_RetainsOverrideAndClassificationContract()
     {
         var builder = new MemoryReconsiderationPromptBuilder();
         var context = ContextWithOverride("Only keep findings a staff engineer would raise.");
 
         var prompt = builder.BuildSystemPrompt(context);
 
-        Assert.Equal("Only keep findings a staff engineer would raise.", prompt);
+        Assert.StartsWith("Only keep findings a staff engineer would raise.", prompt, StringComparison.Ordinal);
+        Assert.Contains("\"finding_classification\"", prompt, StringComparison.Ordinal);
+        Assert.Contains("logic-error", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("RECONSIDERATION phase", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -110,7 +113,7 @@ public sealed class MemoryReconsiderationPromptTests
     }
 
     [Fact]
-    public async Task RetrieveAndReconsiderAsync_WithConfiguredOverride_SendsOverriddenSystemPromptToTheModel()
+    public async Task RetrieveAndReconsiderAsync_WithConfiguredOverride_SendsOverrideAndClassificationContractToTheModel()
     {
         var (service, chatClient) = CreateLiveReconsiderationService();
         var captured = CaptureSystemMessage(chatClient);
@@ -127,7 +130,11 @@ public sealed class MemoryReconsiderationPromptTests
             null,
             ContextWithOverride("Reconsider in the client's own words."));
 
-        Assert.Equal("Reconsider in the client's own words.", captured.Value);
+        Assert.NotNull(captured.Value);
+        Assert.StartsWith("Reconsider in the client's own words.", captured.Value, StringComparison.Ordinal);
+        Assert.Contains("\"finding_classification\"", captured.Value, StringComparison.Ordinal);
+        Assert.Contains("logic-error", captured.Value, StringComparison.Ordinal);
+        Assert.DoesNotContain("RECONSIDERATION phase", captured.Value, StringComparison.Ordinal);
     }
 
     [Fact]

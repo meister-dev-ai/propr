@@ -248,6 +248,25 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     expect(mockRouterPush).not.toHaveBeenCalledWith({ name: 'clients' })
   })
 
+  it('defaults omitted badge style to images and saves a plain badge choice', async () => {
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+    expect(vm.editedFindingBadgeStyle.value).toBe('shieldsIo')
+    expect(vm.isPostConfigButtonEnabled()).toBe(false)
+    vm.editedFindingBadgeStyle.value = 'plain'
+    expect(vm.isPostConfigButtonEnabled()).toBe(true)
+    mockPatch.mockResolvedValue({ data: { ...sampleClient, findingBadgeStyle: 'plain' }, response: { ok: true } })
+    await vm.savePostConfiguration()
+    expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', expect.objectContaining({
+      body: expect.objectContaining({ findingBadgeStyle: 'plain' }),
+    }))
+    expect(vm.editedFindingBadgeStyle.value).toBe('plain')
+    expect(vm.isPostConfigButtonEnabled()).toBe(false)
+    mockGet.mockResolvedValueOnce({ data: { ...sampleClient, findingBadgeStyle: 'plain' } })
+    await vm.loadClient()
+    expect(vm.editedFindingBadgeStyle.value).toBe('plain')
+  })
+
   it('sends the whole post configuration, out-of-scope withholding included', async () => {
     mockPatch.mockResolvedValue({
       data: { ...sampleClient, withholdOutOfScopeFindings: true },
@@ -264,6 +283,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', {
       params: { path: { clientId: 'client-1' } },
       body: {
+        findingBadgeStyle: 'shieldsIo',
         minimumSeverityToPost: 'info',
         autoResolveSeverities: [],
         withholdOutOfScopeFindings: true,

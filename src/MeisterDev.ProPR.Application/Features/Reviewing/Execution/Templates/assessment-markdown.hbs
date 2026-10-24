@@ -1,0 +1,9 @@
+{{#if Collapsed}}<details>
+<summary>Assessment details</summary>
+
+{{/if}}| Assessment | Level | Reason |
+| --- | --- | --- |
+{{#each Rows}}| {{Dimension}} | {{Level}} | {{Reason}} |{{#unless @last}}
+{{/unless}}{{/each}}{{#if Collapsed}}
+
+</details>{{/if}}

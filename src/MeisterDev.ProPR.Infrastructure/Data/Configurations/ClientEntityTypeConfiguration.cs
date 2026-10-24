@@ -115,6 +115,12 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasDefaultValue(CommentSeverity.Info)
             .HasSentinel(CommentSeverity.Info);
 
+        builder.Property(c => c.FindingBadgeStyle)
+            .HasColumnName("finding_badge_style")
+            .HasConversion<int>()
+            .HasDefaultValue(FindingBadgeStyle.ShieldsIo)
+            .HasSentinel(FindingBadgeStyle.ShieldsIo);
+
         builder.Property(c => c.AutoResolveSeverities)
             .HasColumnName("auto_resolve_severities")
             .HasConversion(AutoResolveSeveritiesConverter, AutoResolveSeveritiesComparer)

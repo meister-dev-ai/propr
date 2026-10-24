@@ -96,7 +96,10 @@ internal sealed class GitLabPullRequestFetcher(
             existingThreads,
             isDeltaReview ? allChangedFileSummaries : null,
             AuthorizedIdentityName: context.AuthenticatedUsername,
-            Author: ToPullRequestAuthor(host, mergeRequest));
+            Author: ToPullRequestAuthor(host, mergeRequest))
+        {
+            FetchedHeadSha = NormalizeOptional(mergeRequest.DiffRefs?.HeadSha) ?? NormalizeOptional(mergeRequest.Sha),
+        };
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(
@@ -245,7 +248,10 @@ internal sealed class GitLabPullRequestFetcher(
             existingThreads,
             changedFileManifest,
             AuthorizedIdentityName: context.AuthenticatedUsername,
-            Author: ToPullRequestAuthor(host, mergeRequest));
+            Author: ToPullRequestAuthor(host, mergeRequest))
+        {
+            FetchedHeadSha = NormalizeOptional(mergeRequest.DiffRefs?.HeadSha) ?? NormalizeOptional(mergeRequest.Sha),
+        };
     }
 
     /// <summary>

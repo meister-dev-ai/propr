@@ -14,7 +14,8 @@ public sealed record FinalGateDecision
     public const string PublishDisposition = "Publish";
 
     /// <summary>
-    ///     Disposition used when a finding should only affect the summary.
+    ///     Disposition used when a finding is not posted as an inline comment. The published summary lists the
+    ///     finding when the decision carries summary text.
     /// </summary>
     public const string SummaryOnlyDisposition = "SummaryOnly";
 
@@ -32,7 +33,10 @@ public sealed record FinalGateDecision
     /// <param name="ruleSource">Rule set or evaluator that produced the decision.</param>
     /// <param name="blockedInvariantIds">Blocking invariants associated with the decision.</param>
     /// <param name="evidenceSnapshot">Evidence snapshot used while making the decision.</param>
-    /// <param name="summaryText">Optional summary text emitted for summary-only decisions.</param>
+    /// <param name="summaryText">
+    ///     Text that the published summary lists for a summary-only decision. Without it, the review protocol
+    ///     records the decision and the published summary does not list the finding.
+    /// </param>
     /// <param name="publicationNote">
     ///     Optional note appended to the published comment body when the decision publishes. Used by
     ///     finalization checks to annotate an otherwise-unchanged finding (e.g. an unverified ERROR).
@@ -68,18 +72,13 @@ public sealed record FinalGateDecision
             throw new ArgumentException("At least one reason code is required.", nameof(reasonCodes));
         }
 
-        if (string.Equals(disposition, SummaryOnlyDisposition, StringComparison.Ordinal) && string.IsNullOrWhiteSpace(summaryText))
-        {
-            throw new ArgumentException("SummaryOnly decisions require summary text.", nameof(summaryText));
-        }
-
         this.FindingId = findingId;
         this.Disposition = disposition;
         this.ReasonCodes = normalizedReasonCodes;
         this.RuleSource = ruleSource;
         this.BlockedInvariantIds = blockedInvariantIds?.Where(id => !string.IsNullOrWhiteSpace(id)).ToArray() ?? [];
         this.EvidenceSnapshot = evidenceSnapshot;
-        this.SummaryText = string.Equals(disposition, SummaryOnlyDisposition, StringComparison.Ordinal)
+        this.SummaryText = string.Equals(disposition, SummaryOnlyDisposition, StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(summaryText)
             ? summaryText
             : null;
         this.PublicationNote = string.IsNullOrWhiteSpace(publicationNote) ? null : publicationNote;
@@ -116,7 +115,8 @@ public sealed record FinalGateDecision
     public EvidenceReference? EvidenceSnapshot { get; }
 
     /// <summary>
-    ///     Gets the optional summary text emitted for summary-only decisions.
+    ///     Gets the text that the published summary lists for a summary-only decision. <see langword="null" /> for the
+    ///     other dispositions and for a summary-only decision that the review protocol records without listing it.
     /// </summary>
     public string? SummaryText { get; }
 

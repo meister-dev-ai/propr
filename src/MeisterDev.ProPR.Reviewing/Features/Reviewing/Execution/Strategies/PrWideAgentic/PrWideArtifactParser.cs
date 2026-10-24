@@ -3,8 +3,10 @@
 
 using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 
@@ -66,7 +68,7 @@ internal static class PrWideArtifactParser
         string? responseText,
         PrWideInvestigationTask task,
         IReadOnlyList<PrWideToolUsage> toolUsage,
-        out PrWideInvestigationResult? result)
+        out PrWideInvestigationResult? result, FindingTypeVocabulary? vocabulary = null)
     {
         result = null;
         if (string.IsNullOrWhiteSpace(responseText))
@@ -80,7 +82,7 @@ internal static class PrWideArtifactParser
             var root = doc.RootElement;
 
             var evidence = ParseEvidenceItems(root);
-            var candidates = ParseCandidateFindings(root, task);
+            var candidates = ParseCandidateFindings(root, task, vocabulary);
 
             result = new PrWideInvestigationResult(
                 task.Id,
@@ -125,7 +127,7 @@ internal static class PrWideArtifactParser
         return evidence;
     }
 
-    private static List<PrWideCandidateFinding> ParseCandidateFindings(JsonElement root, PrWideInvestigationTask task)
+    private static List<PrWideCandidateFinding> ParseCandidateFindings(JsonElement root, PrWideInvestigationTask task, FindingTypeVocabulary? vocabulary)
     {
         var candidates = new List<PrWideCandidateFinding>();
         if (!root.TryGetProperty("candidate_findings", out var candidatesEl) || candidatesEl.ValueKind != JsonValueKind.Array)
@@ -153,7 +155,13 @@ internal static class PrWideArtifactParser
                     new EvidenceReference(
                         [], supportingFiles, supportingFiles.Count >= 2 ? EvidenceReference.ResolvedState : EvidenceReference.PartialState,
                         "pr_wide_investigation"),
-                    supportingFiles.Count > 0 ? supportingFiles : task.SeedFilePaths));
+                    supportingFiles.Count > 0 ? supportingFiles : task.SeedFilePaths,
+                    ParseSeverity(item), GetString(item, "file_path"), GetInt(item, "line_number"))
+                {
+                    RiskAssessment = FindingRiskAssessmentParser.ParseFinding(item),
+                    FindingClassification = FindingTypeClassificationParser.ParseFinding(item, vocabulary),
+                    SuggestedFix = ReviewSuggestedFixValidator.Parse(item)
+                });
         }
 
         return candidates;
@@ -161,9 +169,9 @@ internal static class PrWideArtifactParser
 
     internal static bool TryParseSynthesizedCandidates(
         string? responseText,
-        out IReadOnlyList<PrWideCandidateFinding> findings)
+        out IReadOnlyList<PrWideCandidateFinding> findings, FindingTypeVocabulary? vocabulary = null)
     {
-        if (TryParseSynthesisResult(responseText, out var synthesis) && synthesis is not null)
+        if (TryParseSynthesisResult(responseText, out var synthesis, vocabulary) && synthesis is not null)
         {
             findings = synthesis.CandidateFindings;
             return true;
@@ -175,7 +183,7 @@ internal static class PrWideArtifactParser
 
     internal static bool TryParseSynthesisResult(
         string? responseText,
-        out PrWideSynthesisResult? synthesis)
+        out PrWideSynthesisResult? synthesis, FindingTypeVocabulary? vocabulary = null)
     {
         synthesis = null;
         if (string.IsNullOrWhiteSpace(responseText))
@@ -225,12 +233,22 @@ internal static class PrWideArtifactParser
                         ParseSeverity(item),
                         GetString(item, "file_path") ?? GetString(item, "anchor_file_path"),
                         GetInt(item, "line_number") ?? GetInt(item, "anchor_line_number"),
-                        GetString(item, "candidate_summary_text")));
+                        GetString(item, "candidate_summary_text"))
+                    {
+                        RiskAssessment = FindingRiskAssessmentParser.ParseFinding(item),
+                        FindingClassification = FindingTypeClassificationParser.ParseFinding(item, vocabulary),
+                        SuggestedFix = ReviewSuggestedFixValidator.Parse(item)
+                    });
             }
 
             synthesis = new PrWideSynthesisResult(
                 GetString(root, "summary") ?? BuildFallbackSummary(results),
-                results);
+                results)
+            {
+                FindingChallenges = SynthesisResponseParser.ParseChallenges(responseText),
+                SummaryFindingIds = GetStringArray(root, "summary_finding_ids").Where(id => id.Length <= 256).Distinct(StringComparer.Ordinal).Take(256)
+                    .ToList(),
+            };
             return true;
         }
         catch (JsonException)

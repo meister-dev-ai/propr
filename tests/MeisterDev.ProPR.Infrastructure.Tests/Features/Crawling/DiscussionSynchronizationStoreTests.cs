@@ -33,6 +33,171 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Crawling;
 public sealed class DiscussionSynchronizationStoreTests(PostgresContainerFixture postgres)
 {
     [SkippableFact]
+    public async Task ProgressCheckpointRetainsOwnershipAndDoesNotAdvanceFreshness()
+    {
+        postgres.SkipIfUnavailable();
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(1));
+        var store = new DiscussionSynchronizationStore(this.Factory(), LocalScmPolicies.Registry, clock);
+        var target = Target();
+        await using var lease = await store.TryAcquireAsync(target, "revision", true, Interval);
+        Assert.NotNull(lease);
+        var before = (await store.ReadAsync(target))!;
+        await lease.CheckpointProgressAsync("{\"7\":{\"SourceFingerprint\":\"digest\",\"Consumers\":{\"memory\":\"ack\"}}}");
+        var after = (await store.ReadAsync(target))!;
+        Assert.Equal("ack", after.ReadProgress()["7"].Consumers["memory"]);
+        Assert.Equal(before.LeaseToken, after.LeaseToken);
+        Assert.Equal(before.ObservationSequence, after.ObservationSequence);
+        Assert.Equal(before.RequestedGeneration, after.RequestedGeneration);
+        Assert.Equal(before.CompletedGeneration, after.CompletedGeneration);
+        Assert.Equal(before.LastObservedAt, after.LastObservedAt);
+        Assert.Equal(before.LastFullReconciledAt, after.LastFullReconciledAt);
+        Assert.Equal(before.LastReviewRevision, after.LastReviewRevision);
+        Assert.False(lease.CompletionIsCurrent);
+        Assert.False(await store.IsCurrentObservationAsync(target, lease.ObservedAt));
+        Assert.Null(await store.TryAcquireAsync(target, "revision", true, Interval));
+        await lease.EnsureCurrentAsync();
+        await lease.CompleteAsync(after.ThreadProgressJson, "[]", lease.ObservedAt, true, true, false, "revision", Interval);
+    }
+
+    [SkippableTheory]
+    [InlineData("expired")]
+    [InlineData("lease")]
+    [InlineData("fence")]
+    [InlineData("collection")]
+    [InlineData("retention")]
+    public async Task ProgressCheckpointRejectsLostOwnershipAndChangedPolicies(string change)
+    {
+        postgres.SkipIfUnavailable();
+        var factory = this.Factory();
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(1));
+        var store = new DiscussionSynchronizationStore(factory, LocalScmPolicies.Registry, clock);
+        var target = Target();
+        await using var lease = await store.TryAcquireAsync(target, null, true, Interval);
+        Assert.NotNull(lease);
+        await using var changed = await factory.CreateDbContextAsync();
+        var state = changed.DiscussionSynchronizationStates.Where(row => row.Id == lease.State.Id);
+        switch (change)
+        {
+            case "expired": clock.Advance(TimeSpan.FromMinutes(3)); break;
+            case "lease": await state.ExecuteUpdateAsync(set => set.SetProperty(row => row.LeaseToken, Guid.NewGuid())); break;
+            case "fence":
+                await changed.DiscussionObservationFences.Where(row => row.OwnerStateId == lease.State.Id)
+                    .ExecuteUpdateAsync(set => set.SetProperty(row => row.Token, Guid.NewGuid()));
+                break;
+            case "collection":
+                await state.ExecuteUpdateAsync(set => set.SetProperty(row => row.CollectionGeneration, row => row.CollectionGeneration + 1)); break;
+            case "retention": await state.ExecuteUpdateAsync(set => set.SetProperty(row => row.RetentionGeneration, row => row.RetentionGeneration + 1)); break;
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => lease.CheckpointProgressAsync("{\"changed\":{}}"));
+        Assert.Equal("{}", (await store.ReadAsync(target))!.ThreadProgressJson);
+    }
+
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProgressCheckpointSurvivesRestartAndPreservesANewerNotification(bool completeBeforeRestart)
+    {
+        postgres.SkipIfUnavailable();
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(1));
+        var factory = this.Factory();
+        var store = new DiscussionSynchronizationStore(factory, LocalScmPolicies.Registry, clock);
+        var target = Target();
+        long generation;
+        await using (var lease = await store.TryAcquireAsync(target, "revision", true, Interval))
+        {
+            Assert.NotNull(lease);
+            generation = lease.State.RequestedGeneration;
+            await store.RequestAsync(target, "8");
+            await lease.CheckpointProgressAsync("{\"7\":{\"Consumers\":{\"memory\":\"ack\",\"miss\":\"ack\"}}}");
+            if (completeBeforeRestart)
+            {
+                await lease.CompleteAsync(
+                    "{\"7\":{\"Consumers\":{\"memory\":\"ack\",\"miss\":\"ack\"}}}", "[]", lease.ObservedAt,
+                    true, true, false, "revision", Interval);
+            }
+        }
+
+        clock.Advance(TimeSpan.FromSeconds(16));
+        var restarted = new DiscussionSynchronizationStore(factory, LocalScmPolicies.Registry, clock);
+        await using (var retry = await restarted.TryAcquireAsync(target, "revision", false, Interval))
+        {
+            Assert.NotNull(retry);
+            Assert.Equal("ack", retry.State.ReadProgress()["7"].Consumers["memory"]);
+            Assert.Equal(generation + 1, retry.State.RequestedGeneration);
+            Assert.Equal(completeBeforeRestart, retry.State.CompletedGeneration == generation);
+            Assert.True(retry.State.FullRefreshRequested);
+        }
+
+        clock.Advance(TimeSpan.FromSeconds(16));
+        await using var secondRetry = await restarted.TryAcquireAsync(target, "revision", false, Interval);
+        Assert.NotNull(secondRetry);
+        Assert.Equal("ack", secondRetry.State.ReadProgress()["7"].Consumers["memory"]);
+        Assert.DoesNotContain("miss", secondRetry.State.ReadProgress()["7"].Consumers.Keys);
+    }
+
+    [SkippableFact]
+    public async Task InterruptedForcedCatchUpRemainsDueWithoutAdvancingFreshness()
+    {
+        postgres.SkipIfUnavailable();
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(1));
+        var store = new DiscussionSynchronizationStore(this.Factory(), LocalScmPolicies.Registry, clock);
+        var target = Target();
+        await using (var first = await store.TryAcquireAsync(target, "revision", true, Interval))
+        {
+            Assert.NotNull(first);
+            await first.CompleteAsync("{}", "[]", first.ObservedAt, true, true, false, "revision", Interval);
+        }
+
+        var previous = (await store.ReadAsync(target))!;
+        await using (var interrupted = await store.TryAcquireAsync(target, "revision", true, Interval))
+        {
+            Assert.NotNull(interrupted);
+        }
+
+        clock.Advance(TimeSpan.FromSeconds(16));
+        Assert.Contains(await store.ListDueAsync(Interval, 128), item => item.Id == previous.Id);
+        var current = (await store.ReadAsync(target))!;
+        Assert.Equal(previous.LastFullReconciledAt, current.LastFullReconciledAt);
+        Assert.Equal(previous.CompletedGeneration, current.CompletedGeneration);
+        await using var retry = await store.TryAcquireAsync(target, "revision", false, Interval);
+        Assert.NotNull(retry);
+    }
+
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InterruptedFenceDoesNotTrustUncheckpointedOrOtherConnectionProgress(bool otherConnection)
+    {
+        postgres.SkipIfUnavailable();
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(1));
+        var store = new DiscussionSynchronizationStore(this.Factory(), LocalScmPolicies.Registry, clock);
+        var target = Target();
+        await using (var first = await store.TryAcquireAsync(target, "revision", true, Interval))
+        {
+            Assert.NotNull(first);
+            await first.CompleteAsync(
+                "{\"7\":{\"Consumers\":{\"memory\":\"ack\",\"miss\":\"ack\"}}}", "[]", first.ObservedAt,
+                true, true, false, "revision", Interval);
+        }
+
+        await using (var interrupted = await store.TryAcquireAsync(
+                         otherConnection ? target with { ConnectionId = Guid.NewGuid() } : target, "revision", true, Interval))
+        {
+            Assert.NotNull(interrupted);
+            if (otherConnection)
+            {
+                await interrupted.CheckpointProgressAsync("{\"7\":{\"Consumers\":{\"memory\":\"other-ack\"}}}");
+            }
+        }
+
+        clock.Advance(TimeSpan.FromSeconds(16));
+        await using var retry = await store.TryAcquireAsync(target, "revision", true, Interval);
+        Assert.NotNull(retry);
+        Assert.Empty(retry.State.ReadProgress()["7"].Consumers);
+    }
+
+    [SkippableFact]
     public async Task RetainedReplayUsesItsConfiguredLeaseWithoutChangingNormalDiscussionDefaults()
     {
         postgres.SkipIfUnavailable();

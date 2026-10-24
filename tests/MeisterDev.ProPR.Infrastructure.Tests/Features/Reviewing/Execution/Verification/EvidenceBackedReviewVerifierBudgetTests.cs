@@ -148,9 +148,11 @@ public sealed partial class EvidenceBackedReviewVerifierTests
 
         var run = await RunBudgetResponsesAsync(responses.ToArray());
 
+        // The first six calls belong to the judge. A confirmation after its last lookup adds the independent check.
         Assert.Equal(FinalGateDecision.PublishDisposition, run.Outcome.RecommendedDisposition);
-        Assert.Equal([4000, 4000, 4000, 4000, 4000, 8000], run.Options.Select(option => option.MaxOutputTokens));
-        Assert.All(run.Options.Skip(4), option => Assert.IsType<NoneChatToolMode>(option.ToolMode));
+        Assert.Equal([4000, 4000, 4000, 4000, 4000, 8000], run.Options.Take(6).Select(option => option.MaxOutputTokens));
+        Assert.All(run.Options.Skip(4).Take(2), option => Assert.IsType<NoneChatToolMode>(option.ToolMode));
+        Assert.Equal(7, run.Options.Count);
         await run.Tools.Received(4).GetFileContentAsync("src/Other.cs", "source", 1, 5, Arg.Any<CancellationToken>());
     }
 

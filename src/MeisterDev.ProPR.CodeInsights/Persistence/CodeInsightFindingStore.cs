@@ -8,6 +8,8 @@ using MeisterDev.ProPR.CodeInsights.Ports;
 using MeisterDev.ProPR.CodeInsights.Survival;
 using MeisterDev.ProPR.CodeInsights.Taxonomy;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using static MeisterDev.ProPR.CodeInsights.Persistence.CodeInsightProviderScopeLookup;
@@ -52,7 +54,7 @@ public sealed class CodeInsightFindingStore(
             async db =>
             {
                 // Served off ix_code_insight_findings_job_id. Only the columns the view needs are projected,
-                // the encrypted message is deliberately not among them, so this read never decrypts anything.
+                // The finding message is omitted; assessment evidence is decrypted for the finding display.
                 var findings = await db.CodeInsightFindings
                     .Where(finding => finding.JobId == jobId)
                     .OrderBy(finding => finding.Ordinal)
@@ -65,6 +67,7 @@ public sealed class CodeInsightFindingStore(
                         finding.ClassifiedAt,
                         finding.ClassificationAttempts,
                         finding.ClassificationConfidence,
+                        finding.EncryptedRiskAssessment,
                     })
                     .ToListAsync(ct);
 
@@ -111,7 +114,8 @@ public sealed class CodeInsightFindingStore(
                                 .ToList(),
                             finding.Level,
                             finding.Qualifier,
-                            finding.ClassificationConfidence);
+                            finding.ClassificationConfidence,
+                            CodeInsightRiskAssessmentProtection.Read(finding.EncryptedRiskAssessment, secretProtectionCodec));
                     })
                     .ToList();
             },
@@ -208,12 +212,26 @@ public sealed class CodeInsightFindingStore(
                     return;
                 }
 
+                await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(ct) : null;
+                var aggregate = await db.CodeInsightPullRequests.AsNoTracking()
+                    .SingleAsync(row => row.Id == finding.CodeInsightPullRequestId, ct);
+                await CodeInsightAggregateWriteLock.AcquireAsync(
+                    db,
+                    new CodeInsightPullRequestKey(aggregate.ClientId, aggregate.RepositoryId, aggregate.PullRequestId), ct);
+                await db.Entry(finding).ReloadAsync(ct);
+
                 // Replace rather than add. A retry that partly succeeded, or a re-classification after a prompt
                 // change, must not leave the finding carrying one type twice, every count it feeds would be
                 // inflated and no constraint would catch it.
                 var existingTags = await db.CodeInsightFindingTags
                     .Where(tag => tag.CodeInsightFindingId == findingId)
                     .ToListAsync(ct);
+                // A fallback call can finish after the review supplied its original classification.
+                if (existingTags.Any(tag => tag.ClassifierVersion == FindingTypeClassification.ReviewSource))
+                {
+                    return;
+                }
+
                 db.CodeInsightFindingTags.RemoveRange(existingTags);
 
                 var now = DateTimeOffset.UtcNow;
@@ -233,7 +251,10 @@ public sealed class CodeInsightFindingStore(
                         });
                 }
 
-                foreach (var customTagId in classification.CustomTagIds.Distinct())
+                var requestedIds = classification.CustomTagIds.Distinct().ToList();
+                var ownedIds = await db.CodeInsightCustomTags.Where(tag => tag.ClientId == aggregate.ClientId && requestedIds.Contains(tag.Id))
+                    .Select(tag => tag.Id).ToListAsync(ct);
+                foreach (var customTagId in ownedIds)
                 {
                     db.CodeInsightFindingTags.Add(
                         new CodeInsightFindingTag
@@ -255,6 +276,10 @@ public sealed class CodeInsightFindingStore(
                 finding.ClassificationAttempts += 1;
 
                 await db.SaveChangesAsync(ct);
+                if (transaction is not null)
+                {
+                    await transaction.CommitAsync(ct);
+                }
             },
             ct);
     }
@@ -264,9 +289,17 @@ public sealed class CodeInsightFindingStore(
         return this.WithDbAsync(
             async db =>
             {
+                if (db.Database.IsRelational())
+                {
+                    await db.CodeInsightFindings.Where(finding => finding.Id == findingId && finding.ClassifiedAt == null)
+                        .ExecuteUpdateAsync(
+                            update => update.SetProperty(finding => finding.ClassificationAttempts, finding => finding.ClassificationAttempts + 1), ct);
+                    return;
+                }
+
                 var finding = await db.CodeInsightFindings
                     .FirstOrDefaultAsync(candidate => candidate.Id == findingId, ct);
-                if (finding is null)
+                if (finding is null || finding.ClassifiedAt is not null)
                 {
                     return;
                 }
@@ -381,6 +414,60 @@ public sealed class CodeInsightFindingStore(
             ct);
     }
 
+    private static bool CompatibleEvidence(FindingRiskAssessment recorded, FindingRiskAssessment incoming) =>
+        recorded.Source is not null && recorded.RubricVersion == FindingRiskAssessment.CurrentRubricVersion
+                                    && (incoming.Impact == FindingImpact.Unknown || recorded.Impact == FindingImpact.Unknown ||
+                                        incoming.Impact == recorded.Impact)
+                                    && (incoming.Likelihood == FindingLikelihood.Unknown || recorded.Likelihood == FindingLikelihood.Unknown ||
+                                        incoming.Likelihood == recorded.Likelihood)
+                                    && (incoming.ImpactReason is null || recorded.ImpactReason is null || incoming.ImpactReason == recorded.ImpactReason)
+                                    && (incoming.LikelihoodReason is null || recorded.LikelihoodReason is null ||
+                                        incoming.LikelihoodReason == recorded.LikelihoodReason);
+
+    private static void ApplyProducedClassification(
+        MeisterProPRDbContext db, CodeInsightFinding finding, FindingTypeClassification? classification,
+        IEnumerable<CodeInsightFindingTag> existingTags, IReadOnlySet<Guid> ownedCustomIds, DateTimeOffset now)
+    {
+        if (classification is not { HasSupportedTypes: true })
+        {
+            return;
+        }
+
+        if (existingTags.Any(tag => tag.ClassifierVersion == FindingTypeClassification.ReviewSource))
+        {
+            return;
+        }
+
+        db.CodeInsightFindingTags.RemoveRange(existingTags);
+        foreach (var slug in classification.CoreSlugs.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            db.CodeInsightFindingTags.Add(
+                new CodeInsightFindingTag
+                {
+                    Id = Guid.CreateVersion7(), CodeInsightFindingId = finding.Id, IsCore = true,
+                    CoreSlug = FindingTypeTaxonomy.Find(slug)!.Slug, TaxonomyVersion = classification.TaxonomyVersion,
+                    ClassifierVersion = FindingTypeClassification.ReviewSource, AssignedAt = now,
+                });
+        }
+
+        foreach (var id in classification.CustomTags.Select(tag => tag.Id).Distinct().Where(ownedCustomIds.Contains))
+        {
+            db.CodeInsightFindingTags.Add(
+                new CodeInsightFindingTag
+                {
+                    Id = Guid.CreateVersion7(), CodeInsightFindingId = finding.Id, IsCore = false,
+                    CustomTagId = id, TaxonomyVersion = classification.TaxonomyVersion,
+                    ClassifierVersion = FindingTypeClassification.ReviewSource, AssignedAt = now,
+                });
+        }
+
+        finding.Level = classification.Level;
+        finding.Qualifier = classification.Qualifier;
+        finding.ClassificationConfidence = classification.Confidence;
+        finding.ClassifiedAt = now;
+        finding.PerformanceEvidenceUpdatedAt = now;
+    }
+
     public Task<int> MaterialiseFindingsAsync(
         CodeInsightPullRequestKey key,
         Guid jobId,
@@ -401,6 +488,8 @@ public sealed class CodeInsightFindingStore(
         return this.WithDbAsync(
             async db =>
             {
+                await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(ct) : null;
+                await CodeInsightAggregateWriteLock.AcquireAsync(db, key, ct);
                 var pullRequest = await GetOrCreatePullRequestAsync(db, key, null, observedAt, ct);
 
                 // Load the increment's already-materialized records once and match on the natural key, so a
@@ -412,6 +501,35 @@ public sealed class CodeInsightFindingStore(
                                         && candidate.RevisionKey == revisionKey)
                     .ToDictionaryAsync(candidate => candidate.Ordinal, ct);
 
+                var prepared = findings.Select(finding =>
+                {
+                    var current = existing.GetValueOrDefault(finding.Ordinal);
+                    return new
+                    {
+                        Snapshot = finding,
+                        Current = current,
+                        SameClaim = current is not null && current.FilePath == finding.FilePath && current.LineNumber == finding.LineNumber
+                                    && secretProtectionCodec.Unprotect(current.EncryptedMessage, FindingMessagePurpose) == finding.Message,
+                        Classification = FindingTypeClassification.Merge([finding.FindingClassification]),
+                    };
+                }).ToArray();
+                var candidateIds = prepared.Where(item => item.SameClaim && item.Classification is { HasSupportedTypes: true })
+                    .Select(item => item.Current!.Id).Distinct().ToArray();
+                var assignments = candidateIds.Length == 0
+                    ? []
+                    : await db.CodeInsightFindingTags.Where(tag => candidateIds.Contains(tag.CodeInsightFindingId)).ToListAsync(ct);
+                var assignmentsByFinding = assignments.ToLookup(tag => tag.CodeInsightFindingId);
+                var customIds = prepared.Where(item => item.Classification is { HasSupportedTypes: true }
+                                                       && (item.Current is null || item.SameClaim)
+                                                       && (item.Current is null || !assignmentsByFinding[item.Current.Id]
+                                                           .Any(tag => tag.ClassifierVersion == FindingTypeClassification.ReviewSource)))
+                    .SelectMany(item => item.Classification!.CustomTags).Select(tag => tag.Id).Distinct().ToArray();
+                // Captured tags may have retired; collection still requires ownership by this client.
+                IReadOnlySet<Guid> ownedCustomIds = customIds.Length == 0
+                    ? new HashSet<Guid>()
+                    : await db.CodeInsightCustomTags.Where(tag => tag.ClientId == key.ClientId && customIds.Contains(tag.Id))
+                        .Select(tag => tag.Id).ToHashSetAsync(ct);
+
                 // The previous increment's findings, with the chain each belongs to. A finding that restates one
                 // of them continues its chain; anything else starts a new one. This is what turns per-increment
                 // rows into an answer to "was it still being raised when the pull request finished".
@@ -421,12 +539,42 @@ public sealed class CodeInsightFindingStore(
                 var now = DateTimeOffset.UtcNow;
                 var created = 0;
 
-                foreach (var finding in findings)
+                foreach (var item in prepared)
                 {
+                    var finding = item.Snapshot;
                     var encryptedMessage = secretProtectionCodec.Protect(finding.Message, FindingMessagePurpose);
 
-                    if (existing.TryGetValue(finding.Ordinal, out var current))
+                    if (item.Current is { } current)
                     {
+                        if (item.SameClaim && current.EncryptedRiskAssessment is null && finding.RiskAssessment is { } risk)
+                        {
+                            current.EncryptedRiskAssessment = CodeInsightRiskAssessmentProtection.Protect(risk, secretProtectionCodec);
+                            current.Impact = risk.Impact;
+                            current.Likelihood = risk.Likelihood;
+                            current.RiskSeverity = risk.Severity;
+                            current.Confidence = risk.Confidence;
+                            current.RiskRubricVersion = risk.RubricVersion ?? string.Empty;
+                            current.PerformanceEvidenceUpdatedAt = now;
+                        }
+                        else if (item.SameClaim && current.Confidence == FindingConfidence.Unknown && finding.RiskAssessment is
+                                     { Confidence: not FindingConfidence.Unknown } incoming
+                                 && CodeInsightRiskAssessmentProtection.Read(current.EncryptedRiskAssessment, secretProtectionCodec) is
+                                     { Confidence: FindingConfidence.Unknown } recorded
+                                 && CompatibleEvidence(recorded, incoming))
+                        {
+                            var enriched = new FindingRiskAssessment(
+                                recorded.Impact, recorded.Likelihood, recorded.ImpactReason, recorded.LikelihoodReason,
+                                recorded.Source, recorded.RubricVersion, incoming.Confidence, incoming.ConfidenceReason, incoming.ConfidenceSource);
+                            current.EncryptedRiskAssessment = CodeInsightRiskAssessmentProtection.Protect(enriched, secretProtectionCodec);
+                            current.Confidence = enriched.Confidence;
+                            current.PerformanceEvidenceUpdatedAt = now;
+                        }
+
+                        if (item.SameClaim)
+                        {
+                            ApplyProducedClassification(db, current, item.Classification, assignmentsByFinding[current.Id], ownedCustomIds, now);
+                        }
+
                         CodeInsightFindingPublicationUpdater.Apply(db, current, finding, now);
                         continue;
                     }
@@ -442,44 +590,51 @@ public sealed class CodeInsightFindingStore(
                         continuedChains.Add(continuedChain.Value);
                     }
 
-                    db.CodeInsightFindings.Add(
-                        new CodeInsightFinding
-                        {
-                            Id = Guid.CreateVersion7(),
-                            CodeInsightPullRequestId = pullRequest.Id,
-                            JobId = jobId,
-                            RevisionKey = revisionKey,
-                            FindingChainId = continuedChain ?? Guid.CreateVersion7(),
-                            Ordinal = finding.Ordinal,
-                            FilePath = finding.FilePath,
-                            LineNumber = finding.LineNumber,
-                            Severity = finding.Severity,
-                            EncryptedMessage = encryptedMessage,
-                            OriginPassKind = finding.OriginPassKind,
-                            OriginPassIndex = finding.OriginPassIndex,
-                            OriginPassLens = finding.OriginPassLens,
-                            OriginPassShadow = finding.OriginPassShadow,
-                            OriginModelId = finding.OriginModelId,
-                            OriginLogicalModelName = finding.OriginLogicalModelName,
-                            OriginSymbolName = finding.OriginSymbolName,
-                            OriginSymbolKind = finding.OriginSymbolKind,
-                            ScopeRelation = finding.ScopeRelation,
-                            SourceReadGrounding = finding.SourceReadGrounding,
-                            ProviderThreadId = finding.ProviderThreadId,
-                            ProviderCommentId = finding.ProviderCommentId,
-                            ProviderScope = finding.ProviderScope,
-                            PerformanceEvidenceUpdatedAt = now,
-                            PublicationState = finding.PublicationState,
-                            PublicationReason = finding.PublicationReason,
-                            MatchedProviderThreadId = finding.MatchedProviderThreadId,
-                            DuplicateState = finding.DuplicateState,
-                            DuplicateOfPublicationId = finding.DuplicateOfPublicationId,
-                            DuplicateVerificationSource = finding.DuplicateVerificationSource,
-                            DuplicateVerificationConfidence = finding.DuplicateVerificationConfidence,
-                            DuplicateVerifiedAt = finding.DuplicateVerifiedAt,
-                            ObservedAt = observedAt,
-                            CreatedAt = now,
-                        });
+                    var createdFinding = new CodeInsightFinding
+                    {
+                        Id = Guid.CreateVersion7(),
+                        CodeInsightPullRequestId = pullRequest.Id,
+                        JobId = jobId,
+                        RevisionKey = revisionKey,
+                        FindingChainId = continuedChain ?? Guid.CreateVersion7(),
+                        Ordinal = finding.Ordinal,
+                        FilePath = finding.FilePath,
+                        LineNumber = finding.LineNumber,
+                        Severity = finding.Severity,
+                        EncryptedMessage = encryptedMessage,
+                        Impact = finding.RiskAssessment?.Impact ?? FindingImpact.Unknown,
+                        Likelihood = finding.RiskAssessment?.Likelihood ?? FindingLikelihood.Unknown,
+                        RiskSeverity = finding.RiskAssessment?.Severity ?? FindingRiskSeverity.Unknown,
+                        Confidence = finding.RiskAssessment?.Confidence ?? FindingConfidence.Unknown,
+                        RiskRubricVersion = finding.RiskAssessment?.RubricVersion ?? string.Empty,
+                        EncryptedRiskAssessment = CodeInsightRiskAssessmentProtection.Protect(finding.RiskAssessment, secretProtectionCodec),
+                        OriginPassKind = finding.OriginPassKind,
+                        OriginPassIndex = finding.OriginPassIndex,
+                        OriginPassLens = finding.OriginPassLens,
+                        OriginPassShadow = finding.OriginPassShadow,
+                        OriginModelId = finding.OriginModelId,
+                        OriginLogicalModelName = finding.OriginLogicalModelName,
+                        OriginSymbolName = finding.OriginSymbolName,
+                        OriginSymbolKind = finding.OriginSymbolKind,
+                        ScopeRelation = finding.ScopeRelation,
+                        SourceReadGrounding = finding.SourceReadGrounding,
+                        ProviderThreadId = finding.ProviderThreadId,
+                        ProviderCommentId = finding.ProviderCommentId,
+                        ProviderScope = finding.ProviderScope,
+                        PerformanceEvidenceUpdatedAt = now,
+                        PublicationState = finding.PublicationState,
+                        PublicationReason = finding.PublicationReason,
+                        MatchedProviderThreadId = finding.MatchedProviderThreadId,
+                        DuplicateState = finding.DuplicateState,
+                        DuplicateOfPublicationId = finding.DuplicateOfPublicationId,
+                        DuplicateVerificationSource = finding.DuplicateVerificationSource,
+                        DuplicateVerificationConfidence = finding.DuplicateVerificationConfidence,
+                        DuplicateVerifiedAt = finding.DuplicateVerifiedAt,
+                        ObservedAt = observedAt,
+                        CreatedAt = now,
+                    };
+                    db.CodeInsightFindings.Add(createdFinding);
+                    ApplyProducedClassification(db, createdFinding, item.Classification, [], ownedCustomIds, now);
                     created++;
                 }
 
@@ -492,9 +647,30 @@ public sealed class CodeInsightFindingStore(
                 pullRequest.LatestRevisionKey = await ResolveLatestRevisionKeyAsync(db, pullRequest.Id, ct);
                 await db.SaveChangesAsync(ct);
 
+                if (transaction is not null)
+                {
+                    await transaction.CommitAsync(ct);
+                }
+
                 return created;
             },
             ct);
+    }
+
+    public Task<IReadOnlyList<Guid>> GetFindingJobIdsForRevisionAsync(CodeInsightPullRequestKey key, string revisionKey, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(revisionKey);
+        return this.WithDbAsync<IReadOnlyList<Guid>>(
+            async db =>
+            {
+                var pullRequestId = await FindPullRequestIdAsync(db, key, ct);
+                return pullRequestId is null
+                    ? []
+                    : await db.CodeInsightFindings.AsNoTracking()
+                        .Where(finding => finding.CodeInsightPullRequestId == pullRequestId.Value && finding.RevisionKey == revisionKey)
+                        .Select(finding => finding.JobId).Distinct().ToListAsync(ct);
+            }, ct);
     }
 
     public Task<IReadOnlyList<CodeInsightFindingView>> GetFindingsForPullRequestAsync(
@@ -867,7 +1043,8 @@ public sealed class CodeInsightFindingStore(
             record.ProviderThreadId,
             record.ObservedAt,
             record.NativeStatus, record.CurrentCodeChange, record.CurrentClassifierVersion, record.CurrentClassifierConfidence, record.OutcomeJudgementAttempts,
-            record.ProviderScope, record.OutcomeSourceFingerprint, record.ProviderCommentId, record.CreatedAt);
+            record.ProviderScope, record.OutcomeSourceFingerprint, record.ProviderCommentId, record.CreatedAt,
+            CodeInsightRiskAssessmentProtection.Read(record.EncryptedRiskAssessment, secretProtectionCodec));
     }
 
     private async Task WithDbAsync(Func<MeisterProPRDbContext, Task> operation, CancellationToken ct)

@@ -14,11 +14,17 @@ Do not call any tools.
 Respond with a single raw JSON object ONLY — no markdown fences, no prose before or after.
 The very first character must be '{' and the very last character must be '}'.
 Also list, in "summary_finding_ids", the ids of the supplied findings your narrative describes. It is how the pipeline knows which findings the narrative stands on, so a finding that is later ruled out can be removed from it. List an id only if the narrative actually describes that finding.
-Schema: { "summary": "<overall narrative>", "summary_finding_ids": ["<finding-id>"], "cross_cutting_concerns": [{ "message": "<concern>", "severity": "<info|warning|error|suggestion>", "category": "<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>", "candidateSummaryText": "<summary-only wording>", "supportingFindingIds": ["<finding-id>"], "supportingFiles": ["<path>"], "evidenceResolutionState": "<resolved|missing|partial>", "evidenceSource": "<synthesis_payload>" }] }
+If supplied source evidence contradicts a retained finding or its explanation is internally inconsistent, request reconsideration in "finding_challenges": [{"finding_id":"<exact retained ID>","reason":"<specific doubt>","counterevidence":"<source evidence or inconsistency to check>"}]. Do not limit the doubt to narrative prose. Include at most 16 challenges, once per ID, with reason and counterevidence each at most 1024 characters. Never invent IDs or treat model agreement or supplied Certain confidence as proof. Keep each claim no stronger than its source finding.
+Schema: { "summary": "<overall narrative>", "summary_finding_ids": ["<finding-id>"], "finding_challenges": [{"finding_id":"<retained finding-id>","reason":"<specific doubt>","counterevidence":"<source evidence or inconsistency>"}], "cross_cutting_concerns": [{ "message": "<concern>", "severity": "<info|warning|error|suggestion>", "category": "<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>", "candidateSummaryText": "<summary-only wording>", "supportingFindingIds": ["<finding-id>"], "supportingFiles": ["<path>"], "evidenceResolutionState": "<resolved|missing|partial>", "evidenceSource": "<synthesis_payload>" }] }
+
+{{> finding-risk-assessment}}
 {{else}}
 Your task: write a single cohesive narrative summary for the overall pull request.
 Focus on the most important findings across all files.
 Do not invent new findings that are not mentioned in the per-file summaries.
 Do not call any tools.
+Preserve any supplied impact, occurrence likelihood and correctness confidence evidence. Do not infer missing assessment values.
 Respond with plain text only — no JSON, no markdown fences, no bullet lists unless they aid clarity.
 {{/if}}
+
+{{> synthesis-claim-strength}}

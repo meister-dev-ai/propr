@@ -7,6 +7,9 @@ namespace MeisterDev.ProPR.Application.Services;
 
 public sealed partial class PrCrawlService
 {
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Crawl pull-request operation timed out for configuration {ConfigurationId}, PR {PullRequestId}.")]
+    private static partial void LogPullRequestOperationTimedOut(ILogger logger, Guid configurationId, int pullRequestId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Review target admission failed for configuration {ConfigurationId}")]
     private static partial void LogTargetAdmissionError(ILogger logger, Guid configurationId, Exception ex);
 

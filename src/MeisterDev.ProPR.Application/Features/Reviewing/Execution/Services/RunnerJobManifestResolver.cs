@@ -49,7 +49,8 @@ public sealed partial class RunnerJobManifestResolver(
     IReviewJobExecutionStore? executionStore = null,
     ITenantReasoningCapturePolicyProvider? reasoningCapturePolicies = null,
     IReviewFileResultStore? resultStore = null,
-    IClientScmConnectionRepository? scmConnections = null) : IRunnerJobManifestResolver
+    IClientScmConnectionRepository? scmConnections = null,
+    MeisterDev.ProPR.CodeInsights.Contracts.IFindingTypeVocabularyProvider? findingTypeVocabularyProvider = null) : IRunnerJobManifestResolver
 {
     /// <inheritdoc />
     public async Task<RunnerJobManifestResolution> ResolveAsync(
@@ -136,6 +137,7 @@ public sealed partial class RunnerJobManifestResolver(
                 : [];
 
             var overrides = await this.ResolvePromptOverridesAsync(job.ClientId, ct);
+            var findingVocabulary = await FindingTypeVocabularyLoader.LoadAsync(findingTypeVocabularyProvider, job.ClientId, logger, ct);
             var headroom = await this.ResolveBudgetHeadroomAsync(job, ct);
 
             // Read once and used twice: the flag is carried in the manifest for the executor's tool gating, and it
@@ -185,7 +187,9 @@ public sealed partial class RunnerJobManifestResolver(
                     // The baseline reasoning effort is what an unlisted pass runs at, and the custom system
                     // message is prompt configuration too: both belong to the prompt, not the model binding.
                     baselineEffort.ToString(),
-                    MergeSystemMessage(overrides, customSystemMessage)),
+                    MergeSystemMessage(overrides, customSystemMessage), new RunnerFindingTypeVocabulary(
+                        findingVocabulary.Version, findingVocabulary.CustomTypes
+                            .Select(tag => new RunnerFindingCustomTypeDefinition(tag.Id, tag.Slug, tag.DisplayName, tag.Definition)).ToList())),
                 [.. exclusions.Patterns],
                 [
                     .. instructions.Select(instruction => new RunnerRepositoryInstruction(

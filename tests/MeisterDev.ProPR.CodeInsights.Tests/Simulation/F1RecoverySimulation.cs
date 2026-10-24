@@ -1151,6 +1151,13 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
             return Task.CompletedTask;
         }
 
+        public Task CheckpointProgressAsync(string progressJson, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            state.ThreadProgressJson = progressJson;
+            return Task.CompletedTask;
+        }
+
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 

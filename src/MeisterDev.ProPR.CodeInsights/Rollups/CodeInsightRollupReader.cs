@@ -386,6 +386,26 @@ public sealed class CodeInsightRollupReader(
             filtered = filtered.Where(count => count.FilePath == query.FilePath);
         }
 
+        if (query.Impact is { } impact)
+        {
+            filtered = filtered.Where(count => count.Impact == impact);
+        }
+
+        if (query.Likelihood is { } likelihood)
+        {
+            filtered = filtered.Where(count => count.Likelihood == likelihood);
+        }
+
+        if (query.RiskSeverity is { } riskSeverity)
+        {
+            filtered = filtered.Where(count => count.RiskSeverity == riskSeverity);
+        }
+
+        if (query.Confidence is { } confidence)
+        {
+            filtered = filtered.Where(count => count.Confidence == confidence);
+        }
+
         return filtered;
     }
 

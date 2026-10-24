@@ -3,6 +3,8 @@
 
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterDev.ProPR.Application.Services;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
@@ -13,6 +15,171 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps;
 /// </summary>
 public class AdoCommentPosterDeduplicationTests
 {
+    // The earlier comment carries other ratings than the current finding, which must not change the finding's identity.
+    [Theory]
+    [InlineData("shields", FindingBadgeStyle.ShieldsIo)]
+    [InlineData("shields", FindingBadgeStyle.Plain)]
+    [InlineData("plain", FindingBadgeStyle.ShieldsIo)]
+    [InlineData("plain", FindingBadgeStyle.Plain)]
+    public void EarlierBadgeCommentAtAdjacentLine_MatchesTheCurrentClaimAcrossStylesAndRatings(string earlierStyle, FindingBadgeStyle style)
+    {
+        var header = earlierStyle switch
+        {
+            "plain" => "`Severity: Error` `Risk: High` `Impact: High` `Likelihood: Possible` `Confidence: Certain` `Type: Logic error`",
+            _ => "![Severity: Error](https://img.shields.io/badge/Severity-Error-64748b?style=flat-square) "
+                 + "![Risk: High](https://img.shields.io/badge/Risk-High-ea580c?style=flat-square) "
+                 + "![Impact: High](https://img.shields.io/badge/Impact-High-64748b?style=flat-square) "
+                 + "![Likelihood: Possible](https://img.shields.io/badge/Likelihood-Possible-64748b?style=flat-square) "
+                 + "![Confidence: Certain](https://img.shields.io/badge/Confidence-Certain-64748b?style=flat-square) "
+                 + "![Type: Logic error](https://img.shields.io/badge/Type-Logic%20error-2563eb?style=flat-square)",
+        };
+        const string claim = "Guard the shared service before use.";
+        var earlier = header + "\n\n" + claim + "\n\n<!-- propr-risk-assessment:start -->\n\n"
+                      + "<details>\n<summary>Assessment details</summary>\n\n| Assessment | Level | Reason |\n| --- | --- | --- |\n"
+                      + "| Risk | High | Derived from impact and likelihood. |\n"
+                      + "| Impact | High | The request fails. |\n"
+                      + "| Likelihood | Possible | The optional service can be absent. |\n"
+                      + "| Confidence | Certain | The dereference precedes validation. |\n\n</details>\n\n<!-- propr-risk-assessment:end -->";
+        var composer = TestPostedCommentComposer.Default;
+        var current = new ReviewComment("src/Work.cs", 42, CommentSeverity.Error, claim)
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Critical, FindingLikelihood.Likely, "All requests fail.", "Every request.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.High, "The complete path is visible."),
+        };
+        var currentBody = AdoCommentPoster.FormatInlineCommentBody(current, composer, badgeStyle: style);
+        var restored = ReviewFindingTextFormatter.StripAssessment(composer.StripRendered(currentBody, ReviewFindingTextFormatter.RenderPlainText));
+        Assert.Equal("ERROR: " + claim, restored);
+
+        foreach (var newline in new[] { "\n", "\r\n" })
+        {
+            var priorBody = composer.Append(earlier).ReplaceLineEndings(newline);
+            var threads = new List<PrCommentThread> { new("27", "/src/Work.cs", 43, [new PrThreadComment("Bot", priorBody, BotId)]) };
+            var deterministic = AdoCommentPoster.FindDeterministicDuplicateMatch(threads, "src/Work.cs", 42, current.Message, BotId, composer);
+            var fallback = AdoCommentPoster.FindFallbackDuplicateMatch(threads, "src/Work.cs", 42, current.Message, BotId, composer);
+
+            Assert.Equal("normalized_text_match", deterministic?.ReasonCode);
+            Assert.Equal("fallback_duplicate_match", fallback?.ReasonCode);
+            Assert.Equal(restored, ReviewFindingTextFormatter.StripAssessment(composer.Strip(priorBody)));
+        }
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void HtmlFindingWithRepairedCodeFenceAtAdjacentLine_MatchesTheUnmodifiedRawClaim(string newline)
+    {
+        const string message = "Literal <!-- propr-fence-repair -->.\n```csharp\nTask<T> result;";
+        var finding = new ReviewComment("src/Work.cs", 43, CommentSeverity.Warning, message)
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.High, FindingLikelihood.Possible, "Service fails.", "On retry.", "review_model", FindingRiskAssessment.CurrentRubricVersion),
+        };
+        var body = AdoCommentPoster.FormatInlineCommentBody(finding, TestPostedCommentComposer.Default).ReplaceLineEndings(newline);
+        var threads = new List<PrCommentThread> { new("27", "src/Work.cs", 43, [new PrThreadComment("Bot", body, BotId)]) };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(threads, "src/Work.cs", 42, message, BotId, TestPostedCommentComposer.Default);
+
+        Assert.NotNull(match);
+        Assert.Equal("normalized_text_match", match.ReasonCode);
+        Assert.Contains("<details><summary>Assessment details</summary><table>", body, StringComparison.Ordinal);
+        Assert.Equal(message, finding.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawBoldClassificationHeadingAtAdjacentLine_RemainsPartOfFindingIdentity(bool assessed)
+    {
+        const string rawMessage = "**Warning**\n\nLeaks secrets.";
+        var finding = new ReviewComment("src/Foo.cs", 43, CommentSeverity.Error, rawMessage)
+        {
+            RiskAssessment = assessed
+                ? new FindingRiskAssessment(
+                    FindingImpact.High, FindingLikelihood.Possible, "Credentials are exposed.", "On retry.", "review_model",
+                    FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.High, "The path is visible.")
+                : null,
+        };
+        var composer = TestPostedCommentComposer.Default;
+        var priorBody = AdoCommentPoster.FormatInlineCommentBody(finding, composer);
+        var threads = new List<PrCommentThread> { new("27", "/src/Foo.cs", 43, [new PrThreadComment("Bot", priorBody, BotId)]) };
+
+        var deterministic = AdoCommentPoster.FindDeterministicDuplicateMatch(threads, "src/Foo.cs", 42, rawMessage, BotId, composer);
+        var fallback = AdoCommentPoster.FindFallbackDuplicateMatch(threads, "src/Foo.cs", 42, rawMessage, BotId, composer);
+
+        Assert.NotNull(deterministic);
+        Assert.Equal("normalized_text_match", deterministic.ReasonCode);
+        Assert.NotNull(fallback);
+        Assert.Equal("fallback_duplicate_match", fallback.ReasonCode);
+        Assert.Contains(rawMessage, priorBody, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("\n", false, FindingBadgeStyle.ShieldsIo)]
+    [InlineData("\n", false, FindingBadgeStyle.Plain)]
+    [InlineData("\r\n", false, FindingBadgeStyle.ShieldsIo)]
+    [InlineData("\r\n", false, FindingBadgeStyle.Plain)]
+    [InlineData("\n", true, FindingBadgeStyle.ShieldsIo)]
+    [InlineData("\n", true, FindingBadgeStyle.Plain)]
+    [InlineData("\r\n", true, FindingBadgeStyle.ShieldsIo)]
+    [InlineData("\r\n", true, FindingBadgeStyle.Plain)]
+    public void CompactRemoteFindingAtAdjacentLine_MatchesTheRawClaimAcrossRatingChanges(string newline, bool assessed, FindingBadgeStyle style)
+    {
+        var composer = TestPostedCommentComposer.With("Generated <em>by ProPR</em>.");
+        var finding = new ReviewComment("src/Foo.cs", 43, CommentSeverity.Error, "Guard the shared service before use.")
+        {
+            FindingClassification = new(
+                ["logic-error"], [new(Guid.NewGuid(), "custom", "A \u0001 B")], null, null, null,
+                FindingTypeTaxonomy.Version, FindingTypeClassification.ReviewSource),
+            RiskAssessment = assessed
+                ? new FindingRiskAssessment(
+                    FindingImpact.High, FindingLikelihood.Possible, "Service fails.", "On retry.", "review_model",
+                    FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.High, "The path is visible.")
+                : null,
+        };
+        var priorBody = AdoCommentPoster.FormatInlineCommentBody(finding, composer, badgeStyle: style).Replace("\n", newline, StringComparison.Ordinal);
+        var threads = new List<PrCommentThread> { new("27", "/src/Foo.cs", 43, [new PrThreadComment("Bot", priorBody, BotId)]) };
+        var current = finding with
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Critical, FindingLikelihood.Likely, "All tenants fail.", "Every request.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "Reproduced."),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(threads, "src/Foo.cs", 42, current.Message, BotId, composer);
+        var fallback = AdoCommentPoster.FindFallbackDuplicateMatch(threads, "src/Foo.cs", 42, current.Message, BotId, composer);
+        var switchedStyle = style == FindingBadgeStyle.ShieldsIo ? FindingBadgeStyle.Plain : FindingBadgeStyle.ShieldsIo;
+        var currentBody = AdoCommentPoster.FormatInlineCommentBody(current, composer, badgeStyle: switchedStyle);
+
+        Assert.StartsWith(style == FindingBadgeStyle.Plain ? "`Severity: Error`" : "![Severity: Error]", priorBody);
+        Assert.NotNull(match);
+        Assert.NotNull(fallback);
+        Assert.Equal("normalized_text_match", match!.ReasonCode);
+        Assert.Equal("fallback_duplicate_match", fallback!.ReasonCode);
+        Assert.Equal(
+            "ERROR: " + current.Message,
+            ReviewFindingTextFormatter.StripAssessment(composer.StripRendered(currentBody, ReviewFindingTextFormatter.RenderPlainText)));
+    }
+
+    [Fact]
+    public void AssessedRemoteFinding_IsMatchedUsingRawFindingText()
+    {
+        var risk = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Possible, "Service fails.", "A configured retry triggers it.", "review_model",
+            FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "The complete path dereferences the null service.");
+        var finding = new ReviewComment("src/Foo.cs", 43, CommentSeverity.Error, "Add a null check before dereferencing the service.")
+            { RiskAssessment = risk };
+        var body = AdoCommentPoster.FormatInlineCommentBody(finding, TestPostedCommentComposer.Default);
+        var threads = new List<PrCommentThread> { new("27", "/src/Foo.cs", 43, [new PrThreadComment("Bot", body, BotId)]) };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(threads, "src/Foo.cs", 42, finding.Message, BotId, TestPostedCommentComposer.Default);
+        Assert.Equal("normalized_text_match", match!.ReasonCode);
+        Assert.Contains("<tr><td>Risk</td><td>High</td>", body);
+        Assert.Contains("Service fails.", body);
+        Assert.Contains("<tr><td>Confidence</td><td>Certain</td>", body);
+        Assert.Equal("Add a null check before dereferencing the service.", finding.Message);
+    }
+
     private static readonly Guid BotId = new("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid UserId = new("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 

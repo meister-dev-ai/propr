@@ -50,20 +50,22 @@ public sealed class ReviewFindingGateModelsTests
         Assert.Null(finding.VerificationOutcome);
     }
 
-    [Fact]
-    public void FinalGateDecision_SummaryOnlyWithoutSummaryText_Throws()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public void FinalGateDecision_SummaryOnlyWithoutSummaryText_KeepsTheDispositionWithoutText(string? summaryText)
     {
-        var exception = Assert.Throws<ArgumentException>(() =>
-            new FinalGateDecision(
-                "finding-001",
-                FinalGateDecision.SummaryOnlyDisposition,
-                [ReviewFindingGateReasonCodes.MissingMultiFileEvidence],
-                "cross_cutting_evidence_rules",
-                [],
-                null,
-                null));
+        var decision = new FinalGateDecision(
+            "finding-001",
+            FinalGateDecision.SummaryOnlyDisposition,
+            [ReviewFindingGateReasonCodes.MissingMultiFileEvidence],
+            "cross_cutting_evidence_rules",
+            [],
+            null,
+            summaryText);
 
-        Assert.Contains("SummaryOnly", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, decision.Disposition);
+        Assert.Null(decision.SummaryText);
     }
 
     [Fact]

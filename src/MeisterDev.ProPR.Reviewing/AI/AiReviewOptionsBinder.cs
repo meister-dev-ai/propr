@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using MeisterDev.ProPR.Application.Options;
+using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.Extensions.Configuration;
 
 namespace MeisterDev.ProPR.Infrastructure.AI;
@@ -40,6 +41,8 @@ public static class AiReviewOptionsBinder
         opts.EvidenceJudgeMaxOutputTokens = TryGetInt(configuration, "AI_EVIDENCE_JUDGE_MAX_OUTPUT_TOKENS") ?? opts.EvidenceJudgeMaxOutputTokens;
         opts.EvidenceJudgeRetryMaxOutputTokens =
             TryGetInt(configuration, "AI_EVIDENCE_JUDGE_RETRY_MAX_OUTPUT_TOKENS") ?? opts.EvidenceJudgeRetryMaxOutputTokens;
+        opts.VerificationReasoningEffort =
+            TryGetEnum<ReviewReasoningEffort>(configuration, "AI_VERIFICATION_REASONING_EFFORT") ?? opts.VerificationReasoningEffort;
         opts.ConfidenceFloorError = TryGetInt(configuration, "AI_CONFIDENCE_FLOOR_ERROR") ?? opts.ConfidenceFloorError;
         opts.ConfidenceFloorWarning = TryGetInt(configuration, "AI_CONFIDENCE_FLOOR_WARNING") ?? opts.ConfidenceFloorWarning;
         opts.QualityFilterThreshold = TryGetInt(configuration, "AI_QUALITY_FILTER_THRESHOLD") ?? opts.QualityFilterThreshold;
@@ -91,6 +94,12 @@ public static class AiReviewOptionsBinder
     private static float? TryGetFloat(IConfiguration configuration, string key)
     {
         return float.TryParse(configuration[key], NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : null;
+    }
+
+    private static T? TryGetEnum<T>(IConfiguration configuration, string key)
+        where T : struct, Enum
+    {
+        return Enum.TryParse<T>(configuration[key], ignoreCase: true, out var value) && Enum.IsDefined(value) ? value : null;
     }
 
     private static bool? TryGetBool(IConfiguration configuration, string key)

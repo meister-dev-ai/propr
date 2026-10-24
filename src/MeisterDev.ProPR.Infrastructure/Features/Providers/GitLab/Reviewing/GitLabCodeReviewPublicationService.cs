@@ -13,11 +13,12 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Security;
-using MeisterDev.ProPR.Infrastructure.Utilities;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
 
@@ -53,7 +54,8 @@ internal sealed class GitLabCodeReviewPublicationService(
             $"/projects/{Uri.EscapeDataString(review.Repository.ExternalRepositoryId)}/merge_requests/{review.Number}/discussions");
         var client = httpClientFactory.CreateClient("GitLabProvider");
 
-        var summaryBody = BuildSummaryBody(result, reviewer, composer);
+        var badgeStyle = publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo;
+        var summaryBody = BuildSummaryBody(result, reviewer, composer, badgeStyle);
         var inlineComments = result.Comments.Select((comment, ordinal) => (Comment: comment, Ordinal: ordinal))
             .Where(item => IsInlineComment(item.Comment)).ToList();
         var nonInlineCommentCount = result.Comments.Count - inlineComments.Count;
@@ -84,7 +86,9 @@ internal sealed class GitLabCodeReviewPublicationService(
                 inlineComments,
                 totalDiscussions,
                 state,
-                ct);
+                ct,
+                publicationContext?.CurrentHeadSha,
+                badgeStyle);
         }
 
         var diagnostics = ReviewCommentPostingDiagnosticsDto.Empty(
@@ -156,7 +160,8 @@ internal sealed class GitLabCodeReviewPublicationService(
         IReadOnlyList<(ReviewComment Comment, int Ordinal)> inlineComments,
         int totalDiscussions,
         PublicationState state,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? currentHeadSha, FindingBadgeStyle badgeStyle)
     {
         var (inlineRevision, revisionFailure) = await this.ResolveInlineRevisionAsync(client, token, review, ct);
 
@@ -172,13 +177,20 @@ internal sealed class GitLabCodeReviewPublicationService(
 
             try
             {
+                var fix = comment.SuggestedFix;
+                var applicable = currentHeadSha == inlineRevision.HeadSha && ReviewSuggestedFixRenderer.CanApply(comment, currentHeadSha)
+                                                                          && comment.LineNumber - fix!.StartLine <= 100 &&
+                                                                          fix.EndLine - comment.LineNumber <= 100;
+                var suggestionInfo = applicable ? $"suggestion:-{comment.LineNumber - fix!.StartLine}+{fix.EndLine - comment.LineNumber}" : "suggestion";
                 var captured = await PostDiscussionAsync(
                     new GitLabDiscussionPostRequest(
                         client,
                         token,
                         discussionUri,
                         new GitLabDiscussionRequest(
-                            composer.Append($"{FormatSeverity(comment.Severity)}: {comment.Message}"),
+                            composer.AppendRendered(
+                                GitLabFindingCommentRenderer.Format(comment, applicable, suggestionInfo, badgeStyle),
+                                GitLabFindingCommentRenderer.RenderText),
                             new GitLabDiscussionPosition(
                                 "text",
                                 inlineRevision.BaseSha,
@@ -310,22 +322,23 @@ internal sealed class GitLabCodeReviewPublicationService(
         }
     }
 
-    private static string BuildSummaryBody(ReviewResult result, ReviewerIdentity author, IPostedCommentComposer composer)
+    private static string BuildSummaryBody(ReviewResult result, ReviewerIdentity author, IPostedCommentComposer composer, FindingBadgeStyle badgeStyle)
     {
         var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {author.DisplayName} Review");
+        summaryBuilder.AppendLine($"## {GitLabFindingCommentRenderer.RenderText(author.DisplayName.ReplaceLineEndings(" "))} Review");
         summaryBuilder.AppendLine();
-        summaryBuilder.AppendLine(result.Summary);
+        summaryBuilder.Append(ReviewFindingPriority.FormatLead(result, GitLabFindingCommentRenderer.RenderText));
+        summaryBuilder.AppendLine(ReviewFindingTextFormatter.CloseOpenFences(GitLabFindingCommentRenderer.RenderText(result.Summary)));
 
-        foreach (var comment in result.Comments.Where(comment => !IsInlineComment(comment)))
-        {
-            summaryBuilder.AppendLine();
-            summaryBuilder.AppendLine($"- {FormatSeverity(comment.Severity)}: {comment.Message}");
-        }
+        summaryBuilder.AppendLine();
+        summaryBuilder.AppendLine(
+            ReviewSummaryTextFormatter.Format(
+                result, includeFilelessFindingDetails: true, findingRenderer: comment => GitLabFindingCommentRenderer.Format(comment, badgeStyle: badgeStyle),
+                renderText: GitLabFindingCommentRenderer.RenderText));
 
-        ContextBudgetSummarySections.Append(summaryBuilder, result);
+        ContextBudgetSummarySections.Append(summaryBuilder, result, GitLabFindingCommentRenderer.RenderText);
 
-        return composer.Append(summaryBuilder.ToString().Trim());
+        return composer.AppendRendered(summaryBuilder.ToString().Trim(), GitLabFindingCommentRenderer.RenderText);
     }
 
     private static bool IsInlineComment(ReviewComment comment)
@@ -343,7 +356,7 @@ internal sealed class GitLabCodeReviewPublicationService(
     private static HttpContent BuildDiscussionContent(GitLabDiscussionRequest payload)
     {
         var content = new MultipartFormDataContent();
-        content.Add(new StringContent(HtmlSanitizer.Sanitize(payload.Body)), "body");
+        content.Add(new StringContent(payload.Body), "body");
 
         if (payload.Position is not null)
         {
@@ -427,16 +440,6 @@ internal sealed class GitLabCodeReviewPublicationService(
             latestVersion.StartCommitSha!.Trim());
     }
 
-    private static string FormatSeverity(CommentSeverity severity)
-    {
-        return severity switch
-        {
-            CommentSeverity.Error => "Error",
-            CommentSeverity.Warning => "Warning",
-            CommentSeverity.Suggestion => "Suggestion",
-            _ => "Info",
-        };
-    }
 
     private sealed record GitLabDiscussionPostRequest(
         HttpClient Client,

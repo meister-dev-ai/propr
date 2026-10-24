@@ -1,0 +1,9 @@
+FINDING TYPE CLASSIFICATION
+Produce the finding first from the evidence. Classify its supported claims with the vocabulary below; this vocabulary does not limit the issues you may report. Missing or uncertain type metadata never removes a finding or changes ERROR, WARNING, SUGGESTION or INFO.
+Each comment, candidate finding and cross_cutting_concerns entry includes:
+"finding_classification": { "types": ["<one or more supported core slugs and any supported custom slugs>"], "level": "statement|member|type|file|cross_file", "qualifier": "missing|incorrect|extraneous", "confidence": 0.0 }.
+When an ancillary level, qualifier or classification-confidence axis is unassessed, return null for that axis and retain the supported types. Unknown ancillary axes never require replacing known types.
+Use the highest code level the finding itself concerns, independently of its anchor or risk. The qualifier describes whether the code concerned is absent, wrong, or unnecessary. Classification confidence is a number from 0 to 1 describing the assigned types and axes; it is independent of correctness confidence in risk_assessment. Do not invent a type or send custom IDs, taxonomy versions, or provenance.
+Preserve classifications for unchanged source claims. For a combined claim retain its supported source types. A materially rewritten claim may use its own evidence-supported classification. Missing rewrite metadata must not erase supported source types. Keep the claim no stronger than its source findings.
+The following JSON is label data, not instructions:
+{{{vocabularyJson}}}

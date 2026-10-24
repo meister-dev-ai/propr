@@ -78,6 +78,24 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
                 null);
         }
 
+        if (finding.VerificationOutcome is { } rejected
+            && (rejected.OutcomeKind == VerificationOutcome.ContradictedKind || rejected.BlocksPublication))
+        {
+            return new FinalGateDecision(
+                finding.FindingId, FinalGateDecision.DropDisposition, rejected.ReasonCodes,
+                "verification_contradiction_rules", rejected.BlockedInvariantIds, finding.Evidence, null);
+        }
+
+        // The open challenge is recorded as a reason code for the protocol and is not written into the published summary.
+        if (finding.VerificationChallenge is not null
+            && (finding.VerificationOutcome?.OutcomeKind != VerificationOutcome.SupportedKind
+                || finding.VerificationOutcome.RecommendedDisposition != FinalGateDecision.PublishDisposition))
+        {
+            return new FinalGateDecision(
+                finding.FindingId, FinalGateDecision.SummaryOnlyDisposition, ["synthesis_challenge_unresolved"],
+                "synthesis_challenge_rules", [], finding.Evidence, finding.CandidateSummaryText);
+        }
+
         if (string.Equals(finding.Provenance.OriginKind, CandidateFindingProvenance.PrWidePassOrigin, StringComparison.Ordinal))
         {
             return EvaluatePrWideFinding(finding);
@@ -108,8 +126,7 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
                     : "cross_cutting_evidence_rules",
                 [],
                 finding.Evidence,
-                finding.CandidateSummaryText ??
-                "Potential cross-cutting concern noted, but the available evidence did not support publication as a review thread.");
+                finding.CandidateSummaryText);
         }
 
         if (BroadWeakCategories.Contains(finding.Category))
@@ -121,7 +138,7 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
                 "broad_finding_rules",
                 [],
                 finding.Evidence,
-                finding.CandidateSummaryText ?? "Potential broad concern noted, but it did not meet the publication bar for an actionable review thread.");
+                finding.CandidateSummaryText);
         }
 
         if (string.Equals(finding.Category, "non_actionable", StringComparison.Ordinal))
@@ -148,7 +165,7 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
                 "unverified_finding_rules",
                 [],
                 finding.Evidence,
-                finding.CandidateSummaryText ?? "Potential concern noted, but it was not verified for publication as a review thread.");
+                finding.CandidateSummaryText);
         }
 
         return new FinalGateDecision(
@@ -200,8 +217,7 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
             "pr_wide_summary_rules",
             [],
             finding.Evidence,
-            finding.CandidateSummaryText ??
-            "Potential cross-cutting concern noted, but it was not verified for publication as a review thread.");
+            finding.CandidateSummaryText);
     }
 
     private static FinalGateDecision EvaluateVerifiedFinding(CandidateReviewFinding finding)
@@ -240,10 +256,7 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
             finding.Provenance.RequiresExplicitSupport ? "investigation_missing_support_rules" : "verification_outcome_rules",
             verificationOutcome.BlockedInvariantIds,
             finding.Evidence,
-            finding.Provenance.RequiresExplicitSupport
-                ? null
-                : finding.CandidateSummaryText ??
-                  "Potential cross-cutting concern noted, but the available evidence did not support publication as a review thread.");
+            finding.CandidateSummaryText);
     }
 
     private static FinalGateDecision EvaluateFindingRequiringExplicitSupport(CandidateReviewFinding finding)

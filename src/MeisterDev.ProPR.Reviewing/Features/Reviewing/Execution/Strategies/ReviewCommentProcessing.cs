@@ -38,32 +38,8 @@ internal static class ReviewCommentProcessing
 
     internal static ReviewResult ApplyConfidenceFloor(ReviewResult result, int? finalConfidence, AiReviewOptions opts)
     {
-        if (finalConfidence is null || result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var confidence = finalConfidence.Value;
-        var adjusted = result.Comments
-            .Select(c =>
-            {
-                var severity = c.Severity;
-                if (severity == CommentSeverity.Error && confidence < opts.ConfidenceFloorError)
-                {
-                    severity = CommentSeverity.Warning;
-                }
-                else if (severity == CommentSeverity.Warning && confidence < opts.ConfidenceFloorWarning)
-                {
-                    severity = CommentSeverity.Suggestion;
-                }
-
-                return severity == c.Severity ? c : CreateReviewComment(c.FilePath, c.LineNumber, severity, c.Message);
-            })
-            .ToList()
-            .AsReadOnly();
-
-        return adjusted.SequenceEqual(result.Comments)
-            ? result
-            : result with { Comments = adjusted };
+        // A file-level investigation score cannot establish or refute an individual finding.
+        // Correctness confidence and occurrence risk remain independent of defect classification.
+        return result;
     }
 }

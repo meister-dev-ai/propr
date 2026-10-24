@@ -17,6 +17,87 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.GitLab;
 
 public sealed class GitLabPublicationContextContractTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData(FindingBadgeStyle.ShieldsIo)]
+    [InlineData(FindingBadgeStyle.Plain)]
+    public async Task PublishReviewAsync_NeutralizesMarkupAndPreservesCodeBeforeAddingAssessmentWrappers(FindingBadgeStyle? style)
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "bot", "Bot </details><script>author</script>", true);
+        var finding = new ReviewComment("src/</details><script>action</script>.cs", 18, CommentSeverity.Warning, "Guard <b>the service</b>. </details>")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Possible,
+                "Rejects `count < 0 && value > 1` and `a\\|b`. </details><script>impact</script>",
+                "On retry.\n</details><script>likelihood</script>", "review_model", FindingRiskAssessment.CurrentRubricVersion,
+                FindingConfidence.Medium, "Known caller. </details><script>confidence</script>"),
+        };
+        var result = new ReviewResult(
+            "Conclusion </details><script>conclusion</script>.", [finding, finding.AsPullRequestLevel("Overview </details><script>fileless</script>.")])
+        {
+            BudgetSoftCapped = true,
+            BudgetSoftCapSkippedFilePaths = ["src/</details><script>budget</script>.cs"],
+            ContextDegradedFilePaths = ["src/</details><script>degraded</script>.cs"],
+            ContextSkippedFilePaths = ["src/</details><script>skipped</script>.cs"],
+        };
+        var postedBodies = new List<string>();
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(async request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            if (uri.EndsWith("/discussions", StringComparison.Ordinal))
+            {
+                postedBodies.Add(GitLabTestHelpers.ReadMultipartField(await request.Content!.ReadAsStringAsync(), "body"));
+                return GitLabTestHelpers.CreateJsonResponse(new { id = "discussion-1" }, HttpStatusCode.Created);
+            }
+
+            return uri.EndsWith("/user", StringComparison.Ordinal)
+                ? GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" })
+                : GitLabTestHelpers.CreateJsonResponse(
+                    new[] { new { id = 7L, base_commit_sha = "base-sha", head_commit_sha = "head-sha", start_commit_sha = "start-sha" } });
+        });
+        var composer = TestPostedCommentComposer.With("Generated </details><script>marker</script>.");
+        var sut = new GitLabCodeReviewPublicationService(new GitLabConnectionVerifier(connectionRepository, httpClientFactory), httpClientFactory, composer);
+
+        await sut.PublishReviewAsync(
+            clientId, review, revision, result, reviewer,
+            publicationContext: style.HasValue ? new ReviewPublicationContext(review, revision, reviewer, []) { FindingBadgeStyle = style.Value } : null);
+
+        Assert.Equal(2, postedBodies.Count);
+        var prefix = style == FindingBadgeStyle.Plain ? "`Severity: Warning`" : "![Severity: Warning]";
+        Assert.All(postedBodies, body => Assert.Contains(prefix, body));
+        foreach (var body in postedBodies)
+        {
+            Assert.Contains("<details>\n<summary>Assessment details</summary>\n\n| Assessment | Level | Reason |", body);
+            Assert.Contains("`count &lt; 0 &amp;&amp; value &gt; 1`", body);
+            Assert.Contains("`a\\\\|b`", body);
+            Assert.Contains("&lt;/details&gt;&lt;script&gt;impact&lt;/script&gt;", body);
+            Assert.DoesNotContain("&amp;lt;", body);
+            Assert.DoesNotContain("<script>", Markdig.Markdown.ToHtml(body));
+            Assert.Equal(1, body.Split("<details>", StringSplitOptions.None).Length - 1);
+            Assert.Equal(1, body.Split("</details>", StringSplitOptions.None).Length - 1);
+            TestPostedCommentComposer.AssertMarkedOnce(body, "*Generated &lt;/details&gt;&lt;script&gt;marker&lt;/script&gt;.*");
+        }
+
+        var summary = postedBodies[0];
+        foreach (var field in new[] { "author", "conclusion", "action", "budget", "degraded", "skipped" })
+        {
+            Assert.Contains($"&lt;/details&gt;&lt;script&gt;{field}&lt;/script&gt;", summary);
+        }
+
+        Assert.Contains("<\u200B/details><\u200Bscript>fileless<\u200B/script>", summary);
+        Assert.Contains("| 2 | Medium: 2 | Medium: 2 |", summary);
+        Assert.Equal(1, summary.Split("Overview ", StringSplitOptions.None).Length - 1);
+        Assert.StartsWith(prefix, postedBodies[1]);
+        Assert.Contains("\n\nGuard <\u200Bb>the service<\u200B/b>.", postedBodies[1]);
+        Assert.Equal("Guard <b>the service</b>. </details>", finding.Message);
+    }
+
     [Fact]
     public void ProviderAdapters_RegisterGitLabPublicationUnderNeutralInterface()
     {
@@ -384,8 +465,10 @@ public sealed class GitLabPublicationContextContractTests
         Assert.Contains("version", failure.Error, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public async Task PublishReviewAsync_EndsTheSummaryAndEveryInlineDiscussionWithTheMarker()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublishReviewAsync_EndsTheSummaryAndEveryInlineDiscussionWithTheMarker(bool withRisk)
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
@@ -393,9 +476,18 @@ public sealed class GitLabPublicationContextContractTests
         var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
         var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "head-sha", "base-sha...head-sha");
         var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        FindingRiskAssessment? assessment = withRisk
+            ? new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Unlikely, "Limited local disruption.", "Requires an exceptional retry.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion)
+            : null;
         var result = new ReviewResult(
             "Looks solid overall.",
-            [new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case.")]);
+            [
+                new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case.") { RiskAssessment = assessment },
+                new ReviewComment(null, null, CommentSeverity.Info, "Overview concern.") { RiskAssessment = assessment },
+                new ReviewComment("src/settings.ts", null, CommentSeverity.Warning, "Check the file-level setting.") { RiskAssessment = assessment }
+            ]);
 
         var postedBodies = new List<string>();
         var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
@@ -440,13 +532,43 @@ public sealed class GitLabPublicationContextContractTests
             decodedBodies,
             body => TestPostedCommentComposer.AssertMarkedOnce(body, TestPostedCommentComposer.DistinctiveMarker));
 
+        var summary = Assert.Single(decodedBodies, body => body.StartsWith("## Meister Review Bot Review", StringComparison.Ordinal));
+        Assert.Contains("Looks solid overall.", summary);
+        Assert.Contains("- **Warning** · `src/file.ts:18`: Guard this null case.", summary);
+        Assert.Contains(withRisk ? "| 3 | Low: 3 | Unassessed: 3 |" : "| 3 | Unassessed: 3 | Unassessed: 3 |", summary);
+        Assert.Contains("**`src/settings.ts`**", summary);
+        Assert.Contains(withRisk ? "![Risk: Low]" : "\n\nCheck the file-level setting.", summary);
+        Assert.DoesNotContain("- Info: Overview concern.", summary);
+        Assert.DoesNotContain("- INFO: Overview concern.", summary);
+        Assert.Equal(1, summary.Split("Overview concern.", StringSplitOptions.None).Length - 1);
+        if (withRisk)
+        {
+            Assert.Contains(
+                "<!-- propr-risk-assessment:start -->\n\n<details>\n<summary>Assessment details</summary>\n\n| Assessment | Level | Reason |", summary);
+            Assert.Contains(" |\n\n</details>\n\n<!-- propr-risk-assessment:end -->", summary);
+        }
+
         // Identified by its own text, not by posting order: which discussion GitLab reports back first is not
         // part of the contract this test is verifying.
         var inlineBody = Assert.Single(
             decodedBodies,
-            body => body.Contains("Guard this null case", StringComparison.Ordinal));
-        Assert.Equal(
-            "Warning: Guard this null case.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
-            inlineBody);
+            body => body.Contains("Guard this null case.", StringComparison.Ordinal) && !body.StartsWith("## ", StringComparison.Ordinal));
+        if (withRisk)
+        {
+            Assert.StartsWith("![Severity: Warning]", inlineBody);
+            Assert.Contains("![Risk: Low]", inlineBody);
+            Assert.Contains("\n\nGuard this null case.", inlineBody);
+            Assert.Contains("<details>\n<summary>Assessment details</summary>", inlineBody);
+            Assert.Contains("| Risk | Low |", inlineBody);
+            Assert.Contains("Limited local disruption.", inlineBody);
+            Assert.Contains(
+                decodedBodies,
+                body => body.Contains("Overview concern.", StringComparison.Ordinal) && body.Contains("| Risk | Low |", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.StartsWith("![Severity: Warning]", inlineBody);
+            Assert.Contains("\n\nGuard this null case.\n\n" + TestPostedCommentComposer.DistinctiveMarker, inlineBody);
+        }
     }
 }

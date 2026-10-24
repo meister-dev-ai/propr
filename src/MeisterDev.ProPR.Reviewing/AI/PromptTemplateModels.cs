@@ -200,7 +200,15 @@ internal static class PromptTemplateModels
 
     internal sealed record PromptThreadCommentModel(string authorName, string content);
 
-    internal sealed record PromptQualityFilterCommentModel(int index, string filePath, string line, string severity, string message);
+    internal sealed record PromptQualityFilterCommentModel(
+        int index,
+        string sourceFindingId,
+        string filePath,
+        string line,
+        string severity,
+        string message,
+        string riskAssessment,
+        string? findingClassification = null);
 
     internal sealed record PromptMemoryMatchModel(
         int index,
@@ -214,9 +222,15 @@ internal static class PromptTemplateModels
 
     internal sealed record PromptSummaryItem(string filePath, string summary);
 
-    internal sealed record PromptCommentItem(string filePath, string severity, string message);
+    internal sealed record PromptCommentItem(string filePath, string severity, string message, string riskAssessment, string? findingClassification = null);
 
-    internal sealed record PromptCandidateFindingItem(string findingId, string filePath, string severity, string message);
+    internal sealed record PromptCandidateFindingItem(
+        string findingId,
+        string filePath,
+        string severity,
+        string message,
+        string riskAssessment,
+        string? findingClassification = null);
 
     internal sealed record PromptInvestigationResultModel(
         string taskId,
@@ -235,5 +249,15 @@ internal static class PromptTemplateModels
         string content,
         bool truncated);
 
-    internal sealed record PromptPrWideCandidateFindingModel(string id, string message, string category, string confidence, string supportingFiles);
+    internal sealed record PromptPrWideCandidateFindingModel(
+        string id,
+        string message,
+        string category,
+        string confidence,
+        string supportingFiles,
+        string riskAssessment,
+        string suggestedFix = "",
+        string filePath = "",
+        int? lineNumber = null,
+        string? findingClassification = null);
 }

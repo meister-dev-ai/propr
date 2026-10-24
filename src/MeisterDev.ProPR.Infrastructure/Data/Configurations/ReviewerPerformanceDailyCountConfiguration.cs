@@ -12,6 +12,11 @@ internal sealed class ReviewerPerformanceDailyCountConfiguration : IEntityTypeCo
     public void Configure(EntityTypeBuilder<ReviewerPerformanceDailyCount> builder)
     {
         builder.ToTable("reviewer_performance_daily_counts");
+        builder.Property(row => row.Impact).HasConversion<short>();
+        builder.Property(row => row.Likelihood).HasConversion<short>();
+        builder.Property(row => row.RiskSeverity).HasConversion<short>();
+        builder.Property(row => row.Confidence).HasConversion<short>().HasDefaultValue(MeisterDev.ProPR.Domain.Enums.FindingConfidence.Unknown);
+        builder.Property(row => row.RiskRubricVersion).HasMaxLength(128);
         builder.HasKey(row => row.Id);
         builder.Property(row => row.Id).ValueGeneratedNever();
         builder.Property(row => row.CellKey).HasMaxLength(64);

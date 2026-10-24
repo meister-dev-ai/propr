@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -27,6 +28,12 @@ public sealed record ReviewPublicationContext(
     object? ProviderSpecificContext = null,
     bool ReplyInExistingSummaryThread = false)
 {
+    /// <summary>The current provider head read before publication. Null disables applicable replacements.</summary>
+    public string? CurrentHeadSha { get; init; }
+
+    /// <summary>The client badge style captured once for this publication.</summary>
+    public FindingBadgeStyle FindingBadgeStyle { get; init; } = FindingBadgeStyle.ShieldsIo;
+
     /// <summary>
     ///     Returns the provider-specific context when it matches the requested type.
     /// </summary>

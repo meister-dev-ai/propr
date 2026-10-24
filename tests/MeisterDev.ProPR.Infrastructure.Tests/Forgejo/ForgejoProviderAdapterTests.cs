@@ -658,7 +658,8 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
         Assert.Equal("src/file.ts", comments[0].GetProperty("path").GetString());
         Assert.Equal(18, comments[0].GetProperty("new_position").GetInt32());
         Assert.Equal(
-            "Warning: Guard this null case.\n\n" + TestPostedCommentComposer.DistinctiveMarker,
+            "![Severity: Warning](https://img.shields.io/badge/Severity-Warning-64748b?style=flat-square)\n\nGuard this null case.\n\n" +
+            TestPostedCommentComposer.DistinctiveMarker,
             comments[0].GetProperty("body").GetString());
     }
 

@@ -295,6 +295,7 @@ internal sealed partial class FileReviewer(
                     baselinePreFilterCount,
                     ct));
 
+            result = ReviewSuggestedFixValidator.Bind(result, pr, job.ReviewRevisionReference?.HeadSha);
             await this.CompleteReviewAsync(job, fileResult, fileContext, protocolId, result, ct);
 
             LogFileReviewCompleted(logger, file.Path, job.Id);
@@ -387,6 +388,7 @@ internal sealed partial class FileReviewer(
             ModelInventoryComplete = baseContext.ModelInventoryComplete,
             CapturedRevisionKey = baseContext.CapturedRevisionKey,
             CapturedLeaseGeneration = baseContext.CapturedLeaseGeneration,
+            FindingTypeVocabulary = baseContext.FindingTypeVocabulary,
             LogicalModelName = baseContext.LogicalModelName,
             ModelEvidenceCheckpoint = baseContext.ModelEvidenceCheckpoint,
             ProtocolRecorder = protocolId.HasValue ? protocolRecorder : null,
@@ -1609,12 +1611,12 @@ internal sealed partial class FileReviewer(
     {
         if (await this.TryRecordSkippedStepAsync(state, FileByFileReviewStepIds.LocalVerification, ct))
         {
-            return result;
+            return ReviewFindingConfidence.ClearUnverified(result);
         }
 
         if (localReviewVerificationExecutor is null)
         {
-            return result;
+            return ReviewFindingConfidence.ClearUnverified(result);
         }
 
         // Supply the per-file context so an evidence-gathering verifier can read the anchor code,
@@ -2023,7 +2025,7 @@ internal sealed partial class FileReviewer(
         var normalizedLineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
         return normalizedLineNumber == comment.LineNumber
             ? comment
-            : FileByFileReviewOrchestrator.CreateReviewComment(comment.FilePath, normalizedLineNumber, comment.Severity, comment.Message);
+            : comment.WithAnchorAndSeverity(comment.FilePath, normalizedLineNumber, comment.Severity);
     }
 
     private static int CountSeverityDowngrades(

@@ -86,7 +86,9 @@ internal static partial class ReviewPrompts
                         finding.Message,
                         finding.Category,
                         $"{finding.Confidence.Concern}={finding.Confidence.Score}",
-                        string.Join(", ", finding.RelatedFilePaths))).ToList())).ToList() ?? [],
+                        string.Join(", ", finding.RelatedFilePaths), FormatRiskAssessment(finding.RiskAssessment),
+                        FormatSuggestedFix(finding.SuggestedFix), finding.FilePath ?? "(PR-level)", finding.LineNumber,
+                        FormatFindingClassification(finding.FindingClassification))).ToList())).ToList() ?? [],
                 OutputKeyReminder,
                 designReviewScope));
 
@@ -269,7 +271,7 @@ internal static partial class ReviewPrompts
         if (context?.PromptOverrides.TryGetValue("SynthesisSystemPrompt", out var overrideText) == true)
         {
             return OutputLanguageDirective.Append(
-                ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, overrideText!),
+                ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, overrideText!, jsonMode),
                 context);
         }
 
@@ -280,7 +282,7 @@ internal static partial class ReviewPrompts
         // Synthesis writes the pull request's summary narrative. It is the one stage that never received the
         // client's assembled brief, so the language rule has to reach it on its own.
         return OutputLanguageDirective.Append(
-            ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, defaultText),
+            ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, defaultText, jsonMode),
             context);
     }
 
@@ -374,11 +376,13 @@ internal static partial class ReviewPrompts
                     finding.FindingId,
                     finding.FilePath ?? "(PR-level)",
                     finding.Severity.ToString().ToLowerInvariant(),
-                    finding.Message.Replace("|", "\\|"))).ToList() ?? [],
+                    finding.Message.Replace("|", "\\|"), FormatRiskAssessment(finding.RiskAssessment),
+                    FormatFindingClassification(finding.FindingClassification))).ToList() ?? [],
                 allComments?.Select(comment => new PromptTemplateModels.PromptCommentItem(
                     comment.FilePath ?? "(PR-level)",
                     comment.Severity.ToString().ToLowerInvariant(),
-                    comment.Message.Replace("|", "\\|"))).ToList() ?? [],
+                    comment.Message.Replace("|", "\\|"), FormatRiskAssessment(comment.RiskAssessment),
+                    FormatFindingClassification(comment.FindingClassification))).ToList() ?? [],
                 hasCandidateFindings ? "Use the exact `Finding ID` values from the table for `supportingFindingIds`. " : string.Empty,
                 hasCandidateFindings || hasComments));
 

@@ -50,6 +50,39 @@ public sealed class SummaryReconciliationServiceTests
     }
 
     [Fact]
+    public void ReconcileAndGround_SummaryOnlyDecisionWithoutText_ListsNoFinding()
+    {
+        var findings = new[]
+        {
+            new CandidateReviewFinding(
+                "finding-pf-001",
+                new CandidateFindingProvenance(CandidateFindingProvenance.PerFileCommentOrigin, "per_file_review", "src/Foo.cs"),
+                CommentSeverity.Warning,
+                "The loop ignores the latest update.",
+                CandidateReviewFinding.PerFileCommentCategory,
+                "src/Foo.cs",
+                12),
+        };
+        FinalGateDecision[] decisions =
+        [
+            new(
+                "finding-pf-001",
+                FinalGateDecision.SummaryOnlyDisposition,
+                ["synthesis_challenge_unresolved"],
+                "synthesis_challenge_rules",
+                [],
+                null,
+                null),
+        ];
+
+        var result = ReviewSummaryGrounding.Ground(new SummaryReconciliationService().Reconcile("Base summary.", findings, decisions), findings, decisions);
+
+        Assert.DoesNotContain("Summary-only findings:", result.FinalSummary);
+        Assert.Contains("No publishable or summary-only findings remained after verification.", result.FinalSummary);
+        Assert.Empty(result.SummaryOnlyFindingIds);
+    }
+
+    [Fact]
     public void Reconcile_WithDroppedFindings_RewritesUnsafeOriginalSummary()
     {
         var sut = new SummaryReconciliationService();

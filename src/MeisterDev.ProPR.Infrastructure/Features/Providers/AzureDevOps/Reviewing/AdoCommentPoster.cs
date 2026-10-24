@@ -9,6 +9,8 @@ using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -67,7 +69,8 @@ public sealed class AdoCommentPoster(
         AzureDevOpsPublicationContext? publicationContext = null,
         ReviewerIdentity? publicationIdentity = null,
         bool replyInExistingSummaryThread = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo)
     {
         using var activity = ActivitySource.StartActivity("AdoCommentPoster.Post");
         activity?.SetTag("scm.provider", ScmProvider.AzureDevOps.ToString());
@@ -140,7 +143,8 @@ public sealed class AdoCommentPoster(
                     composer,
                     token)
                 : null,
-            cancellationToken);
+            cancellationToken,
+            publicationContext?.SourceHeadSha, badgeStyle);
     }
 
     /// <summary>
@@ -165,7 +169,8 @@ public sealed class AdoCommentPoster(
         IReadOnlyList<PrCommentThread>? existingThreads,
         ReviewerIdentity? publicationIdentity,
         AdoReplyFactory? replyFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? sourceHeadSha = null, FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo)
     {
         var diagnostics = new PostingDiagnosticsBuilder(
             result.Comments.Count + result.CarriedForwardCandidatesSkipped,
@@ -173,7 +178,7 @@ public sealed class AdoCommentPoster(
             ConsideredOpenThreads(existingThreads, botId),
             ConsideredResolvedThreads(existingThreads, botId));
 
-        var state = new PostingState();
+        var state = new PostingState { SourceHeadSha = sourceHeadSha, BadgeStyle = badgeStyle };
 
         await this.PostSummaryThreadIfNeededAsync(
             result,
@@ -290,7 +295,8 @@ public sealed class AdoCommentPoster(
             comment,
             iterationId,
             compareToIterationId,
-            changeTrackingIds);
+            changeTrackingIds,
+            state.SourceHeadSha);
         var (threadContext, prThreadContext) = BuildThreadContexts(anchorContext);
         var normalizedFilePath = anchorContext.NormalizedFilePath;
 
@@ -567,7 +573,10 @@ public sealed class AdoCommentPoster(
         try
         {
             var createdThread = await threadFactory(
-                FormatInlineCommentBody(comment, composer),
+                FormatInlineCommentBody(
+                    comment, composer,
+                    threadContext?.RightFileStart is not null && ReviewSuggestedFixRenderer.CanApply(comment, state.SourceHeadSha),
+                    state.BadgeStyle),
                 threadContext,
                 prThreadContext,
                 cancellationToken);
@@ -586,7 +595,9 @@ public sealed class AdoCommentPoster(
 
     private sealed class PostingState
     {
+        public FindingBadgeStyle BadgeStyle { get; init; }
         public int PostedThreadCount;
+        public string? SourceHeadSha { get; init; }
         public List<Exception> FailureExceptions { get; } = [];
     }
 
@@ -600,14 +611,16 @@ public sealed class AdoCommentPoster(
         ArgumentNullException.ThrowIfNull(composer);
 
         var sb = new StringBuilder(HarvestedThreadEligibility.SummaryPrefix + "\n\n");
-        sb.Append(HtmlSanitizer.RenderForDisplay(result.Summary, ReviewBodyRenderingMode.Summary).RenderedText);
+        sb.Append(ReviewFindingPriority.FormatLead(result, AdoFindingCommentRenderer.RenderText));
+        sb.Append(ReviewFindingTextFormatter.CloseOpenFences(HtmlSanitizer.RenderForDisplay(result.Summary, ReviewBodyRenderingMode.Summary).RenderedText));
+        sb.Append("\n\n").Append(ReviewSummaryTextFormatter.Format(result));
 
         if (result.CarriedForwardFilePaths.Count > 0)
         {
             sb.Append($"\n\n**Carried forward unchanged files** ({result.CarriedForwardFilePaths.Count} files — results from prior review retained)\n\n");
             foreach (var path in result.CarriedForwardFilePaths)
             {
-                var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
+                var renderedPath = AdoFindingCommentRenderer.RenderText(path.ReplaceLineEndings(" "));
                 sb.Append($"- {renderedPath}\n");
             }
         }
@@ -617,7 +630,7 @@ public sealed class AdoCommentPoster(
             sb.Append($"\n\n{ContextBudgetSummarySections.FormatBudgetSoftCapNote(result)}\n\n");
             foreach (var path in result.BudgetSoftCapSkippedFilePaths)
             {
-                var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
+                var renderedPath = AdoFindingCommentRenderer.RenderText(path.ReplaceLineEndings(" "));
                 sb.Append($"- {renderedPath}\n");
             }
         }
@@ -628,7 +641,7 @@ public sealed class AdoCommentPoster(
                 $"\n\n**Reviewed diff-only** ({result.ContextDegradedFilePaths.Count} files — too large for full context, reviewed from the diff alone)\n\n");
             foreach (var path in result.ContextDegradedFilePaths)
             {
-                var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
+                var renderedPath = AdoFindingCommentRenderer.RenderText(path.ReplaceLineEndings(" "));
                 sb.Append($"- {renderedPath}\n");
             }
         }
@@ -638,28 +651,28 @@ public sealed class AdoCommentPoster(
             sb.Append($"\n\n**Skipped — exceeds model context window** ({result.ContextSkippedFilePaths.Count} files — not reviewed)\n\n");
             foreach (var path in result.ContextSkippedFilePaths)
             {
-                var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
+                var renderedPath = AdoFindingCommentRenderer.RenderText(path.ReplaceLineEndings(" "));
                 sb.Append($"- {renderedPath}\n");
             }
         }
 
-        return composer.Append(sb.ToString());
+        return composer.AppendRendered(sb.ToString(), AdoFindingCommentRenderer.RenderText);
     }
 
-    internal static string FormatInlineCommentBody(ReviewComment comment, IPostedCommentComposer composer)
+    internal static string FormatInlineCommentBody(
+        ReviewComment comment, IPostedCommentComposer composer, bool applicableFix = false,
+        FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo)
     {
         ArgumentNullException.ThrowIfNull(comment);
         ArgumentNullException.ThrowIfNull(composer);
 
-        var severityPrefix = comment.Severity switch
+        var body = AdoFindingCommentRenderer.Format(comment, applicableFix, badgeStyle: badgeStyle);
+        if (applicableFix && body.Length > MaxCommentLength - 1000)
         {
-            CommentSeverity.Error => "ERROR",
-            CommentSeverity.Warning => "WARNING",
-            CommentSeverity.Suggestion => "SUGGESTION",
-            _ => "INFO",
-        };
-        var renderedMessage = HtmlSanitizer.RenderForDisplay(comment.Message, ReviewBodyRenderingMode.InlineComment);
-        return composer.Append($"{severityPrefix}: {renderedMessage.RenderedText}");
+            body = AdoFindingCommentRenderer.Format(comment, false, badgeStyle: badgeStyle);
+        }
+
+        return composer.AppendRendered(body, AdoFindingCommentRenderer.RenderText);
     }
 
     /// <summary>
@@ -773,7 +786,7 @@ public sealed class AdoCommentPoster(
             return locationMatch;
         }
 
-        var normalizedMessage = NormalizeCommentMessage(message, composer);
+        var normalizedMessage = NormalizeCommentMessage(message, composer, stripPresentation: false);
         if (normalizedMessage.Length == 0)
         {
             return null;
@@ -783,7 +796,7 @@ public sealed class AdoCommentPoster(
         {
             if (thread.Comments.Any(comment =>
                     IsBotAuthor(comment.AuthorId, botId) &&
-                    NormalizeCommentMessage(comment.Content, composer) == normalizedMessage))
+                    NormalizeCommentMessage(comment.Content, composer, stripPresentation: true) == normalizedMessage))
             {
                 return new DuplicateSuppressionMatch("normalized_text_match", thread.ThreadId);
             }
@@ -800,7 +813,7 @@ public sealed class AdoCommentPoster(
         Guid? botId,
         IPostedCommentComposer composer)
     {
-        var normalizedMessage = NormalizeCommentMessage(message, composer);
+        var normalizedMessage = NormalizeCommentMessage(message, composer, stripPresentation: false);
         if (normalizedMessage.Length == 0)
         {
             return null;
@@ -814,7 +827,7 @@ public sealed class AdoCommentPoster(
                     .Where(comment => IsBotAuthor(comment.AuthorId, botId))
                     .Select(comment => CalculateTextSimilarity(
                         normalizedMessage,
-                        NormalizeCommentMessage(comment.Content, composer)))
+                        NormalizeCommentMessage(comment.Content, composer, stripPresentation: true)))
                     .DefaultIfEmpty(0d)
                     .Max(),
             })
@@ -831,7 +844,8 @@ public sealed class AdoCommentPoster(
         ReviewComment comment,
         int iterationId,
         int? compareToIterationId,
-        IReadOnlyDictionary<string, int> changeTrackingIds)
+        IReadOnlyDictionary<string, int> changeTrackingIds,
+        string? sourceHeadSha = null)
     {
         ArgumentNullException.ThrowIfNull(comment);
         ArgumentNullException.ThrowIfNull(changeTrackingIds);
@@ -857,10 +871,14 @@ public sealed class AdoCommentPoster(
                 comment.FilePath,
                 comment.LineNumber,
                 normalizedFilePath,
-                resolvedLineNumber,
+                ReviewSuggestedFixRenderer.CanApply(comment, sourceHeadSha) ? comment.SuggestedFix!.StartLine : resolvedLineNumber,
                 PublicationAnchorPrecision.Inline,
                 trackingId.ToString(),
-                compareReference);
+                compareReference,
+                ReviewSuggestedFixRenderer.CanApply(comment, sourceHeadSha) ? comment.SuggestedFix!.EndLine : null,
+                ReviewSuggestedFixRenderer.CanApply(comment, sourceHeadSha)
+                    ? comment.SuggestedFix!.OriginalText.ReplaceLineEndings("\n").Split('\n')[^1].Length + 1
+                    : null);
         }
 
         return new PublicationAnchorContext(
@@ -986,20 +1004,11 @@ public sealed class AdoCommentPoster(
 
         const string notice = "\n\n> *(Review comment truncated — view the full review in the MeisterProPR admin UI)*";
 
-        // The marker comes off before the cut and goes back on after it, so the cut cannot land inside it and
-        // the body that survives leaves room for both the notice and the marker.
-        var body = composer.Strip(message);
-        var markerCost = composer.Append(body).Length - body.Length;
+        // Reserve the rendered signature and notice before truncating the body to the provider limit.
+        var body = composer.StripRendered(message, AdoFindingCommentRenderer.RenderText);
+        var markerCost = composer.AppendRendered(body, AdoFindingCommentRenderer.RenderText).Length - body.Length;
         var cutoff = MaxCommentLength - notice.Length - markerCost;
-
-        // Trim to last whitespace boundary so we don't cut mid-word.
-        var boundary = body.LastIndexOf(' ', cutoff);
-        if (boundary < 1)
-        {
-            boundary = cutoff;
-        }
-
-        return composer.Append(body[..boundary] + notice);
+        return composer.AppendRendered(ReviewFindingTextFormatter.Truncate(body, cutoff) + notice, AdoFindingCommentRenderer.RenderText);
     }
 
     private static string NormalizePath(string path)
@@ -1043,7 +1052,8 @@ public sealed class AdoCommentPoster(
         {
             FilePath = anchorContext.NormalizedFilePath,
             RightFileStart = new CommentPosition { Line = anchorContext.ResolvedLineNumber.Value, Offset = 1 },
-            RightFileEnd = new CommentPosition { Line = anchorContext.ResolvedLineNumber.Value, Offset = 1 },
+            RightFileEnd = new CommentPosition
+                { Line = anchorContext.ResolvedEndLineNumber ?? anchorContext.ResolvedLineNumber.Value, Offset = anchorContext.ResolvedEndOffset ?? 1 },
         };
 
         var prThreadContext = new GitPullRequestCommentThreadContext
@@ -1303,16 +1313,16 @@ public sealed class AdoCommentPoster(
         };
     }
 
-    private static string NormalizeCommentMessage(string message, IPostedCommentComposer composer)
+    private static string NormalizeCommentMessage(string message, IPostedCommentComposer composer, bool stripPresentation)
     {
         // The marker comes off first. Comments posted before the marker existed carry none, and a re-review has
         // to recognize its own earlier finding in them.
-        var sanitized = HtmlSanitizer.Sanitize(composer.Strip(message)).Trim();
+        var unsigned = composer.StripRendered(message, AdoFindingCommentRenderer.RenderText);
+        var claim = stripPresentation ? ReviewFindingTextFormatter.StripAssessment(unsigned) : unsigned;
+        var sanitized = HtmlSanitizer.Sanitize(claim).Trim();
 
-        // These four prefixes stay English whatever output language the client configured. They are the severity
-        // labels this poster itself prepends, and stripping them is how a re-review recognizes a comment it already
-        // posted. Translating them would make every previously posted comment stop matching, so duplicate
-        // suppression would silently re-post the same finding.
+        // StripAssessment returns a badge comment with the English severity prefix that comments carried before badges.
+        // Remove it so classification and rating changes do not change the identity of the raw claim.
         foreach (var prefix in new[] { "ERROR:", "WARNING:", "SUGGESTION:", "INFO:" })
         {
             if (sanitized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))

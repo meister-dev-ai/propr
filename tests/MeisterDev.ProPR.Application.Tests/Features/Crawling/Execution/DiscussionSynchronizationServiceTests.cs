@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
@@ -27,6 +28,191 @@ namespace MeisterDev.ProPR.Application.Tests.Features.Crawling.Execution;
 
 public sealed class DiscussionSynchronizationServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ActiveAdmissionDoesNotWaitForMemoryAndLeavesItDue(bool prepare)
+    {
+        var harness = CreateResolvedMemoryHarness();
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Memory.ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(release.Task);
+        var jobs = Substitute.For<IJobRepository>();
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>()).Returns(new TryAddReviewJobResult(true, null, 0));
+        var service = new PullRequestSynchronizationService(
+            LocalScmPolicies.Registry, jobs, NullLogger<PullRequestSynchronizationService>.Instance, discussions: harness.CreateService());
+        try
+        {
+            var admission = prepare
+                ? CompletePreparedAsync()
+                : service.SynchronizeAsync(harness.Request);
+            var outcome = await admission.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+            await harness.Memory.DidNotReceive().ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>());
+            Assert.True(harness.State.FullRefreshRequested);
+            Assert.True(harness.State.CompletedGeneration < harness.State.RequestedGeneration);
+        }
+        finally
+        {
+            release.TrySetResult(true);
+        }
+
+        harness.Memory.ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(true);
+        var registry = CreateReviewRegistry(CodeReviewState.Open);
+        await harness.CreateService(registry: registry).ObserveAsync(harness.Request with { DiscussionOnly = true });
+        await harness.Memory.Received(1).ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>());
+        Assert.Equal(harness.State.RequestedGeneration, harness.State.CompletedGeneration);
+
+        async Task<PullRequestSynchronizationOutcome> CompletePreparedAsync()
+        {
+            var prepared = await service.PrepareAsync(harness.Request);
+            return await prepared.CompleteAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AdmissionThatObservesClosureStillProcessesMemory(bool prepare)
+    {
+        var harness = CreateResolvedMemoryHarness();
+        var registry = CreateReviewRegistry(CodeReviewState.Closed);
+        var jobs = Substitute.For<IJobRepository>();
+        var service = new PullRequestSynchronizationService(
+            registry, jobs, NullLogger<PullRequestSynchronizationService>.Instance, discussions: harness.CreateService(registry: registry));
+        var request = harness.Request with { ActivationSource = PullRequestActivationSource.Webhook };
+        if (prepare)
+        {
+            var prepared = await service.PrepareAsync(request);
+            await prepared.CompleteAsync();
+        }
+        else
+        {
+            await service.SynchronizeAsync(request);
+        }
+
+        await harness.Memory.Received(1).ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        Assert.True(harness.State.IsClosed);
+    }
+
+    [Fact]
+    public async Task CompletedMemorySurvivesCancellationWhileAnotherThreadIsProcessing()
+    {
+        var harness = CreateResolvedMemoryHarness();
+        harness.Threads = [harness.Threads[0], harness.Threads[0] with { ThreadId = "2" }];
+        harness.ReviewerThreads = [harness.ReviewerThreads[0], harness.ReviewerThreads[0] with { ThreadId = "2" }];
+        using var cancellation = new CancellationTokenSource();
+        harness.Memory.ObserveResolvedAsync(Arg.Is<ThreadResolvedDomainEvent>(evt => evt.ThreadId == "2"), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            cancellation.Cancel();
+            return Task.FromCanceled<bool>(call.Arg<CancellationToken>());
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => harness.CreateService().ObserveAsync(harness.Request, cancellation.Token));
+        Assert.True(harness.State.ReadProgress()["1"].Consumers.ContainsKey("memory"));
+        Assert.False(harness.State.ReadProgress()["2"].Consumers.ContainsKey("memory"));
+        harness.Memory.ClearReceivedCalls();
+        harness.Memory.ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(true);
+        await harness.CreateService().ObserveAsync(harness.Request);
+        await harness.Memory.DidNotReceive().ObserveResolvedAsync(Arg.Is<ThreadResolvedDomainEvent>(evt => evt.ThreadId == "1"), Arg.Any<CancellationToken>());
+        await harness.Memory.Received(1).ObserveResolvedAsync(Arg.Is<ThreadResolvedDomainEvent>(evt => evt.ThreadId == "2"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UnrelatedRevisionDoesNotRegenerateAcknowledgedMemory()
+    {
+        var harness = CreateResolvedMemoryHarness();
+        await harness.ObserveAsync();
+        harness.Memory.ClearReceivedCalls();
+        harness.Scans.ClearReceivedCalls();
+        harness.Checkpoints = 0;
+        await harness.CreateService().ObserveAsync(harness.Request with { CandidateIterationId = 8 });
+        await harness.Memory.DidNotReceive().ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>());
+        await harness.Scans.DidNotReceive().SetLastSeenStatusesAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<string, string?>>(), Arg.Any<CancellationToken>());
+        Assert.Equal(0, harness.Checkpoints);
+    }
+
+    [Fact]
+    public async Task InterruptedReplacementCannotReuseThePreviousMemoryAcknowledgmentWhenContentReverts()
+    {
+        var harness = CreateResolvedMemoryHarness();
+        await harness.ObserveAsync();
+        var originalThread = harness.Threads[0];
+        var originalStatus = harness.ReviewerThreads[0];
+        harness.Threads[0] = originalThread with { Comments = [new("Human", "Changed resolution", CommentId: 1)] };
+        harness.ReviewerThreads[0] = originalStatus with { CommentHistory = "Changed resolution" };
+        using var cancellation = new CancellationTokenSource();
+        var oldAcknowledgmentWasRemoved = false;
+        harness.Memory.ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            oldAcknowledgmentWasRemoved = !harness.State.ReadProgress()["1"].Consumers.ContainsKey("memory");
+            cancellation.Cancel();
+            return Task.FromCanceled<bool>(call.Arg<CancellationToken>());
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => harness.CreateService().ObserveAsync(harness.Request, cancellation.Token));
+        Assert.True(oldAcknowledgmentWasRemoved);
+        harness.Threads[0] = originalThread;
+        harness.ReviewerThreads[0] = originalStatus;
+        harness.Memory.ClearReceivedCalls();
+        harness.Memory.ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(true);
+        await harness.ObserveAsync();
+        await harness.Memory.Received(1).ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("configuration")]
+    [InlineData("history")]
+    public async Task RelevantMemoryChangeReprocessesAcknowledgedResolution(string change)
+    {
+        var harness = CreateResolvedMemoryHarness();
+        await harness.ObserveAsync();
+        harness.Memory.ClearReceivedCalls();
+        if (change == "configuration")
+        {
+            harness.MemoryVersion = "updated-routing";
+        }
+        else
+        {
+            harness.Threads[0] = harness.Threads[0] with { Comments = [new("Human", "Updated resolution", CommentId: 1)] };
+            harness.ReviewerThreads[0] = harness.ReviewerThreads[0] with { CommentHistory = "Updated resolution" };
+        }
+
+        await harness.ObserveAsync();
+        await harness.Memory.Received(1).ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    private static Harness CreateResolvedMemoryHarness()
+    {
+        var harness = new Harness
+        {
+            EnableMemory = true,
+            Threads = [new("1", "a.cs", 1, [new("Reviewer", "Resolved concern", CommentId: 1)], "Fixed")],
+            ReviewerThreads = [new("1", "Fixed", "a.cs", "Resolved concern", CodeChangedSinceRaised: ThreadAnchorCodeChange.Changed)]
+        };
+        harness.Scan.Threads.Add(new ReviewPrScanThread { ReviewPrScanId = harness.Scan.Id, ThreadId = "1", LastSeenStatus = "Fixed" });
+        return harness;
+    }
+
+    private static IScmProviderRegistry CreateReviewRegistry(CodeReviewState state)
+    {
+        var registry = LocalScmPolicies.CreateRuntimeSubstitute();
+        registry.GetReviewSourcePolicy(Arg.Any<ScmProvider>()).Returns(call => LocalScmPolicies.Registry.GetReviewSourcePolicy(call.Arg<ScmProvider>()));
+        var query = Substitute.For<ICodeReviewQueryService>();
+        registry.GetCodeReviewQueryService(ScmProvider.AzureDevOps).Returns(query);
+        query.GetReviewAsync(Arg.Any<Guid>(), Arg.Any<CodeReviewRef>(), Arg.Any<CancellationToken>(), Arg.Any<ReviewDiscoveryContext?>())
+            .Returns(call =>
+            {
+                var review = call.Arg<CodeReviewRef>();
+                return new ReviewDiscoveryItemDto(
+                    ScmProvider.AzureDevOps, review.Repository, review, state, new ReviewRevision("head", "base", null, "7", null), null,
+                    "Review", null, "source", "main");
+            });
+        return registry;
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -449,6 +635,53 @@ public sealed class DiscussionSynchronizationServiceTests
         await harness.ObserveAsync();
         await harness.Memory.Received(1).ObserveReopenedAsync(Arg.Is<ThreadReopenedDomainEvent>(evt => evt.ThreadId == "1"), Arg.Any<CancellationToken>());
         Assert.Null(Assert.Single(harness.Scan.Threads).LastSeenStatus);
+        Assert.True(harness.State.ReadProgress()["1"].Consumers.ContainsKey("memory"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeletedReviewerThreadRetriesMemoryRemovalAfterFailedOrDeferredProcessing(bool deferred)
+    {
+        var harness = CreateResolvedMemoryHarness();
+        await harness.ObserveAsync();
+        harness.Threads = [];
+        harness.ReviewerThreads = [];
+        harness.Memory.ObserveReopenedAsync(Arg.Any<ThreadReopenedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        await harness.CreateService().ObserveAsync(harness.Request with { DeferMemoryProcessing = deferred });
+        Assert.True(harness.State.FullRefreshRequested);
+        Assert.Empty(JsonSerializer.Deserialize<PrThreadStatusEntry[]>(harness.State.ReviewerSummariesJson)!);
+        harness.Memory.ClearReceivedCalls();
+        harness.Memory.ObserveReopenedAsync(Arg.Any<ThreadReopenedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(false);
+        await harness.ObserveAsync();
+        await harness.Memory.Received(1).ObserveReopenedAsync(Arg.Is<ThreadReopenedDomainEvent>(evt => evt.ThreadId == "1"), Arg.Any<CancellationToken>());
+        Assert.True(harness.State.FullRefreshRequested);
+
+        harness.Memory.ClearReceivedCalls();
+        harness.Memory.ObserveReopenedAsync(Arg.Any<ThreadReopenedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(true);
+        await harness.ObserveAsync();
+        await harness.Memory.Received(1).ObserveReopenedAsync(Arg.Is<ThreadReopenedDomainEvent>(evt => evt.ThreadId == "1"), Arg.Any<CancellationToken>());
+        Assert.False(harness.State.FullRefreshRequested);
+        Assert.True(harness.State.ReadProgress()["1"].Consumers.ContainsKey("memory"));
+    }
+
+    [Fact]
+    public async Task InterruptedInitialMemoryProcessingRemovesMemoryWhenTheThreadDisappears()
+    {
+        var harness = CreateResolvedMemoryHarness();
+        using var cancellation = new CancellationTokenSource();
+        harness.Memory.ObserveResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            cancellation.Cancel();
+            return Task.FromCanceled<bool>(call.Arg<CancellationToken>());
+        });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => harness.CreateService().ObserveAsync(harness.Request, cancellation.Token));
+        harness.Threads = [];
+        harness.ReviewerThreads = [];
+
+        await harness.ObserveAsync();
+        await harness.Memory.Received(1).ObserveReopenedAsync(Arg.Is<ThreadReopenedDomainEvent>(evt => evt.ThreadId == "1"), Arg.Any<CancellationToken>());
         Assert.True(harness.State.ReadProgress()["1"].Consumers.ContainsKey("memory"));
     }
 
@@ -1037,6 +1270,8 @@ public sealed class DiscussionSynchronizationServiceTests
 
         public bool Enabled = true, Retention = true, Complete = true;
         public string Version = "v1";
+        public string MemoryVersion = "routing-v1";
+        public int Checkpoints;
 
         public Harness()
         {
@@ -1087,7 +1322,7 @@ public sealed class DiscussionSynchronizationServiceTests
             store.TryAcquireAsync(
                     Arg.Any<PullRequestThreadSnapshotTarget>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
                 .Returns(_ => Task.FromResult<IDiscussionSynchronizationLease?>(
-                    this.LeaseUnavailable ? null : this.LeaseFactory?.Invoke() ?? new Lease(this.State, timeProvider)));
+                    this.LeaseUnavailable ? null : this.LeaseFactory?.Invoke() ?? new Lease(this.State, timeProvider, () => this.Checkpoints++)));
             var connections = this.Connections;
             connections.GetOperationalConnectionAsync(this.Request.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
                 .Returns(
@@ -1126,18 +1361,39 @@ public sealed class DiscussionSynchronizationServiceTests
                 NullLogger<DiscussionSynchronizationService>.Instance, Microsoft.Extensions.Options.Options.Create(new DiscussionSynchronizationOptions()),
                 origins: this.Origins, archive: this.Archive, batches: batches, misses: this.Misses, coverage: this.Coverage, dispositions: this.Dispositions,
                 memory: this.EnableMemory ? this.Memory : null, scans: this.EnableMemory ? this.Scans : null, timeProvider: timeProvider,
-                modelConcerns: this.Models);
+                modelConcerns: this.Models, aiVersions: this.CreateMemoryVersions());
             return service;
+        }
+
+        private IAiConfigurationVersionReader CreateMemoryVersions()
+        {
+            var versions = Substitute.For<IAiConfigurationVersionReader>();
+            versions.ReadAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyList<AiPurpose>>(), Arg.Any<CancellationToken>()).Returns(_ => this.MemoryVersion);
+            return versions;
         }
     }
 
-    private sealed class Lease(DiscussionSynchronizationState state, TimeProvider? timeProvider = null) : IDiscussionSynchronizationLease
+    private sealed class Lease(DiscussionSynchronizationState state, TimeProvider? timeProvider = null, Action? checkpoint = null)
+        : IDiscussionSynchronizationLease
     {
         private readonly long _generation = state.RequestedGeneration, _collection = state.CollectionGeneration, _retention = state.RetentionGeneration;
         public bool CompletionIsCurrent { get; private set; }
         public DiscussionSynchronizationState State => state;
         public DateTimeOffset ObservedAt { get; } = (timeProvider ?? TimeProvider.System).GetUtcNow();
         public Task EnsureCurrentAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task CheckpointProgressAsync(string progressJson, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (state.CollectionGeneration != this._collection || state.RetentionGeneration != this._retention)
+            {
+                throw new InvalidOperationException("The discussion consumer policies changed.");
+            }
+
+            state.ThreadProgressJson = progressJson;
+            checkpoint?.Invoke();
+            return Task.CompletedTask;
+        }
 
         public Task CompleteAsync(
             string progressJson, string summaries, DateTimeOffset observedAt, bool completeEnumeration, bool allConsumersCurrent,
@@ -1154,6 +1410,7 @@ public sealed class DiscussionSynchronizationServiceTests
             }
 
             state.LastReviewRevision = revision;
+            state.IsClosed = closed && allConsumersCurrent && this.CompletionIsCurrent;
             state.FullRefreshRequested = !allConsumersCurrent;
             state.NextAttemptAt = observedAt + (allConsumersCurrent ? interval : TimeSpan.FromSeconds(15));
             if (allConsumersCurrent)

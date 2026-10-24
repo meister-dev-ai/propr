@@ -119,7 +119,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             systemContext.LoopMetrics = BuildLoopMetrics(state);
             systemContext.ReviewerFileReads = ToReviewerFileReads(state.FileReads);
 
-            return ParseReviewResult(lastTextResponse, state.FileReads);
+            return ParseReviewResult(lastTextResponse, state.FileReads, systemContext.FindingTypeVocabulary);
         }
         finally
         {
@@ -2293,7 +2293,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             .ToList();
     }
 
-    private static ReviewResult ParseReviewResult(string json, IReadOnlyList<FileReadRecord> fileReads)
+    private static ReviewResult ParseReviewResult(string json, IReadOnlyList<FileReadRecord> fileReads, FindingTypeVocabulary vocabulary)
     {
         var normalized = NormalizeJsonPayload(json);
         if (string.IsNullOrWhiteSpace(normalized))
@@ -2316,6 +2316,9 @@ internal sealed partial class ToolAwareAiReviewCore(
                 c.Message ?? "")
             {
                 SourceReadGrounding = ReviewReadGroundingEvaluator.Classify(c.FilePath, c.LineNumber, fileReads),
+                RiskAssessment = FindingRiskAssessmentParser.ParseProperties(c.AdditionalProperties),
+                FindingClassification = FindingTypeClassificationParser.ParseProperties(c.AdditionalProperties, vocabulary),
+                SuggestedFix = ReviewSuggestedFixValidator.ParseProperties(c.AdditionalProperties),
             })
             .ToList();
 
@@ -2546,7 +2549,11 @@ internal sealed partial class ToolAwareAiReviewCore(
         bool LoopComplete,
         bool? InvestigationComplete); // null = absent = treated as complete (backward compat)
 
-    private sealed record ReviewCommentDto(string? FilePath, int? LineNumber, string? Severity, string? Message);
+    private sealed record ReviewCommentDto(string? FilePath, int? LineNumber, string? Severity, string? Message)
+    {
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalProperties { get; init; }
+    }
 
     private sealed record ConfidenceEvaluationDto(
         string? Concern,

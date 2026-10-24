@@ -10,7 +10,7 @@
         <!-- A model is not a scope, and calling it one would misdescribe the only grouping here that reads the
              findings rather than the pull requests. -->
         <h3 id="insights-by-scope-heading">{{ isModelGrain ? 'Correctness by model' : 'Correctness by scope' }}</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           One number for the whole reviewer answers "is it working" and nothing else. Grouped, the same counts show
           whether one client, repository, pull request or model is carrying the shortfall. Worst first.
         </p>
@@ -34,6 +34,7 @@
       resolved findings rather than closed pull requests.
     </p>
 
+    <p v-for="reason in unavailableReasons" :key="reason" class="panel-note" role="note">{{ exclusionReasonLabel(reason) }}</p>
     <p v-if="rows.length === 0" class="panel-empty">
       {{
         isModelGrain
@@ -83,6 +84,7 @@
 </template>
 
 <script setup lang="ts">
+import { exclusionReasonLabel } from '../reviewerPerformanceEvidence'
 import { computed } from 'vue'
 import ReviewerPerformanceSelect from './ReviewerPerformanceSelect.vue'
 import EstimateNotice from '@/features/code-insights/components/EstimateNotice.vue'
@@ -107,6 +109,7 @@ const SCOPE_HEADINGS: Record<ReviewerPerformanceGrain, string> = {
 }
 
 const scopeHeading = computed(() => SCOPE_HEADINGS[props.grain])
+const unavailableReasons = computed(() => [...new Set(props.rows.flatMap(row => row.metric.unavailableReason ? [row.metric.unavailableReason] : []))])
 const isModelGrain = computed(() => props.grain === 'model')
 
 // The two groupings do not rest on the same thing, and a column called "Sample" over both would invite reading a

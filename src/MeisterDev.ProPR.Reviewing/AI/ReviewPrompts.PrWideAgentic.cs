@@ -121,6 +121,8 @@ internal static partial class ReviewPrompts
                         finding.Message,
                         finding.Category,
                         $"{finding.Confidence.Concern}={finding.Confidence.Score}",
-                        string.Join(", ", finding.RelatedFilePaths))).ToList())).ToList()));
+                        string.Join(", ", finding.RelatedFilePaths), FormatRiskAssessment(finding.RiskAssessment),
+                        FormatSuggestedFix(finding.SuggestedFix), finding.FilePath ?? "(PR-level)", finding.LineNumber,
+                        FormatFindingClassification(finding.FindingClassification))).ToList())).ToList()));
     }
 }

@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
@@ -57,6 +58,17 @@ public sealed partial class EvidenceBackedReviewVerifier(
     // An intermediate model call of the tool loop, in which the judge asked for lookups.
     private const string JudgeToolTurnCallName = "ai_call_evidence_verification_tool_turn";
 
+    // The stage recorded with each lookup, so the trace separates the first judgment from the contradiction check.
+    private const string JudgeLookupStage = "judge";
+    private const string ContradictionCheckLookupStage = "contradiction_check";
+
+    /// <summary>
+    ///     The assumption added to a confirmation that came after the judge's last allowed lookup. Code the judge could no
+    ///     longer read may still decide whether the claimed trigger is reachable.
+    /// </summary>
+    internal const string LookupBudgetAssumption =
+        "The judge confirmed the claim after its last allowed repository lookup, so code it could not read may still decide whether the trigger is reachable.";
+
     /// <summary>Number of judge calls that run at the same time for one file.</summary>
     internal const int MaxParallelJudgeCalls = 4;
 
@@ -64,6 +76,17 @@ public sealed partial class EvidenceBackedReviewVerifier(
     private const int MaxAnchorLines = 400;
     private const string SystemPromptStageKey = "evidence_verification_system";
     private const string UserPromptStageKey = "evidence_verification_user";
+
+    private static readonly Lazy<Func<object?, string>> SystemPromptTemplate = PromptTemplateRuntime.PrepareStage(SystemPromptStageKey);
+    private static readonly Lazy<Func<object?, string>> UserPromptTemplate = PromptTemplateRuntime.PrepareStage(UserPromptStageKey);
+
+    private static readonly Lazy<string> SystemPromptText = new(() => SystemPromptTemplate.Value(
+        new
+        {
+            maxEvidenceTextLength = VerificationConfidenceEvidence.MaxTextLength,
+            maxSourceQuotes = VerificationConfidenceEvidence.MaxSourceQuotes,
+            maxAssumptions = VerificationConfidenceEvidence.MaxAssumptions,
+        }));
 
     /// <summary>
     ///     Time limit of one claim: the anchor read, the excerpt reads and the whole tool loop of the judge together.
@@ -89,6 +112,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
     private readonly TimeSpan _excerptTimeout = excerptTimeout ?? DefaultExcerptTimeout;
     private readonly TimeSpan _recordingGrace = recordingGrace ?? DefaultRecordingGrace;
     private readonly (int Initial, int Retry) _outputBudgets = ResolveOutputBudgets(reviewOptions);
+    private readonly ReviewReasoningEffort _verificationReasoningEffort = reviewOptions?.Value.VerificationReasoningEffort ?? ReviewReasoningEffort.None;
 
     private static (int Initial, int Retry) ResolveOutputBudgets(IOptions<AiReviewOptions>? options)
     {
@@ -118,8 +142,11 @@ public sealed partial class EvidenceBackedReviewVerifier(
 
         // Resolve the judging runtime once for the whole work-item set: the low-effort model, or the reviewer's own tier
         // client when no resolver is available or resolving the low-effort purpose fails, for example because no model
-        // is bound to it.
+        // is bound to it. The contradiction check resolves the same purpose and the escalation check the high-effort
+        // purpose, each when the first claim needs it.
         var judge = await this.ResolveJudgeRuntimeAsync(verificationContext, ct).ConfigureAwait(false);
+        var contradictionJudge = new Lazy<Task<JudgeRuntime>>(() => this.ResolveJudgeRuntimeAsync(verificationContext, ct, AiPurpose.ReviewLowEffort));
+        var escalationJudge = new Lazy<Task<JudgeRuntime>>(() => this.ResolveJudgeRuntimeAsync(verificationContext, ct, AiPurpose.ReviewHighEffort));
 
         // The claims are judged a few at a time. Each outcome is stored at the index of its work item, so the order of
         // the result follows the order of the input whatever order the calls finish in. Recording into the protocol is
@@ -133,7 +160,9 @@ public sealed partial class EvidenceBackedReviewVerifier(
             await callSlots.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                outcomes[index] = await this.VerifyOneAsync(workItem, verificationContext, judge, reads, recordingLock, ct).ConfigureAwait(false);
+                var outcome = await this.VerifyOneAsync(workItem, verificationContext, judge, contradictionJudge, escalationJudge, reads, recordingLock, ct)
+                    .ConfigureAwait(false);
+                outcomes[index] = outcome with { Runtime = outcome.Runtime ?? judge.Provenance };
             }
             finally
             {
@@ -149,16 +178,22 @@ public sealed partial class EvidenceBackedReviewVerifier(
 
     private async Task<JudgeRuntime> ResolveJudgeRuntimeAsync(
         ReviewVerificationContext? context,
-        CancellationToken ct)
+        CancellationToken ct,
+        AiPurpose purpose = AiPurpose.ReviewLowEffort)
     {
         if (context?.Resolver is not null && context.ClientId != Guid.Empty)
         {
             try
             {
                 var runtime = await context.Resolver
-                    .ResolveChatRuntimeAsync(context.ClientId, AiPurpose.ReviewLowEffort, ct)
+                    .ResolveChatRuntimeAsync(context.ClientId, purpose, ct)
                     .ConfigureAwait(false);
-                return new JudgeRuntime(runtime.ChatClient, runtime.Model.RemoteModelId, resolvedJudgeTokenCategory, runtime.SupportsLowReasoningEffort);
+                return new JudgeRuntime(
+                    runtime.ChatClient, runtime.Model.RemoteModelId,
+                    purpose == AiPurpose.ReviewHighEffort ? AiConnectionModelCategory.HighEffort : resolvedJudgeTokenCategory,
+                    runtime.SupportsLowReasoningEffort,
+                    new VerificationRuntimeProvenance(
+                        runtime.Model.RemoteModelId, runtime.Connection?.Id, purpose.ToString(), runtime.LogicalModelName, false));
             }
             catch (OperationCanceledException)
             {
@@ -166,20 +201,24 @@ public sealed partial class EvidenceBackedReviewVerifier(
             }
             catch (Exception ex)
             {
-                await this.RecordResolutionFallbackAsync(context, ex, ct).ConfigureAwait(false);
+                await this.RecordResolutionFallbackAsync(context, ex, ct, purpose).ConfigureAwait(false);
             }
         }
 
-        return new JudgeRuntime(context?.ChatClient, context?.ModelId, AiConnectionModelCategory.Default);
+        return new JudgeRuntime(
+            context?.ChatClient, context?.ModelId, AiConnectionModelCategory.Default,
+            Provenance: new VerificationRuntimeProvenance(context?.ModelId, null, purpose.ToString(), null, true));
     }
 
-    // The low-effort model could not be resolved, so the judge runs on the reviewer's own tier client. The fallback is
-    // logged and recorded in the protocol with the model actually used, because that model can be far more expensive.
-    private async Task RecordResolutionFallbackAsync(ReviewVerificationContext context, Exception ex, CancellationToken ct)
+    // A verification purpose could not be resolved, so the step that asked for it runs on the reviewer's own tier client.
+    // The fallback is logged and recorded in the protocol with the model actually used, because that model can be far
+    // more expensive.
+    private async Task RecordResolutionFallbackAsync(ReviewVerificationContext context, Exception ex, CancellationToken ct, AiPurpose purpose)
     {
         this._logger.LogWarning(
             ex,
-            "The low-effort judge model could not be resolved for client {ClientId}; the evidence judge falls back to the reviewer model {ModelId}",
+            "The {Purpose} model for verification could not be resolved for client {ClientId}; verification falls back to the reviewer model {ModelId}",
+            purpose,
             context.ClientId,
             context.ModelId ?? "(none)");
 
@@ -198,7 +237,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
                     {
                         stage = ClaimDescriptor.LocalStage,
                         degradedComponent = "judge_model_resolution",
-                        requestedPurpose = nameof(AiPurpose.ReviewLowEffort),
+                        requestedPurpose = purpose.ToString(),
                         fallbackModelId = context.ModelId,
                     }),
                 null,
@@ -219,6 +258,8 @@ public sealed partial class EvidenceBackedReviewVerifier(
         VerificationWorkItem workItem,
         ReviewVerificationContext? context,
         JudgeRuntime judge,
+        Lazy<Task<JudgeRuntime>> contradictionJudge,
+        Lazy<Task<JudgeRuntime>> escalationJudge,
         SourceReadCache reads,
         SemaphoreSlim recordingLock,
         CancellationToken ct)
@@ -244,7 +285,10 @@ public sealed partial class EvidenceBackedReviewVerifier(
                 // A claim without an anchor file, such as a cross-cutting finding, is judged from the pull request
                 // inputs, excerpts of the files the finding cites, and the judge's own lookups.
                 var supportingExcerpts = await this.BuildSupportingFileExcerptsAsync(claim, workItem, reads, timeout.Token).ConfigureAwait(false);
-                return await this.JudgeAsync(claim, context, judge, recording, string.Empty, 1, supportingExcerpts, producedWithRepositoryTools, timeout.Token)
+                return await this.JudgeAsync(
+                        workItem, context, judge, contradictionJudge, escalationJudge, recording, string.Empty, string.Empty, 1, supportingExcerpts,
+                        producedWithRepositoryTools,
+                        timeout.Token)
                     .ConfigureAwait(false);
             }
 
@@ -260,7 +304,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
                     degradation: EvidenceJudgeDegradations.AnchorUnreadable);
             }
 
-            var (boundedSource, boundedStartLine) = BoundAnchorChars(anchorSource, windowStart, claim.AnchorLineNumber);
+            var (boundedSource, boundedStartLine, groundingSource) = BoundAnchorChars(anchorSource, windowStart, claim.AnchorLineNumber);
 
             // The judge also receives bounded excerpts of what the reviewing pass read and of the anchor file outside
             // the window, for the symbols the claim names, so a claim whose evidence lies elsewhere can be decided.
@@ -272,7 +316,9 @@ public sealed partial class EvidenceBackedReviewVerifier(
                 .ConfigureAwait(false);
 
             return await this.JudgeAsync(
-                    claim, context, judge, recording, boundedSource, boundedStartLine, excerpts, producedWithRepositoryTools, timeout.Token)
+                    workItem, context, judge, contradictionJudge, escalationJudge, recording, boundedSource, groundingSource, boundedStartLine, excerpts,
+                    producedWithRepositoryTools,
+                    timeout.Token)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
@@ -307,22 +353,34 @@ public sealed partial class EvidenceBackedReviewVerifier(
     // Runs the bounded tool loop for one claim and maps the final answer onto the local decision. Every model call and
     // every tool call is recorded under the protocol of the pass, so the trace shows what the judge looked at.
     private async Task<VerificationOutcome> JudgeAsync(
-        ClaimDescriptor claim,
+        VerificationWorkItem workItem,
         ReviewVerificationContext context,
         JudgeRuntime judge,
+        Lazy<Task<JudgeRuntime>> contradictionJudge,
+        Lazy<Task<JudgeRuntime>> escalationJudge,
         ClaimRecording recording,
         string anchorSource,
+        string groundingSource,
         int sourceStartLine,
         IReadOnlyList<JudgeExcerpt> excerpts,
         bool producedWithRepositoryTools,
         CancellationToken claimToken)
     {
+        var claim = workItem.Claim;
         var systemPrompt = BuildSystemPrompt();
-        var userMessage = BuildUserMessage(claim, anchorSource, sourceStartLine, context.Intent, excerpts, context.SourceBranch);
+        var userMessage = BuildUserMessage(claim, anchorSource, sourceStartLine, context.Intent, excerpts, context.SourceBranch)
+                          + BuildAdditionalInputs(workItem);
         var options = new ChatOptions { ModelId = judge.ModelId, MaxOutputTokens = this._outputBudgets.Initial };
-        if (judge.SupportsLowReasoningEffort)
+        var observedSources = new List<JudgeExcerpt>();
+
+        // A configured verification effort applies to every judge model. Without one, the judge asks for low effort only
+        // where the model supports it.
+        var effort = this._verificationReasoningEffort != ReviewReasoningEffort.None ? this._verificationReasoningEffort
+            : judge.SupportsLowReasoningEffort ? ReviewReasoningEffort.Low
+            : ReviewReasoningEffort.None;
+        if (effort != ReviewReasoningEffort.None)
         {
-            options.ApplyResolvedReasoning(false, ReviewReasoningEffort.Low);
+            options.ApplyResolvedReasoning(false, effort);
         }
 
         var result = await EvidenceJudgeToolLoop.RunAsync(
@@ -337,9 +395,14 @@ public sealed partial class EvidenceBackedReviewVerifier(
                 recording,
                 claim,
                 recordToken => this.RecordJudgeCallAsync(
-                    context.ProtocolId, modelResponse, systemPrompt, userMessage, judge, isFinal ? JudgeCallName : JudgeToolTurnCallName, recordToken)),
-            toolCall => this.RecordSerializedAsync(
-                recording, claim, recordToken => this.RecordJudgeToolCallAsync(context.ProtocolId, claim, toolCall, recordToken)),
+                    context.ProtocolId, modelResponse, systemPrompt, userMessage, judge, isFinal ? JudgeCallName : JudgeToolTurnCallName, recordToken, claim)),
+            toolCall =>
+            {
+                CaptureSourceLookupEvidence(toolCall, context.SourceBranch, observedSources);
+                return this.RecordSerializedAsync(
+                    recording, claim,
+                    recordToken => this.RecordJudgeToolCallAsync(context.ProtocolId, claim, toolCall, recordToken));
+            },
             outputLimit => this.RecordSerializedAsync(
                 recording, claim, recordToken => this.RecordJudgeOutputLimitAsync(context.ProtocolId, claim, judge, outputLimit, recordToken)),
             claimToken).ConfigureAwait(false);
@@ -365,7 +428,84 @@ public sealed partial class EvidenceBackedReviewVerifier(
             return unusable;
         }
 
-        return ToOutcome(claim, TryParseVerdict(response.Text), producedWithRepositoryTools);
+        var confidenceEvidence = ReadConfidenceEvidence(response.Text, claim, groundingSource, [.. excerpts, .. observedSources]);
+        var outcome = ToOutcome(claim, TryParseVerdict(response.Text), producedWithRepositoryTools, confidenceEvidence) with
+        {
+            Runtime = judge.Provenance,
+            ConfidenceEvidence = confidenceEvidence,
+        };
+        if (outcome.RecommendedDisposition != FinalGateDecision.PublishDisposition)
+        {
+            return outcome;
+        }
+
+        // A publication that rests on less than the claim needs keeps its open points as assumptions, which caps its
+        // confidence at Medium, and goes to the independent contradiction check.
+        var openPoints = OpenVerificationPoints(claim, result);
+        if (openPoints.Count > 0 && outcome.ConfidenceEvidence is { } evidence)
+        {
+            outcome = outcome with { ConfidenceEvidence = WithAssumptions(evidence, openPoints) };
+        }
+
+        if (!(workItem.RequiresCertaintyCheck
+              || outcome.ConfidenceEvidence?.Level == FindingConfidence.Certain
+              || openPoints.Count > 0
+              || RequiresIndependentCheck(claim.Severity)))
+        {
+            return outcome;
+        }
+
+        var checkInput = userMessage + BuildSourceLookupInputs(observedSources);
+        var checkedOutcome = await this.CheckContradictionAsync(
+            workItem, outcome, context, judge, contradictionJudge, recording, checkInput,
+            groundingSource, [.. excerpts, .. observedSources], producedWithRepositoryTools).ConfigureAwait(false);
+        if (!RequiresEscalation(workItem, checkedOutcome))
+        {
+            return checkedOutcome;
+        }
+
+        return await this.CheckContradictionAsync(
+            workItem, checkedOutcome, context, judge, escalationJudge, recording, checkInput,
+            groundingSource, [.. excerpts, .. observedSources], producedWithRepositoryTools).ConfigureAwait(false);
+    }
+
+    // The points a confirmation leaves unresolved: the judge read no further code after its last allowed lookup, or the
+    // finding itself states that its trigger is not established. Findings with either point had a false premise more
+    // often than other published findings in adjudicated reviews.
+    private static IReadOnlyList<string> OpenVerificationPoints(ClaimDescriptor claim, JudgeLoopResult result)
+    {
+        var points = new List<string>(2);
+        if (result.UsedEveryLookup)
+        {
+            points.Add(LookupBudgetAssumption);
+        }
+
+        if (ClaimTriggerHedge.FindOpenCondition(claim.AssertionText) is { } condition)
+        {
+            points.Add($"The finding leaves its own trigger open: \"{condition}\"");
+        }
+
+        return points;
+    }
+
+    // An Error or a Warning asks the author to change the code, so its publication needs the independent check in
+    // addition to the first judge. In adjudicated reviews, none of the Errors that the judge confirmed without the check
+    // was a real defect.
+    private static bool RequiresIndependentCheck(CommentSeverity severity) => severity is CommentSeverity.Error or CommentSeverity.Warning;
+
+    // A confirmed Error or Warning that would be published at Medium or below, or without complete evidence, goes to a
+    // second check on the high-effort model. In adjudicated reviews, the low-effort check confirmed most findings, every
+    // false premise it let through was published at Medium or Unassessed, and the high-effort check held back almost only
+    // findings that were not defects.
+    private static bool RequiresEscalation(VerificationWorkItem workItem, VerificationOutcome outcome) =>
+        RequiresIndependentCheck(workItem.Claim.Severity)
+        && outcome.RecommendedDisposition == FinalGateDecision.PublishDisposition
+        && ReviewFindingConfidence.PublishedLevel(workItem.ProposedConfidence, outcome) <= FindingConfidence.Medium;
+
+    private static VerificationConfidenceEvidence WithAssumptions(VerificationConfidenceEvidence evidence, IReadOnlyList<string> assumptions)
+    {
+        var retained = evidence.Assumptions.Take(VerificationConfidenceEvidence.MaxAssumptions - assumptions.Count);
+        return evidence with { Assumptions = [.. retained, .. assumptions] };
     }
 
     private static bool HasUsableVerdict(ChatResponse response)
@@ -534,7 +674,8 @@ public sealed partial class EvidenceBackedReviewVerifier(
         ILogger logger, string claimId, string? modelId, int modelTurn, int maxOutputTokens,
         long? outputTokens, long? reasoningTokens, bool retryScheduled);
 
-    private async Task RecordJudgeToolCallAsync(Guid? protocolId, ClaimDescriptor claim, JudgeToolCall toolCall, CancellationToken ct)
+    private async Task RecordJudgeToolCallAsync(
+        Guid? protocolId, ClaimDescriptor claim, JudgeToolCall toolCall, CancellationToken ct, string stage = JudgeLookupStage)
     {
         if (protocolRecorder is null || !protocolId.HasValue)
         {
@@ -546,7 +687,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
             await protocolRecorder.RecordVerificationEventAsync(
                 protocolId.Value,
                 ReviewProtocolEventNames.EvidenceJudgeToolCall,
-                JsonSerializer.Serialize(new { findingId = claim.FindingId, claimId = claim.ClaimId, tool = toolCall.ToolName }),
+                JsonSerializer.Serialize(new { findingId = claim.FindingId, claimId = claim.ClaimId, tool = toolCall.ToolName, stage }),
                 JsonSerializer.Serialize(
                     new
                     {
@@ -554,6 +695,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
                         arguments = toolCall.Arguments,
                         resultChars = toolCall.ResultChars,
                         resultTruncated = toolCall.ResultTruncated,
+                        succeeded = toolCall.Succeeded,
                     }),
                 null,
                 ct).ConfigureAwait(false);
@@ -577,7 +719,8 @@ public sealed partial class EvidenceBackedReviewVerifier(
         string userMessage,
         JudgeRuntime judge,
         string callName,
-        CancellationToken ct)
+        CancellationToken ct,
+        ClaimDescriptor? claim = null)
     {
         if (protocolRecorder is null || !protocolId.HasValue)
         {
@@ -587,6 +730,10 @@ public sealed partial class EvidenceBackedReviewVerifier(
         try
         {
             var usage = AiTokenUsageExtractor.FromResponse(response);
+            await protocolRecorder.RecordVerificationEventAsync(
+                protocolId.Value, "verification_runtime",
+                JsonSerializer.Serialize(new { findingId = claim?.FindingId, claimId = claim?.ClaimId, callName }),
+                JsonSerializer.Serialize(judge.Provenance), null, ct).ConfigureAwait(false);
             await protocolRecorder.RecordAiCallAsync(
                 protocolId.Value,
                 0,
@@ -636,12 +783,12 @@ public sealed partial class EvidenceBackedReviewVerifier(
 
     // Enforces the character ceiling while keeping the anchor line inside the window: an over-budget window
     // is sliced around the anchor (not from its head) so the cited code is never the part dropped. Returns
-    // the bounded text together with the file line its first retained line corresponds to.
-    private static (string Text, int StartLine) BoundAnchorChars(string source, int windowStartLine, int? anchorLineNumber)
+    // display text, its first retained file line, and complete original source lines eligible for grounding.
+    private static (string Text, int StartLine, string GroundingText) BoundAnchorChars(string source, int windowStartLine, int? anchorLineNumber)
     {
         if (source.Length <= MaxAnchorChars)
         {
-            return (source, windowStartLine);
+            return (source, windowStartLine, source);
         }
 
         var sliceStart = 0;
@@ -655,7 +802,16 @@ public sealed partial class EvidenceBackedReviewVerifier(
         var retainedStartLine = windowStartLine + CountNewlines(source, 0, sliceStart);
         var prefix = sliceStart > 0 ? "…(truncated)\n" : string.Empty;
         var suffix = sliceStart + MaxAnchorChars < source.Length ? "\n…(truncated)" : string.Empty;
-        return (prefix + slice + suffix, retainedStartLine);
+        var sliceEnd = sliceStart + slice.Length;
+        var partialStart = sliceStart > 0 && source[sliceStart - 1] is not ('\r' or '\n') && source[sliceStart] is not ('\r' or '\n');
+        var partialEnd = sliceEnd < source.Length && source[sliceEnd - 1] is not ('\r' or '\n') && source[sliceEnd] is not ('\r' or '\n');
+        var normalized = slice.ReplaceLineEndings("\n");
+        var groundingStart = partialStart ? normalized.IndexOf('\n') + 1 : 0;
+        var groundingEnd = partialEnd ? normalized.LastIndexOf('\n') : normalized.Length;
+        var grounding = partialStart && groundingStart == 0 || groundingEnd < groundingStart
+            ? string.Empty
+            : normalized[groundingStart..groundingEnd];
+        return (prefix + slice + suffix, retainedStartLine, grounding);
     }
 
     // Character offset of the start of the line at the given zero-based index within the text.
@@ -700,7 +856,8 @@ public sealed partial class EvidenceBackedReviewVerifier(
     // source in its summary. A finding the judge cannot decide because the code it needs is not in the inputs is
     // published when the producing pass could read the repository, and withheld otherwise. Every other response keeps
     // the conservative withhold, so an unusable verdict never publishes a finding.
-    private static VerificationOutcome ToOutcome(ClaimDescriptor claim, ParsedVerdict? verdict, bool passReviewedWithRepositoryTools)
+    private static VerificationOutcome ToOutcome(
+        ClaimDescriptor claim, ParsedVerdict? verdict, bool passReviewedWithRepositoryTools, VerificationConfidenceEvidence? confidenceEvidence)
     {
         if (verdict is null)
         {
@@ -712,12 +869,18 @@ public sealed partial class EvidenceBackedReviewVerifier(
         switch (verdict.Kind)
         {
             case EvidenceJudgeVerdicts.Confirmed:
-                return Publish(claim, Truncate(verdict.Reason, 280), EvidenceJudgeVerdicts.Confirmed);
+                return Publish(claim, Truncate(verdict.Reason, 280), EvidenceJudgeVerdicts.Confirmed) with
+                {
+                    VerifiedFindingKind = NormalizeFindingKind(verdict.FindingKind)
+                };
             case EvidenceJudgeVerdicts.IntendedContradicted when NamesASource(verdict.Contradicts):
                 return Publish(
-                    claim,
-                    $"Intended behaviour that contradicts {Truncate(verdict.Contradicts.Trim(), 120)}: {Truncate(verdict.Reason, 240)}",
-                    EvidenceJudgeVerdicts.IntendedContradicted);
+                        claim,
+                        $"Intended behaviour that contradicts {Truncate(verdict.Contradicts.Trim(), 120)}: {Truncate(verdict.Reason, 240)}",
+                        EvidenceJudgeVerdicts.IntendedContradicted) with
+                    {
+                        VerifiedFindingKind = NormalizeFindingKind(verdict.FindingKind)
+                    };
             case EvidenceJudgeVerdicts.IntendedContradicted:
                 return ConservativeWithhold(
                     claim,
@@ -727,8 +890,15 @@ public sealed partial class EvidenceBackedReviewVerifier(
             case EvidenceJudgeVerdicts.Intended:
                 return ConservativeWithhold(
                     claim, $"judge found the behaviour intended and contradicting nothing: {Truncate(verdict.Reason, 200)}", EvidenceJudgeVerdicts.Intended);
+            case EvidenceJudgeVerdicts.NotConfirmed when confidenceEvidence is { SourceGrounded: true }
+                                                         && !string.IsNullOrWhiteSpace(confidenceEvidence.Counterevidence):
+                return new VerificationOutcome(
+                        claim.ClaimId, claim.FindingId, VerificationOutcome.ContradictedKind,
+                        FinalGateDecision.DropDisposition, ["source_counterevidence_refutes_claim"], [], VerificationOutcome.ModerateEvidence,
+                        Truncate(verdict.Reason + " " + confidenceEvidence.Counterevidence, 1024), VerificationOutcome.AiMicroVerifierEvaluator, false)
+                    { JudgeVerdict = EvidenceJudgeVerdicts.NotConfirmed };
             case EvidenceJudgeVerdicts.NotConfirmed:
-                return ConservativeWithhold(claim, $"judge did not confirm: {Truncate(verdict.Reason, 200)}", EvidenceJudgeVerdicts.NotConfirmed);
+                return ConservativeWithhold(claim, "judge returned not_confirmed without source-grounded counterevidence", EvidenceJudgeVerdicts.NotConfirmed);
             case EvidenceJudgeVerdicts.NotActionable:
                 return ConservativeWithhold(
                     claim,
@@ -816,7 +986,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
 
     private static string BuildSystemPrompt()
     {
-        return PromptTemplateRuntime.RenderStage(SystemPromptStageKey);
+        return SystemPromptText.Value;
     }
 
     private static string BuildUserMessage(
@@ -827,9 +997,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
         IReadOnlyList<JudgeExcerpt> excerpts,
         string sourceBranch)
     {
-        return PromptTemplateRuntime.RenderStage(
-            UserPromptStageKey,
-            EvidenceJudgeInput.BuildUserModel(claim, anchorSource, sourceStartLine, intent, excerpts, sourceBranch));
+        return UserPromptTemplate.Value(EvidenceJudgeInput.BuildUserModel(claim, anchorSource, sourceStartLine, intent, excerpts, sourceBranch));
     }
 
     // The recorded output of a model call: its text, or the lookups it asked for when it has no text.
@@ -922,34 +1090,15 @@ public sealed partial class EvidenceBackedReviewVerifier(
 
     private static ParsedVerdict? TryParseVerdict(string? text)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        using var doc = JudgeResponseJson.TryParseObject(text);
+        if (doc is null || !doc.RootElement.TryGetProperty("verdict", out var verdictEl) || verdictEl.ValueKind != JsonValueKind.String)
         {
             return null;
         }
 
-        var start = text.IndexOf('{', StringComparison.Ordinal);
-        var end = text.LastIndexOf('}');
-        if (start < 0 || end <= start)
-        {
-            return null;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(text[start..(end + 1)]);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("verdict", out var verdictEl)
-                                                       || verdictEl.ValueKind != JsonValueKind.String)
-            {
-                return null;
-            }
-
-            return new ParsedVerdict(NormalizeVerdictKind(verdictEl.GetString()), ReadString(root, "reason"), ReadString(root, "contradicts"));
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+        var root = doc.RootElement;
+        return new ParsedVerdict(
+            NormalizeVerdictKind(verdictEl.GetString()), ReadString(root, "reason"), ReadString(root, "contradicts"), ReadString(root, "finding_kind"));
     }
 
     // Accepts the spelling variants a model produces for the same verdict ("Intended-Contradicted", "not confirmed",
@@ -982,7 +1131,14 @@ public sealed partial class EvidenceBackedReviewVerifier(
         return string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max];
     }
 
-    private sealed record ParsedVerdict(string Kind, string Reason, string Contradicts);
+    private static string? NormalizeFindingKind(string kind) => kind.Trim().ToLowerInvariant() switch
+    {
+        "defect" => "defect",
+        "improvement" => "improvement",
+        _ => null,
+    };
+
+    private sealed record ParsedVerdict(string Kind, string Reason, string Contradicts, string FindingKind);
 
     // Reads each file range once per verification run, so the claims of one file share the reads of the excerpts. A
     // read runs under a token scoped to the run, which is cancelled when the run ends; each claim waits for the read
@@ -1032,7 +1188,8 @@ public sealed partial class EvidenceBackedReviewVerifier(
         IChatClient? Client,
         string? ModelId,
         AiConnectionModelCategory Category,
-        bool SupportsLowReasoningEffort = false);
+        bool SupportsLowReasoningEffort = false,
+        VerificationRuntimeProvenance? Provenance = null);
 
     // The serialized protocol recording of one claim: the lock shared by the run, the time after which the claim no
     // longer waits for that lock, and the run token the records themselves use.

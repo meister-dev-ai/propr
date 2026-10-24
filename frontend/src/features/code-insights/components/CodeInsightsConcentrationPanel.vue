@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Ranking</p>
         <h3 id="insights-concentration-heading">Finding distribution</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           The scopes carrying the most findings in this window. Counts are findings rather than type assignments, so a
           finding with several types is still one finding here.
         </p>

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
@@ -28,6 +29,208 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 /// </summary>
 public sealed class PrWideCandidateGeneratorTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IndependentInvestigationsWithTheSameLocalCandidateIdCannotTransferEachOthersTypes(bool repeatedTaskId)
+    {
+        var firstCustomId = Guid.NewGuid();
+        var secondCustomId = Guid.NewGuid();
+        var tools = Substitute.For<IReviewContextTools>();
+        tools.GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns("source");
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var diagnostics = new List<string>();
+        recorder.RecordPrWideStageEventAsync(
+                Arg.Any<Guid>(), ReviewProtocolEventNames.PrWideInvestigationResult, Arg.Any<string?>(),
+                Arg.Do<string?>(output => diagnostics.Add(output ?? string.Empty)), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var context = new ReviewSystemContext(null, [], tools)
+        {
+            ActiveProtocolId = Guid.NewGuid(),
+            ProtocolRecorder = recorder,
+            FindingTypeVocabulary = new(
+                1,
+                [
+                    new(firstCustomId, "tenant-boundary", "Tenant boundary", "Cross-tenant access."),
+                    new(secondCustomId, "write-ordering", "Write ordering", "Concurrent writes."),
+                ]),
+        };
+        var plan = JsonSerializer.Serialize(
+            new
+            {
+                plan_id = "plan", concerns = new[] { "Isolation", "Write ordering" }, changed_areas = new[] { "src" },
+                investigation_tasks = new[]
+                {
+                    new
+                    {
+                        id = "task", task_type = "concern", concern = "Isolation", seed_file_paths = new[] { "src/Web/Program.cs" },
+                        allowed_tools = new[] { "get_file_content" }, max_tool_calls = 1
+                    },
+                    new
+                    {
+                        id = repeatedTaskId ? "task" : "other-task", task_type = "concern", concern = "Write ordering",
+                        seed_file_paths = new[] { "src/Application/Registration.cs" }, allowed_tools = new[] { "get_file_content" }, max_tool_calls = 1
+                    },
+                },
+            });
+        var sourceIds = new List<string>();
+        var callCount = 0;
+        var chat = Substitute.For<IChatClient>();
+        chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                callCount++;
+                string payload;
+                if (callCount == 1)
+                {
+                    payload = plan;
+                }
+                else if (callCount <= 3)
+                {
+                    var first = callCount == 2;
+                    payload = JsonSerializer.Serialize(
+                        new
+                        {
+                            candidate_findings = new[]
+                            {
+                                new
+                                {
+                                    id = "candidate-001", message = first ? "First source claim." : "Second source claim.", category = "per_file_comment",
+                                    severity = "error", file_path = first ? "src/Web/Program.cs" : "src/Application/Registration.cs", line_number = 1,
+                                    finding_classification = new
+                                        { types = first ? new[] { "logic-error", "tenant-boundary" } : ["concurrency", "write-ordering"] }
+                                },
+                            },
+                        });
+                }
+                else
+                {
+                    var input = call.Arg<IEnumerable<ChatMessage>>().Last().Text;
+                    foreach (var message in new[] { "First source claim.", "Second source claim." })
+                    {
+                        var line = input.Split('\n').Single(value =>
+                            value.StartsWith("- ", StringComparison.Ordinal) && value.EndsWith(": " + message, StringComparison.Ordinal));
+                        sourceIds.Add(line[2..line.IndexOf(':')]);
+                    }
+
+                    payload = JsonSerializer.Serialize(
+                        new
+                        {
+                            summary = "Review.", candidate_findings = new[]
+                            {
+                                new
+                                {
+                                    id = "synthesized", message = "The first source defect, reworded.", category = "per_file_comment", severity = "error",
+                                    file_path = "src/Web/Program.cs", line_number = 1, supporting_finding_ids = new[] { sourceIds[0] }
+                                },
+                            },
+                        });
+                }
+
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant, payload));
+            });
+
+        var candidates = await CreateSut().GenerateCandidatesAsync(
+            CreateJob(), CreatePr(), context, Runtime(chat), new(2, 1, 1), 2, false, ReviewReasoningEffort.None, CancellationToken.None);
+
+        var classification = Assert.Single(candidates).FindingClassification;
+        Assert.NotNull(classification);
+        Assert.Equal(["logic-error"], classification.CoreSlugs);
+        Assert.Equal(firstCustomId, Assert.Single(classification.CustomTags).Id);
+        Assert.Equal(2, sourceIds.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(2, diagnostics.Count);
+        foreach (var diagnostic in diagnostics)
+        {
+            using var parsed = JsonDocument.Parse(diagnostic);
+            var mapping = Assert.Single(parsed.RootElement.GetProperty("candidateIdentityMappings").EnumerateArray());
+            Assert.Equal("candidate-001", mapping.GetProperty("localId").GetString());
+            Assert.Contains(mapping.GetProperty("id").GetString(), sourceIds);
+        }
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("unchanged")]
+    [InlineData("combined")]
+    [InlineData("combined-unchanged")]
+    [InlineData("new")]
+    public async Task GenerateCandidatesAsyncPreservesCapturedInvestigationTypesThroughSynthesis(string synthesisMode)
+    {
+        var combined = synthesisMode.StartsWith("combined", StringComparison.Ordinal);
+        var customId = Guid.NewGuid();
+        var tools = Substitute.For<IReviewContextTools>();
+        tools.GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("return rows.Delete();");
+        var context = new ReviewSystemContext(null, [], tools)
+        {
+            FindingTypeVocabulary = new(1, [new(customId, "tenant-boundary", "Tenant boundary", "Cross-tenant access.")]),
+        };
+        const string original = """
+                                {"id":"first","message":"Deleting a tenant removes another tenant's rows.","category":"per_file_comment","severity":"error",
+                                "file_path":"src/Web/Program.cs","line_number":1,"supporting_files":["src/Web/Program.cs"],
+                                "finding_classification":{"types":["logic-error","tenant-boundary"],"level":"member","qualifier":"incorrect","confidence":0.96}}
+                                """;
+        const string second = """
+                              {"id":"second","message":"Concurrent deletes lose a write.","category":"per_file_comment","severity":"error",
+                              "file_path":"src/Application/Registration.cs","line_number":1,"supporting_files":["src/Application/Registration.cs"],
+                              "finding_classification":{"types":["concurrency"],"level":"member","qualifier":"missing","confidence":0.9}}
+                              """;
+        var synthesized = JsonSerializer.Serialize(
+            new
+            {
+                id = combined ? "combined" : "first",
+                message = synthesisMode switch
+                {
+                    "combined" => "Deleting a tenant can lose other tenants' rows and concurrent writes.",
+                    "new" => "A different validated security claim.",
+                    _ => "Deleting a tenant removes another tenant's rows.",
+                },
+                category = "per_file_comment",
+                severity = "error",
+                file_path = "src/Web/Program.cs",
+                line_number = 1,
+                supporting_files = new[] { "src/Web/Program.cs" },
+                supporting_finding_ids = combined ? new[] { "candidate-investigation-001-001", "candidate-investigation-001-002" } : [],
+                finding_classification = synthesisMode == "missing"
+                    ? null
+                    : new
+                    {
+                        types = new[] { combined ? "logic-error" : "security" },
+                        level = "member", qualifier = "incorrect", confidence = 0.98,
+                    },
+            });
+        var chat = Substitute.For<IChatClient>();
+        chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {"plan_id":"plan","concerns":["Delete isolation"],"changed_areas":["src/Web"],
+                                             "investigation_tasks":[{"id":"task","task_type":"concern","concern":"Delete isolation",
+                                             "seed_file_paths":["src/Web/Program.cs"],"allowed_tools":["get_file_content"],"max_tool_calls":1}]}
+                                            """)),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"task_id\":\"task\",\"candidate_findings\":[" + original + "," + second + "]}")),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"summary\":\"Review.\",\"candidate_findings\":[" + synthesized + "]}")));
+
+        var candidates = await CreateSut().GenerateCandidatesAsync(
+            CreateJob(), CreatePr(), context, Runtime(chat), new(1, 1, 1), 2, false, ReviewReasoningEffort.None, CancellationToken.None);
+
+        var classification = Assert.Single(candidates).FindingClassification;
+        Assert.NotNull(classification);
+        if (synthesisMode == "new")
+        {
+            Assert.Equal(["security"], classification.CoreSlugs);
+            Assert.Empty(classification.CustomTags);
+        }
+        else
+        {
+            Assert.Equal(combined ? ["logic-error", "concurrency"] : new[] { "logic-error" }, classification.CoreSlugs);
+            Assert.Equal(customId, Assert.Single(classification.CustomTags).Id);
+        }
+
+        await chat.Received(3).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData("{\"candidate_findings\":[]}", true)]
     [InlineData("{}", false)]

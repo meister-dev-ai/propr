@@ -805,19 +805,19 @@ public class ReviewPromptsTests
 
     // T017 — AgenticLoopGuidance contains the suggestion-block fence marker
     [Fact]
-    public void AgenticLoopGuidance_ContainsSuggestionFenceMarker()
+    public void AgenticLoopGuidance_RequestsStructuredOptionalFix()
     {
-        Assert.Contains("```suggestion", ReviewPrompts.AgenticLoopGuidance);
+        Assert.Contains("suggested_fix", ReviewPrompts.AgenticLoopGuidance);
     }
 
-    // T017 — AgenticLoopGuidance restricts suggestion blocks to single-file, single-hunk, code-only changes
+    // Optional fixes require exact source and an inclusive contiguous replacement range.
     [Fact]
-    public void AgenticLoopGuidance_ContainsSuggestionBlockRestrictions()
+    public void SystemPrompt_RequiresExactBoundedLocalFixes()
     {
-        var guidance = ReviewPrompts.AgenticLoopGuidance;
-        Assert.Contains("single", guidance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("hunk", guidance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("multi-file", guidance, StringComparison.OrdinalIgnoreCase);
+        var guidance = ReviewPrompts.BuildSystemPrompt(null);
+        Assert.Contains("contiguous", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("original_text", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("changes to multiple files", guidance, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -869,7 +869,7 @@ public class ReviewPromptsTests
         Assert.Contains("\"summary\"", prompt);
     }
 
-    // PR64-5468 — BuildSynthesisSystemPrompt plain-text mode must not describe JSON schema
+    // Plain-text synthesis preserves assessment evidence without a JSON schema.
     [Fact]
     public void BuildSynthesisSystemPrompt_PlainTextMode_DoesNotDescribeJson()
     {
@@ -877,6 +877,10 @@ public class ReviewPromptsTests
 
         Assert.Contains("plain text", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cross_cutting_concerns", prompt);
+        Assert.DoesNotContain("\"risk_assessment\"", prompt);
+        Assert.Contains("impact", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("occurrence likelihood", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("correctness confidence", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     // PromptOverrides — BuildSynthesisSystemPrompt uses override when present in context
@@ -893,14 +897,15 @@ public class ReviewPromptsTests
 
     // PromptOverrides — BuildQualityFilterSystemPrompt uses override when present in context
     [Fact]
-    public void BuildQualityFilterSystemPrompt_WithOverride_ReturnsOverrideText()
+    public void BuildQualityFilterSystemPrompt_WithOverrideRetainsRequiredClassificationContract()
     {
         var overrides = new Dictionary<string, string> { ["QualityFilterSystemPrompt"] = "Custom quality filter" };
         var context = new ReviewSystemContext(null, [], null) { PromptOverrides = overrides };
 
         var prompt = ReviewPrompts.BuildQualityFilterSystemPrompt(context);
 
-        Assert.Equal("Custom quality filter", prompt);
+        Assert.StartsWith("Custom quality filter", prompt);
+        Assert.Contains("finding_classification", prompt);
     }
 
     // PromptOverrides — BuildQualityFilterSystemPrompt without override returns default rules text

@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Missed findings</p>
         <h3 id="insights-misses-heading">Harvested human threads</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           Threads a person opened that the reviewer did not. Only the ones judged substantive, acted on and in scope
           count toward recall. The rest are listed as well, so where that line currently sits is visible before
           anybody moves it.

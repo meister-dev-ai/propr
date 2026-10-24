@@ -9,11 +9,12 @@ Schema:
     {
       "id": "candidate-001",
       "message": "<candidate message>",
+      "finding_classification": {"types":["<supported core or custom slug>"],"level":null,"qualifier":null,"confidence":null},
       "category": "cross_cutting|per_file_comment|architecture|documentation|test|ui|configuration|robustness|non_actionable",
       "severity": "info|warning|error|suggestion",
       "confidence": { "concern": "<area>", "score": <0-100> },
       "supporting_files": ["<relative path>"],
-      "supporting_finding_ids": ["<candidate or investigation finding id>"],
+      "supporting_finding_ids": ["<server-owned candidate id from the investigation outputs>"],
       "candidate_summary_text": "<summary-only wording when publication is not justified>",
       "file_path": "<relative path or null>",
       "line_number": <positive integer or null>,
@@ -21,7 +22,9 @@ Schema:
       "evidence_source": "pr_wide_synthesis"
     }
   ],
-  "summary": "<draft PR-wide summary before final reconciliation>"
+  "summary": "<draft PR-wide summary before final reconciliation>",
+  "summary_finding_ids": ["<retained candidate id supporting the narrative>"],
+  "finding_challenges": [{"finding_id":"<retained candidate id>","reason":"<specific doubt>","counterevidence":"<source evidence or inconsistency>"}]
 }
 
 Rules:
@@ -30,3 +33,13 @@ Rules:
 3. When a finding is anchored at one changed site but implicates other files, name those other files explicitly in the `message`.
 4. Use `candidate_summary_text` for any finding that may need `SummaryOnly` disposition later.
 5. Do not make final publication decisions. Emit only candidate findings plus the draft PR summary.
+6. Use the candidate IDs shown in the investigation outputs for `supporting_finding_ids`. Each ID identifies one
+   source candidate across the entire review. Do not substitute a task ID or invent an ID.
+
+{{> finding-risk-assessment}}
+
+{{> finding-presentation}}
+
+If source evidence contradicts a retained finding, request reconsideration in "finding_challenges": [{"finding_id":"<exact retained ID>","reason":"<specific doubt>","counterevidence":"<source evidence to check>"}]. Include at most 16 requests, once per ID, each reason and counterevidence at most 1024 characters. Do not express unresolved doubts only in summary prose, and never treat a producer's Certain confidence as independent evidence.
+
+{{> synthesis-claim-strength}}

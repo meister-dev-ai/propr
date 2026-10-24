@@ -13,6 +13,28 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 public sealed class CandidateFindingFactoryTests
 {
     [Fact]
+    public void AssignSynthesisFindingIds_PreservesOptionalCandidateMetadata()
+    {
+        var source = new CandidateReviewFinding(
+            "unassigned", new CandidateFindingProvenance(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, "synthesis"), CommentSeverity.Error,
+            "The supported call fails.",
+            CandidateReviewFinding.CrossCuttingCategory)
+        {
+            ReadGrounding = ReviewCommentReadGrounding.Covered,
+            ProducedWithRepositoryTools = true,
+            VerificationChallenge = new FindingVerificationChallenge("unassigned", "Check the caller.", "The caller has a guard."),
+        }.WithMergedProvenance(FindingProvenanceKind.BaselineOnly);
+
+        var assigned = Assert.Single(CandidateFindingFactory.AssignSynthesisFindingIds([source]));
+
+        Assert.Equal("finding-cc-001", assigned.FindingId);
+        Assert.Equal(source.ReadGrounding, assigned.ReadGrounding);
+        Assert.Equal(source.ProducedWithRepositoryTools, assigned.ProducedWithRepositoryTools);
+        Assert.Equal(source.VerificationChallenge, assigned.VerificationChallenge);
+        Assert.Equal(source.MergedFinding, assigned.MergedFinding);
+    }
+
+    [Fact]
     public void Build_WithDuplicateOverrideComments_ReusesOriginalFindingsInOrder()
     {
         var comment = new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Repeated warning.");
@@ -115,7 +137,7 @@ public sealed class CandidateFindingFactoryTests
         Assert.Equal(CandidateReviewFinding.CrossCuttingCategory, finding.Category);
         Assert.Null(finding.FilePath);
         Assert.Null(finding.LineNumber);
-        Assert.Equal("Cross-file concern derived from multiple per-file findings.", finding.CandidateSummaryText);
+        Assert.Null(finding.CandidateSummaryText);
 
         Assert.NotNull(finding.Evidence);
         var evidence = finding.Evidence!;

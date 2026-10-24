@@ -9,6 +9,9 @@ import {
   fetchRejectionReasons,
   fetchReviewerFindings,
   fetchTypesOverTime,
+  fetchRiskOverTime,
+  fetchRepositoryDirectory,
+  fetchHotspots,
 } from '@/services/codeInsightsAnalyticsService'
 
 const getMock = vi.fn()
@@ -24,6 +27,30 @@ describe('codeInsightsAnalyticsService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getMock.mockResolvedValue({ data: {} })
+  })
+
+  it('preserves risk filters for chart, directory, historical hotspot and drill requests', async () => {
+    const scope = { ...SCOPE, impact: 'critical', likelihood: 'likely', riskSeverity: 'critical', confidence: 'certain' }
+    for (const load of [
+      () => fetchTypesOverTime(scope, 'day'), () => fetchRepositoryDirectory(scope),
+      () => fetchHotspots(scope), () => fetchFindings(scope),
+    ]) {
+      getMock.mockResolvedValue({ data: {} })
+      await load()
+      expect(getMock.mock.lastCall?.[1].params.query).toMatchObject(scope)
+    }
+  })
+
+  it('requests server risk distributions and preserves Unassessed counts', async () => {
+    const series = { totalFindings: 3, keys: ['Critical', 'Unknown'], points: [
+      { bucketStart: SCOPE.from, key: 'Unknown', count: 2 },
+      { bucketStart: SCOPE.from, key: 'Critical', count: 1 },
+    ] }
+    getMock.mockResolvedValue({ data: series })
+    await expect(fetchRiskOverTime({ ...SCOPE, impact: 'critical' }, 'week', 'riskSeverity')).resolves.toEqual(series)
+    expect(getMock).toHaveBeenCalledWith('/code-quality/risk-over-time', {
+      params: { query: { ...SCOPE, impact: 'critical', dimension: 'riskSeverity', bucket: 'week' } },
+    })
   })
 
   it('omits the filters the caller left empty rather than sending blank ones', async () => {

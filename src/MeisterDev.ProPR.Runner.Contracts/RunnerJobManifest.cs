@@ -310,7 +310,8 @@ public sealed record RunnerModelBinding(
 public sealed record RunnerPromptConfiguration(
     string? Language,
     string? Aggressiveness,
-    IReadOnlyDictionary<string, string> Overrides);
+    IReadOnlyDictionary<string, string> Overrides,
+    RunnerFindingTypeVocabulary? FindingTypeVocabulary = null);
 
 /// <summary>
 ///     W3C trace context carried from the lease into the executor's spans and back, so one review can be
@@ -319,3 +320,9 @@ public sealed record RunnerPromptConfiguration(
 /// <param name="TraceParent">The <c>traceparent</c> header value.</param>
 /// <param name="TraceState">The <c>tracestate</c> header value, when present.</param>
 public sealed record RunnerTraceContext(string TraceParent, string? TraceState);
+
+/// <summary>Finding type vocabulary captured for an executor without database access.</summary>
+public sealed record RunnerFindingTypeVocabulary(int Version, IReadOnlyList<RunnerFindingCustomTypeDefinition> CustomTypes);
+
+/// <summary>One active custom finding type offered by the control plane.</summary>
+public sealed record RunnerFindingCustomTypeDefinition(Guid Id, string Slug, string DisplayName, string Definition);

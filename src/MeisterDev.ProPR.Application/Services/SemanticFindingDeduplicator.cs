@@ -4,6 +4,7 @@
 using System.Globalization;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
@@ -66,17 +67,33 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
         var groups = await this.GroupAsync(findings, clientId, ct).ConfigureAwait(false);
 
         var survivorComments = groups
-            .Select(group => commentsByFindingId[group.Representative.FindingId])
+            .Select(group =>
+            {
+                var representative = commentsByFindingId[group.Representative.FindingId];
+                var classification = group.MemberCount > 1
+                    ? FindingTypeClassification.Merge(group.Members.Select(member => member.FindingClassification))
+                    : null;
+                var risk = group.MemberCount > 1
+                    ? ConsolidateRiskAssessment(representative.RiskAssessment, group.Members.Select(member => member.RiskAssessment))
+                    : null;
+                return group.MemberCount <= 1 || classification is null && risk is null
+                    ? representative
+                    : representative with
+                    {
+                        FindingClassification = classification,
+                        RiskAssessment = risk,
+                    };
+            })
             .ToList();
 
         // Every group with more than one member is a merge the judge confirmed. The record names the surviving
         // comment and the comments it replaced, so the job protocol can show where each removed comment went.
-        var merges = groups
-            .Where(group => group.MemberCount > 1)
-            .Select(group => new FindingMergeRecord(
-                [commentsByFindingId[group.Representative.FindingId]],
-                group.Members
-                    .Where(member => !string.Equals(member.FindingId, group.Representative.FindingId, StringComparison.Ordinal))
+        var merges = groups.Select((group, index) => (group, index))
+            .Where(item => item.group.MemberCount > 1)
+            .Select(item => new FindingMergeRecord(
+                [survivorComments[item.index]],
+                item.group.Members
+                    .Where(member => !string.Equals(member.FindingId, item.group.Representative.FindingId, StringComparison.Ordinal))
                     .Select(member => commentsByFindingId[member.FindingId])
                     .ToList(),
                 FindingDeduplicationResult.SemanticSameDefectReason))
@@ -224,6 +241,16 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
         return ShouldReplace(current, candidate) ? candidate : current;
     }
 
+    private static FindingRiskAssessment? ConsolidateRiskAssessment(FindingRiskAssessment? representative, IEnumerable<FindingRiskAssessment?> sources)
+    {
+        var values = sources.ToArray();
+        var risk = representative?.Severity is > FindingRiskSeverity.Unknown
+            ? representative
+            : values.Where(value => value?.Severity is > FindingRiskSeverity.Unknown).MaxBy(value => value!.Severity)
+              ?? representative ?? values.FirstOrDefault(value => value is not null);
+        return ReviewFindingConfidence.Consolidate(risk, values);
+    }
+
     private static int SeverityRank(CommentSeverity severity)
     {
         return severity switch
@@ -241,25 +268,26 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
         var passKind = isUnion ? ReviewPassKind.MultiPassUnion : ReviewPassKind.Baseline;
         var findingId = string.Create(CultureInfo.InvariantCulture, $"finding-union-{ordinal:D4}");
         return new CandidateReviewFinding(
-            findingId,
-            new CandidateFindingProvenance(
-                CandidateFindingProvenance.PerFileCommentOrigin,
-                "multi_pass_union_dedup",
+                findingId,
+                new CandidateFindingProvenance(
+                    CandidateFindingProvenance.PerFileCommentOrigin,
+                    "multi_pass_union_dedup",
+                    comment.FilePath,
+                    reviewPassKind: passKind,
+                    findingProvenanceKind: FindingProvenanceKind.BaselineOnly,
+                    unionPassIndex: isUnion ? comment.OriginPassIndex : null,
+                    unionArmLabel: isUnion ? comment.OriginPassKind : null,
+                    unionLens: isUnion ? comment.OriginPassLens : null,
+                    originModelId: comment.OriginModelId,
+                    originLogicalModelName: comment.OriginLogicalModelName,
+                    originSymbolName: comment.OriginSymbolName,
+                    originSymbolKind: comment.OriginSymbolKind),
+                comment.Severity,
+                comment.Message,
+                comment.FilePath is null ? CandidateReviewFinding.CrossCuttingCategory : CandidateReviewFinding.PerFileCommentCategory,
                 comment.FilePath,
-                reviewPassKind: passKind,
-                findingProvenanceKind: FindingProvenanceKind.BaselineOnly,
-                unionPassIndex: isUnion ? comment.OriginPassIndex : null,
-                unionArmLabel: isUnion ? comment.OriginPassKind : null,
-                unionLens: isUnion ? comment.OriginPassLens : null,
-                originModelId: comment.OriginModelId,
-                originLogicalModelName: comment.OriginLogicalModelName,
-                originSymbolName: comment.OriginSymbolName,
-                originSymbolKind: comment.OriginSymbolKind),
-            comment.Severity,
-            comment.Message,
-            comment.FilePath is null ? CandidateReviewFinding.CrossCuttingCategory : CandidateReviewFinding.PerFileCommentCategory,
-            comment.FilePath,
-            comment.LineNumber);
+                comment.LineNumber)
+            { RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix };
     }
 
     // A mutable accumulator for one merge group: its current representative and the distinct passes that
@@ -294,10 +322,14 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
             var sourcePasses = this._sourcePasses.OrderBy(p => p).ToList();
             var provenanceKind = ResolveProvenanceKind(sourcePasses);
             return this.Representative.WithMergedProvenance(
-                provenanceKind,
-                sourcePasses,
-                "semantic_same_defect_class",
-                this.Representative.FindingId);
+                    provenanceKind,
+                    sourcePasses,
+                    "semantic_same_defect_class",
+                    this.Representative.FindingId) with
+                {
+                    FindingClassification = FindingTypeClassification.Merge(this._members.Select(member => member.FindingClassification)),
+                    RiskAssessment = ConsolidateRiskAssessment(this.Representative.RiskAssessment, this._members.Select(member => member.RiskAssessment)),
+                };
         }
 
         private static FindingProvenanceKind ResolveProvenanceKind(IReadOnlyList<ReviewPassKind> sourcePasses)

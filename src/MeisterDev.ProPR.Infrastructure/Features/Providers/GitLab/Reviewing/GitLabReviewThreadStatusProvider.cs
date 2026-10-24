@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Globalization;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
@@ -222,7 +223,7 @@ internal sealed class GitLabReviewThreadStatusProvider(
 
             builder.Append(note.Author?.Username ?? "Unknown");
             builder.Append(": ");
-            builder.Append(note.Body ?? string.Empty);
+            builder.Append(ReviewFindingTextFormatter.CompactBadgeHeaderForHistory(note.Body ?? string.Empty));
         }
 
         return builder.ToString();

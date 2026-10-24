@@ -1,0 +1,5 @@
+For each retained or reworded comment, return `source_finding_ids` containing the source finding ID
+from the input table. For a combined comment, list every source finding ID supporting the combined claim.
+Use only IDs from that table. Never invent an ID or combine unrelated claims. Keep the original types for
+an unchanged claim and retain the union of supported source types when combining claims. Rewording does
+not remove source types, risk evidence, fixes or provenance. A confirmed defect cannot become a SUGGESTION.

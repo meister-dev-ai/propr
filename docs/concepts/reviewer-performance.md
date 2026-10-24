@@ -52,10 +52,15 @@ Comparison uses the available page width, with compact filters above both charts
 the pane. On narrow screens, **Filters** opens the pane and **Apply filters** returns to the chart.
 Metric, aggregation, bucket and series controls sit above the charts.
 
-Filter by client, repository, model, finding type and kind. Kind uses the Missing, Incorrect and
+Filter by client, repository, model, finding type, kind, impact, likelihood, confidence and risk severity. Kind uses the Missing, Incorrect and
 Extraneous qualifier. Selections are combined as a union within one dimension and an intersection across
 dimensions. A finding with several selected types contributes once to the combined view. Its membership can
 appear in several separate type series, so those series are not disjoint populations.
+
+Impact, likelihood, confidence and risk severity also support separate series and matrix axes. Their values come
+from the retained [finding risk assessment](reviews.md#finding-risk). Unassessed is a selectable
+population, including historical findings. A risk restriction applies alongside the other filters to
+the same observations. It does not weight the scoring formula or replace finding classification.
 
 Client filters include authorized clients without measurements in the selected dates and are available in
 all performance views. **All** includes every value in a dimension; **None** selects an empty population.
@@ -93,6 +98,14 @@ remain pending. If a replacement query fails, all displayed comparison views, me
 labels remain attached to the retained results.
 
 ## Evidence limits
+
+Risk-filtered or risk-grouped recall and F1 require independent human concerns assessed with compatible
+impact, likelihood and confidence evidence. That evidence is unavailable, so these measurements show an explicit
+limitation. Selecting a risk matrix axis qualifies each cell without changing an otherwise unfiltered
+timeline. Overall publication precision remains available when its selected outcomes support it.
+Whole-pull-request correctness scores cannot be split by risk; risk-filtered correctness is unavailable.
+The Missed findings list requires unrestricted risk filters because human concerns have no independent
+impact, likelihood or confidence assessment. Collection coverage includes all risk levels.
 
 Observed recall measures retained human review concerns; it does not measure every defect in the code.
 Complete successful thread enumeration is required even when no human misses were found. Open human
@@ -159,6 +172,10 @@ concerns without source identity exclude compatible sources because their member
 established. Sources with coverage records remain visible even when they have no findings or scored misses.
 
 ## Current evidence and saved reports
+
+Saved reports capture the selected assessment dimensions, observed rubric versions and score limitations.
+Opening an older report preserves its captured values; absent risk selections mean an unrestricted
+scope and absent assessment evidence remains Unassessed.
 
 Current results reuse stored counts. Collection and background catch-up refresh those counts as evidence
 changes. Each view shows its latest evidence update time. **Report captured** shows the response capture

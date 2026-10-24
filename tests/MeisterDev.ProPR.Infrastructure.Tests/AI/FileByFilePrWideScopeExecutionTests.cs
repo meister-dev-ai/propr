@@ -6,6 +6,7 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
@@ -75,6 +76,8 @@ public sealed class FileByFilePrWideScopeExecutionTests
         Assert.Equal(nameof(ReviewPassKind.MultiPassUnion), prWideComment.OriginPassKind);
         Assert.Equal(2, prWideComment.OriginPassIndex);
         Assert.Equal(ReviewPassScope.PrWide, prWideComment.OriginPassLens);
+        Assert.True(prWideComment.ProducedWithRepositoryTools);
+        Assert.Equal(FindingConfidence.Unknown, Assert.IsType<FindingRiskAssessment>(prWideComment.RiskAssessment).Confidence);
     }
 
     [Fact]
@@ -104,6 +107,34 @@ public sealed class FileByFilePrWideScopeExecutionTests
         Assert.Equal(nameof(ReviewPassKind.MultiPassUnion), prWideComment.OriginPassKind);
         Assert.Equal(2, prWideComment.OriginPassIndex);
         Assert.Equal(ReviewPassScope.PrWide, prWideComment.OriginPassLens);
+        Assert.True(prWideComment.ProducedWithRepositoryTools);
+        Assert.Equal(FindingConfidence.High, Assert.IsType<FindingRiskAssessment>(prWideComment.RiskAssessment).Confidence);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReviewAsync_WithUnavailableRequestedVerification_DoesNotReusePriorOutcome(bool challenged)
+    {
+        var candidate = PublishablePrWideFinding(2);
+        candidate = challenged
+            ? candidate with
+            {
+                VerificationChallenge = new FindingVerificationChallenge(candidate.FindingId, "Recheck the claim.", "The guard may prevent it.")
+            }
+            : candidate with { VerificationOutcome = null };
+        var generator = Substitute.For<IPrWideCandidateGenerator>();
+        generator.GenerateCandidatesAsync(
+                Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<IResolvedAiChatRuntime>(),
+                Arg.Any<PrWideGenerationBudget>(), Arg.Any<int>(), Arg.Any<bool>(), Arg.Any<ReviewReasoningEffort>(), Arg.Any<CancellationToken>())
+            .Returns([candidate]);
+        var fixture = BuildFixture(generator, ResolverForAnyModel());
+        var context = ContextWith(fixture.ChatClient, fixture.ReviewTools, new ReviewPassSpec(Guid.NewGuid(), Scope: ReviewPassScope.PrWide));
+
+        var result = await fixture.Sut.ReviewAsync(fixture.Job, fixture.Pr, context, CancellationToken.None);
+
+        Assert.DoesNotContain(result.Comments, comment => comment.Message == candidate.Message);
+        Assert.Contains(result.Comments, comment => comment.Message == "Confirmed local issue.");
     }
 
     [Fact]
@@ -270,7 +301,13 @@ public sealed class FileByFilePrWideScopeExecutionTests
                 "The retrieved repository evidence supports the cross-file claim.",
                 VerificationOutcome.AiMicroVerifierEvaluator,
                 false),
-            scopeRelation: ChangedLineRelation.OnChangedLine);
+            scopeRelation: ChangedLineRelation.OnChangedLine)
+        {
+            ProducedWithRepositoryTools = true,
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Possible, "The operation fails.", "The affected input is possible.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "Provisional producer certainty."),
+        };
     }
 
     // A verifier-approved anchored PR-wide finding: the bounded PR-verifier recommended publication and the anchor
@@ -304,7 +341,14 @@ public sealed class FileByFilePrWideScopeExecutionTests
                 "The retrieved repository evidence supports the cross-file claim.",
                 VerificationOutcome.AiMicroVerifierEvaluator,
                 false),
-            scopeRelation: ChangedLineRelation.OnChangedLine);
+            scopeRelation: ChangedLineRelation.OnChangedLine)
+        {
+            ProducedWithRepositoryTools = true,
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Moderate, FindingLikelihood.Possible, "The operation fails.", "The affected input is possible.", "review_model",
+                FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.High, "Independent source evidence supports the bounded claim.",
+                ReviewFindingConfidence.VerificationSource),
+        };
     }
 
     // A verifier-approved PR-wide finding with no changed-line anchor (null file/line/scope). It is earned but not

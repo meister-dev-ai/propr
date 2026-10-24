@@ -64,13 +64,13 @@ public sealed class CompositeReviewFindingVerifierTests
     }
 
     [Fact]
-    public async Task WhenJudgeDoesNotConfirm_SurfacesEscalatedWithholdWithJudgeReason()
+    public async Task WhenJudgeRefutesClaim_DropsItWithTheSourceReason()
     {
         const string anchorPath = "src/Service.cs";
 
         var tools = Substitute.For<IReviewContextTools>();
         tools.GetFileContentAsync(anchorPath, "source", 1, Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns("public string Lookup(string key)\n{\n    return _map[key].ToString();\n}");
+            .Returns("public string Lookup(string key)\n{\n    return _map[key]?.ToString() ?? string.Empty;\n}");
 
         var judge = Substitute.For<IChatClient>();
         judge.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
@@ -78,7 +78,14 @@ public sealed class CompositeReviewFindingVerifierTests
                 new ChatResponse(
                     new ChatMessage(
                         ChatRole.Assistant,
-                        "{\"verdict\":\"not_confirmed\",\"reason\":\"key is non-nullable at line 1\"}")));
+                        """
+                        {"verdict":"not_confirmed","reason":"Conditional access skips ToString for a null mapped value.","confidence_evidence":{
+                          "level":"low","witness":"The mapped value is null when Lookup is called.",
+                          "consequence":"The method returns string.Empty without dereferencing the null value.",
+                          "counterevidence":"The return statement uses conditional access and null coalescing.",
+                          "assumptions":[],"all_claims_covered":true,
+                          "source_quotes":[{"file_path":"src/Service.cs","quote":"return _map[key]?.ToString() ?? string.Empty;"}]}}
+                        """)));
 
         var sut = CreateSut();
 
@@ -88,15 +95,12 @@ public sealed class CompositeReviewFindingVerifierTests
             new ReviewVerificationContext(tools, "source", judge, "judge-model"),
             CancellationToken.None);
 
-        // The disposition must not regress (still a SummaryOnly withhold), but the recorded outcome has to
-        // show that escalation ran and why the judge refused — otherwise a refused escalation is
-        // indistinguishable in the protocol from escalation never having run at all.
         var outcome = Assert.Single(outcomes);
-        Assert.Equal(VerificationOutcome.NonVerifiableKind, outcome.OutcomeKind);
-        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, outcome.RecommendedDisposition);
+        Assert.Equal(VerificationOutcome.ContradictedKind, outcome.OutcomeKind);
+        Assert.Equal(FinalGateDecision.DropDisposition, outcome.RecommendedDisposition);
         Assert.Equal(VerificationOutcome.AiMicroVerifierEvaluator, outcome.EvaluatedBy);
-        Assert.Contains("judge did not confirm", outcome.EvidenceSummary, StringComparison.Ordinal);
-        Assert.Contains("key is non-nullable", outcome.EvidenceSummary, StringComparison.Ordinal);
+        Assert.True(outcome.BlocksPublication);
+        Assert.Contains("Conditional access", outcome.EvidenceSummary, StringComparison.Ordinal);
     }
 
     private static CompositeReviewFindingVerifier CreateSut()

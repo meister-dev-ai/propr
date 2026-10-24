@@ -1,6 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 
 /// <summary>
@@ -140,6 +143,21 @@ public sealed record VerificationWorkItem
     ///     in one run sets it per work item.
     /// </summary>
     public bool? ProducedWithRepositoryTools { get; init; }
+
+    /// <summary>Server-owned request for a separate contradiction check. The initial judge never receives the producer's confidence.</summary>
+    public bool RequiresCertaintyCheck { get; init; }
+
+    /// <summary>
+    ///     Server-owned confidence that the producing pass proposed, which bounds the verified level. No judge receives it;
+    ///     it decides whether a confirmation goes to the escalation check.
+    /// </summary>
+    public FindingConfidence? ProposedConfidence { get; init; }
+
+    /// <summary>Optional structured replacement judged independently of the finding's correctness.</summary>
+    public ReviewSuggestedFix? SuggestedFix { get; init; }
+
+    /// <summary>Bounded counterevidence from synthesis for one reconsideration of the stable finding ID.</summary>
+    public FindingVerificationChallenge? Challenge { get; init; }
 
     private static IReadOnlyList<string> BuildDefaultVerifierFamilies(string evidenceScope, bool supportsAiMicroVerification)
     {

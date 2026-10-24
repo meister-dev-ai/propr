@@ -24,6 +24,100 @@ namespace MeisterDev.ProPR.Application.Tests.Services;
 /// </summary>
 public sealed class ThreadMemoryServiceTests
 {
+    [Theory]
+    [InlineData("finding-0", "a.cs")]
+    [InlineData(null, "a.cs")]
+    [InlineData("unknown-id", "a.cs")]
+    [InlineData("finding-0", "/a.cs")]
+    [InlineData("finding-0", "\\a.cs")]
+    public async Task Reconsideration_RetainedIdentityPreservesFixAndClassificationAcrossRewording(string? findingId, string filePath)
+    {
+        var (embedder, repository, _, _, service) = CreateService(out var chat, out var prompts);
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new[] { 0.5f });
+        repository.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto> { new(Guid.NewGuid(), "5", "a.cs", "A previous instance was corrected.", 0.92f) });
+        chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        System.Text.Json.JsonSerializer.Serialize(
+                            new
+                            {
+                                summary = "Retained.",
+                                comments = new[]
+                                {
+                                    new
+                                    {
+                                        finding_id = findingId, file_path = filePath, line_number = 1, severity = "suggestion",
+                                        message = "The reworded trigger still fails."
+                                    }
+                                },
+                            }))));
+        var finding = new ReviewComment("a.cs", 1, CommentSeverity.Error, "This trigger fails.")
+        {
+            SuggestedFix = new ReviewSuggestedFix(1, 1, "old();", "fixed();"),
+            OriginModelId = "source-model",
+        };
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, Host, Project, "repo", 1, 1);
+        var actual = await service.RetrieveAndReconsiderAsync(ClientId, job, "a.cs", "diff", new ReviewResult("Draft.", [finding]), null);
+        var kept = Assert.Single(actual.Comments);
+        Assert.Equal("The reworded trigger still fails.", kept.Message);
+        Assert.Equal(finding.Severity, kept.Severity);
+        Assert.Equal(finding.FilePath, kept.FilePath);
+        Assert.Equal(finding.LineNumber, kept.LineNumber);
+        Assert.Equal(finding.SuggestedFix, kept.SuggestedFix);
+        Assert.Equal(finding.OriginModelId, kept.OriginModelId);
+        prompts.Received(1).BuildUserMessage(
+            Arg.Is<string>(input => input.Contains("\"finding_id\":\"finding-0\"", StringComparison.Ordinal)
+                                    && input.Contains("fixed();", StringComparison.Ordinal)),
+            Arg.Any<IReadOnlyList<ThreadMemoryMatchDto>>(), Arg.Any<ReviewSystemContext?>());
+    }
+
+    [Theory]
+    [InlineData("ambiguous-anchor")]
+    [InlineData("duplicate-identity")]
+    [InlineData("unmatched-anchor")]
+    [InlineData("id-anchor-mismatch")]
+    [InlineData("id-line-mismatch")]
+    public async Task Reconsideration_UnreliableIdentityRetainsTheCompleteDraft(string scenario)
+    {
+        var (embedder, repository, _, _, service) = CreateService(out var chat, out _);
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new[] { 0.5f });
+        repository.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto> { new(Guid.NewGuid(), "5", "a.cs", "A previous instance was corrected.", 0.92f) });
+        var response = new
+        {
+            finding_id = scenario is "duplicate-identity" or "id-anchor-mismatch" or "id-line-mismatch" ? "finding-0" : null,
+            file_path = scenario is "unmatched-anchor" or "id-anchor-mismatch" ? "other.cs" : "a.cs",
+            line_number = scenario == "id-line-mismatch" ? 2 : 1,
+            severity = "suggestion",
+            message = "Reworded finding.",
+        };
+        chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        System.Text.Json.JsonSerializer.Serialize(
+                            new
+                            {
+                                summary = "Reconsidered.",
+                                comments = scenario == "duplicate-identity" ? new[] { response, response } : new[] { response },
+                            }))));
+        var finding = new ReviewComment("a.cs", 1, CommentSeverity.Error, "First defect.")
+        {
+            SuggestedFix = new ReviewSuggestedFix(1, 1, "old();", "fixed();"),
+        };
+        var other = new ReviewComment("a.cs", scenario == "ambiguous-anchor" ? 1 : 2, CommentSeverity.Error, "Second defect.");
+        var draft = new ReviewResult("Draft.", [finding, other]);
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, Host, Project, "repo", 1, 1);
+
+        var actual = await service.RetrieveAndReconsiderAsync(ClientId, job, "a.cs", "diff", draft, null);
+
+        Assert.Same(draft, actual);
+    }
+
     /// <summary>The host that issued the repository identifiers in this fixture.</summary>
     private const string Host = "https://dev.azure.com/org";
 

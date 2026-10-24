@@ -21,6 +21,25 @@ namespace MeisterDev.ProPR.Domain.Entities;
 /// </remarks>
 public sealed class CodeInsightFinding
 {
+    /// <summary>Assessed consequence, or Unknown when no assessment was retained.</summary>
+    public FindingImpact Impact { get; set; }
+
+    /// <summary>Occurrence likelihood independent of correctness confidence.</summary>
+    public FindingLikelihood Likelihood { get; set; }
+
+    /// <summary>Strength of correctness evidence, or Unknown for unassessed findings.</summary>
+    public FindingConfidence Confidence { get; set; }
+
+    /// <summary>Server-derived risk severity.</summary>
+    public FindingRiskSeverity RiskSeverity { get; set; }
+
+    /// <summary>Rubric used for the retained assessment, or empty for historical findings.</summary>
+    public string RiskRubricVersion { get; set; } = string.Empty;
+
+    /// <summary>Protected assessment with evidence rationales and provenance.</summary>
+    public string? EncryptedRiskAssessment { get; set; }
+
+
     /// <summary>Fingerprint of the discussion used by the current outcome judgement.</summary>
     public string? OutcomeSourceFingerprint { get; set; }
 
@@ -202,14 +221,12 @@ public sealed class CodeInsightFinding
     public ICollection<CodeInsightFindingTag> Tags { get; init; } = new List<CodeInsightFindingTag>();
 
     /// <summary>
-    ///     The level of code the finding concerns, once classified; <see langword="null" /> while it is still
-    ///     awaiting classification.
+    ///     The level of code the finding concerns, or <see langword="null" /> when that axis is unassessed.
     /// </summary>
     public CodeInsightFindingLevel? Level { get; set; }
 
     /// <summary>
-    ///     Whether the code in question is absent, wrong, or unnecessary, once classified;
-    ///     <see langword="null" /> while it is still awaiting classification.
+    ///     Whether the code in question is absent, wrong, or unnecessary; <see langword="null" /> when unassessed.
     /// </summary>
     public CodeInsightFindingQualifier? Qualifier { get; set; }
 
@@ -228,7 +245,7 @@ public sealed class CodeInsightFinding
 
     /// <summary>
     ///     The classifier's own confidence in the assigned types, 0–1, or <see langword="null" /> when
-    ///     unclassified. Stored so a confidence threshold can be calibrated later without re-running the model.
+    ///     unavailable. Stored so a confidence threshold can be calibrated later without re-running the model.
     /// </summary>
     public double? ClassificationConfidence { get; set; }
 }

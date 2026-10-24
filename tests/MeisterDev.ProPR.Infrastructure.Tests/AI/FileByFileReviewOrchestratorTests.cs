@@ -507,7 +507,10 @@ public class FileByFileReviewOrchestratorTests
     [Fact]
     public async Task ReviewAsync_CarriedForwardResults_DoNotContributePostingCandidates()
     {
-        var carriedForwardComment = new ReviewComment("legacy.cs", 10, CommentSeverity.Warning, "legacy issue");
+        var risk = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Unlikely, "A record is lost.", "Rare input.",
+            "review_model", FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "The reproduction confirms the loss.");
+        var carriedForwardComment = new ReviewComment("legacy.cs", 10, CommentSeverity.Warning, "legacy issue") { RiskAssessment = risk };
         var freshComment = new ReviewComment("fresh.cs", 20, CommentSeverity.Warning, "fresh issue");
 
         var priorResult = new ReviewFileResult(Guid.NewGuid(), "legacy.cs");
@@ -526,6 +529,7 @@ public class FileByFileReviewOrchestratorTests
         {
             ReviewFileResult.CreateCarriedForward(job.Id, priorResult),
         };
+        Assert.Equal(risk, Assert.Single(storedResults[0].Comments!).RiskAssessment);
 
         var repo = Substitute.For<IJobRepository>();
         repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())

@@ -442,6 +442,10 @@ const controlOptions = {
     { value: 'qualifier', label: 'Kind (qualifier)' },
     { value: 'client', label: 'Clients' },
     { value: 'repository', label: 'Repositories' },
+    { value: 'riskSeverity', label: 'Risk severity' },
+    { value: 'confidence', label: 'Confidence' },
+    { value: 'impact', label: 'Impact' },
+    { value: 'likelihood', label: 'Likelihood' },
   ],
 }
 
@@ -456,6 +460,10 @@ const initial: PerformanceScope = {
   models: null,
   types: null,
   qualifiers: null,
+  impacts: null,
+  likelihoods: null,
+  riskSeverities: null,
+  confidences: null,
 }
 const scopes = ref<PerformanceScope[]>([{ ...initial }, { ...initial }])
 const metric = ref<PerformanceMetric>('f1')
@@ -703,7 +711,7 @@ function applyResponse(result: PerformanceResponse, preserve = false): void {
     facetCache.value[index] = frozen.value
       ? facets
       : Object.fromEntries(
-          (['clients', 'repositories', 'models', 'types', 'qualifiers'] as const).map((key) => [
+          (['clients', 'repositories', 'models', 'types', 'qualifiers', 'impacts', 'likelihoods', 'riskSeverities', 'confidences'] as const).map((key) => [
             key,
             [
               ...new Map(
@@ -1022,6 +1030,10 @@ async function drill(cell: PerformanceMatrixCell): Promise<void> {
       model: 'models',
       type: 'types',
       qualifier: 'qualifiers',
+      impact: 'impacts',
+      likelihood: 'likelihoods',
+      riskSeverity: 'riskSeverities',
+      confidence: 'confidences',
     }[dimension] as keyof PerformanceScope
     Object.assign(scope, { [field]: [id] })
   }

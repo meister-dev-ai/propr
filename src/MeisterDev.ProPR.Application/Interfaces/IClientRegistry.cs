@@ -112,6 +112,9 @@ public interface IClientRegistry
     /// <param name="ct">Cancellation token.</param>
     Task<CommentSeverity> GetMinimumSeverityToPostAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>Returns the SCM finding badge style, defaulting to Shields.io images for an unknown client.</summary>
+    Task<FindingBadgeStyle> GetFindingBadgeStyleAsync(Guid clientId, CancellationToken ct = default);
+
     /// <summary>
     ///     Returns the severities whose published comments are posted already resolved (with an explanatory note)
     ///     for the given client. Defaults to an empty set (nothing auto-resolved) if the client does not exist.

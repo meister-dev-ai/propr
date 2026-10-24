@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Acceptance</p>
         <h3 id="insights-acceptance-heading">Acceptance rate</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           Of the findings that reached an outcome, the share a human fixed or agreed with. Dismissed findings count
           against acceptance even though they count as correct. A finding can be right and unwanted, so correctness
           and acceptance are measured separately. Findings a human engaged with and left unresolved are counted on

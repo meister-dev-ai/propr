@@ -12,8 +12,11 @@ internal static class ProviderRetryMechanics
     /// <summary>
     ///     Whether a failure may be classified and retried at all. Cancellation belongs to the caller, and a
     ///     refusal thrown on the cancellation channel — a budget hard cap, for instance — belongs to whoever
-    ///     threw it, so both pass through untouched. The one cancellation that is ours is the HTTP client's own
-    ///     timeout: it wraps a <see cref="TimeoutException" /> and arrives while the caller's token is healthy.
+    ///     threw it, so both pass through untouched. The cancellations that are ours are the clients' own timeouts,
+    ///     which arrive while the caller's token is healthy. The HTTP client's timeout wraps a
+    ///     <see cref="TimeoutException" />. The network timeout of the System.ClientModel clients, which the OpenAI
+    ///     clients use, fires when a response stream stops delivering data and wraps the interrupted read as an
+    ///     <see cref="IOException" /> below a second cancellation.
     /// </summary>
     /// <param name="exception">The exception the call threw.</param>
     /// <param name="cancellationToken">The caller's token, used to tell a real cancellation from a timeout.</param>
@@ -21,7 +24,21 @@ internal static class ProviderRetryMechanics
     {
         return exception is not OperationCanceledException
                || (!cancellationToken.IsCancellationRequested
-                   && exception is TaskCanceledException { InnerException: TimeoutException });
+                   && exception is TaskCanceledException
+                   && CarriesTransportTimeout(exception.InnerException));
+    }
+
+    private static bool CarriesTransportTimeout(Exception? inner)
+    {
+        for (; inner is not null; inner = inner.InnerException)
+        {
+            if (inner is TimeoutException or IOException)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

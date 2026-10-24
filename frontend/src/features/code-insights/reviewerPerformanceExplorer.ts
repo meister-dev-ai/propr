@@ -35,6 +35,10 @@ export const EXPLORER_DIMENSIONS: readonly ExplorerAxisItem[] = [
   { id: 'qualifier', label: 'Kind (qualifier)' },
   { id: 'client', label: 'Client' },
   { id: 'repository', label: 'Repository' },
+  { id: 'riskSeverity', label: 'Risk severity' },
+  { id: 'impact', label: 'Impact' },
+  { id: 'likelihood', label: 'Likelihood' },
+  { id: 'confidence', label: 'Confidence' },
 ]
 
 export function dimensionLabel(dimension: string): string {

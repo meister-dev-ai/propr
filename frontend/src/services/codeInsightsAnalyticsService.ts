@@ -17,6 +17,7 @@
  */
 
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
+import type { FindingRiskAssessment, RiskDimension } from '@/features/reviews/findingRisk'
 
 export type CodeInsightBucket = 'day' | 'week' | 'month'
 
@@ -87,6 +88,10 @@ export interface CodeInsightScope {
   repositoryId?: string | null
   filePath?: string | null
   pullRequestId?: number | null
+  impact?: string | null
+  likelihood?: string | null
+  riskSeverity?: string | null
+  confidence?: string | null
 }
 
 export interface CodeInsightCountPoint {
@@ -106,6 +111,7 @@ export interface CodeInsightTypeSeries {
  * Rendering that as 0 would draw an absence of data as a collapse in quality.
  */
 export interface CodeInsightMetric {
+  unavailableReason?: string | null
   precision: number | null
   recall: number | null
   f1: number | null
@@ -287,6 +293,7 @@ export interface CodeInsightFinding {
   providerThreadId: string | null
   observedAt: string
   rejectionReason?: string | null
+  riskAssessment?: FindingRiskAssessment | null
 }
 
 export interface CodeInsightMiss {
@@ -342,6 +349,10 @@ function toQuery(scope: CodeInsightScope, extra: Record<string, unknown> = {}): 
   if (scope.repositoryId) query.repositoryId = scope.repositoryId
   if (scope.filePath) query.filePath = scope.filePath
   if (scope.pullRequestId != null) query.pullRequestId = scope.pullRequestId
+  if (scope.impact) query.impact = scope.impact
+  if (scope.likelihood) query.likelihood = scope.likelihood
+  if (scope.riskSeverity) query.riskSeverity = scope.riskSeverity
+  if (scope.confidence) query.confidence = scope.confidence
   return query
 }
 
@@ -363,6 +374,7 @@ function toMetric(raw: Partial<CodeInsightMetric> | null | undefined): CodeInsig
     coveredSampleSize: raw.coveredSampleSize ?? 0,
     coveredTruePositives: raw.coveredTruePositives ?? 0,
     coveredMisses: raw.coveredMisses ?? 0,
+    unavailableReason: raw.unavailableReason ?? null,
   }
 }
 
@@ -407,6 +419,19 @@ export async function fetchTypesOverTime(
     totalFindings: series.totalFindings ?? 0,
     keys: series.keys ?? [],
   }
+}
+
+/** Loads both metric lenses over the window: is the reviewer right, and do humans want what it says. */
+export async function fetchRiskOverTime(
+  scope: CodeInsightScope,
+  bucket: CodeInsightBucket,
+  dimension: RiskDimension,
+): Promise<CodeInsightTypeSeries> {
+  const { data, error } = await createAdminClient().GET('/code-quality/risk-over-time', {
+    params: { query: toQuery(scope, { bucket, dimension }) },
+  })
+  if (error || !data) throw new Error(getApiErrorMessage(error, 'Failed to load the finding risk distribution.'))
+  return { points: data.points ?? [], totalFindings: data.totalFindings ?? 0, keys: data.keys ?? [] } as CodeInsightTypeSeries
 }
 
 /** Loads both metric lenses over the window: is the reviewer right, and do humans want what it says. */

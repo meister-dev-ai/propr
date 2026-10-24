@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Net.Sockets;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
@@ -122,6 +123,24 @@ public sealed class ProviderRetryChatClientTests
     public async Task AnHttpClientTimeoutIsTreatedAsTransient()
     {
         var inner = new ScriptedChatClient([new TaskCanceledException("timed out", new TimeoutException()), null]);
+
+        var response = await Client(inner).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]);
+
+        Assert.Equal("ok", response.Text);
+        Assert.Equal(2, inner.Calls);
+    }
+
+    // The OpenAI clients raise the System.ClientModel network timeout when a response stream stops delivering data:
+    // the timeout wraps a second cancellation, which wraps the interrupted read.
+    [Fact]
+    public async Task AResponseStreamThatStopsDeliveringDataIsTreatedAsTransient()
+    {
+        var stalled = new TaskCanceledException(
+            "The operation was cancelled because it exceeded the configured timeout of 0:01:40.",
+            new TaskCanceledException(
+                "The operation was canceled.",
+                new IOException("Unable to read data from the transport connection: Operation canceled.", new SocketException(125))));
+        var inner = new ScriptedChatClient([stalled, null]);
 
         var response = await Client(inner).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]);
 

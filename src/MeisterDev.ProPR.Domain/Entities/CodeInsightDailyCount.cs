@@ -31,6 +31,22 @@ namespace MeisterDev.ProPR.Domain.Entities;
 /// </remarks>
 public sealed class CodeInsightDailyCount
 {
+    /// <summary>Assessed consequence, or Unknown when no assessment was retained.</summary>
+    public FindingImpact Impact { get; set; }
+
+    /// <summary>Occurrence likelihood independent of correctness confidence.</summary>
+    public FindingLikelihood Likelihood { get; set; }
+
+    /// <summary>Strength of correctness evidence, or Unknown for unassessed findings.</summary>
+    public FindingConfidence Confidence { get; set; }
+
+    /// <summary>Server-derived risk severity.</summary>
+    public FindingRiskSeverity RiskSeverity { get; set; }
+
+    /// <summary>Rubric used for the retained assessment, or empty for historical findings.</summary>
+    public string RiskRubricVersion { get; set; } = string.Empty;
+
+
     /// <summary>Primary key.</summary>
     public Guid Id { get; set; }
 

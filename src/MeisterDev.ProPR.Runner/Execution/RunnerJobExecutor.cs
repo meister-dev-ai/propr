@@ -329,6 +329,11 @@ public sealed partial class RunnerJobExecutor(
                 PrefersResponsesApi: false,
                 SupportsPromptCaching: manifest.DefaultModel.SupportsPromptCaching),
             OutputLanguage = manifest.Prompts.Language,
+            FindingTypeVocabulary = manifest.Prompts.FindingTypeVocabulary is { Version: FindingTypeTaxonomy.Version, CustomTypes: not null } vocabulary
+                ? new FindingTypeVocabulary(
+                    vocabulary.Version, vocabulary.CustomTypes.Where(tag => tag is not null).Select(tag =>
+                        new FindingCustomTypeDefinition(tag.Id, tag.Slug, tag.DisplayName, tag.Definition)).ToList().AsReadOnly())
+                : FindingTypeVocabulary.Core,
             ExclusionRules = ReviewExclusionRules.FromPatterns(manifest.Exclusions),
             PromptOverrides = manifest.Prompts.Overrides,
             BaselineReasoningEffort = ParseEffort(manifest.Prompts.Aggressiveness),

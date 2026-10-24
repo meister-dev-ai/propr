@@ -93,7 +93,8 @@ public sealed partial class CodeInsightFindingIngestionService(
                 finding.DuplicateVerificationSource,
                 finding.DuplicateVerificationConfidence,
                 finding.DuplicateVerifiedAt,
-                finding.ProviderScope))
+                finding.ProviderScope,
+                finding.RiskAssessment, finding.FindingClassification))
             .ToList();
 
         await store.MaterialiseFindingsAsync(
@@ -104,11 +105,14 @@ public sealed partial class CodeInsightFindingIngestionService(
             snapshots,
             ct);
 
-        // Keep the roll-up current. It recomputes the job's cells rather than incrementing, so calling it here
-        // and again after classification or a disposition cannot double a count.
+        // Replayed revisions retain their original finding owners. Refresh those jobs as well as the current job.
         if (rollupProjector is not null)
         {
-            await rollupProjector.ProjectJobAsync(evt.JobId, ct);
+            var owners = await store.GetFindingJobIdsForRevisionAsync(key, evt.RevisionKey, ct);
+            foreach (var jobId in owners.Append(evt.JobId).Distinct())
+            {
+                await rollupProjector.ProjectJobAsync(jobId, ct);
+            }
         }
     }
 }

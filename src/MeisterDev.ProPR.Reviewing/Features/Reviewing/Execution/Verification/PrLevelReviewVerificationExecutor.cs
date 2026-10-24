@@ -4,6 +4,7 @@
 using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
@@ -50,7 +51,14 @@ internal sealed class PrLevelReviewVerificationExecutor(
     {
         if (synthesizedFindings.Count == 0 || reviewClaimExtractor is null || reviewEvidenceCollector is null)
         {
-            return synthesizedFindings;
+            return synthesizedFindings.Select(finding =>
+                finding.VerificationChallenge is null
+                    ? finding with { RiskAssessment = ReviewFindingConfidence.Resolve(finding.RiskAssessment, []) }
+                    : WithOutcome(
+                        finding, finding.Evidence,
+                        VerificationOutcome.DegradedUnresolved(
+                            finding.FindingId, VerificationOutcome.AiMicroVerifierEvaluator,
+                            ReviewFindingGateReasonCodes.VerificationDegraded, "Independent PR-level verification is unavailable."))).ToList();
         }
 
         var verificationContext = new ReviewVerificationContext(
@@ -103,68 +111,82 @@ internal sealed class PrLevelReviewVerificationExecutor(
                 continue;
             }
 
-            var claim = claims[0];
-            var initialWorkItem = new VerificationWorkItem(
-                claim,
-                effectiveFinding.Provenance,
-                claim.Stage,
-                VerificationWorkItem.CrossFileScope,
-                true,
-                effectiveFinding.Evidence);
-
-            EvidenceBundle evidence;
-            try
+            foreach (var claim in claims)
             {
-                evidence = await reviewEvidenceCollector.CollectEvidenceAsync(initialWorkItem, reviewContext.ReviewTools, sourceBranch, ct);
+                var initialWorkItem = new VerificationWorkItem(
+                    claim,
+                    effectiveFinding.Provenance,
+                    claim.Stage,
+                    VerificationWorkItem.CrossFileScope,
+                    true,
+                    effectiveFinding.Evidence);
+
+                EvidenceBundle evidence;
+                try
+                {
+                    evidence = await reviewEvidenceCollector.CollectEvidenceAsync(initialWorkItem, reviewContext.ReviewTools, sourceBranch, ct);
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    await this.RecordDegradedAsync(
+                        protocolId,
+                        new
+                        {
+                            findingId = effectiveFinding.FindingId,
+                            claimId = claim.ClaimId,
+                            stage = ClaimDescriptor.PrLevelStage,
+                            degradedComponent = "evidence_collection",
+                        },
+                        null,
+                        ex.Message,
+                        ct);
+
+                    verified[index] = CreateEvidenceCollectionDegradedFinding(effectiveFinding, claim, ex.Message);
+                    pendingJudgements.RemoveAll(pending => pending.Index == index);
+                    break;
+                }
+
+                await this.RecordEvidenceCollectedAsync(protocolId, effectiveFinding, claim, evidence, ct);
+
+                var updatedEvidence = BuildUpdatedEvidence(effectiveFinding, evidence);
+                var evidenceBackedWorkItem = new VerificationWorkItem(
+                    claim,
+                    effectiveFinding.Provenance,
+                    claim.Stage,
+                    VerificationWorkItem.CrossFileScope,
+                    true,
+                    updatedEvidence)
+                {
+                    ProducedWithRepositoryTools = ProducedWithRepositoryTools(effectiveFinding, reviewContext),
+                    RequiresCertaintyCheck = effectiveFinding.RiskAssessment?.Confidence == FindingConfidence.Certain,
+                    ProposedConfidence = ReviewFindingConfidence.ProposedConfidence(effectiveFinding.RiskAssessment),
+                    SuggestedFix = effectiveFinding.SuggestedFix,
+                    Challenge = effectiveFinding.VerificationChallenge,
+                };
+
+                pendingJudgements.Add(new PendingJudgement(index, effectiveFinding, evidenceBackedWorkItem, updatedEvidence));
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                await this.RecordDegradedAsync(
-                    protocolId,
-                    new
-                    {
-                        findingId = effectiveFinding.FindingId,
-                        claimId = claim.ClaimId,
-                        stage = ClaimDescriptor.PrLevelStage,
-                        degradedComponent = "evidence_collection",
-                    },
-                    null,
-                    ex.Message,
-                    ct);
-
-                verified[index] = CreateEvidenceCollectionDegradedFinding(effectiveFinding, claim, ex.Message);
-                continue;
-            }
-
-            await this.RecordEvidenceCollectedAsync(protocolId, effectiveFinding, claim, evidence, ct);
-
-            var updatedEvidence = BuildUpdatedEvidence(effectiveFinding, evidence);
-            var evidenceBackedWorkItem = new VerificationWorkItem(
-                claim,
-                effectiveFinding.Provenance,
-                claim.Stage,
-                VerificationWorkItem.CrossFileScope,
-                true,
-                updatedEvidence)
-            {
-                ProducedWithRepositoryTools = ProducedWithRepositoryTools(effectiveFinding, reviewContext),
-            };
-
-            pendingJudgements.Add(new PendingJudgement(index, effectiveFinding, evidenceBackedWorkItem, updatedEvidence));
         }
 
         var outcomes = await this.VerifyClaimsAsync(pendingJudgements, verificationContext, ct);
-        for (var pendingIndex = 0; pendingIndex < pendingJudgements.Count; pendingIndex++)
+        foreach (var group in pendingJudgements.Select((pending, outcomeIndex) => (pending, Outcome: outcomes[outcomeIndex]))
+                     .GroupBy(item => item.pending.Index))
         {
-            var (index, effectiveFinding, workItem, _) = pendingJudgements[pendingIndex];
-            var outcome = outcomes[pendingIndex];
+            var (index, effectiveFinding, workItem, _) = group.First().pending;
+            var findingOutcomes = group.Select(item => item.Outcome).ToArray();
+            var outcome = findingOutcomes.FirstOrDefault(item => item.BlocksPublication)
+                          ?? findingOutcomes.FirstOrDefault(item => item.RecommendedDisposition != FinalGateDecision.PublishDisposition)
+                          ?? findingOutcomes[0];
 
-            await this.RecordDecisionAsync(protocolId, outcome, workItem, ct);
+            foreach (var item in group)
+            {
+                await this.RecordDecisionAsync(protocolId, item.Outcome, item.pending.WorkItem, ct);
+            }
 
             verified[index] = new CandidateReviewFinding(
                 effectiveFinding.FindingId,
                 effectiveFinding.Provenance,
-                effectiveFinding.Severity,
+                ReviewFindingClassification.Resolve(effectiveFinding.Severity, findingOutcomes),
                 effectiveFinding.Message,
                 effectiveFinding.Category,
                 effectiveFinding.FilePath,
@@ -175,8 +197,13 @@ internal sealed class PrLevelReviewVerificationExecutor(
                 outcome,
                 effectiveFinding.ScopeRelation)
             {
+                RiskAssessment = ReviewFindingConfidence.Resolve(effectiveFinding.RiskAssessment, findingOutcomes),
+                FindingClassification = effectiveFinding.FindingClassification,
+                SuggestedFix = effectiveFinding.SuggestedFix,
                 ReadGrounding = effectiveFinding.ReadGrounding,
                 MergedFinding = effectiveFinding.MergedFinding,
+                ProducedWithRepositoryTools = effectiveFinding.ProducedWithRepositoryTools,
+                VerificationChallenge = effectiveFinding.VerificationChallenge,
             };
         }
 
@@ -189,8 +216,10 @@ internal sealed class PrLevelReviewVerificationExecutor(
     // the repository.
     private static bool ProducedWithRepositoryTools(CandidateReviewFinding finding, ReviewSystemContext reviewContext)
     {
-        return reviewContext.ReviewTools is not null
-               && string.Equals(finding.Provenance.OriginKind, CandidateFindingProvenance.PrWidePassOrigin, StringComparison.Ordinal);
+        return finding.ProducedWithRepositoryTools ?? (reviewContext.ReviewTools is not null
+                                                       && string.Equals(
+                                                           finding.Provenance.OriginKind, CandidateFindingProvenance.PrWidePassOrigin,
+                                                           StringComparison.Ordinal));
     }
 
     private static VerificationOutcome CreateNoClaimOutcome(CandidateReviewFinding finding)
@@ -224,8 +253,12 @@ internal sealed class PrLevelReviewVerificationExecutor(
             outcome,
             finding.ScopeRelation)
         {
+            RiskAssessment = ReviewFindingConfidence.Resolve(finding.RiskAssessment, [outcome]), FindingClassification = finding.FindingClassification,
+            SuggestedFix = finding.SuggestedFix,
             MergedFinding = finding.MergedFinding,
             ReadGrounding = finding.ReadGrounding,
+            ProducedWithRepositoryTools = finding.ProducedWithRepositoryTools,
+            VerificationChallenge = finding.VerificationChallenge,
         };
     }
 
@@ -401,27 +434,10 @@ internal sealed class PrLevelReviewVerificationExecutor(
 
     private static CandidateReviewFinding CreateClaimExtractionDegradedFinding(CandidateReviewFinding finding, string? error)
     {
-        return new CandidateReviewFinding(
-            finding.FindingId,
-            finding.Provenance,
-            finding.Severity,
-            finding.Message,
-            finding.Category,
-            finding.FilePath,
-            finding.LineNumber,
-            finding.Evidence,
-            finding.CandidateSummaryText,
-            finding.InvariantCheckContext,
-            VerificationOutcome.DegradedUnresolved(
-                finding.FindingId,
-                VerificationOutcome.DeterministicRulesEvaluator,
-                ReviewFindingGateReasonCodes.VerificationDegraded,
-                $"PR-level claim extraction degraded: {error}"),
-            finding.ScopeRelation)
-        {
-            ReadGrounding = finding.ReadGrounding,
-            MergedFinding = finding.MergedFinding,
-        };
+        return WithOutcome(
+            finding, finding.Evidence, VerificationOutcome.DegradedUnresolved(
+                finding.FindingId, VerificationOutcome.DeterministicRulesEvaluator, ReviewFindingGateReasonCodes.VerificationDegraded,
+                $"PR-level claim extraction degraded: {error}"));
     }
 
     private static CandidateReviewFinding CreateEvidenceCollectionDegradedFinding(
@@ -429,27 +445,10 @@ internal sealed class PrLevelReviewVerificationExecutor(
         ClaimDescriptor claim,
         string? error)
     {
-        return new CandidateReviewFinding(
-            finding.FindingId,
-            finding.Provenance,
-            finding.Severity,
-            finding.Message,
-            finding.Category,
-            finding.FilePath,
-            finding.LineNumber,
-            finding.Evidence,
-            finding.CandidateSummaryText,
-            finding.InvariantCheckContext,
-            VerificationOutcome.DegradedUnresolved(
-                claim,
-                VerificationOutcome.AiMicroVerifierEvaluator,
-                ReviewFindingGateReasonCodes.VerificationDegraded,
-                $"PR-level evidence collection degraded: {error}"),
-            finding.ScopeRelation)
-        {
-            ReadGrounding = finding.ReadGrounding,
-            MergedFinding = finding.MergedFinding,
-        };
+        return WithOutcome(
+            finding, finding.Evidence, VerificationOutcome.DegradedUnresolved(
+                claim, VerificationOutcome.AiMicroVerifierEvaluator, ReviewFindingGateReasonCodes.VerificationDegraded,
+                $"PR-level evidence collection degraded: {error}"));
     }
 
     private static EvidenceReference BuildUpdatedEvidence(CandidateReviewFinding finding, EvidenceBundle evidence)

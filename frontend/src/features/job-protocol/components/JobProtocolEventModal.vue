@@ -91,6 +91,7 @@
                                             </template>
                                             <template v-else>No matching thread was recorded for this reason.</template>
                                         </p>
+                                        <FindingRiskAssessmentView :assessment="decodeProtocolRiskAssessment(f.riskAssessment ?? f.originalComment?.riskAssessment)" />
                                     </div>
                                 </div>
                             </div>
@@ -175,6 +176,7 @@
                                             <span class="monospace-value memory-comment-loc">{{ vm.commentLocation(comment.filePath, comment.lineNumber) }}</span>
                                         </div>
                                         <p class="memory-comment-msg">{{ comment.message }}</p>
+                                        <FindingRiskAssessmentView :assessment="decodeProtocolRiskAssessment(comment.riskAssessment)" />
                                         <div class="comment-relevance-meta">
                                             <span v-if="comment.decisionSource" class="monospace-badge">{{ comment.decisionSource }}</span>
                                             <span v-for="reasonCode in comment.reasonCodes ?? []" :key="reasonCode" class="monospace-badge">{{ reasonCode }}</span>
@@ -246,8 +248,9 @@
                                     <span class="json-key">Comments ({{ vm.selectedAssistantTurn.parsedReview.comments.length }}):</span>
                                     <ul class="json-comments-list">
                                         <li v-for="(comment, idx) in vm.selectedAssistantTurn.parsedReview.comments" :key="idx" class="json-comment-item" :class="`severity-${comment.severity}`">
-                                            <strong>{{ (comment.severity ?? 'note').toUpperCase() }}</strong> at <span class="monospace-value">{{ comment.file_path }}:L{{ comment.line_number }}</span><br />
+                                            <strong>Classification: {{ (comment.severity ?? 'note').toUpperCase() }}</strong> at <span class="monospace-value">{{ comment.file_path }}:L{{ comment.line_number }}</span><br />
                                             {{ comment.message }}
+                                            <FindingRiskAssessmentView :assessment="comment.riskAssessment" :authoritative="false" />
                                         </li>
                                     </ul>
                                 </div>
@@ -273,8 +276,9 @@
                                 <span class="json-key">Comments ({{ vm.parsedOutputResult.comments.length }}):</span>
                                 <ul class="json-comments-list">
                                     <li v-for="(comment, idx) in vm.parsedOutputResult.comments" :key="idx" class="json-comment-item" :class="`severity-${comment.severity}`">
-                                        <strong>{{ (comment.severity ?? 'note').toUpperCase() }}</strong> at <span class="monospace-value">{{ comment.file_path }}:L{{ comment.line_number }}</span><br />
+                                        <strong>Classification: {{ (comment.severity ?? 'note').toUpperCase() }}</strong> at <span class="monospace-value">{{ comment.file_path }}:L{{ comment.line_number }}</span><br />
                                         {{ comment.message }}
+                                        <FindingRiskAssessmentView :assessment="decodeProposedRiskAssessment(comment.risk_assessment ?? comment.riskAssessment)" :authoritative="false" />
                                     </li>
                                 </ul>
                             </div>
@@ -362,6 +366,8 @@
 </template>
 
 <script setup lang="ts">
+import FindingRiskAssessmentView from '@/components/findings/FindingRiskAssessmentView.vue'
+import { decodeProtocolRiskAssessment, decodeProposedRiskAssessment } from '../utils/findingRiskDecoders'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 

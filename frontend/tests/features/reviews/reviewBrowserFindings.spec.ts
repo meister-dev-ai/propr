@@ -20,6 +20,30 @@ const thread: RetainedThread = { threadId: 'thread-1', filePath: 'src/Auth.cs', 
 const filters = { query: '', presence: 'all', kind: '', severity: '', outcome: '' }
 
 describe('review browser findings', () => {
+  it('applies confidence-only filters to finding metadata', () => {
+    expect(filterBrowserFiles(files, [thread], [finding()], { ...filters, confidence: 'certain' })).toEqual([])
+    expect(filterBrowserFiles(files, [thread], [finding()], { ...filters, confidence: 'unknown' })).toEqual([files[0]])
+  })
+
+  it('combines impact, likelihood, risk severity and classification on the same finding', () => {
+    const riskAssessment = { impact: 'moderate', likelihood: 'unlikely', severity: 'low', confidence: 'high', confidenceReason: 'The affected code path is visible.',
+      impactReason: 'An optional report is incorrect.', likelihoodReason: 'Only empty imports are affected.',
+      source: 'review-generation', rubricVersion: 'finding-risk-v1' } as const
+    const metadata = [finding({ riskAssessment }), finding({ id: 'f2', severity: 'Error',
+      riskAssessment: { ...riskAssessment, impact: 'critical', likelihood: 'likely', severity: 'critical', confidence: 'certain' } })]
+    expect(filterBrowserFiles(files, [thread], metadata, {
+      ...filters, severity: 'warning', impact: 'critical', likelihood: 'likely', riskSeverity: 'critical', confidence: 'certain',
+    })).toEqual([])
+    expect(filterBrowserFiles(files, [thread], metadata, {
+      ...filters, severity: 'warning', impact: 'moderate', likelihood: 'unlikely', riskSeverity: 'low', confidence: 'high',
+    })).toEqual([files[0]])
+  })
+
+  it('selects legacy or incomplete assessments as Unassessed instead of Low', () => {
+    expect(filterBrowserFiles(files, [thread], [finding()], { ...filters, riskSeverity: 'unknown' })).toEqual([files[0]])
+    expect(filterBrowserFiles(files, [thread], [finding()], { ...filters, riskSeverity: 'low' })).toEqual([])
+  })
+
   it('joins finding identity to the original AI comment without classifying replies', () => {
     const metadata = finding()
     expect(findingForComment(thread, original, [metadata])).toBe(metadata)

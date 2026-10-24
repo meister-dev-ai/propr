@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Globalization;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
@@ -304,7 +305,7 @@ internal sealed class ForgejoReviewThreadStatusProvider(
 
             builder.Append(comments[index].Comment.User?.Login ?? "Unknown");
             builder.Append(": ");
-            builder.Append(comments[index].Comment.Body ?? string.Empty);
+            builder.Append(ReviewFindingTextFormatter.CompactBadgeHeaderForHistory(comments[index].Comment.Body ?? string.Empty));
         }
 
         return builder.ToString();

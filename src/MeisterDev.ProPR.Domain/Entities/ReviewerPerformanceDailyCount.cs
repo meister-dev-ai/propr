@@ -9,6 +9,22 @@ namespace MeisterDev.ProPR.Domain.Entities;
 /// <summary>One joint daily count cell. Type membership is retained as a set for union deduplication.</summary>
 public sealed class ReviewerPerformanceDailyCount
 {
+    /// <summary>Assessed consequence, or Unknown when no assessment was retained.</summary>
+    public FindingImpact Impact { get; set; }
+
+    /// <summary>Occurrence likelihood independent of correctness confidence.</summary>
+    public FindingLikelihood Likelihood { get; set; }
+
+    /// <summary>Strength of correctness evidence, or Unknown for unassessed findings.</summary>
+    public FindingConfidence Confidence { get; set; }
+
+    /// <summary>Server-derived risk severity.</summary>
+    public FindingRiskSeverity RiskSeverity { get; set; }
+
+    /// <summary>Rubric used for the retained assessment, or empty for historical findings.</summary>
+    public string RiskRubricVersion { get; set; } = string.Empty;
+
+
     public Guid Id { get; set; }
     public string CellKey { get; set; } = string.Empty;
     public Guid CodeInsightPullRequestId { get; set; }

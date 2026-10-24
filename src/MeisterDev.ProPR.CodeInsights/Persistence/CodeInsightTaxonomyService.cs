@@ -3,6 +3,8 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Text.RegularExpressions;
+using MeisterDev.ProPR.CodeInsights.Contracts;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -15,8 +17,17 @@ namespace MeisterDev.ProPR.CodeInsights.Persistence;
 ///     Validation lives here rather than in the controller so the shadowing rule holds for every caller,
 ///     including the classifier's own lookups.
 /// </summary>
-public sealed partial class CodeInsightTaxonomyService(MeisterProPRDbContext dbContext) : ICodeInsightTaxonomyService
+public sealed partial class CodeInsightTaxonomyService(MeisterProPRDbContext dbContext) : ICodeInsightTaxonomyService, IFindingTypeVocabularyProvider
 {
+    /// <inheritdoc />
+    public async Task<FindingTypeVocabulary> GetVocabularyAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var vocabulary = await this.GetAssignableTaxonomyAsync(clientId, ct);
+        return new FindingTypeVocabulary(
+            vocabulary.Version, vocabulary.CustomTags
+                .Select(tag => new FindingCustomTypeDefinition(tag.Id, tag.Slug, tag.DisplayName, tag.Definition)).ToList().AsReadOnly());
+    }
+
     private const int MaxSlugLength = 64;
     private const int MaxDisplayNameLength = 128;
     private const int MaxDefinitionLength = 512;

@@ -41,6 +41,8 @@ internal sealed class HandlebarsPromptRenderer
     /// </summary>
     private CachedEnvironment? _cached;
 
+    private readonly object _preparationLock = new();
+
     internal string Render(string template, object? model, IReadOnlyDictionary<string, string>? partials = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(template);
@@ -53,6 +55,37 @@ internal sealed class HandlebarsPromptRenderer
         catch (Exception ex) when (ex is HandlebarsCompilerException or HandlebarsRuntimeException or InvalidOperationException)
         {
             throw new InvalidOperationException($"Failed to render Handlebars prompt template: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>Compiles a fixed template once; the returned delegate renders independent models without recompilation.</summary>
+    internal Func<object?, string> Prepare(string template, IReadOnlyDictionary<string, string>? partials = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(template);
+
+        try
+        {
+            HandlebarsTemplate<object, object> compiled;
+            lock (this._preparationLock)
+            {
+                compiled = this.ResolveEnvironment(partials).Compile(template);
+            }
+
+            return model =>
+            {
+                try
+                {
+                    return compiled(model);
+                }
+                catch (Exception ex) when (ex is HandlebarsCompilerException or HandlebarsRuntimeException or InvalidOperationException)
+                {
+                    throw new InvalidOperationException($"Failed to render Handlebars prompt template: {ex.Message}", ex);
+                }
+            };
+        }
+        catch (Exception ex) when (ex is HandlebarsCompilerException or HandlebarsRuntimeException or InvalidOperationException)
+        {
+            throw new InvalidOperationException($"Failed to prepare Handlebars prompt template: {ex.Message}", ex);
         }
     }
 

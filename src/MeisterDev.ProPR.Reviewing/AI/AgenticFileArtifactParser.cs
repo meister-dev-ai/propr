@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
@@ -71,7 +72,7 @@ internal static class AgenticFileArtifactParser
     internal static bool TryParseInvestigationResult(
         string? responseText,
         AgenticFileInvestigationTask task,
-        out AgenticFileInvestigationResult? result)
+        out AgenticFileInvestigationResult? result, FindingTypeVocabulary? vocabulary = null)
     {
         result = null;
         if (string.IsNullOrWhiteSpace(responseText))
@@ -85,7 +86,7 @@ internal static class AgenticFileArtifactParser
             var root = doc.RootElement;
 
             var evidence = ParseEvidence(root);
-            var findings = ParseCandidateFindings(root, task);
+            var findings = ParseCandidateFindings(root, task, vocabulary);
             var toolUsage = ParseToolUsage(root);
 
             result = new AgenticFileInvestigationResult(
@@ -130,7 +131,8 @@ internal static class AgenticFileArtifactParser
         return evidence;
     }
 
-    private static List<AgenticFileCandidateFinding> ParseCandidateFindings(JsonElement root, AgenticFileInvestigationTask task)
+    private static List<AgenticFileCandidateFinding> ParseCandidateFindings(
+        JsonElement root, AgenticFileInvestigationTask task, FindingTypeVocabulary? vocabulary)
     {
         var findings = new List<AgenticFileCandidateFinding>();
         if (!root.TryGetProperty("candidate_findings", out var findingsEl) || findingsEl.ValueKind != JsonValueKind.Array)
@@ -164,7 +166,12 @@ internal static class AgenticFileArtifactParser
                     GetString(item, "file_path"),
                     GetInt(item, "line_number"),
                     GetString(item, "candidate_summary_text"),
-                    SupportSource: GetString(item, "support_source")));
+                    SupportSource: GetString(item, "support_source"))
+                {
+                    RiskAssessment = FindingRiskAssessmentParser.ParseFinding(item),
+                    FindingClassification = FindingTypeClassificationParser.ParseFinding(item, vocabulary),
+                    SuggestedFix = ReviewSuggestedFixValidator.Parse(item)
+                });
         }
 
         return findings;

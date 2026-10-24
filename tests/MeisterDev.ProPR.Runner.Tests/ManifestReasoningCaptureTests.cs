@@ -24,6 +24,18 @@ namespace MeisterDev.ProPR.Runner.Tests;
 /// </summary>
 public sealed class ManifestReasoningCaptureTests
 {
+    [Fact]
+    public async Task CapturedFindingVocabularyReachesExecutorAndLegacyManifestsKeepCoreTypes()
+    {
+        var id = Guid.NewGuid();
+        var vocabulary = new RunnerFindingTypeVocabulary(1, [new(id, "tenant-boundary", "Captured label", "Definition")]);
+        var context = await BuildContextAsync(null, false, vocabulary);
+        Assert.Equal(id, Assert.Single(context.FindingTypeVocabulary.CustomTypes).Id);
+        Assert.Equal("Captured label", context.FindingTypeVocabulary.CustomTypes[0].DisplayName);
+        var legacy = await BuildContextAsync(null, false);
+        Assert.Same(FindingTypeVocabulary.Core, legacy.FindingTypeVocabulary);
+    }
+
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -71,9 +83,10 @@ public sealed class ManifestReasoningCaptureTests
 
     private static async Task<MeisterDev.ProPR.Application.ValueObjects.ReviewSystemContext> BuildContextAsync(
         RunnerReviewBehaviour? behaviour,
-        bool hostSwitch)
+        bool hostSwitch, RunnerFindingTypeVocabulary? vocabulary = null)
     {
         var manifest = RunnerManifests.Sample() with { Behaviour = behaviour };
+        manifest = manifest with { Prompts = manifest.Prompts with { FindingTypeVocabulary = vocabulary } };
         var workspace = new EmptyWorkspace();
         var job = RunnerReviewSubject.BuildJob(manifest);
         var pullRequest = await RunnerReviewSubject.BuildPullRequestAsync(manifest, workspace, CancellationToken.None);

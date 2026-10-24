@@ -66,6 +66,8 @@
       </button>
     </form>
 
+    <FindingRiskFilters :model-value="vm.riskFilters.value" :disabled="vm.loading.value" @update:model-value="vm.setRiskFilters" />
+
     <p v-if="vm.error.value" class="page-error" role="alert">{{ vm.error.value }}</p>
 
     <CodeQualityRepositoryDirectory
@@ -84,7 +86,7 @@
         class="section-tab"
         :class="{ 'section-tab--active': vm.section.value === tab.key }"
         :aria-current="vm.section.value === tab.key ? 'page' : undefined"
-        @click="vm.section.value = tab.key"
+        @click="onSectionChange(tab.key)"
       >
         <i :class="['fi', tab.icon]" aria-hidden="true"></i>
         {{ tab.label }}
@@ -96,6 +98,17 @@
       :series="vm.types.value"
       :bucket="vm.bucket.value"
       @drill="onTypeDrill"
+    />
+
+    <CodeInsightsRiskPanel
+      v-else-if="vm.section.value === 'risk'"
+      :series="vm.riskSeries.value"
+      :bucket="vm.bucket.value"
+      :dimension="vm.riskDimension.value"
+      :loading="vm.riskLoading.value"
+      :error="vm.riskError.value"
+      @update:dimension="onRiskDimensionChange"
+      @drill="onRiskDrill"
     />
 
     <CodeInsightsHotspotsPanel
@@ -134,6 +147,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import FindingRiskFilters from '@/components/findings/FindingRiskFilters.vue'
+import CodeInsightsRiskPanel from './CodeInsightsRiskPanel.vue'
+import { riskLabel, type RiskDimension } from '@/features/reviews/findingRisk'
 import CodeInsightsConcentrationPanel from '@/features/code-insights/components/CodeInsightsConcentrationPanel.vue'
 import CodeInsightsDrillPanel from '@/features/code-insights/components/CodeInsightsDrillPanel.vue'
 import CodeInsightsHotspotsPanel from '@/features/code-insights/components/CodeInsightsHotspotsPanel.vue'
@@ -156,6 +172,7 @@ const TABS: { key: CodeQualitySection; label: string; icon: string }[] = [
   { key: 'concentration', label: 'Distribution', icon: 'fi-rr-target' },
   { key: 'hotspots', label: 'Hotspots', icon: 'fi-rr-fire-flame-curved' },
   { key: 'survival', label: 'Persistence', icon: 'fi-rr-anchor' },
+  { key: 'risk', label: 'Risk assessment', icon: 'fi-rr-chart-histogram' },
 ]
 
 // Pinning a scope is what makes this reusable: the same workspace as a per-client tab, or embedded in one
@@ -180,6 +197,18 @@ const vm = useCodeQualityViewModel({
 
 function value(event: Event): string {
   return (event.target as HTMLInputElement | HTMLSelectElement).value
+}
+
+function onSectionChange(section: CodeQualitySection): void {
+  vm.section.value = section
+  if (section === 'risk') void vm.loadRisk()
+}
+function onRiskDimensionChange(dimension: RiskDimension): void {
+  vm.riskDimension.value = dimension
+  void vm.loadRisk()
+}
+function onRiskDrill(value: string): void {
+  void vm.openDrill({ title: `${riskLabel(value)} ${vm.riskDimension.value === 'riskSeverity' ? 'risk' : vm.riskDimension.value} findings`, [vm.riskDimension.value]: value })
 }
 
 function onRepositoryChange(event: Event): void {

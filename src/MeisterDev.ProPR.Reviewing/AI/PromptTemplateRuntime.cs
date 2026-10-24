@@ -23,6 +23,35 @@ public static class PromptTemplateRuntime
     private static readonly Lazy<PromptTemplateValidator> Validator = new(() => new PromptTemplateValidator(FileProvider.Value));
 
     /// <summary>
+    ///     Prepares one fixed template on first use. Callers retain a finite set of these delegates; subsequent
+    ///     renders use the compiled template without file reads, validation or compilation.
+    /// </summary>
+    internal static Lazy<Func<object?, string>> PrepareTemplateFile(string relativePath, PromptTemplateFileProvider? provider = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+        return new Lazy<Func<object?, string>>(() =>
+        {
+            try
+            {
+                var files = provider ?? FileProvider.Value;
+                var template = files.ReadTemplate(relativePath);
+                var partials = new PromptTemplatePartialRegistry(files).GetPartials();
+                new PromptTemplateValidator(files).ValidateTemplate(relativePath, template, partials);
+                var render = Renderer.Value.Prepare(template, partials);
+                return model => render(model).TrimEnd();
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidOperationException($"Failed to prepare prompt template '{relativePath}': {ex.Message}", ex);
+            }
+        });
+    }
+
+    /// <summary>Prepares a fixed stage without changing the dynamic stage-rendering path.</summary>
+    internal static Lazy<Func<object?, string>> PrepareStage(string stageKey) =>
+        PrepareTemplateFile(PromptTemplateCatalog.Get(stageKey).TemplateRelativePath);
+
+    /// <summary>
     ///     Renders the template at <paramref name="relativePath" /> under the prompt root, with the shared
     ///     partials available to it.
     /// </summary>

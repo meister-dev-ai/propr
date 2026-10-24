@@ -155,4 +155,5 @@ public sealed record ReviewCommentDto(
     string? OriginPassKind = null,
     ReviewCommentScopeRelation? ChangedLineRelation = null,
     int? OriginPassIndex = null,
-    string? OriginPassLens = null);
+    string? OriginPassLens = null,
+    FindingRiskAssessment? RiskAssessment = null);

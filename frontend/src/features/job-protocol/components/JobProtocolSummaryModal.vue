@@ -8,7 +8,7 @@
                 <div class="findings-header">
                     <div class="header-main">
                         <h4>Findings Matrix</h4>
-                        <div class="severity-summary-row mini-stats">
+                        <div class="severity-summary-row mini-stats" role="group" aria-label="Classification counts">
                             <div
                                 v-for="(count, sev) in vm.severityCounts"
                                 :key="sev"
@@ -23,13 +23,14 @@
                     <div class="comments-filter-controls">
                         <i class="fi fi-rr-search filter-icon"></i>
                         <input v-model="vm.localSearchQuery" type="text" class="comment-search-input" placeholder="Search findings…" />
-                        <div class="severity-pills">
+                        <div class="severity-pills" role="group" aria-label="Filter finding classification">
                             <button
                                 v-for="sev in severities"
                                 :key="sev"
                                 class="severity-pill"
                                 :class="[`severity-pill--${sev}`, { 'severity-pill--active': vm.localSeverities.has(sev) }]"
                                 :data-severity="sev"
+                                :aria-pressed="vm.localSeverities.has(sev)"
                                 @click="vm.toggleSeverity(sev)"
                             >
                                 {{ sev }}
@@ -37,6 +38,7 @@
                         </div>
                     </div>
                 </div>
+                <FindingRiskFilters v-model="vm.riskFilters" />
             </header>
 
             <div class="modal-body-scroll">
@@ -69,6 +71,7 @@
 </template>
 
 <script setup lang="ts">
+import FindingRiskFilters from '@/components/findings/FindingRiskFilters.vue'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 import JobProtocolCommentGroups from './JobProtocolCommentGroups.vue'

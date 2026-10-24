@@ -61,7 +61,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                     invariantCheckContext: this.BuildInvariantCheckContext(fileResult, comment, index + 1),
                     scopeRelation: ClassifyScopeRelation(comment.FilePath ?? fileResult.FilePath, normalizedLineNumber, changedLineRangesByPath))
                 {
+                    RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix,
                     ReadGrounding = comment.SourceReadGrounding,
+                    ProducedWithRepositoryTools = comment.ProducedWithRepositoryTools,
                 };
                 originalFindings.Add(finding);
 
@@ -88,7 +90,12 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             var signature = CreateCommentSignature(comment);
             if (findingsBySignature.TryGetValue(signature, out var queue) && queue.Count > 0)
             {
-                finalFindings.Add(queue.Dequeue());
+                finalFindings.Add(
+                    queue.Dequeue() with
+                    {
+                        RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix,
+                        ProducedWithRepositoryTools = comment.ProducedWithRepositoryTools,
+                    });
                 continue;
             }
 
@@ -134,6 +141,23 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             .ToList();
     }
 
+    internal static IReadOnlyList<CandidateReviewFinding> RetainSourceClassifications(
+        IReadOnlyList<CandidateReviewFinding> findings, IReadOnlyList<CandidateReviewFinding> sources)
+    {
+        return findings.Select(finding =>
+        {
+            var unchanged = sources.Where(source => source.Message == finding.Message && source.FilePath == finding.FilePath
+                                                                                      && source.LineNumber == finding.LineNumber).Take(2).ToList();
+            return finding with
+            {
+                FindingClassification = FindingTypeClassificationPreserver.Preserve(
+                    finding.FindingClassification, unchanged.Count == 1 ? unchanged[0].FindingClassification : null,
+                    sources.Where(source => finding.Evidence?.SupportingFindingIds?.Contains(source.FindingId, StringComparer.Ordinal) == true)
+                        .Select(source => source.FindingClassification)),
+            };
+        }).ToList();
+    }
+
     public static IReadOnlyList<CandidateReviewFinding> AssignSynthesisFindingIds(IReadOnlyList<CandidateReviewFinding> synthesizedFindings)
     {
         if (synthesizedFindings.Count == 0)
@@ -145,20 +169,7 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
         for (var index = 0; index < synthesizedFindings.Count; index++)
         {
             var finding = synthesizedFindings[index];
-            assigned.Add(
-                new CandidateReviewFinding(
-                    $"finding-cc-{index + 1:D3}",
-                    finding.Provenance,
-                    finding.Severity,
-                    finding.Message,
-                    finding.Category,
-                    finding.FilePath,
-                    finding.LineNumber,
-                    finding.Evidence,
-                    finding.CandidateSummaryText,
-                    finding.InvariantCheckContext,
-                    finding.VerificationOutcome,
-                    finding.ScopeRelation));
+            assigned.Add(finding.WithFindingId($"finding-cc-{index + 1:D3}"));
         }
 
         return assigned;
@@ -182,24 +193,25 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
         {
             var findingId = $"finding-dedup-{ordinal:D3}";
             return new CandidateReviewFinding(
-                findingId,
-                new CandidateFindingProvenance(
-                    CandidateFindingProvenance.PerFileCommentOrigin,
-                    "finding_deduplication",
-                    reviewPassKind: passKind,
-                    findingProvenanceKind: provenanceKind,
-                    originModelId: comment.OriginModelId,
-                    originLogicalModelName: comment.OriginLogicalModelName,
-                    originSymbolName: comment.OriginSymbolName,
-                    originSymbolKind: comment.OriginSymbolKind),
-                comment.Severity,
-                comment.Message,
-                CandidateReviewFinding.CrossCuttingCategory,
-                null,
-                null,
-                evidence,
-                "Cross-file concern derived from multiple per-file findings.",
-                this.BuildInvariantCheckContext(findingId, comment, CandidateReviewFinding.CrossCuttingCategory, null, null, evidence));
+                    findingId,
+                    new CandidateFindingProvenance(
+                        CandidateFindingProvenance.PerFileCommentOrigin,
+                        "finding_deduplication",
+                        reviewPassKind: passKind,
+                        findingProvenanceKind: provenanceKind,
+                        originModelId: comment.OriginModelId,
+                        originLogicalModelName: comment.OriginLogicalModelName,
+                        originSymbolName: comment.OriginSymbolName,
+                        originSymbolKind: comment.OriginSymbolKind),
+                    comment.Severity,
+                    comment.Message,
+                    CandidateReviewFinding.CrossCuttingCategory,
+                    null,
+                    null,
+                    evidence,
+                    null,
+                    this.BuildInvariantCheckContext(findingId, comment, CandidateReviewFinding.CrossCuttingCategory, null, null, evidence))
+                { RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix };
         }
 
         var derivedFindingId = $"finding-derived-{ordinal:D3}";
@@ -230,7 +242,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 null),
             scopeRelation: ClassifyScopeRelation(comment.FilePath, normalizedLineNumber, changedLineRangesByPath))
         {
+            RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix,
             ReadGrounding = comment.SourceReadGrounding,
+            ProducedWithRepositoryTools = comment.ProducedWithRepositoryTools,
         };
     }
 
@@ -261,7 +275,7 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             category,
             filePath,
             normalizedLineNumber,
-            evidence);
+            evidence) { RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix };
 
         var claims = reviewClaimExtractor.ExtractClaims(probeFinding);
         return claims.Count == 0 ? null : CandidateReviewFinding.CreateInvariantCheckContext(claims);
@@ -279,20 +293,21 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
 
         var normalizedLineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
         var probeFinding = new CandidateReviewFinding(
-            FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, ordinal),
-            new CandidateFindingProvenance(
-                CandidateFindingProvenance.PerFileCommentOrigin,
-                "per_file_review",
-                fileResult.FilePath,
-                fileResult.Id,
-                ordinal,
-                reviewPassKind: ReviewPassKind.Baseline,
-                findingProvenanceKind: FindingProvenanceKind.BaselineOnly),
-            comment.Severity,
-            comment.Message,
-            FileByFileReviewOrchestrator.DetermineCategory(comment),
-            comment.FilePath,
-            normalizedLineNumber);
+                FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, ordinal),
+                new CandidateFindingProvenance(
+                    CandidateFindingProvenance.PerFileCommentOrigin,
+                    "per_file_review",
+                    fileResult.FilePath,
+                    fileResult.Id,
+                    ordinal,
+                    reviewPassKind: ReviewPassKind.Baseline,
+                    findingProvenanceKind: FindingProvenanceKind.BaselineOnly),
+                comment.Severity,
+                comment.Message,
+                FileByFileReviewOrchestrator.DetermineCategory(comment),
+                comment.FilePath,
+                normalizedLineNumber)
+            { RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix };
 
         var claims = reviewClaimExtractor.ExtractClaims(probeFinding);
         return claims.Count == 0 ? null : CandidateReviewFinding.CreateInvariantCheckContext(claims);

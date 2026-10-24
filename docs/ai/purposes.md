@@ -16,14 +16,14 @@ screen; extra [review passes](../concepts/reviews.md#review-passes) pick a logic
 | Embedding default | `embeddingDefault` | Embeddings for thread memory and ProCursor similarity |
 | Triage | `reviewTriage` | Cheap per-file complexity classification |
 | Verification | `reviewVerification` | The AI duplicate judge and the acceptance forecast |
-| Low effort / Medium effort / High effort | `reviewLowEffort`, `reviewMediumEffort`, `reviewHighEffort` | Per-file review at the complexity tier triage assigned; High effort also runs synthesis. Low effort also runs the per-file judge that decides every finding; on a runner the judge uses the default model of the job manifest |
+| Low effort / Medium effort / High effort | `reviewLowEffort`, `reviewMediumEffort`, `reviewHighEffort` | Per-file review uses the assigned complexity tier. High effort also runs synthesis, the rewrite of a summary that describes a finding the gate dropped, and the escalation check for Errors and Warnings that verification leaves at Medium or below. Low effort runs the initial finding judge and the bounded confidence contradiction check. A runner uses the job manifest's available runtime when a requested purpose is unavailable. |
 | Memory reconsideration | `memoryReconsideration` | Re-judging an existing comment thread on a re-review |
 | ProRV prefilter | `proRvPrefilter` | Not used by the review path - see below |
 
 A purpose is scoped to the work that asked for it. The High-effort model synthesis resolves applies to the
-synthesis call and nothing else, so the stages that run after it - comment deduplication, the comment quality
-filter, pull-request-level verification - each stay on their own purpose, and their token usage is reported
-against the model they actually ran on.
+synthesis call and to the rewrite of its summary, so the other stages around synthesis - comment deduplication, the
+comment quality filter, pull-request-level verification - each stay on their own purpose, and their token usage is
+reported against the model they actually ran on.
 
 A purpose resolves in this order:
 

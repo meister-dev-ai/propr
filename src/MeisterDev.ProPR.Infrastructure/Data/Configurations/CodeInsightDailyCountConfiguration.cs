@@ -14,6 +14,11 @@ internal sealed class CodeInsightDailyCountConfiguration : IEntityTypeConfigurat
     public void Configure(EntityTypeBuilder<CodeInsightDailyCount> builder)
     {
         builder.ToTable("code_insight_daily_counts");
+        builder.Property(row => row.Impact).HasConversion<short>();
+        builder.Property(row => row.Likelihood).HasConversion<short>();
+        builder.Property(row => row.RiskSeverity).HasConversion<short>();
+        builder.Property(row => row.Confidence).HasConversion<short>().HasDefaultValue(MeisterDev.ProPR.Domain.Enums.FindingConfidence.Unknown);
+        builder.Property(row => row.RiskRubricVersion).HasMaxLength(128);
 
         builder.HasKey(count => count.Id);
         builder.Property(count => count.Id).HasColumnName("id").ValueGeneratedNever();
@@ -75,6 +80,11 @@ internal sealed class CodeInsightDailyCountConfiguration : IEntityTypeConfigurat
                 count.BucketDate,
                 count.Dimension,
                 count.DimensionKey,
+                count.Impact,
+                count.Likelihood,
+                count.RiskSeverity,
+                count.Confidence,
+                count.RiskRubricVersion,
             })
             .IsUnique()
             .HasDatabaseName("uq_code_insight_daily_counts_key");

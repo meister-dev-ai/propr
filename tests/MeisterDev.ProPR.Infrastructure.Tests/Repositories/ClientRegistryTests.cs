@@ -425,6 +425,18 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
+    public async Task FindingBadgeStyleDefaultsToImagesAndRemainsClientScoped()
+    {
+        var first = await this.SeedClientAsync();
+        var second = await this.SeedClientAsync();
+        first.FindingBadgeStyle = FindingBadgeStyle.Plain;
+        await this._dbContext.SaveChangesAsync();
+        Assert.Equal(FindingBadgeStyle.Plain, await this._registry.GetFindingBadgeStyleAsync(first.Id));
+        Assert.Equal(FindingBadgeStyle.ShieldsIo, await this._registry.GetFindingBadgeStyleAsync(second.Id));
+        Assert.Equal(FindingBadgeStyle.ShieldsIo, await this._registry.GetFindingBadgeStyleAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
     public async Task GetScmCommentPostingEnabledAsync_ClientWithSetting_ReturnsPersistedValue()
     {
         var client = await this.SeedClientAsync();

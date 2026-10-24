@@ -292,7 +292,8 @@ public sealed record ProtocolReviewCommentDto(
     string? OriginModelId = null,
     string? OriginLogicalModelName = null,
     string? OriginSymbolName = null,
-    string? OriginSymbolKind = null);
+    string? OriginSymbolKind = null,
+    FindingRiskAssessment? RiskAssessment = null);
 
 /// <summary>
 ///     Terminal outcome metadata for one file-linked protocol pass.

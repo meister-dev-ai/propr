@@ -30,6 +30,56 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
     private const string WarningFile = "src/A.cs";
     private const string SuggestionFile = "src/B.cs";
 
+    [Theory]
+    [InlineData(FindingBadgeStyle.ShieldsIo)]
+    [InlineData(FindingBadgeStyle.Plain)]
+    public async Task PublicationCapturesTheClientBadgeStyleOnce(FindingBadgeStyle style)
+    {
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var clients = CreateClientRegistry(out var job);
+        clients.GetFindingBadgeStyleAsync(job.ClientId, Arg.Any<CancellationToken>()).Returns(style);
+        var result = new ReviewResult("Review.", [new ReviewComment(WarningFile, 1, CommentSeverity.Warning, "Guard the request.")]);
+        var publisher = CreatePublicationService();
+        var (service, _) = CreateService(jobs, clients, result, publisher);
+        await service.ProcessAsync(job, CancellationToken.None);
+        await publisher.Received(1).PublishReviewAsync(
+            job.ClientId, Arg.Any<CodeReviewRef>(), Arg.Any<ReviewRevision>(),
+            Arg.Any<ReviewResult>(), Arg.Any<ReviewerIdentity>(), Arg.Any<CancellationToken>(),
+            Arg.Is<ReviewPublicationContext?>(context => context != null && context.FindingBadgeStyle == style));
+        await clients.Received(1).GetFindingBadgeStyleAsync(job.ClientId, Arg.Any<CancellationToken>());
+        Assert.Equal("Guard the request.", result.Comments[0].Message);
+    }
+
+    [Fact]
+    public async Task SuggestionAutoResolution_LeavesLowRiskConfirmedDefectActive()
+    {
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var clients = CreateClientRegistry(out var job);
+        clients.GetAutoResolveSeveritiesAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<CommentSeverity>>([CommentSeverity.Suggestion]));
+        var finding = new ReviewComment(WarningFile, 1, CommentSeverity.Error, "The supplied input throws.")
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Low, FindingLikelihood.Unlikely,
+                "One request fails.", "Only this input reaches the failure.", "review_model", FindingRiskAssessment.CurrentRubricVersion),
+        };
+        var result = new ReviewResult(
+            "Review.", [finding, new ReviewComment(SuggestionFile, 2, CommentSeverity.Suggestion, "Extract the repeated validation.")]);
+        var publisher = CreatePublicationService(review => ReviewCommentPostingDiagnosticsDto.Empty(review.Comments.Count) with
+        {
+            PostedComments = [new PostedReviewCommentRef("1", "defect", WarningFile, 1), new PostedReviewCommentRef("2", "improvement", SuggestionFile, 2)],
+        });
+        var (service, providers) = CreateService(jobs, clients, result, publisher);
+        await service.ProcessAsync(job, CancellationToken.None);
+        var writer = providers.GetReviewThreadStatusWriter(ScmProvider.AzureDevOps);
+        await writer.Received(1).ResolveThreadAsync(
+            job.ClientId,
+            Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "improvement"), Arg.Any<CancellationToken>());
+        await writer.DidNotReceive().ResolveThreadAsync(
+            job.ClientId,
+            Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "defect"), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task MinimumSeverity_SuppressesBelowThresholdFromPublication_ButKeepsThemInPersistedResult()
     {

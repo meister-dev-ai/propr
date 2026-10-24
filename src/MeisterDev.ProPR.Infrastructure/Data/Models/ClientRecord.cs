@@ -103,6 +103,9 @@ public sealed class ClientRecord
     /// </summary>
     public CommentSeverity MinimumSeverityToPost { get; set; } = CommentSeverity.Info;
 
+    /// <summary>The metadata badge style used in outgoing SCM finding comments.</summary>
+    public FindingBadgeStyle FindingBadgeStyle { get; set; } = FindingBadgeStyle.ShieldsIo;
+
     /// <summary>
     ///     Severities whose published comments are posted already resolved, each carrying an explanatory note.
     ///     Empty by default so nothing is auto-resolved. Applied after the minimum-severity filter, so a finding

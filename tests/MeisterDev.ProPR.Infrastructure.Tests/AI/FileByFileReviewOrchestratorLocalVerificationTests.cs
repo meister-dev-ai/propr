@@ -85,9 +85,10 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
         Assert.Equal(hasMetadata ? ReviewCommentScopeRelation.OutsideChange : ReviewCommentScopeRelation.OnChangedLine, withheld.Comment.ScopeRelation);
         Assert.Equal(hasMetadata ? nameof(ReviewPassKind.MultiPassUnion) : nameof(ReviewPassKind.Baseline), withheld.Comment.OriginPassKind);
         Assert.Equal(hasMetadata ? "existing-model" : "review-model", withheld.Comment.OriginModelId);
+        Assert.True(withheld.Comment.ProducedWithRepositoryTools);
         if (hasMetadata)
         {
-            Assert.Equal(comment, withheld.Comment);
+            Assert.Equal(comment with { ProducedWithRepositoryTools = true }, withheld.Comment);
         }
 
         Assert.Equal(withheld, Assert.Single(result.WithheldFindings));
@@ -182,7 +183,7 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
     }
 
     [Fact]
-    public async Task ReviewAsync_LocalNonVerifiableGenericFinding_IsRemovedFromCommentsAndSummary()
+    public async Task ReviewAsync_LocalRefutedGenericFinding_IsRemovedFromCommentsAndSummary()
     {
         var aiCore = Substitute.For<IAiReviewCore>();
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -237,8 +238,8 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
                 Arg.Is<string>(name => name == ReviewProtocolEventNames.VerificationLocalDecision),
                 Arg.Any<string?>(),
                 Arg.Is<string?>(output => output != null &&
-                                          output.Contains("\"outcomeKind\":\"NonVerifiable\"", StringComparison.Ordinal) &&
-                                          output.Contains("\"recommendedDisposition\":\"SummaryOnly\"", StringComparison.Ordinal)),
+                                          output.Contains("\"outcomeKind\":\"Contradicted\"", StringComparison.Ordinal) &&
+                                          output.Contains("\"recommendedDisposition\":\"Drop\"", StringComparison.Ordinal)),
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
     }
@@ -483,6 +484,21 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
                 }
 
                 var user = string.Join("\n", messages.Where(message => message.Role == ChatRole.User).Select(message => message.Text));
+                if (user.Contains("The helper method isCommentRelevanceEvent is missing", StringComparison.Ordinal))
+                {
+                    return new ChatResponse(
+                        new ChatMessage(
+                            ChatRole.Assistant,
+                            """
+                            {"verdict":"not_confirmed","reason":"The source defines isCommentRelevanceEvent.","confidence_evidence":{
+                              "level":"low","witness":"The source includes a definition of isCommentRelevanceEvent.",
+                              "consequence":"The alleged missing-helper failure does not occur.",
+                              "counterevidence":"The helper definition contradicts the claim that it is missing.",
+                              "assumptions":[],"all_claims_covered":true,
+                              "source_quotes":[{"file_path":"src/Foo.cs","quote":"private bool isCommentRelevanceEvent() => true;"}]}}
+                            """));
+                }
+
                 return user.Contains("Confirmed null dereference", StringComparison.Ordinal)
                     ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"line 2 dereferences null\"}"))
                     : new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"not_confirmed\",\"reason\":\"not in the code\"}"));
@@ -494,7 +510,7 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
     {
         var tools = Substitute.For<IReviewContextTools>();
         tools.GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns("public void ExecuteAsync()\n{\n    string? value = null;\n    _ = value.Length;\n}");
+            .Returns("public void ExecuteAsync()\n{\n    string? value = null;\n    _ = value.Length;\n}\nprivate bool isCommentRelevanceEvent() => true;");
         return tools;
     }
 }

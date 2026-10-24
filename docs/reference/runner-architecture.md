@@ -124,3 +124,8 @@ A runner removes working copies left by a previous process at startup, before en
 filesystem cleanup failures and continues. The startup supervisor also contains unexpected cleanup failures
 so enrollment and health reporting can proceed. Give the container's user read and write access to
 `RUNNER_WORK_ROOT` so it can fetch and remove job workspaces.
+
+
+The prompt configuration carries the finding-type vocabulary captured by the control plane. Custom type IDs,
+slugs, labels and definitions are data for the shared review pipeline; the executor does not query analytics
+persistence. Manifests without this optional snapshot use the canonical core vocabulary.

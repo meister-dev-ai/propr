@@ -8,7 +8,7 @@
       <div>
         <p class="panel-kicker">Rejections</p>
         <h3 id="insights-reasons-heading">Why findings were turned down</h3>
-        <p class="panel-copy">
+        <p class="panel-description">
           A precision figure says how often the reviewer was turned down. This says what to do about it. A
           reviewer that invents problems needs a better prompt, one that argues with deliberate decisions needs
           this codebase's conventions, and one that repeats another tool needs to be told what that tool covers.

@@ -12,20 +12,20 @@ PR Description: {{prDescription}}
 ## All Per-File Findings
 
 {{#if hasCandidateFindings}}
-| Finding ID | File | Severity | Message |
-|------------|------|----------|---------|
+| Finding ID | File | Severity | Message | Risk assessment | Finding classification |
+|------------|------|----------|---------| --- | --- |
 {{#each candidateFindings}}
-| {{findingId}} | {{filePath}} | {{severity}} | {{message}} |
+| {{findingId}} | {{filePath}} | {{severity}} | {{message}} | {{{riskAssessment}}} | {{{findingClassification}}} |
 {{/each}}
 {{else}}
-| File | Severity | Message |
-|------|----------|---------|
+| File | Severity | Message | Risk assessment | Finding classification |
+|------|----------|---------| --- | --- |
 {{#each comments}}
-| {{filePath}} | {{severity}} | {{message}} |
+| {{filePath}} | {{severity}} | {{message}} | {{{riskAssessment}}} | {{{findingClassification}}} |
 {{/each}}
 {{/if}}
 
-Based on the above findings, identify any cross-cutting concerns — issues that span multiple files or form a coherent architectural or behavioral pattern. Return a JSON object with a `cross_cutting_concerns` array field. Each entry should be: { "message": "<concern description>", "severity": "<info|warning|error|suggestion>", "category": "<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>", "candidateSummaryText": "<summary-only wording>", "supportingFindingIds": ["<finding-id>"], "supportingFiles": ["<path>"], "evidenceResolutionState": "<resolved|missing|partial>", "evidenceSource": "<synthesis_payload>" }. {{findingIdInstructionSuffix}}If there are no cross-cutting concerns, return { "cross_cutting_concerns": [] }. Also write a single cohesive narrative summary for the PR. Wrap the summary in a `summary` field in the same JSON object, and put the ids of the findings that summary describes in a `summary_finding_ids` array field alongside it.
+Based on the above findings, identify any cross-cutting concerns — issues that span multiple files or form a coherent architectural or behavioral pattern. Return a JSON object with a `cross_cutting_concerns` array field. Each entry should be: { "message": "<concern description>", "finding_classification": {"types":["<supported core or custom slug>"],"level":null,"qualifier":null,"confidence":null}, "severity": "<info|warning|error|suggestion>", "category": "<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>", "candidateSummaryText": "<summary-only wording>", "supportingFindingIds": ["<finding-id>"], "supportingFiles": ["<path>"], "evidenceResolutionState": "<resolved|missing|partial>", "evidenceSource": "<synthesis_payload>" }. {{findingIdInstructionSuffix}}If there are no cross-cutting concerns, return { "cross_cutting_concerns": [] }. Also write a single cohesive narrative summary for the PR. Wrap the summary in a `summary` field in the same JSON object, and put the ids of the findings that summary describes in a `summary_finding_ids` array field alongside it.
 {{else}}
 Write a single cohesive narrative summary for the overall pull request. Focus on the most important findings across all files. Do not invent new findings. Respond with plain text only.
 {{/if}}

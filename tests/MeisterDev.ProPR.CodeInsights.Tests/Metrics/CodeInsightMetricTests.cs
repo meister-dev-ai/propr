@@ -67,6 +67,74 @@ public sealed class CodeInsightMetricTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WholePullRequestSealsAreExplicitlyUnavailableForRiskSelectedMetrics(bool confidenceOnly)
+    {
+        await this.WriteSealAsync("repo-1", 1, new DateOnly(2026, 10, 1), addressed: 1, falsePositive: 0);
+        var query = new CodeInsightRollupQuery([ClientA], new(2026, 1, 1), new(2026, 12, 31), Impact: FindingImpact.High);
+        if (confidenceOnly)
+        {
+            query = query with { Impact = null, Confidence = FindingConfidence.Certain };
+        }
+
+        var summary = await this._reader.GetCorrectnessAsync(query);
+        Assert.Equal("sealed-risk-filter-unavailable", summary.UnavailableReason);
+        Assert.Null(summary.Metrics.Precision);
+        Assert.Null(summary.Metrics.Recall);
+        Assert.Null(summary.Metrics.F1);
+        Assert.Equal(
+            "sealed-risk-filter-unavailable",
+            Assert.Single(await this._reader.GetCorrectnessSeriesAsync(query, CodeInsightBucketSize.Day)).Result.UnavailableReason);
+        Assert.Equal(
+            "sealed-risk-filter-unavailable",
+            Assert.Single(await this._reader.GetCorrectnessByGrainAsync(query, CodeInsightGrain.Client)).Result.UnavailableReason);
+    }
+
+    [Fact]
+    public async Task ConfidenceIntersectsRejectionAndModelOutcomeFindingReads()
+    {
+        await this.SeedRejectionsAsync(ClientA, "repo-1", 41, [CodeInsightRejectionReason.Wrong, CodeInsightRejectionReason.OutOfScope]);
+        var findings = await this._dbContext.CodeInsightFindings.OrderBy(row => row.Ordinal).ToListAsync();
+        findings[0].Confidence = FindingConfidence.Certain;
+        findings[1].Confidence = FindingConfidence.Low;
+        await this._dbContext.SaveChangesAsync();
+        var scope = this.Window(ClientA) with { Confidence = FindingConfidence.Certain };
+        var reasons = await this._reader.GetRejectionReasonsAsync(scope);
+        Assert.Equal(1, reasons.Rejections);
+        Assert.Equal(1, reasons.Counts[CodeInsightRejectionReason.Wrong]);
+        Assert.Equal(1, Assert.Single(await this._reader.GetByModelAsync(scope)).Result.SampleSize);
+    }
+
+    [Theory]
+    [InlineData(CodeInsightGrain.Client, 1)]
+    [InlineData(CodeInsightGrain.Repository, 2)]
+    [InlineData(CodeInsightGrain.PullRequest, 3)]
+    public async Task RiskSelectedCorrectnessRetainsTheRequestedScopeIdentities(CodeInsightGrain grain, int count)
+    {
+        var date = new DateOnly(2026, 10, 1);
+        await this.WriteSealAsync("repo-1", 1, date, addressed: 1, falsePositive: 0);
+        await this.WriteSealAsync("repo-1", 2, date, addressed: 1, falsePositive: 0);
+        await this.WriteSealAsync("repo-2", 3, date, addressed: 1, falsePositive: 0);
+        var query = new CodeInsightRollupQuery([ClientA], date, date, RiskSeverity: FindingRiskSeverity.Critical);
+
+        var rows = await this._reader.GetCorrectnessByGrainAsync(query, grain);
+
+        Assert.Equal(count, rows.Count);
+        Assert.All(
+            rows, row =>
+            {
+                Assert.Equal(ClientA, row.ClientId);
+                Assert.Equal(grain == CodeInsightGrain.Client, row.RepositoryId is null);
+                Assert.Equal(grain != CodeInsightGrain.PullRequest, row.PullRequestId is null);
+                Assert.Equal("sealed-risk-filter-unavailable", row.Result.UnavailableReason);
+                Assert.Null(row.Result.Metrics.Precision);
+                Assert.Null(row.Result.Metrics.Recall);
+                Assert.Null(row.Result.Metrics.F1);
+            });
+    }
+
+    [Theory]
     [InlineData("Completed")]
     [InlineData("Abandoned")]
     [InlineData("Closed")]

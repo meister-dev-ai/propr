@@ -39,7 +39,8 @@ internal static class ReviewerPerformanceViewBuilder
             raw.Count == 0 ? null : raw.Min(row => row.UpdatedAt),
             snapshot.NewestProjection,
             Rollups.ReviewerPerformanceCountProjector.ProjectionVersion,
-            snapshot.Pending, snapshot.ModelEvidence is null ? null : "model-opportunity-v1");
+            snapshot.Pending, snapshot.ModelEvidence is null ? null : "model-opportunity-v1",
+            raw.Where(row => row.RiskRubricVersion.Length > 0).Select(row => row.RiskRubricVersion).Distinct().Order().ToArray());
         return new(scope with { ClientIds = clients }, facets, series, matrix, raw.Count, freshness, coverage.Catalog);
     }
 
@@ -50,7 +51,8 @@ internal static class ReviewerPerformanceViewBuilder
     {
         var selected = new List<ReviewerPerformanceDailyCount>();
         var population = new List<ReviewerPerformanceDailyCount>();
-        if (scope.Models?.Count == 0 || scope.Types?.Count == 0 || scope.Qualifiers?.Count == 0)
+        if (scope.Models?.Count == 0 || scope.Types?.Count == 0 || scope.Qualifiers?.Count == 0 || scope.Impacts?.Count == 0 || scope.Likelihoods?.Count == 0 ||
+            scope.RiskSeverities?.Count == 0 || scope.Confidences?.Count == 0)
         {
             return new(selected, population);
         }
@@ -95,6 +97,10 @@ internal static class ReviewerPerformanceViewBuilder
                 "model" => scope with { Models = [key.Id] },
                 "type" => scope with { Types = [key.Id] },
                 "qualifier" => scope with { Qualifiers = [key.Id] },
+                "impact" => scope with { Impacts = [key.Id] },
+                "likelihood" => scope with { Likelihoods = [key.Id] },
+                "riskSeverity" => scope with { RiskSeverities = [key.Id] },
+                "confidence" => scope with { Confidences = [key.Id] },
                 _ => scope,
             };
             var points = new List<ReviewerPerformancePoint>();
@@ -274,8 +280,9 @@ internal static class ReviewerPerformanceViewBuilder
     private static IEnumerable<ReviewerPerformanceDailyCount> DimensionEvidence(List<ReviewerPerformanceDailyCount> cells, string dimension)
     {
         return cells.Where(row =>
-            (dimension is "client" or "repository" || !ReviewerPerformanceMeasurement.IsCoverage(row) || row.Outcome == "collectionModelOpportunity")
-            && (dimension != "model" || !row.IsMiss));
+            (dimension is "client" or "repository" || !ReviewerPerformanceMeasurement.IsCoverage(row) ||
+             dimension is not ("impact" or "likelihood" or "riskSeverity" or "confidence") && row.Outcome == "collectionModelOpportunity")
+            && (dimension is not ("model" or "impact" or "likelihood" or "riskSeverity" or "confidence") || !row.IsMiss));
     }
 
     private static void ValidateMatrixSize(int rows, int columns)
@@ -352,6 +359,10 @@ internal static class ReviewerPerformanceViewBuilder
 
         return scope with
         {
+            Impacts = Selection("impact", scope.Impacts),
+            Likelihoods = Selection("likelihood", scope.Likelihoods),
+            RiskSeverities = Selection("riskSeverity", scope.RiskSeverities),
+            Confidences = Selection("confidence", scope.Confidences),
             Types = Selection("type", scope.Types),
             Qualifiers = Selection("qualifier", scope.Qualifiers),
             Models = Selection("model", scope.Models),

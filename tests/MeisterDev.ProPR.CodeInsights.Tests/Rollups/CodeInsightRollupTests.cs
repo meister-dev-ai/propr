@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.Events;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Services;
@@ -56,6 +57,107 @@ public sealed class CodeInsightRollupTests : IDisposable
     public void Dispose()
     {
         this._dbContext.Dispose();
+    }
+
+    [Fact]
+    public async Task ConfidenceEnrichmentRefreshesTheOriginalJobsCountsWhenARevisionIsReplayed()
+    {
+        var job = Guid.NewGuid();
+        var risk = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Unlikely, "A record is lost.", "Rare input.",
+            "review_model", FindingRiskAssessment.CurrentRubricVersion);
+        var finding = new ReviewFindingProduced(
+            0, "a.cs", 10, CommentSeverity.Error, "The update loses the record.",
+            "Baseline", null, null, false, null, null, null, null, RiskAssessment: risk);
+        var evt = new ReviewFindingsProducedEvent(ClientA, "confidence-repo", 7, job, "revision", "Active", ReviewedAt, [finding]);
+        var service = new CodeInsightFindingIngestionService(
+            this._store, this._gate,
+            NullLogger<CodeInsightFindingIngestionService>.Instance, this._projector);
+        await service.HandleReviewFindingsProducedAsync(evt);
+        Assert.Equal(1, await this._reader.GetTotalAsync(this.Window(ClientA) with { Confidence = FindingConfidence.Unknown }));
+        var enriched = new FindingRiskAssessment(
+            risk.Impact, risk.Likelihood, risk.ImpactReason, risk.LikelihoodReason, risk.Source,
+            risk.RubricVersion, FindingConfidence.Certain, "The complete path deterministically loses the record.");
+        await service.HandleReviewFindingsProducedAsync(
+            evt with
+            {
+                JobId = Guid.NewGuid(), Findings = [finding with { RiskAssessment = enriched }],
+            });
+        var retained = Assert.Single(await this._dbContext.CodeInsightFindings.ToListAsync());
+        Assert.Equal(job, retained.JobId);
+        Assert.Equal(FindingConfidence.Certain, retained.Confidence);
+        Assert.Equal(1, await this._reader.GetTotalAsync(this.Window(ClientA) with { Confidence = FindingConfidence.Certain }));
+        Assert.Equal(0, await this._reader.GetTotalAsync(this.Window(ClientA) with { Confidence = FindingConfidence.Unknown }));
+        Assert.Equal(
+            "Certain",
+            Assert.Single(await this._reader.GetSeriesAsync(this.Window(ClientA), CodeInsightCountDimension.Confidence, CodeInsightBucketSize.Day))
+                .DimensionKey);
+    }
+
+    [Fact]
+    public async Task ConfidenceCellsRemainDistinctForIdenticalRiskAndReconcileJointSelections()
+    {
+        var key = new CodeInsightPullRequestKey(ClientA, "confidence-repo", 7);
+        var job = Guid.NewGuid();
+        var findings = Enum.GetValues<FindingConfidence>().Select((confidence, ordinal) => new CodeInsightFindingSnapshot(
+            ordinal, "a.cs", 10, CommentSeverity.Warning, $"Finding {ordinal}", "Baseline", null, null, false, null, null, null, null,
+            RiskAssessment: new FindingRiskAssessment(
+                FindingImpact.High, FindingLikelihood.Unlikely, "Limited effect.", "Rare input.",
+                "review_model", FindingRiskAssessment.CurrentRubricVersion, confidence, "Evidence for the retained claim."))).ToList();
+        await this._store.MaterialiseFindingsAsync(key, job, "revision", ReviewedAt, findings);
+        await this._projector.ProjectJobAsync(job);
+        await this._projector.ProjectJobAsync(job);
+
+        var window = this.Window(ClientA);
+        var distribution = await this._reader.GetSeriesAsync(window, CodeInsightCountDimension.Confidence, CodeInsightBucketSize.Day);
+        Assert.Equal(5, distribution.Count);
+        Assert.All(distribution, cell => Assert.Equal(1, cell.Count));
+        Assert.Equal(5, await this._reader.GetTotalAsync(window));
+        foreach (var confidence in Enum.GetValues<FindingConfidence>())
+        {
+            var scope = window with { Confidence = confidence, Impact = FindingImpact.High, RiskSeverity = FindingRiskSeverity.Medium };
+            Assert.Equal(1, await this._reader.GetTotalAsync(scope));
+            Assert.Equal(1, (await this._reader.GetRepositoryDirectoryAsync(scope)).TotalFindings);
+        }
+    }
+
+    [Fact]
+    public async Task RiskIntersectionsReconcileTypesDirectoryHotspotsAndUnknownHistory()
+    {
+        var key = new CodeInsightPullRequestKey(ClientA, "risk-repo", 7);
+        var job = Guid.NewGuid();
+
+        CodeInsightFindingSnapshot Finding(int ordinal, FindingLikelihood? likelihood) => new(
+            ordinal, "a.cs", 10, CommentSeverity.Error, $"Finding {ordinal}", "Baseline", null, null, false,
+            null, null, null, null, OriginSymbolName: "Run", RiskAssessment: likelihood is null
+                ? null
+                : new FindingRiskAssessment(
+                    FindingImpact.Moderate, likelihood.Value, "Limited effect", "Rare input",
+                    "review-generation", FindingRiskAssessment.CurrentRubricVersion));
+
+        await this._store.MaterialiseFindingsAsync(
+            key, job, "risk-rev", ReviewedAt,
+            [Finding(0, FindingLikelihood.Unlikely), Finding(1, FindingLikelihood.Likely), Finding(2, null)]);
+        foreach (var finding in await this._store.GetFindingsForPullRequestAsync(key))
+        {
+            await this._store.ApplyClassificationAsync(
+                finding.Id, new(
+                    ["logic-error"], [], CodeInsightFindingLevel.Member,
+                    CodeInsightFindingQualifier.Incorrect, 0.9, "test"));
+        }
+
+        await this._projector.ProjectJobAsync(job);
+        await this._projector.ProjectJobAsync(job);
+        var query = this.Window(ClientA) with
+        {
+            Impact = FindingImpact.Moderate, Likelihood = FindingLikelihood.Unlikely, RiskSeverity = FindingRiskSeverity.Low
+        };
+        Assert.Equal(1, await this._reader.GetTotalAsync(query));
+        Assert.Equal(1, Assert.Single(await this._reader.GetSeriesAsync(query, CodeInsightCountDimension.CoreType, CodeInsightBucketSize.Day)).Count);
+        Assert.Equal(1, (await this._reader.GetRepositoryDirectoryAsync(query)).TotalFindings);
+        Assert.Equal(1, (await this._reader.GetHotspotsAsync(query, null, 10, CodeInsightHotspotGrouping.Symbol)).TotalFindings);
+        Assert.Equal(1, await this._reader.GetTotalAsync(this.Window(ClientA) with { Impact = FindingImpact.Unknown }));
+        Assert.Equal(3, await this._reader.GetTotalAsync(this.Window(ClientA)));
     }
 
     [Fact]

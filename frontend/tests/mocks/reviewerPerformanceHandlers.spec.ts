@@ -20,6 +20,50 @@ async function read(): Promise<PerformanceResponse> {
 }
 
 describe('reviewer performance mock recovery lifecycle', () => {
+  it('filters joint risk evidence, preserves legacy Unassessed and does not invent risk-restricted recall', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-18T12:00:00Z'))
+    const raw = mockPerformanceResponse(query).views![0]!
+    const last = (riskSeverities: string[] | null) => mockPerformanceResponse({ ...query,
+      views: [{ ...query.views[0], riskSeverities }] }).views![0]!.series![0]!.points!.at(-1)!
+    expect(raw.facets!.riskSeverities).toContainEqual({ id: 'Unknown', label: 'Unassessed' })
+    const all = last(null), critical = last(['Critical']), unknown = last(['Unknown']), none = last([])
+    expect(critical.overallPrecision!.counts!.generated!).toBeGreaterThan(0)
+    expect(critical.overallPrecision!.counts!.generated!).toBeLessThan(all.overallPrecision!.counts!.generated!)
+    expect(unknown.overallPrecision!.counts!.generated!).toBeGreaterThan(0)
+    expect(none.overallPrecision!.counts!.generated).toBe(0)
+    expect(critical.coverage!.candidatePullRequests).toBe(all.coverage!.candidatePullRequests)
+    expect(critical.coverage!.recallSupported).toBe(false)
+    expect(critical.unavailableReasons).toContain('miss-risk-assessment-unavailable')
+    expect(critical.score!.summary!.recall).toBeUndefined()
+    expect(critical.score!.summary!.f1).toBeUndefined()
+    expect(critical.overallPrecision!.summary!.median).toBeGreaterThan(0)
+    const grouped = mockPerformanceResponse({ ...query, grouping: 'riskSeverity', breakdown: { rows: 'impact', columns: 'likelihood' } }).views![0]!
+    expect(grouped.series!.some(series => series.id === 'Unknown')).toBe(true)
+    expect(grouped.breakdown!.some(cell => cell.rowId === 'Critical' && cell.columnId === 'Likely')).toBe(true)
+    expect(grouped.breakdown!.every(cell => cell.measurement!.coverage!.recallSupported === false)).toBe(true)
+    const matrixOnly = mockPerformanceResponse({ ...query, breakdown: { rows: 'impact', columns: 'likelihood' } }).views![0]!
+    expect(matrixOnly.series![0]!.points!.at(-1)!.coverage!.recallSupported).toBe(true)
+    expect(matrixOnly.breakdown!.every(cell => cell.measurement!.coverage!.recallSupported === false)).toBe(true)
+    expect(matrixOnly.evidence!.projectionVersion).toBe(6)
+  })
+
+  it('keeps confidence scope, grouping and matrix evidence independent of risk severity', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-18T12:00:00Z'))
+    const response = mockPerformanceResponse({ ...query, grouping: 'confidence', breakdown: { rows: 'confidence', columns: 'impact' } })
+    const view = response.views![0]!
+    expect(view.facets!.confidences!.map(facet => facet.id)).toEqual(expect.arrayContaining(['Unknown', 'Low', 'Medium', 'High', 'Certain']))
+    expect(view.series!.map(series => series.id)).toEqual(expect.arrayContaining(['Unknown', 'Low', 'Medium', 'High', 'Certain']))
+    expect(view.breakdown!.every(cell => cell.measurement!.coverage!.recallSupported === false)).toBe(true)
+    for (const confidences of [null, [], ['Certain']]) {
+      const last = mockPerformanceResponse({ ...query, views: [{ ...query.views[0], confidences }] }).views![0]!.series![0]!.points!.at(-1)!
+      if (confidences?.length === 0) expect(last.overallPrecision!.counts!.generated!).toBe(0)
+      else expect(last.overallPrecision!.counts!.generated!).toBeGreaterThan(0)
+      if (confidences?.length) expect(last.unavailableReasons).toContain('miss-risk-assessment-unavailable')
+    }
+  })
+
   beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
   afterAll(() => server.close())
   afterEach(() => vi.useRealTimers())

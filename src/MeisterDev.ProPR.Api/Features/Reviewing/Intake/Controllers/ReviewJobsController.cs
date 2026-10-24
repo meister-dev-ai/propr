@@ -27,7 +27,7 @@ public sealed partial class ReviewJobsController(
     SubmitReviewByCoordinatesHandler submitReviewByCoordinatesHandler,
     ILogger<ReviewJobsController> logger) : ControllerBase
 {
-    /// <summary>Returns a review result only when the specified client owns the job.</summary>
+    /// <summary>Returns a review result with available impact, likelihood and confidence assessments when the specified client owns the job.</summary>
     /// <param name="clientId">The owning client.</param>
     /// <param name="jobId">The review job identifier.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -424,7 +424,7 @@ public sealed partial class ReviewJobsController(
                             comment.FilePath,
                             comment.LineNumber,
                             comment.Severity,
-                            comment.Message))
+                            comment.Message, RiskAssessment: comment.RiskAssessment))
                         .ToArray()),
             status.Error)
         {

@@ -11,6 +11,8 @@ using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -27,6 +29,8 @@ internal sealed partial class GitHubLifecyclePublicationService(
     IPostedCommentComposer composer,
     ILogger<GitHubLifecyclePublicationService>? logger = null)
 {
+    private const int MaximumCommentBodyCharacters = 65_536;
+
     // Read across pages from pageInfo, matching the thread read path. A pull request past a hundred threads
     // used to leave the overflow without a thread id, which cost auto-resolution on those findings.
     private const string ReviewThreadIdsQuery =
@@ -53,7 +57,9 @@ internal sealed partial class GitHubLifecyclePublicationService(
         activity?.SetTag("publication.author.login", author.Login);
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
-        var payload = BuildPayload(review, revision, result, author, composer);
+        var payload = BuildPayload(
+            review, revision, result, author, composer, publicationContext?.CurrentHeadSha,
+            publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo);
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             GitHubConnectionVerifier.BuildApiUri(
@@ -98,7 +104,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
         // The review-thread node ids need a second follow-up read: GitHub exposes review threads only
         // through GraphQL, and neither the create-review response nor the REST comment payload names the
         // thread a comment opened.
-        var postedComments = await this.TryCapturePostedCommentsAsync(context, review, response, ct);
+        var postedComments = await this.TryCapturePostedCommentsAsync(context, review, response, result, payload, ct);
 
         return ReviewCommentPostingDiagnosticsDto.Empty(
                 result.Comments.Count + result.CarriedForwardCandidatesSkipped,
@@ -113,6 +119,8 @@ internal sealed partial class GitHubLifecyclePublicationService(
         GitHubConnectionVerifier.GitHubConnectionContext context,
         CodeReviewRef review,
         HttpResponseMessage reviewResponse,
+        ReviewResult result,
+        GitHubReviewRequest payload,
         CancellationToken ct)
     {
         try
@@ -147,14 +155,22 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
             var threadIdsByCommentId = await this.TryResolveReviewThreadIdsAsync(context, review, ct);
 
-            return comments
-                .Where(comment => comment.Id is not null)
-                .Select(comment => new PostedReviewCommentRef(
+            var originals = result.Comments.Select((finding, ordinal) => (Finding: finding, Ordinal: ordinal))
+                .Where(item => !string.IsNullOrWhiteSpace(item.Finding.FilePath) && item.Finding.LineNumber is > 0).ToArray();
+            return comments.Where(comment => comment.Id is not null).Select(comment =>
+            {
+                var matches = payload.Comments.Select((sent, index) => (Sent: sent, Index: index))
+                    .Where(item => item.Sent.Path == comment.Path && item.Sent.Line == comment.Line
+                                                                  && (comment.Body is null || item.Sent.Body == comment.Body)).Take(2).ToArray();
+                var original = matches.Length == 1 ? originals[matches[0].Index] : default;
+                return new PostedReviewCommentRef(
                     comment.Id!.Value.ToString(CultureInfo.InvariantCulture),
-                    threadIdsByCommentId.GetValueOrDefault(comment.Id.Value),
-                    comment.Path,
-                    comment.Line))
-                .ToList();
+                    threadIdsByCommentId.GetValueOrDefault(comment.Id.Value), original.Finding?.FilePath ?? comment.Path,
+                    original.Finding?.LineNumber ?? comment.Line)
+                {
+                    FindingOrdinal = original.Finding is not null ? original.Ordinal : null,
+                };
+            }).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -303,42 +319,161 @@ internal sealed partial class GitHubLifecyclePublicationService(
         ReviewRevision revision,
         ReviewResult result,
         ReviewerIdentity author,
-        IPostedCommentComposer composer)
+        IPostedCommentComposer composer,
+        string? currentHeadSha = null, FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo)
     {
         ArgumentNullException.ThrowIfNull(composer);
 
-        var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {author.DisplayName} Review");
-        summaryBuilder.AppendLine();
-        summaryBuilder.AppendLine(result.Summary);
-
+        var bodyBudget = Math.Max(0, MaximumCommentBodyCharacters - composer.AppendRendered(string.Empty, GitHubFindingCommentRenderer.RenderText).Length - 2);
         var inlineComments = new List<GitHubInlineReviewComment>();
         foreach (var comment in result.Comments)
         {
             if (!string.IsNullOrWhiteSpace(comment.FilePath) && comment.LineNumber.HasValue &&
                 comment.LineNumber.Value > 0)
             {
+                var applicable = currentHeadSha == revision.HeadSha && ReviewSuggestedFixRenderer.CanApply(comment, currentHeadSha);
+                var fix = applicable ? comment.SuggestedFix : null;
+                var body = FitFindingMetadata(GitHubFindingCommentRenderer.Format(comment, applicable, badgeStyle: badgeStyle), bodyBudget);
+                if (body.Length > bodyBudget && comment.SuggestedFix is not null)
+                {
+                    body = FitFindingMetadata(
+                        GitHubFindingCommentRenderer.Format(comment with { SuggestedFix = null }, badgeStyle: badgeStyle),
+                        bodyBudget);
+                    fix = null;
+                }
+
+                body = composer.AppendRendered(ReviewFindingTextFormatter.Truncate(body, bodyBudget), GitHubFindingCommentRenderer.RenderText);
+
                 inlineComments.Add(
                     new GitHubInlineReviewComment(
                         NormalizePath(comment.FilePath),
-                        comment.LineNumber.Value,
+                        fix?.EndLine ?? comment.LineNumber.Value,
                         "RIGHT",
-                        composer.Append($"{FormatSeverity(comment.Severity)}: {comment.Message}")));
-            }
-            else
-            {
-                summaryBuilder.AppendLine();
-                summaryBuilder.AppendLine($"- {FormatSeverity(comment.Severity)}: {comment.Message}");
+                        body,
+                        fix is not null && fix.StartLine != fix.EndLine ? fix.StartLine : null,
+                        fix is not null && fix.StartLine != fix.EndLine ? "RIGHT" : null));
             }
         }
 
-        ContextBudgetSummarySections.Append(summaryBuilder, result);
+        var summary = BuildSummaryBody(result, author, includeSuggestedFixes: true, badgeStyle, bodyBudget);
+        if (summary.Length > bodyBudget)
+        {
+            summary = BuildSummaryBody(result, author, includeSuggestedFixes: false, badgeStyle, bodyBudget);
+        }
+
+        summary = composer.AppendRendered(ReviewFindingTextFormatter.Truncate(summary, bodyBudget), GitHubFindingCommentRenderer.RenderText);
 
         return new GitHubReviewRequest(
             revision.HeadSha,
-            composer.Append(summaryBuilder.ToString().Trim()),
+            summary,
             "COMMENT",
             inlineComments);
+    }
+
+    private static string FitFindingMetadata(string body, int maximumBodyLength)
+    {
+        if (body.Length <= maximumBodyLength)
+        {
+            return body;
+        }
+
+        var withoutHeader = ReviewFindingTextFormatter.LimitBadgeHeader(body, 0);
+        return ReviewFindingTextFormatter.LimitBadgeHeader(body, Math.Max(0, maximumBodyLength - withoutHeader.Length));
+    }
+
+    private static string BuildSummaryBody(
+        ReviewResult result, ReviewerIdentity author, bool includeSuggestedFixes, FindingBadgeStyle badgeStyle, int maximumBodyLength)
+    {
+        var fileless = result.Comments.Where(comment => string.IsNullOrWhiteSpace(comment.FilePath) || comment.LineNumber is not > 0).ToArray();
+        var rendered = fileless.Distinct().ToDictionary(
+            comment => comment,
+            comment => GitHubFindingCommentRenderer.Format(includeSuggestedFixes ? comment : comment with { SuggestedFix = null }, badgeStyle: badgeStyle));
+        var summary = FormatSummary(result, author, comment => rendered[comment]);
+        if (summary.Length <= maximumBodyLength)
+        {
+            return summary;
+        }
+
+        // Only formatter-owned prefixes are reduced; badge examples in descriptions remain unchanged.
+        var withoutHeaders = FormatSummary(result, author, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], 0));
+        if (withoutHeaders.Length <= maximumBodyLength && fileless.Length > 0)
+        {
+            var headerBudget = (maximumBodyLength - withoutHeaders.Length) / fileless.Length;
+            return FormatSummary(result, author, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], headerBudget));
+        }
+
+        if (includeSuggestedFixes)
+        {
+            return withoutHeaders;
+        }
+
+        if (fileless.Length == 0)
+        {
+            return ReviewFindingTextFormatter.Truncate(FormatSummary(result, author, _ => string.Empty), maximumBodyLength);
+        }
+
+        var shellBudget = maximumBodyLength / 2;
+        var shell = FormatSummary(result, author, _ => string.Empty, shellBudget);
+        if (shell.Length >= maximumBodyLength)
+        {
+            return ReviewFindingTextFormatter.Truncate(shell, maximumBodyLength);
+        }
+
+        var findingBudget = (maximumBodyLength - shell.Length) / fileless.Length;
+        return FormatSummary(
+            result, author, comment => ReviewFindingTextFormatter.Truncate(FitFindingMetadata(rendered[comment], findingBudget), findingBudget), shellBudget);
+    }
+
+    private static string FormatSummary(
+        ReviewResult result, ReviewerIdentity author, Func<ReviewComment, string> findingRenderer, int? maximumShellLength = null)
+    {
+        var summaryBuilder = new StringBuilder();
+        summaryBuilder.AppendLine($"## {GitHubFindingCommentRenderer.RenderText(author.DisplayName.ReplaceLineEndings(" "))} Review");
+        summaryBuilder.AppendLine();
+        summaryBuilder.Append(ReviewFindingPriority.FormatLead(result, GitHubFindingCommentRenderer.RenderText));
+        summaryBuilder.AppendLine(ReviewFindingTextFormatter.CloseOpenFences(GitHubFindingCommentRenderer.RenderText(result.Summary)));
+        summaryBuilder.AppendLine();
+        var summaryResult = result;
+        var sourcesByDisplay = new Dictionary<ReviewComment, ReviewComment>(ReferenceEqualityComparer.Instance);
+        if (maximumShellLength.HasValue)
+        {
+            var comments = result.Comments.Select(comment =>
+            {
+                if (comment.LineNumber is > 0 || comment.FilePath is not { Length: > 160 } path)
+                {
+                    return comment;
+                }
+
+                var length = char.IsHighSurrogate(path[159]) ? 159 : 160;
+                var display = comment.WithAnchorAndSeverity(path[..length] + "…", comment.LineNumber, comment.Severity);
+                sourcesByDisplay.Add(display, comment);
+                return display;
+            }).ToArray();
+            summaryResult = result with { Comments = comments };
+        }
+
+        var findings = ReviewSummaryTextFormatter.Format(
+            summaryResult, includeFilelessFindingDetails: true,
+            findingRenderer: comment => findingRenderer(sourcesByDisplay.GetValueOrDefault(comment, comment)),
+            renderText: GitHubFindingCommentRenderer.RenderText);
+        var contextBuilder = new StringBuilder();
+        ContextBudgetSummarySections.Append(contextBuilder, result, GitHubFindingCommentRenderer.RenderText);
+        if (maximumShellLength is { } shellBudget)
+        {
+            var emptyFindings = ReviewSummaryTextFormatter.Format(
+                summaryResult, includeFilelessFindingDetails: true, findingRenderer: _ => string.Empty, renderText: GitHubFindingCommentRenderer.RenderText);
+            var textBudget = Math.Max(0, shellBudget - emptyFindings.Length - 4);
+            if (summaryBuilder.Length + contextBuilder.Length > textBudget)
+            {
+                var contextBudget = Math.Min(contextBuilder.Length, textBudget / 2);
+                var conclusion = ReviewFindingTextFormatter.Truncate(summaryBuilder.ToString().TrimEnd(), textBudget - contextBudget);
+                var context = ReviewFindingTextFormatter.Truncate(contextBuilder.ToString().Trim(), contextBudget);
+                return (conclusion + "\n\n" + findings + "\n\n" + context).Trim();
+            }
+        }
+
+        summaryBuilder.AppendLine(findings).Append(contextBuilder);
+        return summaryBuilder.ToString().Trim();
     }
 
     private static string BuildRepositoryPath(RepositoryRef repository)
@@ -365,16 +500,6 @@ internal sealed partial class GitHubLifecyclePublicationService(
         return path.Trim().TrimStart('/');
     }
 
-    private static string FormatSeverity(CommentSeverity severity)
-    {
-        return severity switch
-        {
-            CommentSeverity.Error => "Error",
-            CommentSeverity.Warning => "Warning",
-            CommentSeverity.Suggestion => "Suggestion",
-            _ => "Info",
-        };
-    }
 
     private static async Task<string?> ReadDiagnosticBodyAsync(HttpResponseMessage response, CancellationToken ct)
     {
@@ -459,7 +584,8 @@ internal sealed partial class GitHubLifecyclePublicationService(
     private sealed record GitHubReviewCommentResponse(
         [property: JsonPropertyName("id")] long? Id,
         [property: JsonPropertyName("path")] string? Path,
-        [property: JsonPropertyName("line")] int? Line);
+        [property: JsonPropertyName("line")] int? Line,
+        [property: JsonPropertyName("body")] string? Body = null);
 
     internal sealed record GitHubReviewRequest(
         [property: JsonPropertyName("commit_id")]
@@ -473,5 +599,9 @@ internal sealed partial class GitHubLifecyclePublicationService(
         [property: JsonPropertyName("path")] string Path,
         [property: JsonPropertyName("line")] int Line,
         [property: JsonPropertyName("side")] string Side,
-        [property: JsonPropertyName("body")] string Body);
+        [property: JsonPropertyName("body")] string Body,
+        [property: JsonPropertyName("start_line"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        int? StartLine = null,
+        [property: JsonPropertyName("start_side"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? StartSide = null);
 }

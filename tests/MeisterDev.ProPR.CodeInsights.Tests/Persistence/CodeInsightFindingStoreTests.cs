@@ -14,6 +14,11 @@ using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.CodeInsights.Taxonomy;
 using MeisterDev.ProPR.CodeInsights.Persistence;
 using NSubstitute;
+using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterDev.ProPR.CodeInsights.Classification;
+using MeisterDev.ProPR.CodeInsights.Ports;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterDev.ProPR.CodeInsights.Tests.Persistence;
 
@@ -34,6 +39,248 @@ public sealed class CodeInsightFindingStoreTests : IDisposable
     public void Dispose()
     {
         this._dbContext.Dispose();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SupportedReviewTypesAreAuthoritativeWithUnknownAncillaryAxes(bool allAxesMissing)
+    {
+        var key = NewKey();
+        var source = new FindingTypeClassification(
+            ["logic-error"], [], CodeInsightFindingLevel.Member,
+            CodeInsightFindingQualifier.Incorrect, 0.9, 1, FindingTypeClassification.ReviewSource);
+        var classification =
+            FindingTypeClassification.Merge([source, source with { CoreSlugs = ["concurrency"], Qualifier = CodeInsightFindingQualifier.Missing }])!;
+        if (allAxesMissing)
+        {
+            using var document = JsonDocument.Parse(
+                """
+                {"finding_classification":{"types":["logic-error","concurrency"]}}
+                """);
+            classification = FindingTypeClassificationParser.ParseFinding(document.RootElement)!;
+        }
+
+        Assert.False(classification.IsComplete);
+        await this._store.MaterialiseFindingsAsync(
+            key, JobId, "partial", DateTimeOffset.UtcNow,
+            [NewFindings()[0] with { FindingClassification = classification }]);
+        var row = await this._dbContext.CodeInsightFindings.SingleAsync();
+        Assert.Equal(
+            ["concurrency", "logic-error"],
+            await this._dbContext.CodeInsightFindingTags.OrderBy(tag => tag.CoreSlug).Select(tag => tag.CoreSlug).ToListAsync());
+        Assert.NotNull(row.ClassifiedAt);
+        Assert.Null(row.Qualifier);
+        Assert.Equal(classification.Level, row.Level);
+        Assert.Equal(classification.Confidence, row.ClassificationConfidence);
+        Assert.Empty(await this._store.ListUnclassifiedAsync(10, 3));
+        var classifier = Substitute.For<IFindingTypeClassifier>();
+        var sweeper = new CodeInsightClassificationSweeper(
+            this._store, classifier, Substitute.For<ICodeInsightTaxonomyService>(),
+            Substitute.For<ICodeInsightsCollectionGate>(), NullLogger<CodeInsightClassificationSweeper>.Instance);
+        Assert.Equal(0, (await sweeper.SweepOnceAsync()).Considered);
+        await classifier.DidNotReceive().ClassifyAsync(Arg.Any<FindingClassificationRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProducedClassificationSkipsBacklogAndRejectsStaleFallbackOrReplayWrites()
+    {
+        var key = NewKey();
+        var classification = new FindingTypeClassification(
+            ["logic-error", "concurrency"], [], CodeInsightFindingLevel.Member,
+            CodeInsightFindingQualifier.Incorrect, 0.93, 1, FindingTypeClassification.ReviewSource);
+        var snapshot = NewFindings()[0] with
+        {
+            FindingClassification = classification,
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Low, FindingLikelihood.Unlikely, "Bounded.", "Rare input.",
+                "review_model", FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "The path is deterministic."),
+        };
+        await this._store.MaterialiseFindingsAsync(key, JobId, "typed", DateTimeOffset.UtcNow, [snapshot]);
+        var row = await this._dbContext.CodeInsightFindings.SingleAsync();
+        Assert.NotNull(row.ClassifiedAt);
+        Assert.Equal(0.93, row.ClassificationConfidence);
+        Assert.Equal(FindingConfidence.Certain, row.Confidence);
+        Assert.Equal(0, row.ClassificationAttempts);
+        Assert.Empty(await this._store.ListUnclassifiedAsync(10, 3));
+        await this._store.ApplyClassificationAsync(
+            row.Id,
+            new(["naming-clarity"], [], CodeInsightFindingLevel.File, CodeInsightFindingQualifier.Missing, 0.1, "finding-type-v1"));
+        await this._store.MaterialiseFindingsAsync(
+            key, Guid.NewGuid(), "typed", DateTimeOffset.UtcNow,
+            [snapshot with { FindingClassification = classification with { CoreSlugs = ["security"] } }]);
+        await this._store.MaterialiseFindingsAsync(
+            key, Guid.NewGuid(), "typed", DateTimeOffset.UtcNow,
+            [snapshot with { FindingClassification = null }]);
+        Assert.Equal(row.Id, (await this._dbContext.CodeInsightFindings.SingleAsync()).Id);
+        Assert.Equal(JobId, row.JobId);
+        Assert.Equal(0.93, row.ClassificationConfidence);
+        Assert.Equal(
+            ["concurrency", "logic-error"],
+            await this._dbContext.CodeInsightFindingTags.OrderBy(tag => tag.CoreSlug).Select(tag => tag.CoreSlug).ToListAsync());
+    }
+
+    [Fact]
+    public async Task ProducedClassificationEnrichesLegacyRowsAndFiltersForeignCustomIdsButRetainsRetiredCapturedTags()
+    {
+        var key = NewKey();
+        var ownId = Guid.NewGuid();
+        var foreignId = Guid.NewGuid();
+        this._dbContext.CodeInsightCustomTags.AddRange(
+            new CodeInsightCustomTag
+            {
+                Id = ownId, ClientId = key.ClientId, Slug = "tenant-boundary", DisplayName = "Tenant boundary", Definition = "Definition",
+                RetiredAt = DateTimeOffset.UtcNow
+            },
+            new CodeInsightCustomTag
+                { Id = foreignId, ClientId = Guid.NewGuid(), Slug = "secret-client-tag", DisplayName = "Other client", Definition = "Definition" });
+        await this._dbContext.SaveChangesAsync();
+        var snapshot = NewFindings()[0];
+        await this._store.MaterialiseFindingsAsync(key, JobId, "legacy", DateTimeOffset.UtcNow, [snapshot]);
+        var row = await this._dbContext.CodeInsightFindings.SingleAsync();
+        Assert.Single(await this._store.ListUnclassifiedAsync(10, 3));
+        await this._store.ApplyClassificationAsync(
+            row.Id,
+            new(["naming-clarity"], [], CodeInsightFindingLevel.File, CodeInsightFindingQualifier.Missing, 0.1, "finding-type-v1"));
+        var classification = new FindingTypeClassification(
+            ["logic-error"],
+            [new(ownId, "tenant-boundary", "Captured label"), new(foreignId, "secret-client-tag", "Forged"), new(Guid.NewGuid(), "unknown", "Unknown")],
+            CodeInsightFindingLevel.Member, CodeInsightFindingQualifier.Incorrect, 0.93, 1, FindingTypeClassification.ReviewSource);
+        await this._store.MaterialiseFindingsAsync(
+            key, JobId, "legacy", DateTimeOffset.UtcNow,
+            [snapshot with { FindingClassification = classification }]);
+        Assert.Equal(["logic-error"], await this._dbContext.CodeInsightFindingTags.Where(tag => tag.IsCore).Select(tag => tag.CoreSlug).ToListAsync());
+        Assert.Equal([ownId], await this._dbContext.CodeInsightFindingTags.Where(tag => !tag.IsCore).Select(tag => tag.CustomTagId!.Value).ToListAsync());
+        Assert.Empty(await this._store.ListUnclassifiedAsync(10, 3));
+    }
+
+    [Theory]
+    [InlineData(FindingConfidence.Low)]
+    [InlineData(FindingConfidence.Medium)]
+    [InlineData(FindingConfidence.High)]
+    [InlineData(FindingConfidence.Certain)]
+    public async Task RiskAssessmentRoundTripsWithProtectedReasonsAndQueryableDimensions(FindingConfidence confidence)
+    {
+        var key = NewKey();
+        var risk = new FindingRiskAssessment(
+            FindingImpact.Critical, FindingLikelihood.Likely,
+            "Stored credentials become public", "Every request exposes the value", "review-generation", FindingRiskAssessment.CurrentRubricVersion,
+            confidence, "The response serializes the stored secret.");
+        var snapshot = NewFindings()[0] with { RiskAssessment = risk };
+        await this._store.MaterialiseFindingsAsync(key, JobId, "rev-risk", DateTimeOffset.UtcNow, [snapshot]);
+        this._dbContext.ChangeTracker.Clear();
+        var entity = Assert.Single(await this._dbContext.CodeInsightFindings.ToListAsync());
+        Assert.Equal(FindingImpact.Critical, entity.Impact);
+        Assert.Equal(FindingRiskSeverity.Critical, entity.RiskSeverity);
+        Assert.Equal(confidence, entity.Confidence);
+        await this._store.ApplyClassificationAsync(
+            entity.Id,
+            new CodeInsightClassification(["logic-error"], [], CodeInsightFindingLevel.Member, CodeInsightFindingQualifier.Incorrect, 0.91, "test-classifier"));
+        Assert.Equal(0.91, entity.ClassificationConfidence);
+        Assert.Equal(confidence, entity.Confidence);
+        Assert.DoesNotContain(risk.ImpactReason!, entity.EncryptedRiskAssessment!);
+        Assert.DoesNotContain(risk.ConfidenceReason!, entity.EncryptedRiskAssessment!);
+        var view = Assert.Single(await this._store.GetFindingsForPullRequestAsync(key));
+        Assert.Equal(risk, view.RiskAssessment);
+        await this._store.MaterialiseFindingsAsync(key, JobId, "rev-risk", DateTimeOffset.UtcNow, [snapshot with { RiskAssessment = null }]);
+        Assert.Equal(risk, Assert.Single(await this._store.GetFindingsForPullRequestAsync(key)).RiskAssessment);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplayEnrichesOnlyMissingCompatibleConfidenceAndRetainsKnownEvidence(bool conflict)
+    {
+        var key = NewKey();
+        var original = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Unlikely, "A record is lost.", "Rare input.",
+            "review-generation", FindingRiskAssessment.CurrentRubricVersion);
+        var snapshot = NewFindings()[0] with { RiskAssessment = original };
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot]);
+        var entity = await this._dbContext.CodeInsightFindings.SingleAsync();
+        var initialTime = DateTimeOffset.UnixEpoch;
+        entity.PerformanceEvidenceUpdatedAt = initialTime;
+        await this._dbContext.SaveChangesAsync();
+        var supplied = new FindingRiskAssessment(
+            conflict ? FindingImpact.Low : original.Impact, original.Likelihood, original.ImpactReason, original.LikelihoodReason,
+            "review_model", FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "A deterministic reproduction confirms the loss.",
+            "evidence_verification");
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot with { RiskAssessment = supplied }]);
+        var enriched = Assert.Single(await this._store.GetFindingsForPullRequestAsync(key)).RiskAssessment!;
+        Assert.Equal(original.Impact, enriched.Impact);
+        Assert.Equal(original.ImpactReason, enriched.ImpactReason);
+        Assert.Equal(original.Source, enriched.Source);
+        Assert.Equal(conflict ? FindingConfidence.Unknown : FindingConfidence.Certain, enriched.Confidence);
+        Assert.Equal(conflict ? original.ConfidenceSource : "evidence_verification", enriched.ConfidenceSource);
+        var replayTime = (await this._dbContext.CodeInsightFindings.SingleAsync()).PerformanceEvidenceUpdatedAt;
+        if (conflict)
+        {
+            Assert.Equal(initialTime, replayTime);
+        }
+        else
+        {
+            Assert.True(replayTime > initialTime);
+        }
+
+        var retainedTime = DateTimeOffset.UnixEpoch.AddDays(1);
+        entity.PerformanceEvidenceUpdatedAt = retainedTime;
+        await this._dbContext.SaveChangesAsync();
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot]);
+        Assert.Equal(enriched, Assert.Single(await this._store.GetFindingsForPullRequestAsync(key)).RiskAssessment);
+        Assert.Equal(retainedTime, (await this._dbContext.CodeInsightFindings.SingleAsync()).PerformanceEvidenceUpdatedAt);
+    }
+
+    [Theory]
+    [InlineData(false, "message")]
+    [InlineData(false, "path")]
+    [InlineData(false, "line")]
+    [InlineData(true, "message")]
+    [InlineData(true, "path")]
+    [InlineData(true, "line")]
+    public async Task ReplayedDifferentClaimCannotSupplyConfidenceForTheRetainedFinding(bool assessed, string changedField)
+    {
+        var key = NewKey();
+        var risk = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Unlikely, "A record is lost.", "Rare input.",
+            "review_model", FindingRiskAssessment.CurrentRubricVersion);
+        var recorded = assessed ? risk : null;
+        var snapshot = NewFindings()[0] with { RiskAssessment = recorded };
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot]);
+        var supplied = new FindingRiskAssessment(
+            risk.Impact, risk.Likelihood, risk.ImpactReason, risk.LikelihoodReason, risk.Source, risk.RubricVersion,
+            FindingConfidence.Certain, "A reproduction confirms another claim.");
+        var replay = snapshot with { RiskAssessment = supplied };
+        replay = changedField switch
+        {
+            "message" => replay with { Message = "A different claim." },
+            "path" => replay with { FilePath = "src/Other.cs" },
+            _ => replay with { LineNumber = 99 },
+        };
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [replay]);
+        Assert.Equal(recorded, Assert.Single(await this._store.GetFindingsForPullRequestAsync(key)).RiskAssessment);
+        Assert.Equal(FindingConfidence.Unknown, (await this._dbContext.CodeInsightFindings.SingleAsync()).Confidence);
+    }
+
+    [Theory]
+    [InlineData(null, "finding-risk-v1")]
+    [InlineData("review_model", "future")]
+    public async Task UnusableRecordedProvenanceDoesNotRefreshConfidenceEvidence(string? source, string version)
+    {
+        var key = NewKey();
+        var risk = new FindingRiskAssessment(FindingImpact.High, FindingLikelihood.Unlikely, "A record is lost.", "Rare input.", source, version);
+        var snapshot = NewFindings()[0] with { RiskAssessment = risk };
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot]);
+        var stored = await this._dbContext.CodeInsightFindings.SingleAsync();
+        stored.PerformanceEvidenceUpdatedAt = DateTimeOffset.UnixEpoch;
+        await this._dbContext.SaveChangesAsync();
+        var encrypted = stored.EncryptedRiskAssessment;
+        var supplied = new FindingRiskAssessment(
+            risk.Impact, risk.Likelihood, risk.ImpactReason, risk.LikelihoodReason,
+            "review_model", FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Certain, "The complete path proves the claim.");
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot with { RiskAssessment = supplied }]);
+        Assert.Equal(FindingConfidence.Unknown, stored.Confidence);
+        Assert.Equal(encrypted, stored.EncryptedRiskAssessment);
+        Assert.Equal(DateTimeOffset.UnixEpoch, stored.PerformanceEvidenceUpdatedAt);
     }
 
     [Theory]
