@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using System.Globalization;
 using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
@@ -11,6 +12,7 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
+using MeisterDev.ProPR.Application.Features.TenantData;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -28,6 +30,7 @@ public sealed class ClientsController(
     IClientAdminService clientAdminService,
     ITenantAdminService tenantAdminService,
     IClientTokenUsageRepository usageRepository,
+    ITenantDataLifecycle dataLifecycle,
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private static ClientResponse ToClientResponse(ClientDto client, long? recentUsageTokens = null)
@@ -228,18 +231,28 @@ public sealed class ClientsController(
     }
 
     /// <summary>
-    ///     Deletes a client and all its crawl configurations.
+    ///     Stops the work of a client and deletes the client once that work has ended. Each request deactivates the
+    ///     client and its webhook, crawl, mention and ProCursor configurations and ends its unfinished jobs. While an
+    ///     execution may still be running, or for a minute after a request stopped any work, the request answers 409
+    ///     with the seconds to wait. A request after that deletes the client and every record that belongs to it,
+    ///     including review jobs, protocols, retained discussions, usage reports and the ProCursor indexes.
     ///     Requires a global admin JWT or <c>X-User-Pat</c>.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <response code="204">Client deleted.</response>
     /// <response code="401">Missing or invalid admin credentials.</response>
     /// <response code="404">Client not found.</response>
+    /// <response code="409">
+    ///     The work of the client was stopped and the deletion waits for it; the Retry-After header gives the seconds to
+    ///     wait.
+    /// </response>
     [HttpDelete("{clientId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteClient(Guid clientId)
+    [ProducesResponseType(typeof(ClientDeletionWaitResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteClient(Guid clientId, CancellationToken ct)
     {
         var auth = this.RequirePlatformAdmin();
         if (auth is not null)
@@ -247,8 +260,27 @@ public sealed class ClientsController(
             return auth;
         }
 
-        var deleted = await clientAdminService.DeleteAsync(clientId);
-        return deleted ? this.NoContent() : this.NotFound();
+        // A client that the installation does not show, such as a client of another tenant without multi-tenancy,
+        // counts as missing.
+        if (!await clientAdminService.ExistsAsync(clientId, ct)
+            || await dataLifecycle.DeleteClientAsync(clientId, ct) is not { } answer)
+        {
+            return this.NotFound();
+        }
+
+        if (answer.Pending is not { } pending)
+        {
+            return this.NoContent();
+        }
+
+        var seconds = Math.Max(1, (int)Math.Ceiling(pending.RetryAfter.TotalSeconds));
+        this.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
+        return this.Conflict(
+            new ClientDeletionWaitResponse(
+                "client_work_running",
+                $"The work of the client was stopped. Request the deletion again after {seconds} seconds.",
+                seconds,
+                pending.Running));
     }
 
     /// <summary>
@@ -413,6 +445,17 @@ public sealed class ClientsController(
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
 }
+
+/// <summary>The answer while a client deletion waits for the work of the client to end.</summary>
+/// <param name="Error">Always <c>client_work_running</c>.</param>
+/// <param name="Message">What the caller does next.</param>
+/// <param name="RetryAfterSeconds">The seconds after which the caller requests the deletion again, as in the Retry-After header.</param>
+/// <param name="Running">The executions that may still be running, by kind.</param>
+public sealed record ClientDeletionWaitResponse(
+    string Error,
+    string Message,
+    int RetryAfterSeconds,
+    IReadOnlyDictionary<string, int> Running);
 
 /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
 public sealed record ClientResponse(

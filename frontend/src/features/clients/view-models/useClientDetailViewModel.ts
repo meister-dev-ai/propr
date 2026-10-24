@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-import { computed, onMounted, ref, watch, type ComputedRef, type InjectionKey, type Ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type InjectionKey, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { useSession } from '@/composables/useSession'
@@ -86,6 +86,9 @@ export interface ClientDetailViewModel {
   saveError: Ref<string>
   admissionSaveError: Ref<string>
   showDeleteDialog: Ref<boolean>
+  /** Seconds until the deletion is requested again while ProPR stops the work of the client, or null. */
+  deletionWaitSeconds: Ref<number | null>
+  deleteError: Ref<string>
   editedDisplayName: Ref<string>
   editedDefaultReviewPipelineProfileId: Ref<string>
   editedScmCommentPostingEnabled: Ref<boolean>
@@ -157,7 +160,48 @@ export interface ClientDetailService {
   getReviewProfiles: () => Promise<{ data: { profiles: ReviewProfileCatalogItemDto[] } | null }>
   getClientReviewProfile: (clientId: string) => Promise<{ data: ClientReviewProfileDto | null }>
   putClientReviewProfile: (clientId: string, body: { defaultReviewPipelineProfileId: string | null }) => Promise<{ data: ClientReviewProfileDto }>
-  deleteClient: (clientId: string) => Promise<unknown>
+  deleteClient: (clientId: string) => Promise<ClientDeletionResponse>
+}
+
+/** The parts of the answer to a client deletion request that decide what the page does next. */
+export interface ClientDeletionResponse {
+  error?: unknown
+  response?: { status?: number; headers?: { get: (name: string) => string | null } }
+}
+
+/** What the page does after a client deletion request. */
+export type ClientDeletionStep =
+  | { kind: 'deleted' }
+  | { kind: 'waiting'; seconds: number }
+  | { kind: 'failed'; message: string }
+
+/** The wait before the next deletion request when a 409 answer names no wait. */
+const DEFAULT_DELETION_WAIT_SECONDS = 60
+
+/**
+ * Reads the answer to a client deletion request. While ProPR stops the work of the client, the API answers 409
+ * with the seconds to wait, and the page requests the deletion again after that time. A client that no longer
+ * exists counts as deleted.
+ */
+export function clientDeletionStep(answer: ClientDeletionResponse): ClientDeletionStep {
+  const status = answer.response?.status
+  if (status === 204 || status === 404) {
+    return { kind: 'deleted' }
+  }
+
+  if (status === 409) {
+    const body = answer.error as { retryAfterSeconds?: unknown } | undefined
+    const header = Number(answer.response?.headers?.get('Retry-After'))
+    const seconds = [body?.retryAfterSeconds, header].find(isPositiveSeconds) ?? DEFAULT_DELETION_WAIT_SECONDS
+    return { kind: 'waiting', seconds: Math.max(1, Math.ceil(seconds)) }
+  }
+
+  return { kind: 'failed', message: 'The client could not be deleted. Try again later.' }
+}
+
+/** Whether a wait from the body or the header of a deletion answer is a finite, positive number of seconds. */
+function isPositiveSeconds(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
 }
 
 export interface UseClientDetailViewModelOptions {
@@ -377,6 +421,10 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   // reporting that shared value beside the admission fields attributes those failures to the review limits.
   const admissionSaveError = ref('')
   const showDeleteDialog = ref(false)
+  const deletionWaitSeconds = ref<number | null>(null)
+  const deleteError = ref('')
+  let deletionRetry: ReturnType<typeof setTimeout> | undefined
+  let unmounted = false
   const editedDisplayName = ref('')
   const editedDefaultReviewPipelineProfileId = ref('file-by-file-balanced')
   const editedScmCommentPostingEnabled = ref(true)
@@ -893,13 +941,37 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
 
   async function handleDelete() {
     if (!canManageClient.value) return
+    showDeleteDialog.value = false
+    deleteError.value = ''
+    clearTimeout(deletionRetry)
+    let step: ClientDeletionStep
     try {
-      await deleteClientFn(clientId)
-      router.push({ name: 'clients' })
+      step = clientDeletionStep(await deleteClientFn(clientId))
     } catch {
+      step = clientDeletionStep({})
+    }
+
+    // An answer that arrives after the page was closed starts no further request and does not navigate.
+    if (unmounted) return
+
+    if (step.kind === 'deleted') {
+      deletionWaitSeconds.value = null
       router.push({ name: 'clients' })
+    } else if (step.kind === 'waiting') {
+      deletionWaitSeconds.value = step.seconds
+      deletionRetry = setTimeout(() => void handleDelete(), step.seconds * 1000)
+    } else {
+      deletionWaitSeconds.value = null
+      deleteError.value = step.message
     }
   }
+
+  // The page requests the deletion again only while it is open. A client left behind stays deactivated, and the
+  // next deletion request continues where this one stopped.
+  onBeforeUnmount(() => {
+    unmounted = true
+    clearTimeout(deletionRetry)
+  })
 
   return {
     name: 'useClientDetailViewModel',
@@ -912,6 +984,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saveError,
     admissionSaveError,
     showDeleteDialog,
+    deletionWaitSeconds,
+    deleteError,
     editedDisplayName,
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,

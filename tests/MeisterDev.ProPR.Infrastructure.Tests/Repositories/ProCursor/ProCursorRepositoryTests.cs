@@ -34,6 +34,7 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
     public async Task InitializeAsync()
     {
         fixture.SkipIfUnavailable();
+        await ProCursorDatabase.MigrateAsync(fixture.ConnectionString);
 
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
             .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
@@ -98,6 +99,24 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
         Assert.Single(stored.TrackedBranches);
     }
 
+    // ProCursor schedules no indexing for a deactivated client.
+    [Fact]
+    public async Task KnowledgeSourceRepository_ListEnabledAsync_LeavesOutTheSourcesOfADeactivatedClient()
+    {
+        var source = await this.PersistSourceWithBranchAsync();
+        await this.SetClientActiveAsync(false);
+        try
+        {
+            Assert.DoesNotContain(await this._knowledgeSources.ListEnabledAsync(), listed => listed.Id == source.Id);
+        }
+        finally
+        {
+            await this.SetClientActiveAsync(true);
+        }
+
+        Assert.Contains(await this._knowledgeSources.ListEnabledAsync(), listed => listed.Id == source.Id);
+    }
+
     [Fact]
     public async Task IndexJobRepository_GetNextPendingAsync_ReturnsOldestPendingJob()
     {
@@ -125,11 +144,92 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
         await this._jobs.AddAsync(job);
         Assert.True(await this._jobs.HasActiveJobAsync(branch.Id, job.DedupKey));
 
-        job.MarkProcessing();
+        job.MarkProcessing(DateTimeOffset.UtcNow.AddMinutes(5));
         job.MarkCompleted();
         await this._jobs.UpdateAsync(job);
 
         Assert.False(await this._jobs.HasActiveJobAsync(branch.Id, job.DedupKey));
+    }
+
+    // Two ProCursor services can read the same pending job. The update of the second service is refused, so the job
+    // runs once.
+    [Fact]
+    public async Task IndexJobRepository_UpdateAsync_RefusesAClaimOfAJobThatAnotherServiceClaimedFirst()
+    {
+        var source = await this.PersistSourceWithBranchAsync();
+        var branch = source.TrackedBranches.Single();
+        await this._jobs.AddAsync(new ProCursorIndexJob(Guid.NewGuid(), source.Id, branch.Id, null, "refresh", "source/main/claim"));
+        await using var otherDb = new ProCursorOperationalDbContext(
+            new DbContextOptionsBuilder<ProCursorOperationalDbContext>().UseNpgsql(fixture.ConnectionString, o => o.UseVector()).Options);
+        var otherJobs = new ProCursorIndexJobRepository(otherDb);
+        var first = (await this._jobs.GetNextPendingAsync())!;
+        var second = (await otherJobs.GetNextPendingAsync())!;
+
+        first.MarkProcessing(DateTimeOffset.UtcNow.AddMinutes(5));
+        second.MarkProcessing(DateTimeOffset.UtcNow.AddMinutes(5));
+
+        Assert.True(await this._jobs.UpdateAsync(first));
+        Assert.False(await otherJobs.UpdateAsync(second));
+        Assert.Null(await otherJobs.GetNextPendingAsync());
+        Assert.Equal(1, (await otherJobs.GetByIdAsync(first.Id))!.AttemptCount);
+    }
+
+    [Fact]
+    public async Task IndexJobRepository_ListExpiredLeasesAsync_ReturnsTheProcessingJobsWithoutAValidLease()
+    {
+        var source = await this.PersistSourceWithBranchAsync();
+        var branch = source.TrackedBranches.Single();
+        var now = DateTimeOffset.UtcNow;
+        var expired = await this.AddProcessingJobAsync(source.Id, branch.Id, "expired", now.AddSeconds(-1));
+        var held = await this.AddProcessingJobAsync(source.Id, branch.Id, "held", now.AddMinutes(5));
+        var excluded = await this.AddProcessingJobAsync(source.Id, branch.Id, "excluded", now.AddSeconds(-1));
+        await this._jobs.AddAsync(new ProCursorIndexJob(Guid.NewGuid(), source.Id, branch.Id, null, "refresh", "source/main/pending"));
+
+        // A job that was started before the lease was recorded has none.
+        var unleased = await this.AddProcessingJobAsync(source.Id, branch.Id, "unleased", now.AddMinutes(5));
+        await this._operationalDb.ProCursorIndexJobs.Where(job => job.Id == unleased)
+            .ExecuteUpdateAsync(set => set.SetProperty(job => job.LeaseExpiresAt, (DateTimeOffset?)null));
+
+        var listed = await this._jobs.ListExpiredLeasesAsync(now, [excluded]);
+
+        Assert.Equal(new[] { expired, unleased }.Order(), listed.Select(job => job.Id).Order());
+        Assert.DoesNotContain(held, listed.Select(job => job.Id));
+    }
+
+    // The service that runs a job can renew its lease after another service read the job as expired. The recovery
+    // then leaves the job to the service that runs it.
+    [Fact]
+    public async Task IndexJobRepository_RecoverExpiredLeaseAsync_LeavesAJobWhoseLeaseWasRenewedAfterItWasRead()
+    {
+        var source = await this.PersistSourceWithBranchAsync();
+        var branch = source.TrackedBranches.Single();
+        var now = DateTimeOffset.UtcNow;
+        var renewedId = await this.AddProcessingJobAsync(source.Id, branch.Id, "renewed", now.AddSeconds(-1));
+        var expiredId = await this.AddProcessingJobAsync(source.Id, branch.Id, "expired", now.AddSeconds(-1));
+        var listed = await this._jobs.ListExpiredLeasesAsync(now, []);
+
+        await using var ownerDb = new ProCursorOperationalDbContext(
+            new DbContextOptionsBuilder<ProCursorOperationalDbContext>().UseNpgsql(fixture.ConnectionString, o => o.UseVector()).Options);
+        var ownerJobs = new ProCursorIndexJobRepository(ownerDb);
+        var owned = (await ownerJobs.GetByIdAsync(renewedId))!;
+        owned.RenewLease(now.AddMinutes(5));
+        Assert.True(await ownerJobs.UpdateAsync(owned));
+
+        var renewed = listed.Single(job => job.Id == renewedId);
+        renewed.MarkPendingForRetry("The lease expired.");
+        var expired = listed.Single(job => job.Id == expiredId);
+        expired.MarkPendingForRetry("The lease expired.");
+
+        Assert.False(await this._jobs.RecoverExpiredLeaseAsync(renewed, now));
+        Assert.True(await this._jobs.RecoverExpiredLeaseAsync(expired, now));
+
+        var storedRenewed = (await this._jobs.GetByIdAsync(renewedId))!;
+        Assert.Equal(ProCursorIndexJobStatus.Processing, storedRenewed.Status);
+        Assert.True(storedRenewed.LeaseExpiresAt > now);
+        var storedExpired = (await this._jobs.GetByIdAsync(expiredId))!;
+        Assert.Equal(ProCursorIndexJobStatus.Pending, storedExpired.Status);
+        Assert.Null(storedExpired.LeaseExpiresAt);
+        Assert.Equal("The lease expired.", storedExpired.FailureReason);
     }
 
     [Fact]
@@ -229,12 +329,24 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
         Assert.Equal(1, await this._operationalDb.ProCursorSymbolEdges.CountAsync(record => record.SnapshotId == snapshot.Id));
     }
 
+    private Task SetClientActiveAsync(bool active) =>
+        this._controlDb.Clients.Where(client => client.Id == ClientId)
+            .ExecuteUpdateAsync(set => set.SetProperty(client => client.IsActive, active));
+
     private async Task<ProCursorKnowledgeSource> PersistSourceWithBranchAsync()
     {
         var source = CreateSource();
         source.AddTrackedBranch(Guid.NewGuid(), "main", ProCursorRefreshTriggerMode.BranchUpdate, true);
         await this._knowledgeSources.AddAsync(source);
         return source;
+    }
+
+    private async Task<Guid> AddProcessingJobAsync(Guid sourceId, Guid branchId, string name, DateTimeOffset leaseExpiresAt)
+    {
+        var job = new ProCursorIndexJob(Guid.NewGuid(), sourceId, branchId, null, "refresh", $"source/main/{name}");
+        job.MarkProcessing(leaseExpiresAt);
+        await this._jobs.AddAsync(job);
+        return job.Id;
     }
 
     private async Task<ProCursorIndexSnapshot> PersistReadySnapshotAsync()

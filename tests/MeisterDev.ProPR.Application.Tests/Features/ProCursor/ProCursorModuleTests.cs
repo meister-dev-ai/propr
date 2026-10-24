@@ -32,6 +32,7 @@ public sealed class ProCursorModuleTests
         var options = provider.GetRequiredService<IOptions<ProCursorOptions>>().Value;
         Assert.Equal(7, options.MaxIndexConcurrency);
         Assert.Equal(20, options.MaxQueryResults);
+        Assert.Equal(120, options.IndexJobLeaseSeconds);
         Assert.NotNull(provider.GetRequiredService<IProCursorTrackedBranchChangeDetector>());
     }
 
@@ -137,6 +138,7 @@ public sealed class ProCursorModuleTests
                     ["PROCURSOR_CHUNK_TARGET_LINES"] = "120",
                     ["PROCURSOR_MINI_INDEX_TTL_MINUTES"] = "30",
                     ["PROCURSOR_REFRESH_POLL_SECONDS"] = "15",
+                    ["PROCURSOR_INDEX_JOB_LEASE_SECONDS"] = "120",
                     ["PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES"] = "60",
                     ["PROCURSOR_EMBEDDING_DIMENSIONS"] = "1536",
                     ["PROCURSOR_TOKEN_USAGE_ROLLUP_POLL_SECONDS"] = "30",

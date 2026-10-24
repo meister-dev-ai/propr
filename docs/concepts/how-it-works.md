@@ -118,6 +118,12 @@ instead. The one case that does replace a running review is a pushed update on a
 every one, described above: the older revision's review is cancelled because it is reviewing code that
 has been superseded.
 
+A deactivated client takes in no work. Webhook deliveries and crawls skip it, its mentions are not
+scanned, and ProCursor stops refreshing its knowledge sources when it next reads its configuration from
+ProPR, within five minutes by default. The reviews, thread passes and answers that the client already has
+wait and start once the client is active again, and so does a review requested on demand. Work that runs
+when the client is deactivated finishes. The same applies to every client of a deactivated tenant.
+
 ## Asking ProPR a question
 
 Mention the client's configured reviewer identity in a pull request comment and ProPR answers it, using
@@ -129,6 +135,9 @@ The answer is posted into the thread containing the question where the provider 
 in the conversation of a GitHub pull request, there is no thread, so the answer is a new comment that
 opens with a markdown blockquote of the question. See
 [the platform notes](../platforms/index.md#mention-answering).
+
+ProPR stops an answer that takes longer than 10 minutes. It posts nothing for that question and records the
+mention reply as failed with the reason.
 
 Answering mentions is configured in its own right, on the client's **Mentions** tab. A mention
 configuration names a provider, where the client is reached, and the repositories it answers on. On

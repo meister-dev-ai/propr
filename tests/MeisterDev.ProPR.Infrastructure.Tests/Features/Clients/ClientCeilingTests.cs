@@ -150,8 +150,10 @@ public sealed class ClientCeilingTests(PostgresContainerFixture fixture) : IAsyn
             await Assert.ThrowsAsync<InvalidOperationException>(() => this.CreateOneAsync(CreateService(refusing, limit), "before-delete"));
         }
 
-        await using var deleting = this.CreateContext();
-        Assert.True(await CreateService(deleting, limit).DeleteAsync(removable, CancellationToken.None));
+        await using (var deleting = this.CreateContext())
+        {
+            await deleting.Clients.Where(client => client.Id == removable).ExecuteDeleteAsync();
+        }
 
         await using var admitting = this.CreateContext();
         var created = await this.CreateOneAsync(CreateService(admitting, limit), "after-delete");

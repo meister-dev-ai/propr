@@ -9390,7 +9390,11 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Deletes a client and all its crawl configurations.
+         * Stops the work of a client and deletes the client once that work has ended. Each request deactivates the
+         *     client and its webhook, crawl, mention and ProCursor configurations and ends its unfinished jobs. While an
+         *     execution may still be running, or for a minute after a request stopped any work, the request answers 409
+         *     with the seconds to wait. A request after that deletes the client and every record that belongs to it,
+         *     including review jobs, protocols, retained discussions, usage reports and the ProCursor indexes.
          *     Requires a global admin JWT or `X-User-Pat`.
          */
         delete: {
@@ -9432,6 +9436,20 @@ export interface paths {
                         "text/plain": components["schemas"]["ProblemDetails"];
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /**
+                 * @description The work of the client was stopped and the deletion waits for it; the Retry-After header gives the seconds to
+                 *     wait.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientDeletionWaitResponse"];
+                        "application/json": components["schemas"]["ClientDeletionWaitResponse"];
+                        "text/json": components["schemas"]["ClientDeletionWaitResponse"];
                     };
                 };
             };
@@ -22127,6 +22145,22 @@ export interface components {
             monthlyHardCapUsd?: number | null;
             /** @description One entry per month in the window, oldest first (months with no spend are present with zero). */
             months?: components["schemas"]["BudgetMonthSpendDto"][] | null;
+        };
+        /** @description The answer while a client deletion waits for the work of the client to end. */
+        ClientDeletionWaitResponse: {
+            /** @description Always `client_work_running`. */
+            error?: string | null;
+            /** @description What the caller does next. */
+            message?: string | null;
+            /**
+             * Format: int32
+             * @description The seconds after which the caller requests the deletion again, as in the Retry-After header.
+             */
+            retryAfterSeconds?: number;
+            /** @description The executions that may still be running, by kind. */
+            running?: {
+                [key: string]: number;
+            } | null;
         };
         /** @description Open pull request details available to a review target. */
         ClientOpenReviewResponse: {

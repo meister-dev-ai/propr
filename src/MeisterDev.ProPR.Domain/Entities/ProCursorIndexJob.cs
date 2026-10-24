@@ -117,10 +117,21 @@ public sealed class ProCursorIndexJob
     public string? FailureReason { get; private set; }
 
     /// <summary>
+    ///     Gets the time at which the lease of the ProCursor service that runs the job expires, if any.
+    /// </summary>
+    /// <remarks>
+    ///     The service renews the lease while the job runs. A job in processing whose lease has expired has no
+    ///     service that runs it, and the index worker returns it to the queue or fails it. A cancelled job keeps
+    ///     the lease it had, because the service that ran it can write until the lease expires.
+    /// </remarks>
+    public DateTimeOffset? LeaseExpiresAt { get; private set; }
+
+    /// <summary>
     ///     Marks the job as processing.
     /// </summary>
+    /// <param name="leaseExpiresAt">The time at which the lease of the service that starts the job expires.</param>
     /// <exception cref="InvalidOperationException">Thrown when the job is not in pending status.</exception>
-    public void MarkProcessing()
+    public void MarkProcessing(DateTimeOffset leaseExpiresAt)
     {
         if (this.Status != ProCursorIndexJobStatus.Pending)
         {
@@ -132,6 +143,22 @@ public sealed class ProCursorIndexJob
         this.StartedAt = DateTimeOffset.UtcNow;
         this.CompletedAt = null;
         this.FailureReason = null;
+        this.LeaseExpiresAt = leaseExpiresAt;
+    }
+
+    /// <summary>
+    ///     Extends the lease of the service that runs the job.
+    /// </summary>
+    /// <param name="leaseExpiresAt">The time at which the renewed lease expires.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the job is not in processing status.</exception>
+    public void RenewLease(DateTimeOffset leaseExpiresAt)
+    {
+        if (this.Status != ProCursorIndexJobStatus.Processing)
+        {
+            throw new InvalidOperationException($"Cannot renew the lease of a job in status {this.Status}.");
+        }
+
+        this.LeaseExpiresAt = leaseExpiresAt;
     }
 
     /// <summary>
@@ -148,6 +175,7 @@ public sealed class ProCursorIndexJob
         this.Status = ProCursorIndexJobStatus.Completed;
         this.CompletedAt = DateTimeOffset.UtcNow;
         this.FailureReason = null;
+        this.LeaseExpiresAt = null;
     }
 
     /// <summary>
@@ -168,6 +196,7 @@ public sealed class ProCursorIndexJob
         this.Status = ProCursorIndexJobStatus.Failed;
         this.CompletedAt = DateTimeOffset.UtcNow;
         this.FailureReason = failureReason.Trim();
+        this.LeaseExpiresAt = null;
     }
 
     /// <summary>
@@ -189,6 +218,7 @@ public sealed class ProCursorIndexJob
         this.StartedAt = null;
         this.CompletedAt = null;
         this.FailureReason = failureReason.Trim();
+        this.LeaseExpiresAt = null;
     }
 
     /// <summary>

@@ -456,11 +456,18 @@ Read by the ProCursor service.
 | `PROCURSOR_CHUNK_TARGET_LINES` | Target chunk size, in lines, for indexed text | `120` | 10–1000 | no |
 | `PROCURSOR_MINI_INDEX_TTL_MINUTES` | Lifetime of a review-time mini-index overlay | `30` | 1–1440 | no |
 | `PROCURSOR_REFRESH_POLL_SECONDS` | How often the indexing worker looks for work | `30` | 1–3600 | no |
+| `PROCURSOR_INDEX_JOB_LEASE_SECONDS` | How long a claim holds an indexing job before its lease must be renewed | `300` | 10–3600 | no |
 | `PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES` | How long a stale temporary indexing workspace is kept | `120` | 1–1440 | no |
 | `PROCURSOR_EMBEDDING_DIMENSIONS` | Expected embedding vector width; must match the embedding model in use | `1536` | 1–4096 | no |
 | `PROCURSOR_TOKEN_USAGE_ROLLUP_POLL_SECONDS` | How often ProCursor aggregates its token usage | `900` | 10–86400 | no |
 | `PROCURSOR_TOKEN_USAGE_EVENT_RETENTION_DAYS` | Retention for raw ProCursor token usage events | `365` | 1–3650 | no |
 | `PROCURSOR_TOKEN_USAGE_ROLLUP_RETENTION_DAYS` | Retention for aggregated ProCursor token rollups | `730` | 1–3650 | no |
+
+The indexing worker renews the lease of a running job five times per `PROCURSOR_INDEX_JOB_LEASE_SECONDS`. When the
+lease of a job expires, for example because the ProCursor service stopped while the job ran, the worker returns the
+job to the queue, and after the third attempt it marks the job as failed. A job that is cancelled while it runs stops
+at the next renewal. When no renewal succeeds, for example because the database cannot be reached, the worker stops
+the job before its lease expires, so that the job does not run twice once another worker recovers it.
 
 ## Review loop budgets
 

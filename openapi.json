@@ -13305,7 +13305,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Deletes a client and all its crawl configurations.\nRequires a global admin JWT or `X-User-Pat`.",
+        "summary": "Stops the work of a client and deletes the client once that work has ended. Each request deactivates the\nclient and its webhook, crawl, mention and ProCursor configurations and ends its unfinished jobs. While an\nexecution may still be running, or for a minute after a request stopped any work, the request answers 409\nwith the seconds to wait. A request after that deletes the client and every record that belongs to it,\nincluding review jobs, protocols, retained discussions, usage reports and the ProCursor indexes.\nRequires a global admin JWT or `X-User-Pat`.",
         "parameters": [
           {
             "name": "clientId",
@@ -13358,6 +13358,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The work of the client was stopped and the deletion waits for it; the Retry-After header gives the seconds to\nwait.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDeletionWaitResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDeletionWaitResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDeletionWaitResponse"
                 }
               }
             }
@@ -32450,6 +32470,37 @@
         },
         "additionalProperties": false,
         "description": "Response DTO for `GET /admin/clients/{clientId}/budget/history`: the client's estimated USD spend per\ncalendar month over a trailing window, plus the currently configured monthly caps for comparison. Because\ncaps are not snapshotted historically, the caps describe the current configuration, not the caps that were\nin effect in each past month."
+      },
+      "ClientDeletionWaitResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Always `client_work_running`.",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "description": "What the caller does next.",
+            "nullable": true
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "description": "The seconds after which the caller requests the deletion again, as in the Retry-After header.",
+            "format": "int32"
+          },
+          "running": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "The executions that may still be running, by kind.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The answer while a client deletion waits for the work of the client to end."
       },
       "ClientOpenReviewResponse": {
         "type": "object",

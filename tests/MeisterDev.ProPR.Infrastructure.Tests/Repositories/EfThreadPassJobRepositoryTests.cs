@@ -390,6 +390,25 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
         Assert.Contains(pending, candidate => candidate.Id == job.Id);
     }
 
+    // A deactivated client takes in no work, and its passes wait until it is active again.
+    [Fact]
+    public async Task GetPendingAsync_LeavesThePassesOfADeactivatedClientWaiting()
+    {
+        var job = CreatePass("7|deactivated");
+        await this._repository.TryClaimAsync(job);
+        await this.SetSeedClientActiveAsync(false);
+        try
+        {
+            Assert.Empty(await this._repository.GetPendingAsync(10));
+        }
+        finally
+        {
+            await this.SetSeedClientActiveAsync(true);
+        }
+
+        Assert.Contains(await this._repository.GetPendingAsync(10), pending => pending.Id == job.Id);
+    }
+
     [Fact]
     public async Task TryRestartAsync_CompletedPass_RefusesToRunItAgain()
     {
@@ -426,6 +445,10 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
         Assert.Equal(2, passes.Count);
         Assert.Single(passes.First(pass => pass.Id == first.Id).HandledThreads);
     }
+
+    private Task SetSeedClientActiveAsync(bool active) =>
+        this._dbContext.Clients.Where(client => client.Id == SeedClientId)
+            .ExecuteUpdateAsync(set => set.SetProperty(client => client.IsActive, active));
 
     private static ThreadPassJob CreatePass(string triggerKey)
     {

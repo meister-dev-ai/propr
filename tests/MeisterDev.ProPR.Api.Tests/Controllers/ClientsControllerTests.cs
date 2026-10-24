@@ -14,6 +14,7 @@ using MeisterDev.Ai.Providers.Transport;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.TenantData;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -102,6 +103,54 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // While the work of the client may still run, the deletion answers 409 with the seconds to wait, in the body and in
+    // the Retry-After header.
+    [Fact]
+    public async Task DeleteClient_WhileItsWorkMayStillRun_Returns409WithTheWait()
+    {
+        var clientId = await this.SeedBudgetTestClientAsync("delete-waits");
+        factory.DataLifecycle.DeleteClientAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(new ClientDeletionAnswer(null, new DeletionPending(TimeSpan.FromSeconds(42.2), new Dictionary<string, int> { ["reviews"] = 1 })));
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(TimeSpan.FromSeconds(43), response.Headers.RetryAfter?.Delta);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("client_work_running", body.GetProperty("error").GetString());
+        Assert.Equal(43, body.GetProperty("retryAfterSeconds").GetInt32());
+        Assert.Equal(1, body.GetProperty("running").GetProperty("reviews").GetInt32());
+    }
+
+    [Fact]
+    public async Task DeleteClient_OnceItsWorkHasEnded_Returns204()
+    {
+        var clientId = await this.SeedBudgetTestClientAsync("delete-done");
+        factory.DataLifecycle.DeleteClientAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(new ClientDeletionAnswer(new ClientDeletionResult(clientId, new Dictionary<string, int>()), null));
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteClient_ForAnUnknownClient_Returns404AndStopsNothing()
+    {
+        var clientId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await factory.DataLifecycle.DidNotReceive().DeleteClientAsync(clientId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1536,6 +1585,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         /// </summary>
         internal FakeProviderEndpoint ProviderWire { get; } = new();
 
+        /// <summary>
+        ///     Answers the client deletion. The deletion itself runs against PostgreSQL and is tested there, and these tests
+        ///     cover what the endpoint answers.
+        /// </summary>
+        public ITenantDataLifecycle DataLifecycle { get; } = Substitute.For<ITenantDataLifecycle>();
+
         public string GenerateAdminToken()
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
@@ -1646,6 +1701,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 services.AddSingleton(Substitute.For<IJobRepository>());
+                services.AddSingleton(this.DataLifecycle);
 
                 // Substitute licensing so the Budgeting gate on the budget-config patch is controllable per
                 // test. Every capability reports available by default, which these endpoints saw when

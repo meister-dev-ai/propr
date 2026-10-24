@@ -270,6 +270,27 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
         Assert.Null(inactiveFetch);
     }
 
+    // A webhook delivery for a deactivated client takes in no work.
+    [Fact]
+    public async Task GetActiveByPathKeyAsync_ForADeactivatedClient_ReturnsNull()
+    {
+        await this._configRepo.AddAsync(
+            this._clientId,
+            WebhookProviderType.AzureDevOps,
+            "path-key-deactivated",
+            "https://dev.azure.com/org",
+            "project",
+            "ciphertext",
+            [WebhookEventType.PullRequestCreated],
+            null,
+            CancellationToken.None);
+        await this._dbContext.Clients.Where(client => client.Id == this._clientId)
+            .ExecuteUpdateAsync(set => set.SetProperty(client => client.IsActive, false));
+
+        Assert.Null(await this._configRepo.GetActiveByPathKeyAsync("path-key-deactivated", CancellationToken.None));
+        Assert.DoesNotContain(await this._configRepo.GetAllActiveAsync(CancellationToken.None), config => config.ClientId == this._clientId);
+    }
+
     [Fact]
     public async Task UpdateRepoFiltersAsync_PersistsCanonicalFilterMetadata()
     {

@@ -78,9 +78,60 @@ public sealed class ProCursorIndexJobRepository(ProCursorOperationalDbContext db
     }
 
     /// <inheritdoc />
-    public async Task UpdateAsync(ProCursorIndexJob job, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProCursorIndexJob>> ListExpiredLeasesAsync(
+        DateTimeOffset now,
+        IReadOnlyCollection<Guid> excludedJobIds,
+        CancellationToken ct = default)
+    {
+        return await db.ProCursorIndexJobs
+            .Where(job =>
+                job.Status == ProCursorIndexJobStatus.Processing &&
+                (job.LeaseExpiresAt == null || job.LeaseExpiresAt < now) &&
+                !excludedJobIds.Contains(job.Id))
+            .OrderBy(job => job.QueuedAt)
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> RecoverExpiredLeaseAsync(ProCursorIndexJob job, DateTimeOffset now, CancellationToken ct = default)
+    {
+        // A renewal changes only the lease, which is no concurrency token. The condition on the lease in the same
+        // statement keeps the recovery from taking a job whose lease was renewed after it was read.
+        var updated = await db.ProCursorIndexJobs
+            .Where(stored =>
+                stored.Id == job.Id &&
+                stored.Status == ProCursorIndexJobStatus.Processing &&
+                stored.AttemptCount == job.AttemptCount &&
+                (stored.LeaseExpiresAt == null || stored.LeaseExpiresAt < now))
+            .ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(stored => stored.Status, job.Status)
+                    .SetProperty(stored => stored.StartedAt, job.StartedAt)
+                    .SetProperty(stored => stored.CompletedAt, job.CompletedAt)
+                    .SetProperty(stored => stored.FailureReason, job.FailureReason)
+                    .SetProperty(stored => stored.LeaseExpiresAt, job.LeaseExpiresAt),
+                ct);
+
+        // The statement bypasses the change tracker, so a later query of this context reads the stored job.
+        db.Entry(job).State = EntityState.Detached;
+        return updated == 1;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> UpdateAsync(ProCursorIndexJob job, CancellationToken ct = default)
     {
         db.ProCursorIndexJobs.Update(job);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The status and the attempt count are concurrency tokens. The job is detached, so a later query of this
+            // context reads the stored job.
+            db.Entry(job).State = EntityState.Detached;
+            return false;
+        }
     }
 }

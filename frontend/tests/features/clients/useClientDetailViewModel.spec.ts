@@ -1,7 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent } from 'vue'
 
 const mockGet = vi.fn()
 const mockPatch = vi.fn()
@@ -234,6 +236,76 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.loadError.value).toBe(true)
     expect(vm.notFound.value).toBe(false)
     expect(mockRouterPush).not.toHaveBeenCalledWith({ name: 'clients' })
+  })
+
+  // While ProPR stops the work of the client, the deletion answers 409 with the seconds to wait. The page shows the
+  // wait, requests the deletion again after it and returns to the client list once the client is deleted.
+  it('repeats the deletion after the wait that a 409 answer names and then returns to the client list', async () => {
+    vi.useFakeTimers()
+    try {
+      mockDelete
+        .mockResolvedValueOnce({
+          error: { error: 'client_work_running', retryAfterSeconds: 60 },
+          response: { status: 409, headers: new Headers({ 'Retry-After': '60' }) },
+        })
+        .mockResolvedValueOnce({ response: { status: 204, headers: new Headers() } })
+      const vm = useClientDetailViewModel({ autoLoad: false })
+      vm.showDeleteDialog.value = true
+
+      await vm.handleDelete()
+
+      expect(vm.showDeleteDialog.value).toBe(false)
+      expect(vm.deletionWaitSeconds.value).toBe(60)
+      expect(mockRouterPush).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(mockDelete).toHaveBeenCalledTimes(2)
+      expect(vm.deletionWaitSeconds.value).toBeNull()
+      expect(mockRouterPush).toHaveBeenCalledWith({ name: 'clients' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('starts no further deletion request and does not navigate once the page was closed', async () => {
+    vi.useFakeTimers()
+    try {
+      let answer!: (value: unknown) => void
+      mockDelete.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+      let vm!: ReturnType<typeof useClientDetailViewModel>
+      const wrapper = mount(defineComponent({
+        setup() {
+          vm = useClientDetailViewModel({ autoLoad: false })
+          return () => null
+        },
+      }))
+
+      const deletion = vm.handleDelete()
+      wrapper.unmount()
+      answer({
+        error: { error: 'client_work_running', retryAfterSeconds: 60 },
+        response: { status: 409, headers: new Headers({ 'Retry-After': '60' }) },
+      })
+      await deletion
+      await vi.advanceTimersByTimeAsync(120_000)
+
+      expect(mockDelete).toHaveBeenCalledTimes(1)
+      expect(mockRouterPush).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stays on the page and reports a deletion that failed', async () => {
+    mockDelete.mockResolvedValueOnce({ error: {}, response: { status: 500, headers: new Headers() } })
+    const vm = useClientDetailViewModel({ autoLoad: false })
+
+    await vm.handleDelete()
+
+    expect(vm.deleteError.value).toContain('could not be deleted')
+    expect(vm.deletionWaitSeconds.value).toBeNull()
+    expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
   it('surfaces a load error when the request throws and does not redirect', async () => {

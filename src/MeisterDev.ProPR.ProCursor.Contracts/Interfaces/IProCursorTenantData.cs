@@ -11,7 +11,10 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 /// </summary>
 public interface IProCursorTenantData
 {
-    /// <summary>Cancels the pending index jobs of the knowledge sources and reports the index jobs that still run.</summary>
+    /// <summary>
+    ///     Cancels the pending and running index jobs of the knowledge sources and reports until when the cancelled jobs
+    ///     that were running can still write.
+    /// </summary>
     /// <param name="knowledgeSourceIds">The knowledge sources whose indexing stops.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<ProCursorIndexingStop> StopIndexingAsync(

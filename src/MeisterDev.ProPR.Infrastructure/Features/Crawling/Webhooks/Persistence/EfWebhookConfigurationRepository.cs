@@ -73,8 +73,9 @@ public sealed class EfWebhookConfigurationRepository(
     /// <inheritdoc />
     public async Task<IReadOnlyList<WebhookConfigurationDto>> GetAllActiveAsync(CancellationToken ct = default)
     {
+        var inactiveClients = dbContext.InactiveClientIds();
         var records = await this.BaseQuery()
-            .Where(config => config.IsActive)
+            .Where(config => config.IsActive && !inactiveClients.Contains(config.ClientId))
             .OrderByDescending(config => config.CreatedAt)
             .ToListAsync(ct);
 
@@ -178,8 +179,11 @@ public sealed class EfWebhookConfigurationRepository(
         string publicPathKey,
         CancellationToken ct = default)
     {
+        var inactiveClients = dbContext.InactiveClientIds();
         var record = await this.BaseQuery()
-            .FirstOrDefaultAsync(config => config.PublicPathKey == publicPathKey && config.IsActive, ct);
+            .FirstOrDefaultAsync(
+                config => config.PublicPathKey == publicPathKey && config.IsActive && !inactiveClients.Contains(config.ClientId),
+                ct);
 
         if (record is not null && providerActivationService is not null)
         {

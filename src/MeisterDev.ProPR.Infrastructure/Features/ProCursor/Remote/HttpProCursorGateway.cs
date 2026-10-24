@@ -13,7 +13,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
 /// <summary>
 ///     HTTP-backed <see cref="IProCursorGateway" /> implementation used when ProCursor runs out of process.
 /// </summary>
-public sealed class HttpProCursorGateway(HttpClient httpClient, ILogger<HttpProCursorGateway> logger) : IProCursorGateway
+public sealed class HttpProCursorGateway(HttpClient httpClient, ILogger<HttpProCursorGateway> logger)
+    : IProCursorGateway, IProCursorConfigurationNotifier
 {
     public Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default)
     {
@@ -112,6 +113,12 @@ public sealed class HttpProCursorGateway(HttpClient httpClient, ILogger<HttpProC
             $"internal/procursor/runtime-config/sources/{sourceId:D}/invalidate",
             new { },
             ct);
+    }
+
+    /// <inheritdoc />
+    public Task SourceChangedAsync(Guid sourceId, CancellationToken ct = default)
+    {
+        return this.InvalidateRuntimeConfigurationAsync(sourceId, ct);
     }
 
     private async Task<TResponse> SendAsync<TResponse>(

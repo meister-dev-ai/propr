@@ -499,6 +499,29 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
         Assert.True(result);
     }
 
+    // The crawl takes in no work for a deactivated client.
+    [Fact]
+    public async Task GetAllActiveAsync_LeavesOutTheConfigurationsOfADeactivatedClient()
+    {
+        var created = await this._repo.AddAsync(
+            this._clientId,
+            ScmProvider.AzureDevOps,
+            "https://dev.azure.com/org",
+            "project",
+            60,
+            await this.SeedOrganizationScopeAsync(),
+            CancellationToken.None,
+            0.2f);
+        await this._dbContext.CrawlConfigurations.Where(config => config.Id == created.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(config => config.ReviewTargetLifecycle, ReviewTargetLifecycle.Enabled));
+        Assert.Contains(await this._repo.GetAllActiveAsync(CancellationToken.None), config => config.Id == created.Id);
+
+        await this._dbContext.Clients.Where(client => client.Id == this._clientId)
+            .ExecuteUpdateAsync(set => set.SetProperty(client => client.IsActive, false));
+
+        Assert.DoesNotContain(await this._repo.GetAllActiveAsync(CancellationToken.None), config => config.Id == created.Id);
+    }
+
     [Fact]
     public async Task AddAsync_PersistsOrganizationScopeId()
     {

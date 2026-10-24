@@ -83,6 +83,10 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         await this._dbContext.DisposeAsync();
     }
 
+    private Task SetClientActiveAsync(bool active) =>
+        this._dbContext.Clients.Where(client => client.Id == ClientId)
+            .ExecuteUpdateAsync(set => set.SetProperty(client => client.IsActive, active));
+
     private static MentionReplyJob MakeJob(
         Guid? clientId = null,
         int prId = 1,
@@ -304,19 +308,81 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
     }
 
 
+    // Another instance can still be answering a job in processing. Only a job whose processing started before the
+    // cutoff returns to pending.
     [Fact]
-    public async Task ResetStuckProcessingAsync_ResetsProcessingJobsToPending()
+    public async Task ReclaimStalledAsync_ReturnsOnlyStalledJobsToPending()
     {
-        var job = MakeJob();
-        await this._repo.AddAsync(job);
-        await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        var stalled = MakeJob(prId: 41, threadId: "41", commentId: 410);
+        var answering = MakeJob(prId: 42, threadId: "42", commentId: 420);
+        await this._repo.AddAsync(stalled);
+        await this._repo.AddAsync(answering);
+        await this._repo.TryTransitionAsync(stalled.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        await this._repo.TryTransitionAsync(answering.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        var now = DateTimeOffset.UtcNow;
+        await this._dbContext.MentionReplyJobs.Where(job => job.Id == stalled.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(job => job.ProcessingStartedAt, now.AddMinutes(-20)));
 
-        // Simulate crash recovery: reset stuck processing jobs
-        await this._repo.ResetStuckProcessingAsync();
+        Assert.Equal(1, await this._repo.ReclaimStalledAsync(now.AddMinutes(-15)));
 
         var pending = await this._repo.GetPendingAsync();
-        Assert.Single(pending);
-        Assert.Equal(MentionJobStatus.Pending, pending[0].Status);
+        Assert.Equal(stalled.Id, Assert.Single(pending).Id);
+    }
+
+    // Two instances can read the same pending job and both claim it. The claim of the second one fails, so the job is
+    // answered once.
+    [Fact]
+    public async Task TryTransitionAsync_ForAJobThatAnotherInstanceClaimedAfterReadingIt_ReturnsFalse()
+    {
+        var job = MakeJob(prId: 43, threadId: "43", commentId: 430);
+        await this._repo.AddAsync(job);
+        await using var otherContext = new MeisterProPRDbContext(
+            new DbContextOptionsBuilder<MeisterProPRDbContext>().UseNpgsql(fixture.ConnectionString, o => o.UseVector()).Options);
+        var other = new EfMentionReplyJobRepository(otherContext);
+        Assert.Equal(MentionJobStatus.Pending, (await otherContext.MentionReplyJobs.FindAsync(job.Id))!.Status);
+
+        Assert.True(await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing));
+        Assert.False(await other.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing));
+    }
+
+    // A deactivated client takes in no work, and its jobs wait until it is active again.
+    [Fact]
+    public async Task AJobOfADeactivatedClient_IsNeitherOfferedNorClaimed()
+    {
+        var job = MakeJob(prId: 46, threadId: "46", commentId: 460);
+        await this._repo.AddAsync(job);
+        await this.SetClientActiveAsync(false);
+        try
+        {
+            Assert.Empty(await this._repo.GetPendingAsync());
+            Assert.False(await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing));
+        }
+        finally
+        {
+            await this.SetClientActiveAsync(true);
+        }
+
+        Assert.True(await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing));
+    }
+
+    [Fact]
+    public async Task GetPendingAsync_WithACutoff_ReturnsTheOldestJobsThatWaitedLongerThanIt()
+    {
+        var waited = MakeJob(prId: 44, threadId: "44", commentId: 440);
+        var waitedLonger = MakeJob(prId: 47, threadId: "47", commentId: 470);
+        var fresh = MakeJob(prId: 45, threadId: "45", commentId: 450);
+        await this._repo.AddAsync(waited);
+        await this._repo.AddAsync(waitedLonger);
+        await this._repo.AddAsync(fresh);
+        var now = DateTimeOffset.UtcNow;
+        await this._dbContext.MentionReplyJobs.Where(job => job.Id == waited.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(job => job.CreatedAt, now.AddMinutes(-20)));
+        await this._dbContext.MentionReplyJobs.Where(job => job.Id == waitedLonger.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(job => job.CreatedAt, now.AddMinutes(-30)));
+
+        var pending = await this._repo.GetPendingAsync(now.AddMinutes(-15), 10);
+
+        Assert.Equal([waitedLonger.Id, waited.Id], pending.Select(job => job.Id));
     }
 
 

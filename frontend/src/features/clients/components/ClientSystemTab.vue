@@ -211,12 +211,17 @@
                     <p>Deleting this client is permanent and cannot be undone.</p>
                 </div>
             </div>
-            <button class="btn-danger" @click="showDeleteDialog = true">
+            <button class="btn-danger" :disabled="deletionWaitSeconds !== null" @click="showDeleteDialog = true">
                 <i class="fi fi-rr-trash"></i> Delete Client
             </button>
             <ConfirmDialog :open="showDeleteDialog" message="Delete this client permanently?"
                 @cancel="showDeleteDialog = false" @confirm="handleDelete" />
         </div>
+        <p v-if="deletionWaitSeconds !== null" class="deletion-status" role="status">
+            ProPR has deactivated this client and stopped its work. ProPR waits {{ deletionWaitSeconds }} seconds
+            for running work to end and then continues the deletion. Keep this page open until then.
+        </p>
+        <span v-if="deleteError" class="error" role="alert">{{ deleteError }}</span>
     </div>
 </template>
 
@@ -234,6 +239,8 @@ const {
     saving,
     saveError,
     showDeleteDialog,
+    deletionWaitSeconds,
+    deleteError,
     editedDisplayName,
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
@@ -315,5 +322,11 @@ const REASONING_EFFORT_OPTIONS: { value: string; label: string }[] = [
     color: var(--color-text-muted);
     font-style: italic;
     padding: 1rem 1.25rem;
+}
+
+.deletion-status {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    margin: 0.5rem 0;
 }
 </style>

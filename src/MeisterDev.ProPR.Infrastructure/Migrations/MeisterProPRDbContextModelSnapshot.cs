@@ -5117,6 +5117,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("withhold_out_of_scope_findings");
 
+                    b.Property<DateTimeOffset?>("WorkStoppedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("work_stopped_at");
+
                     b.Property<bool>("WorkspaceAiSelectionInitialized")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

@@ -244,7 +244,8 @@ public sealed partial class JobRepository(
             return [];
         }
 
-        var pending = dbContext.ReviewJobs.Where(j => j.Status == JobStatus.Pending);
+        var inactiveClients = dbContext.InactiveClientIds();
+        var pending = dbContext.ReviewJobs.Where(j => j.Status == JobStatus.Pending && !inactiveClients.Contains(j.ClientId));
         if (submittedAfter is { } cursor)
         {
             pending = pending.Where(j => j.SubmittedAt > cursor);

@@ -76,6 +76,19 @@ public sealed class RunnerLeaseOfferStoreTests(PostgresContainerFixture fixture)
         Assert.Equal([mine.Id], offered.Select(j => j.Id));
     }
 
+    // The work of a deactivated tenant waits until the tenant is active again, as the work of a deactivated client
+    // does.
+    [Fact]
+    public async Task TheWorkOfADeactivatedTenant_IsOfferedToNoRunner()
+    {
+        var client = await this.AddClientAsync(TenantId);
+        await this.AddPendingJobAsync(client, DateTimeOffset.UtcNow);
+        await this._dbContext.Tenants.Where(tenant => tenant.Id == TenantId)
+            .ExecuteUpdateAsync(set => set.SetProperty(tenant => tenant.IsActive, false));
+
+        Assert.Empty(await this._store.GetOfferCandidatesAsync(TenantId, [], [], 50));
+    }
+
     // An empty stamped scope is the unrestricted enrollment, and it still stops at the tenant.
     [Fact]
     public async Task AnEmptyScope_MeansEveryClientInTheTenantAndNoOther()

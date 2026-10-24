@@ -95,12 +95,14 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
     public async Task<IReadOnlyList<ThreadPassJob>> GetPendingAsync(int maxCount, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
+        var inactiveClients = dbContext.InactiveClientIds();
 
         return await dbContext.ThreadPassJobs
             .AsNoTracking()
             .Where(job => job.Status == ThreadPassJobStatus.Pending
                           && job.AttemptCount < ThreadPassJob.MaxAttempts
-                          && (job.NextAttemptAt == null || job.NextAttemptAt <= now))
+                          && (job.NextAttemptAt == null || job.NextAttemptAt <= now)
+                          && !inactiveClients.Contains(job.ClientId))
             .OrderBy(job => job.CreatedAt)
             .Take(maxCount)
             .ToListAsync(ct);

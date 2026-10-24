@@ -16,10 +16,11 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.TenantData;
 
-/// <summary>Stops, deletes, exports and retains the data of a tenant.</summary>
+/// <summary>Stops, deletes, exports and retains the data of a tenant, and deletes single clients.</summary>
 /// <remarks>
 ///     Most tables reach a tenant through a foreign key to <c>clients</c> or <c>tenants</c> that cascades. The deletion
 ///     removes the rows of the tables that carry the identifier without such a key before it deletes the clients and the
@@ -30,7 +31,9 @@ public sealed class TenantDataLifecycle(
     MeisterProPRDbContext database,
     IReviewJobCancellationRegistry? cancellations = null,
     TimeProvider? clock = null,
-    IProCursorTenantData? proCursor = null) : ITenantDataLifecycle
+    IProCursorTenantData? proCursor = null,
+    IProCursorConfigurationNotifier? proCursorNotifier = null,
+    ILogger<TenantDataLifecycle>? logger = null) : ITenantDataLifecycle
 {
     /// <summary>The export format this class writes.</summary>
     public const string ExportFormat = "propr.tenant-export";
@@ -41,8 +44,8 @@ public sealed class TenantDataLifecycle(
     public const int MaximumInstructionLength = 120;
 
     /// <summary>
-    ///     The time a deletion waits after a request stopped work of the tenant. An intake that read an active
-    ///     configuration before the stop has stored its job by then, and the next request stops it.
+    ///     The time a deletion waits after a request stopped work of the tenant or the client. An intake that read an
+    ///     active configuration before the stop has stored its job by then, and the next request stops it.
     /// </summary>
     internal static readonly TimeSpan QuietPeriod = TimeSpan.FromMinutes(1);
 
@@ -51,14 +54,6 @@ public sealed class TenantDataLifecycle(
     ///     and a thread pass counts as stalled after this time.
     /// </summary>
     internal static readonly TimeSpan UnleasedRunLimit = TimeSpan.FromMinutes(15);
-
-    /// <summary>
-    ///     How long a ProCursor index job counts as running after it started. ProCursor sets no time limit on an index job
-    ///     and does not recover one that stopped while it ran.
-    /// </summary>
-    internal static readonly TimeSpan IndexJobRunLimit = TimeSpan.FromHours(1);
-
-    private const string StopReason = "The tenant is being deleted.";
 
     private const int ExportPageSize = 200;
 
@@ -93,34 +88,44 @@ public sealed class TenantDataLifecycle(
 
         var clientIds = await database.Clients.Where(client => client.TenantId == tenantId).Select(client => client.Id)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var sourceIds = await database.ProCursorKnowledgeSources.Where(source => clientIds.Contains(source.ClientId))
-            .Select(source => source.Id).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var scope = await this.ScopeAsync(tenantId, clientIds, "The tenant is being deleted.", cancellationToken)
+            .ConfigureAwait(false);
         var now = this._clock.GetUtcNow();
-        await this.StopWorkAsync(tenantId, clientIds, sourceIds, now, cancellationToken).ConfigureAwait(false);
-
-        // The knowledge sources are disabled by now, so ProCursor queues no further index job for them.
-        var indexing = proCursor is null
-            ? null
-            : await proCursor.StopIndexingAsync(sourceIds, cancellationToken).ConfigureAwait(false);
-        if (indexing?.Cancelled > 0)
-        {
-            await this.StartQuietPeriodAsync(tenantId, now, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (await this.PendingAsync(tenantId, clientIds, indexing, now, cancellationToken).ConfigureAwait(false) is { } pending)
+        var indexing = await this.StopAsync(scope, now, cancellationToken).ConfigureAwait(false);
+        var quietStart = await database.Tenants.Where(tenant => tenant.Id == tenantId)
+            .Select(tenant => (DateTimeOffset?)tenant.UpdatedAt).SingleAsync(cancellationToken).ConfigureAwait(false);
+        if (await this.PendingAsync(quietStart, clientIds, indexing, now, cancellationToken).ConfigureAwait(false) is { } pending)
         {
             return new(null, pending);
         }
 
-        // The ProCursor data is deleted first, while the knowledge sources that identify it still exist. A failure after
-        // that leaves the tenant in place, and the next request repeats the deletion.
-        var deleted = proCursor is null
-            ? new Dictionary<string, int>(StringComparer.Ordinal)
-            : new Dictionary<string, int>(
-                await proCursor.DeleteAsync(sourceIds, clientIds, cancellationToken).ConfigureAwait(false),
-                StringComparer.Ordinal);
-        await this.DeleteRowsAsync(tenantId, deleted, cancellationToken).ConfigureAwait(false);
+        var deleted = await this.DeleteProCursorDataAsync(scope, cancellationToken).ConfigureAwait(false);
+        await this.DeleteTenantRowsAsync(tenantId, deleted, cancellationToken).ConfigureAwait(false);
         return new(new TenantDeletionResult(tenantId, deleted), null);
+    }
+
+    public async Task<ClientDeletionAnswer?> DeleteClientAsync(Guid clientId, CancellationToken cancellationToken = default)
+    {
+        if (!await database.Clients.AnyAsync(client => client.Id == clientId, cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        List<Guid> clientIds = [clientId];
+        var scope = await this.ScopeAsync(null, clientIds, "The client is being deleted.", cancellationToken)
+            .ConfigureAwait(false);
+        var now = this._clock.GetUtcNow();
+        var indexing = await this.StopAsync(scope, now, cancellationToken).ConfigureAwait(false);
+        var quietStart = await database.Clients.Where(client => client.Id == clientId).Select(client => client.WorkStoppedAt)
+            .SingleAsync(cancellationToken).ConfigureAwait(false);
+        if (await this.PendingAsync(quietStart, clientIds, indexing, now, cancellationToken).ConfigureAwait(false) is { } pending)
+        {
+            return new(null, pending);
+        }
+
+        var deleted = await this.DeleteProCursorDataAsync(scope, cancellationToken).ConfigureAwait(false);
+        await this.DeleteClientRowsAsync(clientId, deleted, cancellationToken).ConfigureAwait(false);
+        return new(new ClientDeletionResult(clientId, deleted), null);
     }
 
     public async Task<bool> WriteExportAsync(
@@ -234,12 +239,33 @@ public sealed class TenantDataLifecycle(
                                                                     && (job.CommentAuthorExternalUserId == external
                                                                         || (login != null && job.CommentAuthorLogin == login)));
 
+        // A thread pass evaluates the threads of a pull request, and its protocol can quote their comments. It concerns
+        // the author when it ran on a pull request of the author, or when it evaluated a thread with a comment of the
+        // author.
+        var authorComments = database.RetainedThreadComments.Where(comment =>
+            comment.AuthorIdentity == external || (login != null && comment.AuthorIdentity == login));
+        var threadPasses = database.ThreadPassJobs.Where(pass =>
+            clients.Contains(pass.ClientId)
+            && (reviewJobs.Any(job => job.ClientId == pass.ClientId && job.RepositoryId == pass.RepositoryId
+                                                                    && job.PullRequestId == pass.PullRequestId)
+                || database.ThreadPassHandledThreads.Any(handled =>
+                    handled.ThreadPassJobId == pass.Id
+                    && database.RetainedThreads.Any(thread =>
+                        thread.ThreadId == handled.ThreadId
+                        && authorComments.Any(comment => comment.RetainedThreadId == thread.Id)
+                        && database.RetainedPullRequests.Any(pullRequest =>
+                            pullRequest.Id == thread.RetainedPullRequestId && pullRequest.ClientId == handled.ClientId
+                                                                           && pullRequest.RepositoryId == handled.RepositoryId
+                                                                           && pullRequest.PullRequestId == handled.PullRequestId)))));
+
         // Protocols can quote the comments and the descriptions of the author, so the events of every execution that
         // concerns the author are deleted before the author fields that identify those executions are cleared.
         var events = await database.ProtocolEvents
             .Where(protocolEvent => database.ReviewJobProtocols.Any(protocol =>
                 protocol.Id == protocolEvent.ProtocolId
-                && (reviewJobs.Any(job => job.Id == protocol.JobId) || mentionReplies.Any(job => job.Id == protocol.MentionReplyJobId))))
+                && (reviewJobs.Any(job => job.Id == protocol.JobId)
+                    || mentionReplies.Any(job => job.Id == protocol.MentionReplyJobId)
+                    || threadPasses.Any(pass => pass.Id == protocol.ThreadPassJobId))))
             .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         var jobs = await reviewJobs.ExecuteUpdateAsync(
             set => set
@@ -281,20 +307,76 @@ public sealed class TenantDataLifecycle(
         return new(jobs, mentions, comments, events);
     }
 
-    /// <summary>
-    ///     Deactivates the tenant, its clients and their configurations, closes their discussion synchronizations and
-    ///     ends their unfinished jobs, in one transaction. When it changes anything, it starts the quiet period in the
-    ///     same transaction.
-    /// </summary>
-    private async Task StopWorkAsync(
-        Guid tenantId, List<Guid> clientIds, List<Guid> sourceIds,
-        DateTimeOffset now, CancellationToken ct)
+    /// <summary>Returns the scope of a deletion with the knowledge sources of its clients.</summary>
+    private async Task<DeletionScope> ScopeAsync(Guid? tenantId, List<Guid> clientIds, string stopReason, CancellationToken ct)
     {
+        var sourceIds = await database.ProCursorKnowledgeSources.Where(source => clientIds.Contains(source.ClientId))
+            .Select(source => source.Id).ToListAsync(ct).ConfigureAwait(false);
+        return new DeletionScope(tenantId, clientIds, sourceIds, stopReason);
+    }
+
+    /// <summary>Stops the work of the scope in ProPR and in ProCursor.</summary>
+    /// <returns>The index jobs of the scope after their indexing was stopped, or null without ProCursor.</returns>
+    private async Task<ProCursorIndexingStop?> StopAsync(DeletionScope scope, DateTimeOffset now, CancellationToken ct)
+    {
+        await this.StopWorkAsync(scope, now, ct).ConfigureAwait(false);
+
+        // The knowledge sources are disabled by now. Until the ProCursor service reads that, it can still queue an
+        // index job for them, and a later request cancels that job and starts the quiet period again.
+        await this.NotifyProCursorAsync(scope.SourceIds, ct).ConfigureAwait(false);
+        var indexing = proCursor is null
+            ? null
+            : await proCursor.StopIndexingAsync(scope.SourceIds, ct).ConfigureAwait(false);
+        if (indexing?.Cancelled > 0)
+        {
+            await this.StartQuietPeriodAsync(scope, now, ct).ConfigureAwait(false);
+        }
+
+        return indexing;
+    }
+
+    /// <summary>Tells the ProCursor service that the knowledge sources changed, so it reads them again.</summary>
+    /// <remarks>
+    ///     Without the notice, the ProCursor service reads the change when its cached configuration expires. A failed
+    ///     notice therefore delays the stop of the indexing and does not fail the deletion request.
+    /// </remarks>
+    private async Task NotifyProCursorAsync(List<Guid> sourceIds, CancellationToken ct)
+    {
+        if (proCursorNotifier is null)
+        {
+            return;
+        }
+
+        foreach (var sourceId in sourceIds)
+        {
+            try
+            {
+                await proCursorNotifier.SourceChangedAsync(sourceId, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger?.LogWarning(ex, "The ProCursor service was not told that knowledge source {SourceId} is disabled.", sourceId);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Deactivates the clients of the scope and their configurations, and the tenant when the whole tenant is
+    ///     deleted. Closes the discussion synchronizations of the clients and ends their unfinished jobs, in one
+    ///     transaction. When it changes anything, it starts the quiet period in the same transaction.
+    /// </summary>
+    private async Task StopWorkAsync(DeletionScope scope, DateTimeOffset now, CancellationToken ct)
+    {
+        var (tenantId, clientIds, sourceIds, stopReason) = scope;
         await using var transaction = await database.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var changed = 0;
-        changed += await database.Tenants.Where(tenant => tenant.Id == tenantId && tenant.IsActive)
-            .ExecuteUpdateAsync(set => set.SetProperty(tenant => tenant.IsActive, false), ct).ConfigureAwait(false);
-        changed += await database.Clients.Where(client => client.TenantId == tenantId && client.IsActive)
+        if (tenantId is { } tenant)
+        {
+            changed += await database.Tenants.Where(row => row.Id == tenant && row.IsActive)
+                .ExecuteUpdateAsync(set => set.SetProperty(row => row.IsActive, false), ct).ConfigureAwait(false);
+        }
+
+        changed += await database.Clients.Where(client => clientIds.Contains(client.Id) && client.IsActive)
             .ExecuteUpdateAsync(set => set.SetProperty(client => client.IsActive, false), ct).ConfigureAwait(false);
 
         // Webhook, crawl and mention intake each read the flag of their configuration.
@@ -320,7 +402,7 @@ public sealed class TenantDataLifecycle(
                 set => set
                     .SetProperty(job => job.Status, ThreadPassJobStatus.Cancelled)
                     .SetProperty(job => job.CompletedAt, now)
-                    .SetProperty(job => job.ErrorMessage, StopReason),
+                    .SetProperty(job => job.ErrorMessage, stopReason),
                 ct).ConfigureAwait(false);
         changed += await database.MentionReplyJobs
             .Where(job => clientIds.Contains(job.ClientId) && WaitingMentionStatuses.Contains(job.Status))
@@ -328,7 +410,7 @@ public sealed class TenantDataLifecycle(
                 set => set
                     .SetProperty(job => job.Status, MentionJobStatus.Failed)
                     .SetProperty(job => job.CompletedAt, now)
-                    .SetProperty(job => job.ErrorMessage, StopReason),
+                    .SetProperty(job => job.ErrorMessage, stopReason),
                 ct).ConfigureAwait(false);
 
         // Reviews end as a manual stop ends them: the status is persisted, so the pipeline aborts at its next status
@@ -344,7 +426,7 @@ public sealed class TenantDataLifecycle(
                     set => set
                         .SetProperty(job => job.Status, JobStatus.Stopped)
                         .SetProperty(job => job.CompletedAt, now)
-                        .SetProperty(job => job.ErrorMessage, StopReason),
+                        .SetProperty(job => job.ErrorMessage, stopReason),
                     ct).ConfigureAwait(false);
             await database.ReviewJobProtocols
                 .Where(protocol => protocol.JobId != null && reviews.Contains(protocol.JobId.Value) && protocol.CompletedAt == null)
@@ -355,7 +437,7 @@ public sealed class TenantDataLifecycle(
 
         if (changed > 0)
         {
-            await this.StartQuietPeriodAsync(tenantId, now, ct).ConfigureAwait(false);
+            await this.StartQuietPeriodAsync(scope, now, ct).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
@@ -365,22 +447,46 @@ public sealed class TenantDataLifecycle(
         }
     }
 
-    /// <summary>Sets the update time of the tenant, which starts the quiet period of the deletion.</summary>
-    private Task StartQuietPeriodAsync(Guid tenantId, DateTimeOffset now, CancellationToken ct) =>
-        database.Tenants.Where(tenant => tenant.Id == tenantId)
-            .ExecuteUpdateAsync(set => set.SetProperty(tenant => tenant.UpdatedAt, now), ct);
+    /// <summary>
+    ///     Starts the quiet period of the deletion. A tenant deletion counts it from the update time of the tenant, and a
+    ///     client deletion from the time at which the work of the client was stopped.
+    /// </summary>
+    private async Task StartQuietPeriodAsync(DeletionScope scope, DateTimeOffset now, CancellationToken ct)
+    {
+        if (scope.TenantId is { } tenantId)
+        {
+            await database.Tenants.Where(tenant => tenant.Id == tenantId)
+                .ExecuteUpdateAsync(set => set.SetProperty(tenant => tenant.UpdatedAt, now), ct).ConfigureAwait(false);
+        }
+
+        var clientIds = scope.ClientIds;
+        await database.Clients.Where(client => clientIds.Contains(client.Id))
+            .ExecuteUpdateAsync(set => set.SetProperty(client => client.WorkStoppedAt, now), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Deletes the ProCursor data of the scope and returns the deleted rows, by table.</summary>
+    /// <remarks>
+    ///     The ProCursor data is deleted first, while the knowledge sources that identify it still exist. A failure after
+    ///     that leaves the tenant or the client in place, and the next request repeats the deletion.
+    /// </remarks>
+    private async Task<Dictionary<string, int>> DeleteProCursorDataAsync(DeletionScope scope, CancellationToken ct) =>
+        proCursor is null
+            ? new Dictionary<string, int>(StringComparer.Ordinal)
+            : new Dictionary<string, int>(
+                await proCursor.DeleteAsync(scope.SourceIds, scope.ClientIds, ct).ConfigureAwait(false),
+                StringComparer.Ordinal);
 
     /// <summary>
     ///     The work the deletion still waits for: the quiet period after the last stop, and every execution that may still
     ///     be running.
     /// </summary>
     /// <returns>The pending answer, or null when the deletion can go ahead.</returns>
-    private async Task<TenantDeletionPending?> PendingAsync(
-        Guid tenantId, List<Guid> clientIds, ProCursorIndexingStop? indexing,
+    /// <param name="quietStart">The start of the quiet period, or null when no request stopped any work.</param>
+    private async Task<DeletionPending?> PendingAsync(
+        DateTimeOffset? quietStart, List<Guid> clientIds, ProCursorIndexingStop? indexing,
         DateTimeOffset now, CancellationToken ct)
     {
-        var until = await database.Tenants.Where(tenant => tenant.Id == tenantId).Select(tenant => tenant.UpdatedAt)
-            .SingleAsync(ct).ConfigureAwait(false) + QuietPeriod;
+        var until = quietStart is { } start ? start + QuietPeriod : DateTimeOffset.MinValue;
         var running = new Dictionary<string, int>(StringComparer.Ordinal);
 
         void Wait(string kind, IEnumerable<DateTimeOffset> ends)
@@ -420,56 +526,27 @@ public sealed class TenantDataLifecycle(
             await database.DiscussionSynchronizationStates
                 .Where(state => clientIds.Contains(state.ClientId) && state.LeaseExpiresAt > now)
                 .Select(state => state.LeaseExpiresAt!.Value).ToListAsync(ct).ConfigureAwait(false));
-        Wait("indexJobs", indexing?.RunningSince.Select(started => started + IndexJobRunLimit) ?? []);
-        return until > now ? new TenantDeletionPending(until - now, running) : null;
+        Wait("indexJobs", indexing?.RunningUntil ?? []);
+        return until > now ? new DeletionPending(until - now, running) : null;
     }
 
     /// <summary>Deletes the tenant, its clients and every row that carries one of their identifiers, in one transaction.</summary>
-    private async Task DeleteRowsAsync(Guid tenantId, Dictionary<string, int> deleted, CancellationToken ct)
+    private async Task DeleteTenantRowsAsync(Guid tenantId, Dictionary<string, int> deleted, CancellationToken ct)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-        var clients = database.Clients.Where(client => client.TenantId == tenantId).Select(client => client.Id);
-        var reviewJobs = database.ReviewJobs.Where(job => clients.Contains(job.ClientId)).Select(job => job.Id);
-        var syncStates = database.DiscussionSynchronizationStates.Where(state => clients.Contains(state.ClientId))
-            .Select(state => state.Id);
-        var reports = database.ReviewerPerformanceReportClients.Where(report => clients.Contains(report.ClientId))
-            .Select(report => report.ReportId);
-
-        // Rows that reference rows of the tables below without a foreign key are deleted first.
-        await Remove(database.RunnerIngestReceipts.Where(receipt => reviewJobs.Contains(receipt.JobId)));
-        await Remove(database.DiscussionObservationFences.Where(fence => syncStates.Contains(fence.OwnerStateId)));
-
-        // A cached report can summarize the clients of the tenant.
-        await Remove(database.ReviewerPerformanceReports.Where(report => reports.Contains(report.Id)));
-
-        // The tables that carry a client without a cascading foreign key to clients, in deletion order: a table that a
-        // later table references with a restricting key comes after it.
-        await Remove(database.LogicalModelOverrides.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.AiModelCatalogEntries.Where(row => row.ClientId != null && clients.Contains(row.ClientId.Value)));
-        await Remove(database.AiUsageReports.Where(row => row.ClientId != null && clients.Contains(row.ClientId.Value)));
-        await Remove(database.BudgetEvents.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.BudgetSpendResets.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.ClientPullRequestOverviewCache.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.CompletedReviewUsageSnapshots.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.DiscussionSynchronizationStates.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.MemoryActivityLogEntries.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.PostedCommentOrigins.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.RetainedPullRequests.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.ReviewerPerformanceDailyCounts.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.ReviewJobs.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.MentionReplyJobs.Where(row => clients.Contains(row.ClientId)));
-        await Remove(database.UserClientRoles.Where(row => clients.Contains(row.ClientId)));
+        var rows = new RowDeletion(database, deleted, ct);
+        await this.DeleteClientDataAsync(rows, database.Clients.Where(client => client.TenantId == tenantId).Select(client => client.Id));
 
         // The tables that carry the tenant without a cascading foreign key to tenants.
-        await Remove(database.LogicalModels.Where(row => row.TenantId == tenantId));
-        await Remove(database.AiModelCatalogEntries.Where(row => row.TenantId == tenantId));
-        await Remove(database.AiUsageReports.Where(row => row.TenantId == tenantId));
-        await Remove(database.ReviewRunners.Where(row => row.TenantId == tenantId));
-        await Remove(database.RunnerRegistrationTokens.Where(row => row.TenantId == tenantId));
+        await rows.RemoveAsync(database.LogicalModels.Where(row => row.TenantId == tenantId));
+        await rows.RemoveAsync(database.AiModelCatalogEntries.Where(row => row.TenantId == tenantId));
+        await rows.RemoveAsync(database.AiUsageReports.Where(row => row.TenantId == tenantId));
+        await rows.RemoveAsync(database.ReviewRunners.Where(row => row.TenantId == tenantId));
+        await rows.RemoveAsync(database.RunnerRegistrationTokens.Where(row => row.TenantId == tenantId));
 
         // The deletion also removes the accounts that belong to this tenant alone. It keeps administrators and accounts
         // with access to another tenant or to a client of another tenant.
-        await Remove(
+        await rows.RemoveAsync(
             database.AppUsers.Where(user =>
                 user.GlobalRole != AppUserRole.Admin
                 && (database.TenantMemberships.Any(membership => membership.UserId == user.Id && membership.TenantId == tenantId)
@@ -478,16 +555,58 @@ public sealed class TenantDataLifecycle(
                 && !database.UserClientRoles.Any(role => role.UserId == user.Id
                                                          && database.Clients.Any(client => client.Id == role.ClientId
                                                                                            && client.TenantId != tenantId))));
-        await Remove(database.Clients.Where(row => row.TenantId == tenantId));
-        await Remove(database.Tenants.Where(row => row.Id == tenantId));
+        await rows.RemoveAsync(database.Clients.Where(row => row.TenantId == tenantId));
+        await rows.RemoveAsync(database.Tenants.Where(row => row.Id == tenantId));
         await transaction.CommitAsync(ct).ConfigureAwait(false);
+    }
 
-        async Task Remove<T>(IQueryable<T> rows)
-            where T : class
-        {
-            var table = database.Model.FindEntityType(typeof(T))!.GetTableName()!;
-            deleted[table] = deleted.GetValueOrDefault(table) + await rows.ExecuteDeleteAsync(ct).ConfigureAwait(false);
-        }
+    /// <summary>Deletes the client and every row that carries its identifier, in one transaction.</summary>
+    private async Task DeleteClientRowsAsync(Guid clientId, Dictionary<string, int> deleted, CancellationToken ct)
+    {
+        await using var transaction = await database.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var rows = new RowDeletion(database, deleted, ct);
+        await this.DeleteClientDataAsync(rows, database.Clients.Where(client => client.Id == clientId).Select(client => client.Id));
+        await rows.RemoveAsync(database.Clients.Where(row => row.Id == clientId));
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Deletes the rows of the clients from the tables that carry a client without a cascading foreign key to
+    ///     <c>clients</c>, and the rows that reference those rows without a foreign key. The rows of the clients
+    ///     themselves stay, and the rows that cascade from them are deleted with them.
+    /// </summary>
+    private async Task DeleteClientDataAsync(RowDeletion rows, IQueryable<Guid> clients)
+    {
+        var reviewJobs = database.ReviewJobs.Where(job => clients.Contains(job.ClientId)).Select(job => job.Id);
+        var syncStates = database.DiscussionSynchronizationStates.Where(state => clients.Contains(state.ClientId))
+            .Select(state => state.Id);
+        var reports = database.ReviewerPerformanceReportClients.Where(report => clients.Contains(report.ClientId))
+            .Select(report => report.ReportId);
+
+        // Rows that reference rows of the tables below without a foreign key are deleted first.
+        await rows.RemoveAsync(database.RunnerIngestReceipts.Where(receipt => reviewJobs.Contains(receipt.JobId)));
+        await rows.RemoveAsync(database.DiscussionObservationFences.Where(fence => syncStates.Contains(fence.OwnerStateId)));
+
+        // A cached report can summarize the clients.
+        await rows.RemoveAsync(database.ReviewerPerformanceReports.Where(report => reports.Contains(report.Id)));
+
+        // The tables that carry a client without a cascading foreign key to clients, in deletion order: a table that a
+        // later table references with a restricting key comes after it.
+        await rows.RemoveAsync(database.LogicalModelOverrides.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.AiModelCatalogEntries.Where(row => row.ClientId != null && clients.Contains(row.ClientId.Value)));
+        await rows.RemoveAsync(database.AiUsageReports.Where(row => row.ClientId != null && clients.Contains(row.ClientId.Value)));
+        await rows.RemoveAsync(database.BudgetEvents.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.BudgetSpendResets.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.ClientPullRequestOverviewCache.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.CompletedReviewUsageSnapshots.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.DiscussionSynchronizationStates.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.MemoryActivityLogEntries.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.PostedCommentOrigins.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.RetainedPullRequests.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.ReviewerPerformanceDailyCounts.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.ReviewJobs.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.MentionReplyJobs.Where(row => clients.Contains(row.ClientId)));
+        await rows.RemoveAsync(database.UserClientRoles.Where(row => clients.Contains(row.ClientId)));
     }
 
     private async Task WriteClientAsync(Utf8JsonWriter writer, Guid clientId, TenantExportOptions options, CancellationToken ct)
@@ -662,4 +781,22 @@ public sealed class TenantDataLifecycle(
         List<ExportedFileResult> FileResults,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         List<ExportedProtocol>? Protocols);
+
+    /// <summary>The tenant, the clients and the knowledge sources whose work a deletion stops.</summary>
+    /// <param name="TenantId">The tenant, when the deletion removes the whole tenant.</param>
+    /// <param name="ClientIds">The clients that the deletion removes.</param>
+    /// <param name="SourceIds">The knowledge sources of the clients.</param>
+    /// <param name="StopReason">The error message of the jobs that the deletion stops or cancels.</param>
+    private sealed record DeletionScope(Guid? TenantId, List<Guid> ClientIds, List<Guid> SourceIds, string StopReason);
+
+    /// <summary>Deletes rows and adds the number of deleted rows to their table.</summary>
+    private sealed class RowDeletion(MeisterProPRDbContext database, Dictionary<string, int> deleted, CancellationToken ct)
+    {
+        public async Task RemoveAsync<T>(IQueryable<T> rows)
+            where T : class
+        {
+            var table = database.Model.FindEntityType(typeof(T))!.GetTableName()!;
+            deleted[table] = deleted.GetValueOrDefault(table) + await rows.ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        }
+    }
 }

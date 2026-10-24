@@ -77,6 +77,13 @@ internal sealed class ReviewWorkspaceCleanupService(
             this.CleanupReleasedWorkspaces();
             this.CleanupMirrorCache();
         }
+        catch (Exception ex)
+        {
+            // The sweep removes what earlier reviews left behind, and the preparation that triggered it does not
+            // need it. A failed sweep is therefore logged and does not fail that preparation. The next
+            // preparation runs the sweep again.
+            logger.LogWarning(ex, "The review workspace cleanup under {RootPath} failed.", options.Value.RootPath);
+        }
         finally
         {
             Interlocked.Exchange(ref this._sweepInProgress, 0);
@@ -282,10 +289,37 @@ internal sealed class ReviewWorkspaceCleanupService(
             }
         }
 
-        var bytes = directory.EnumerateFiles().Sum(file => file.Length);
+        var bytes = SumFileBytes(directory.EnumerateFiles());
         lock (this._sizeCacheLock)
         {
             this._directoryFileBytes[directory.FullName] = new DirectoryFileBytes(lastWriteTimeUtc, bytes);
+        }
+
+        return bytes;
+    }
+
+    /// <summary>Returns the sum of the file sizes. A file that no longer exists when its size is read counts as zero.</summary>
+    /// <param name="files">The files of one directory, as listed.</param>
+    /// <remarks>
+    ///     While git fetches into a mirror, it writes temporary files there and renames or removes them when the
+    ///     fetch ends. A sweep that measures the mirror during the fetch of another review can therefore list a
+    ///     file that is gone when its size is read. The removal changes the timestamp of the directory, so the
+    ///     next sweep measures the directory again.
+    /// </remarks>
+    internal static long SumFileBytes(IEnumerable<FileInfo> files)
+    {
+        long bytes = 0;
+        foreach (var file in files)
+        {
+            try
+            {
+                bytes += file.Length;
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // The file was renamed or removed between the listing and the read of its size. Any other error ends
+                // the sweep, which logs it, so the cache keeps no size that leaves out a file that exists.
+            }
         }
 
         return bytes;

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using MeisterDev.ProPR.ProCursor.Core;
 using MeisterDev.ProPR.ProCursor.Options;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,7 +19,7 @@ public sealed partial class ProCursorIndexWorker(
     IOptions<ProCursorOptions> options,
     ILogger<ProCursorIndexWorker> logger) : BackgroundService
 {
-    private readonly Dictionary<Guid, Task> _activeJobsBySource = [];
+    private readonly Dictionary<Guid, ActiveJob> _activeJobsBySource = [];
     private readonly Lock _activeJobsLock = new();
     private readonly ProCursorOptions _options = options.Value;
     private bool _coordinatorResolutionFailureLogged;
@@ -98,12 +99,32 @@ public sealed partial class ProCursorIndexWorker(
                 }
             }
 
+            await this.RecoverExpiredJobsAsync(ct);
             await this.StartPendingJobsAsync(ct);
             this.LastCycleCompletedAt = DateTimeOffset.UtcNow;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogCycleError(logger, ex);
+        }
+    }
+
+    /// <summary>How long the lease on a running job lasts after its claim or its last renewal.</summary>
+    private TimeSpan LeaseDuration => TimeSpan.FromSeconds(this._options.IndexJobLeaseSeconds);
+
+    /// <summary>
+    ///     How often the lease on a running job is renewed. Five renewals fall into one lease duration, so a renewal
+    ///     that fails because the database cannot be reached does not let the lease expire.
+    /// </summary>
+    private TimeSpan LeaseRenewalInterval => this.LeaseDuration / 5;
+
+    private async Task RecoverExpiredJobsAsync(CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var coordinator = this.TryResolveCoordinator(scope.ServiceProvider);
+        if (coordinator is not null)
+        {
+            await coordinator.RecoverExpiredJobsAsync(this.GetActiveJobIds(), ct);
         }
     }
 
@@ -126,26 +147,114 @@ public sealed partial class ProCursorIndexWorker(
             }
 
             var startSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var jobTask = this.ExecuteJobAsync(job.Id, job.KnowledgeSourceId, CancellationToken.None, startSignal.Task);
-            this.TrackActiveJob(job.KnowledgeSourceId, jobTask);
+            var jobTask = this.ExecuteJobAsync(job.Id, job.AttemptCount, job.KnowledgeSourceId, startSignal.Task);
+            this.TrackActiveJob(job.KnowledgeSourceId, new ActiveJob(job.Id, jobTask));
             startSignal.TrySetResult();
         }
     }
 
-    private async Task ExecuteJobAsync(Guid jobId, Guid sourceId, CancellationToken ct, Task startSignal)
+    /// <summary>
+    ///     Runs one claimed job and renews its lease until the job ends. The job is stopped when a renewal finds that
+    ///     the job was cancelled, or that another service recovered and claimed it again.
+    /// </summary>
+    /// <param name="jobId">The claimed job.</param>
+    /// <param name="attemptCount">The attempt count of the claim.</param>
+    /// <param name="sourceId">The knowledge source of the job.</param>
+    /// <param name="startSignal">Completes once the job is tracked as active.</param>
+    private async Task ExecuteJobAsync(Guid jobId, int attemptCount, Guid sourceId, Task startSignal)
     {
         await startSignal;
 
+        using var leaseLost = new CancellationTokenSource();
+        using var jobEnded = new CancellationTokenSource();
+        var renewal = this.RenewLeaseAsync(jobId, attemptCount, leaseLost, jobEnded.Token);
         try
         {
             using var scope = scopeFactory.CreateScope();
             var coordinator = scope.ServiceProvider.GetRequiredService<ProCursorIndexCoordinator>();
-            await coordinator.ExecuteJobAsync(jobId, ct);
+            await coordinator.ExecuteJobAsync(jobId, attemptCount, leaseLost.Token);
+        }
+        catch (OperationCanceledException) when (leaseLost.IsCancellationRequested)
+        {
+            LogJobStoppedWithoutLease(logger, jobId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogJobEndUnrecorded(logger, jobId, ex);
         }
         finally
         {
+            await jobEnded.CancelAsync();
+            await renewal;
             this.UntrackActiveJob(sourceId);
         }
+    }
+
+    /// <summary>
+    ///     Renews the lease on a running job until the job ends or the lease is lost. When renewals fail, the job is
+    ///     stopped before its lease expires, because another service can then recover the job and run it again.
+    /// </summary>
+    /// <param name="jobId">The running job.</param>
+    /// <param name="attemptCount">The attempt count of the claim.</param>
+    /// <param name="leaseLost">Cancelled when the job is no longer held by this claim.</param>
+    /// <param name="jobEnded">Cancelled when the job has ended.</param>
+    private async Task RenewLeaseAsync(
+        Guid jobId,
+        int attemptCount,
+        CancellationTokenSource leaseLost,
+        CancellationToken jobEnded)
+    {
+        using var timer = new PeriodicTimer(this.LeaseRenewalInterval);
+
+        // The lease was set at the claim, shortly before this loop starts, and each successful renewal extends it.
+        var sinceLease = Stopwatch.StartNew();
+        try
+        {
+            while (await timer.WaitForNextTickAsync(jobEnded))
+            {
+                // A renewal that is still running when the job has to stop counts as failed, so a database request that
+                // hangs cannot keep the job running past its lease.
+                using var renewal = CancellationTokenSource.CreateLinkedTokenSource(jobEnded);
+                renewal.CancelAfter(Max(TimeSpan.Zero, this.LeaseDuration - this.LeaseRenewalInterval - sinceLease.Elapsed));
+
+                // The coordinator sets the renewed lease while the request runs, so the age of the renewed lease counts
+                // from the start of the request, including the time the database takes to answer.
+                var sinceRequest = Stopwatch.StartNew();
+                try
+                {
+                    using var scope = scopeFactory.CreateScope();
+                    var coordinator = scope.ServiceProvider.GetRequiredService<ProCursorIndexCoordinator>();
+                    if (!await coordinator.RenewLeaseAsync(jobId, attemptCount, renewal.Token))
+                    {
+                        await leaseLost.CancelAsync();
+                        return;
+                    }
+
+                    sinceLease = sinceRequest;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !jobEnded.IsCancellationRequested)
+                {
+                    LogLeaseRenewalFailed(logger, jobId, ex);
+
+                    // The next renewal would come after the lease has expired.
+                    if (sinceLease.Elapsed + this.LeaseRenewalInterval >= this.LeaseDuration)
+                    {
+                        LogLeaseUnrenewable(logger, jobId);
+                        await leaseLost.CancelAsync();
+                        return;
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The job has ended.
+        }
+    }
+
+    private static TimeSpan Max(TimeSpan first, TimeSpan second)
+    {
+        return first > second ? first : second;
     }
 
     private ProCursorRefreshScheduler? TryResolveScheduler(IServiceProvider serviceProvider)
@@ -204,11 +313,19 @@ public sealed partial class ProCursorIndexWorker(
         }
     }
 
-    private void TrackActiveJob(Guid sourceId, Task jobTask)
+    private Guid[] GetActiveJobIds()
     {
         lock (this._activeJobsLock)
         {
-            this._activeJobsBySource[sourceId] = jobTask;
+            return this._activeJobsBySource.Values.Select(job => job.JobId).ToArray();
+        }
+    }
+
+    private void TrackActiveJob(Guid sourceId, ActiveJob job)
+    {
+        lock (this._activeJobsLock)
+        {
+            this._activeJobsBySource[sourceId] = job;
         }
     }
 
@@ -225,7 +342,7 @@ public sealed partial class ProCursorIndexWorker(
         Task[] activeTasks;
         lock (this._activeJobsLock)
         {
-            activeTasks = this._activeJobsBySource.Values.ToArray();
+            activeTasks = this._activeJobsBySource.Values.Select(job => job.Execution).ToArray();
         }
 
         if (activeTasks.Length == 0)
@@ -242,4 +359,9 @@ public sealed partial class ProCursorIndexWorker(
             // Shutdown canceled the remaining jobs.
         }
     }
+
+    /// <summary>A job that this worker runs.</summary>
+    /// <param name="JobId">The job.</param>
+    /// <param name="Execution">The task that runs the job and renews its lease.</param>
+    private sealed record ActiveJob(Guid JobId, Task Execution);
 }

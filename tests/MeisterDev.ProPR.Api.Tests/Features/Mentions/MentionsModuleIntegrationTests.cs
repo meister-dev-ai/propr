@@ -48,7 +48,7 @@ public sealed class MentionsModuleIntegrationTests
         await Task.Delay(50, CancellationToken.None);
         await worker.StopAsync(CancellationToken.None);
 
-        await repo.Received(1).ResetStuckProcessingAsync(Arg.Any<CancellationToken>());
+        await repo.Received(1).ReclaimStalledAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await repo.Received(1).GetPendingAsync(Arg.Any<CancellationToken>());
     }
 

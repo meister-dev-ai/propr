@@ -33,10 +33,26 @@ public sealed partial class EfMentionReplyJobRepository(
     /// <inheritdoc />
     public async Task<IReadOnlyList<MentionReplyJob>> GetPendingAsync(CancellationToken ct = default)
     {
+        var inactiveClients = dbContext.InactiveClientIds();
         return await dbContext.MentionReplyJobs
             .AsNoTracking()
-            .Where(j => j.Status == MentionJobStatus.Pending)
+            .Where(j => j.Status == MentionJobStatus.Pending && !inactiveClients.Contains(j.ClientId))
             .OrderBy(j => j.CreatedAt)
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MentionReplyJob>> GetPendingAsync(
+        DateTimeOffset createdBefore,
+        int limit,
+        CancellationToken ct = default)
+    {
+        var inactiveClients = dbContext.InactiveClientIds();
+        return await dbContext.MentionReplyJobs
+            .AsNoTracking()
+            .Where(j => j.Status == MentionJobStatus.Pending && j.CreatedAt < createdBefore && !inactiveClients.Contains(j.ClientId))
+            .OrderBy(j => j.CreatedAt)
+            .Take(limit)
             .ToListAsync(ct);
     }
 
@@ -130,29 +146,23 @@ public sealed partial class EfMentionReplyJobRepository(
         MentionJobStatus to,
         CancellationToken ct = default)
     {
-        var job = await dbContext.MentionReplyJobs.FindAsync([jobId], ct);
-        if (job is null || job.Status != from)
-        {
-            return false;
-        }
-
-        job.Status = to;
+        // One statement that changes the job only while it has the expected status. Two processes that read the same
+        // pending job and both claim it therefore cannot both succeed.
+        var jobs = dbContext.MentionReplyJobs.Where(j => j.Id == jobId && j.Status == from);
         if (to == MentionJobStatus.Processing)
         {
-            job.ProcessingStartedAt = DateTimeOffset.UtcNow;
+            // A job of an inactive client waits until the client and its tenant are active again.
+            var inactiveClients = dbContext.InactiveClientIds();
+            jobs = jobs.Where(j => !inactiveClients.Contains(j.ClientId));
         }
 
-        try
-        {
-            await dbContext.SaveChangesAsync(ct);
-            return true;
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            // Concurrency conflict occurred, another process likely updated the job. Reload the entity to get the latest state.
-            await dbContext.Entry(job).ReloadAsync(ct);
-            return false;
-        }
+        var startedAt = DateTimeOffset.UtcNow;
+        var updated = to == MentionJobStatus.Processing
+            ? await jobs.ExecuteUpdateAsync(
+                s => s.SetProperty(j => j.Status, to).SetProperty(j => j.ProcessingStartedAt, startedAt),
+                ct)
+            : await jobs.ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, to), ct);
+        return updated == 1;
     }
 
     /// <inheritdoc />
@@ -312,10 +322,12 @@ public sealed partial class EfMentionReplyJobRepository(
     }
 
     /// <inheritdoc />
-    public async Task ResetStuckProcessingAsync(CancellationToken ct = default)
+    public async Task<int> ReclaimStalledAsync(DateTimeOffset startedBefore, CancellationToken ct = default)
     {
-        await dbContext.MentionReplyJobs
-            .Where(j => j.Status == MentionJobStatus.Processing)
+        // A job in processing without a recorded start cannot belong to a process that is still answering it either.
+        return await dbContext.MentionReplyJobs
+            .Where(j => j.Status == MentionJobStatus.Processing
+                        && (j.ProcessingStartedAt == null || j.ProcessingStartedAt < startedBefore))
             .ExecuteUpdateAsync(
                 s => s.SetProperty(j => j.Status, MentionJobStatus.Pending)
                     .SetProperty(j => j.ProcessingStartedAt, (DateTimeOffset?)null),

@@ -17,9 +17,10 @@ public sealed class ProCursorKnowledgeSourceRepository(MeisterProPRDbContext db)
     /// <inheritdoc />
     public async Task<IReadOnlyList<ProCursorKnowledgeSource>> ListEnabledAsync(CancellationToken ct = default)
     {
+        var inactiveClients = db.InactiveClientIds();
         return await db.ProCursorKnowledgeSources
             .Include(source => source.TrackedBranches)
-            .Where(source => source.IsEnabled)
+            .Where(source => source.IsEnabled && !inactiveClients.Contains(source.ClientId))
             .OrderBy(source => source.DisplayName)
             .ToListAsync(ct);
     }

@@ -350,6 +350,13 @@ public static class ProPRHost
                     ? sp.GetRequiredService<ManagedRemoteProCursorGateway>()
                     : sp.GetRequiredService<DisabledProCursorGateway>());
 
+            // The deletion of a tenant or a client disables its knowledge sources. The ProCursor service reads that
+            // change before its cached configuration expires only when it is told.
+            if (useRemoteProCursor)
+            {
+                builder.Services.AddScoped<IProCursorConfigurationNotifier>(sp => sp.GetRequiredService<HttpProCursorGateway>());
+            }
+
             builder.Services.RemoveAll<IProCursorScmBroker>();
             builder.Services.RemoveAll<IProCursorEmbeddingBroker>();
             builder.Services.AddScoped<IProCursorScmBroker>(sp => sp.GetRequiredService<LocalProPrScmBroker>());

@@ -660,6 +660,37 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
         Assert.Equal(older.Id, candidates[0].Id);
     }
 
+    // A deactivated client takes in no work, and the work it already has waits until it is active again. The same
+    // holds for the clients of a deactivated tenant.
+    [Fact]
+    public async Task GetClaimCandidates_LeavesTheJobsOfDeactivatedClientsAndTenantsWaiting()
+    {
+        var active = await this.AddClientAsync(tenantActive: true, clientActive: true);
+        var deactivated = await this.AddClientAsync(tenantActive: true, clientActive: false);
+        var inDeactivatedTenant = await this.AddClientAsync(tenantActive: false, clientActive: true);
+        var runnable = await this.AddPendingJobAsync(prId: 1, clientId: active);
+        var ofDeactivatedClient = await this.AddPendingJobAsync(prId: 2, clientId: deactivated);
+        var ofDeactivatedTenant = await this.AddPendingJobAsync(prId: 3, clientId: inDeactivatedTenant);
+
+        var candidates = await this._store.GetClaimCandidatesAsync(10);
+
+        Assert.Equal([runnable.Id], candidates.Select(job => job.Id));
+
+        var deactivatedTenantId = await this._dbContext.Clients.Where(client => client.Id == inDeactivatedTenant)
+            .Select(client => client.TenantId)
+            .SingleAsync();
+        await this._dbContext.Tenants.Where(tenant => tenant.Id == deactivatedTenantId)
+            .ExecuteUpdateAsync(set => set.SetProperty(tenant => tenant.IsActive, true));
+        await this._dbContext.Clients.Where(client => client.Id == deactivated)
+            .ExecuteUpdateAsync(set => set.SetProperty(client => client.IsActive, true));
+
+        var afterReactivation = await this._store.GetClaimCandidatesAsync(10);
+
+        Assert.Equal(
+            new[] { runnable.Id, ofDeactivatedClient.Id, ofDeactivatedTenant.Id }.Order(),
+            afterReactivation.Select(job => job.Id).Order());
+    }
+
     [Fact]
     public async Task GetClaimCandidates_ExcludesJobsThatAreAlreadyLeased()
     {
@@ -1370,11 +1401,11 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
             NullLogger<JobRepository>.Instance);
     }
 
-    private async Task<ReviewJob> AddPendingJobAsync(int prId = 1)
+    private async Task<ReviewJob> AddPendingJobAsync(int prId = 1, Guid? clientId = null)
     {
         var job = new ReviewJob(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            clientId ?? Guid.NewGuid(),
             "https://dev.azure.com/org",
             "proj",
             "repo",
@@ -1382,6 +1413,23 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
             1);
         await this._repo.AddAsync(job);
         return job;
+    }
+
+    private async Task<Guid> AddClientAsync(bool tenantActive, bool clientActive)
+    {
+        var tenantId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        this._dbContext.Tenants.Add(new TenantRecord { Id = tenantId, Slug = $"t{tenantId:N}", DisplayName = "Claim tenant" });
+        this._dbContext.Clients.Add(new ClientRecord { Id = clientId, TenantId = tenantId, DisplayName = "Claim client", CreatedAt = DateTimeOffset.UtcNow });
+        await this._dbContext.SaveChangesAsync();
+
+        // The flags are written after the insert, because the database default of an active flag replaces a false
+        // value on insert.
+        await this._dbContext.Tenants.Where(tenant => tenant.Id == tenantId)
+            .ExecuteUpdateAsync(set => set.SetProperty(tenant => tenant.IsActive, tenantActive));
+        await this._dbContext.Clients.Where(client => client.Id == clientId)
+            .ExecuteUpdateAsync(set => set.SetProperty(client => client.IsActive, clientActive));
+        return clientId;
     }
 
     private async Task<ReviewJob> ReadJobAsync(Guid id)

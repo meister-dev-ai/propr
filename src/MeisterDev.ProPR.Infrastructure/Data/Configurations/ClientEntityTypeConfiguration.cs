@@ -58,6 +58,9 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("created_at")
             .IsRequired();
 
+        builder.Property(c => c.WorkStoppedAt)
+            .HasColumnName("work_stopped_at");
+
         builder.Property(c => c.CommentResolutionBehavior)
             .HasColumnName("comment_resolution_behavior")
             .HasConversion<int>()

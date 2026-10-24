@@ -235,6 +235,29 @@ public sealed class ReviewWorkspaceCleanupServiceTests
         }
     }
 
+    // git writes temporary files into a mirror while it fetches and removes them when the fetch ends. A sweep
+    // during the fetch of another review can therefore list a file that is removed before its size is read.
+    [Fact]
+    public void SumFileBytes_CountsAFileRemovedAfterTheListingAsZero()
+    {
+        var root = CreateRoot();
+        var present = Path.Combine(root, "mirrors", "pack-1.pack");
+        File.WriteAllText(present, new string('x', 512));
+        var removedPath = Path.Combine(root, "mirrors", "tmp_pack_removed");
+        File.WriteAllText(removedPath, new string('x', 256));
+        var removed = new FileInfo(removedPath);
+        File.Delete(removedPath);
+
+        try
+        {
+            Assert.Equal(512, ReviewWorkspaceCleanupService.SumFileBytes([new FileInfo(present), removed]));
+        }
+        finally
+        {
+            TryDeleteRoot(root);
+        }
+    }
+
     private static string CreateRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "review-workspace-cleanup-" + Guid.NewGuid().ToString("N"));

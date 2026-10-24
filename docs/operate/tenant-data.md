@@ -9,7 +9,8 @@ platform administrator can call them.
 `DELETE /api/admin/tenants/{tenantId}` first stops the work of the tenant, and a later request deletes it. Each
 request deactivates the tenant, its clients and their webhook, crawl, mention and ProCursor configurations, so the
 intake accepts no new work for them. It closes the discussion synchronizations of the clients, stops their
-unfinished reviews and cancels their waiting thread passes, mention replies and ProCursor index jobs.
+unfinished reviews, cancels their waiting thread passes and mention replies, and cancels their waiting and running
+ProCursor index jobs.
 
 While work of the tenant may still be running, the request answers `409` with the error `tenant_work_running`, and
 the `Retry-After` header gives the seconds to wait:
@@ -20,7 +21,9 @@ the `Retry-After` header gives the seconds to wait:
 - A thread pass or a mention reply that is running holds no lease. The deletion waits up to 15 minutes after it
   started.
 - A discussion synchronization that holds a lease ends when the lease expires.
-- A running ProCursor index job is left to finish. The deletion waits up to one hour after it started.
+- The ProCursor service stops a cancelled index job that was running when it next renews the lease of the job,
+  every minute by default. The deletion waits until that lease expires, by default at most five minutes after the
+  last renewal.
 
 A request after the wait deletes the tenant, its clients and every row that carries the identifier of the tenant or
 of one of its clients. ProPR deletes the ProCursor data first, while the knowledge sources that identify it still
@@ -35,6 +38,17 @@ cannot be deleted.
 
 The licensing records, which count pull request authors per month, belong to the installation, and ProPR keeps
 them.
+
+## Client deletion
+
+`DELETE /api/clients/{clientId}` deletes one client in the same two steps. Each request deactivates the client and its
+webhook, crawl, mention and ProCursor configurations and stops or cancels its work as a tenant deletion does. While
+work of the client may still be running, the request answers `409` with the error `client_work_running` and a
+`Retry-After` header, for the same waits as a tenant deletion. A request after the wait deletes the client and every
+row that carries its identifier, including its ProCursor data. The tenant, its other clients and its accounts stay.
+
+The client page of the management UI repeats the request after each wait while the page is open. A client whose
+deletion was not completed stays deactivated, and the next deletion request continues it.
 
 ## Tenant export
 
@@ -68,6 +82,7 @@ customer, who is the controller of the review records:
 
 ProPR clears the pull request author of the review jobs and the comment author of the mention replies that name
 the identifier or the login, and replaces the author of retained thread comments with `erased`. It deletes the
-protocol events of those executions, because their prompts can quote the developer. Records of other tenants are
+protocol events of those executions, and of the thread passes that ran on a pull request of the developer or
+evaluated a thread with a comment of the developer, because their prompts can quote the developer. Records of other tenants are
 not changed. The tenant audit records the erasure with the instruction reference and a hash of the identifier,
 not the identifier itself.

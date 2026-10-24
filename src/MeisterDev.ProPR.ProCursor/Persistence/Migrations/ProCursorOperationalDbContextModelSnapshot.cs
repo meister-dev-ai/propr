@@ -24,16 +24,17 @@ public sealed class ProCursorOperationalDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity<ProCursorIndexJob>(b =>
         {
             b.Property<Guid>("Id").ValueGeneratedNever().HasColumnName("id");
-            b.Property<int>("AttemptCount").HasColumnName("attempt_count").HasDefaultValue(0);
+            b.Property<int>("AttemptCount").IsConcurrencyToken().HasColumnName("attempt_count").HasDefaultValue(0);
             b.Property<DateTimeOffset?>("CompletedAt").HasColumnName("completed_at");
             b.Property<string>("DedupKey").HasColumnType("character varying(256)").HasMaxLength(256).HasColumnName("dedup_key");
             b.Property<string?>("FailureReason").HasColumnType("text").HasColumnName("failure_reason");
             b.Property<string>("JobKind").HasColumnType("character varying(64)").HasMaxLength(64).HasColumnName("job_kind");
             b.Property<Guid>("KnowledgeSourceId").HasColumnName("knowledge_source_id");
+            b.Property<DateTimeOffset?>("LeaseExpiresAt").HasColumnName("lease_expires_at");
             b.Property<DateTimeOffset>("QueuedAt").HasColumnName("queued_at");
             b.Property<string?>("RequestedCommitSha").HasColumnType("character varying(64)").HasMaxLength(64).HasColumnName("requested_commit_sha");
             b.Property<DateTimeOffset?>("StartedAt").HasColumnName("started_at");
-            b.Property<short>("Status").HasColumnName("status");
+            b.Property<short>("Status").IsConcurrencyToken().HasColumnName("status");
             b.Property<Guid>("TrackedBranchId").HasColumnName("tracked_branch_id");
             b.HasKey("Id");
             b.HasIndex("TrackedBranchId", "DedupKey").HasDatabaseName("ix_procursor_index_jobs_branch_dedup");

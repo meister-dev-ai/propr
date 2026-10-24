@@ -54,6 +54,7 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
         // row_number per client, ordered by that client's own queue, then read back in (rank, age) order:
         // every client's oldest job comes before any client's second-oldest. A client that queues two
         // hundred pull requests therefore takes one slot per round rather than the whole pool.
+        // A job of an inactive client, or of a client of an inactive tenant, waits until both are active again.
         var ids = await dbContext.Database
             .SqlQueryRaw<Guid>(
                 """
@@ -63,8 +64,10 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
                            row_number() OVER (PARTITION BY j.client_id ORDER BY j.submitted_at, j.id) AS client_rank
                     FROM review_jobs j
                     JOIN clients c ON c.id = j.client_id
+                    JOIN tenants t ON t.id = c.tenant_id
                     WHERE j.status = 'Pending'
                       AND c.is_active
+                      AND t.is_active
                       AND ({4} OR c.tenant_id = {0})
                       AND (cardinality({1}::uuid[]) = 0 OR j.client_id = ANY({1}::uuid[]))
                       AND (
@@ -126,7 +129,10 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
                        j.submitted_at AS "PendingSince"
                 FROM review_jobs j
                 JOIN clients c ON c.id = j.client_id
+                JOIN tenants t ON t.id = c.tenant_id
                 WHERE j.status = 'Pending'
+                  AND c.is_active
+                  AND t.is_active
                   AND coalesce(btrim(c.required_runner_tags), '') <> ''
                   AND NOT EXISTS (
                       SELECT 1 FROM review_runners r
@@ -201,8 +207,10 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
                 """
                 SELECT DISTINCT c.id AS "Value"
                 FROM clients c
+                JOIN tenants t ON t.id = c.tenant_id
                 JOIN review_runners r ON (r.tenant_id = c.tenant_id OR r.tenant_id = {3})
                 WHERE c.is_active
+                  AND t.is_active
                   AND r.state = 'Enrolled'
                   AND r.last_seen_at >= {0}
                   AND r.contract_version BETWEEN {1} AND {2}

@@ -27,27 +27,24 @@ public sealed partial class ProCursorIndexCoordinator(
     IOptions<ProCursorOptions> options)
 {
     private const int MaxRetryAttempts = 3;
+
+    private const string LeaseExpiredReason =
+        "The lease of the ProCursor service that ran the job expired, for example because the service stopped.";
+
     private readonly ProCursorOptions _options = options.Value;
 
     /// <summary>
-    ///     Attempts to execute the next queued ProCursor indexing job.
+    ///     How long the lease on a running index job lasts. The index worker renews it while the job runs.
     /// </summary>
-    public async Task<bool> ExecuteNextJobAsync(CancellationToken ct = default)
-    {
-        var job = await this.TryStartNextJobAsync([], ct);
-        if (job is null)
-        {
-            LogIndexCycleHeartbeat(logger, this._options.MaxIndexConcurrency);
-            return false;
-        }
-
-        await this.ExecuteJobAsync(job.Id, ct);
-        return true;
-    }
+    public TimeSpan LeaseDuration => TimeSpan.FromSeconds(this._options.IndexJobLeaseSeconds);
 
     /// <summary>
     ///     Claims the next pending job whose source is not already active in the current worker cycle.
     /// </summary>
+    /// <returns>
+    ///     The claimed job, or null when no job is pending or another service claimed the next job after it was read.
+    ///     In the second case, the next worker cycle claims the following job.
+    /// </returns>
     public async Task<ProCursorIndexJob?> TryStartNextJobAsync(
         IReadOnlyCollection<Guid> excludedSourceIds,
         CancellationToken ct = default)
@@ -60,19 +57,79 @@ public sealed partial class ProCursorIndexCoordinator(
             return null;
         }
 
-        job.MarkProcessing();
-        await indexJobRepository.UpdateAsync(job, ct);
-        return job;
+        job.MarkProcessing(DateTimeOffset.UtcNow + this.LeaseDuration);
+        return await indexJobRepository.UpdateAsync(job, ct) ? job : null;
+    }
+
+    /// <summary>
+    ///     Extends the lease on a running job, as long as the job is still in processing under the same claim.
+    /// </summary>
+    /// <param name="jobId">The job.</param>
+    /// <param name="attemptCount">The attempt count of the claim that the calling service holds.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    ///     False when the job was cancelled, ended, or recovered and claimed again. The calling service stops the job
+    ///     then.
+    /// </returns>
+    public async Task<bool> RenewLeaseAsync(Guid jobId, int attemptCount, CancellationToken ct = default)
+    {
+        var job = await indexJobRepository.GetByIdAsync(jobId, ct);
+        if (job is null || job.Status != ProCursorIndexJobStatus.Processing || job.AttemptCount != attemptCount)
+        {
+            return false;
+        }
+
+        job.RenewLease(DateTimeOffset.UtcNow + this.LeaseDuration);
+        return await indexJobRepository.UpdateAsync(job, ct);
+    }
+
+    /// <summary>
+    ///     Returns the jobs whose lease has expired to the queue, or fails them after the last attempt. The service
+    ///     that claimed such a job has stopped, or it could not renew the lease for the whole duration and stops the job
+    ///     at its next renewal.
+    /// </summary>
+    /// <param name="runningJobIds">The jobs that the calling service runs itself.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of jobs that were returned to the queue or failed.</returns>
+    public async Task<int> RecoverExpiredJobsAsync(IReadOnlyCollection<Guid> runningJobIds, CancellationToken ct = default)
+    {
+        var recovered = 0;
+        var now = DateTimeOffset.UtcNow;
+        foreach (var job in await indexJobRepository.ListExpiredLeasesAsync(now, runningJobIds, ct))
+        {
+            if (job.AttemptCount < MaxRetryAttempts)
+            {
+                job.MarkPendingForRetry(LeaseExpiredReason);
+            }
+            else
+            {
+                job.MarkFailed(LeaseExpiredReason);
+            }
+
+            if (await indexJobRepository.RecoverExpiredLeaseAsync(job, now, ct))
+            {
+                recovered++;
+                LogExpiredJobRecovered(logger, job.Id, job.AttemptCount, job.Status);
+            }
+        }
+
+        return recovered;
     }
 
     /// <summary>
     ///     Executes one previously claimed ProCursor index job.
     /// </summary>
-    public async Task<bool> ExecuteJobAsync(Guid jobId, CancellationToken ct = default)
+    /// <param name="jobId">The claimed job.</param>
+    /// <param name="attemptCount">The attempt count of the claim that the calling service holds.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>False when the job is no longer in processing under that claim. The job does not run then.</returns>
+    public async Task<bool> ExecuteJobAsync(Guid jobId, int attemptCount, CancellationToken ct = default)
     {
         var job = await indexJobRepository.GetByIdAsync(jobId, ct);
-        if (job is null)
+        if (job is null || job.Status != ProCursorIndexJobStatus.Processing || job.AttemptCount != attemptCount)
         {
+            // The job was cancelled or recovered between its claim and its start. A job with another attempt count
+            // was recovered and claimed again, and the service that holds the newer claim runs it.
             return false;
         }
 
@@ -108,8 +165,7 @@ public sealed partial class ProCursorIndexCoordinator(
             {
                 trackedBranch.RecordIndexedCommit(materializedSource.CommitSha);
                 await knowledgeSourceRepository.UpdateAsync(source, ct);
-                job.MarkCompleted();
-                await indexJobRepository.UpdateAsync(job, ct);
+                await this.CompleteAsync(job, ct);
                 return true;
             }
 
@@ -149,12 +205,13 @@ public sealed partial class ProCursorIndexCoordinator(
             trackedBranch.RecordIndexedCommit(materializedSource.CommitSha);
             await knowledgeSourceRepository.UpdateAsync(source, ct);
 
-            job.MarkCompleted();
-            await indexJobRepository.UpdateAsync(job, ct);
+            await this.CompleteAsync(job, ct);
             return true;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
+            // A cancellation that the caller did not request is a failure of a step, for example an HTTP request that
+            // ran into its timeout. A cancellation that the caller requested leaves the job to whoever cancelled it.
             await this.HandleJobFailureAsync(job, snapshot, ex, ct);
             return true;
         }
@@ -207,6 +264,18 @@ public sealed partial class ProCursorIndexCoordinator(
     }
 
     /// <summary>
+    ///     Records the completion of the job, unless the job was cancelled or recovered while it ran.
+    /// </summary>
+    private async Task CompleteAsync(ProCursorIndexJob job, CancellationToken ct)
+    {
+        job.MarkCompleted();
+        if (!await indexJobRepository.UpdateAsync(job, ct))
+        {
+            LogJobChangedWhileRunning(logger, job.Id);
+        }
+    }
+
+    /// <summary>
     ///     Records a failed job execution: marks any in-progress snapshot as failed, schedules a retry
     ///     or terminal failure for the job depending on the attempt count, and logs the failure.
     /// </summary>
@@ -222,6 +291,14 @@ public sealed partial class ProCursorIndexCoordinator(
             await snapshotRepository.UpdateAsync(snapshot, ct);
         }
 
+        if (job.Status != ProCursorIndexJobStatus.Processing)
+        {
+            // The failure happened while the completion was recorded. The stored job is still in processing, and
+            // the index worker recovers it when its lease expires.
+            LogCompletionUnrecorded(logger, job.Id, ex);
+            return;
+        }
+
         if (job.AttemptCount < MaxRetryAttempts)
         {
             job.MarkPendingForRetry(ex.Message);
@@ -231,9 +308,14 @@ public sealed partial class ProCursorIndexCoordinator(
             job.MarkFailed(ex.Message);
         }
 
-        await indexJobRepository.UpdateAsync(job, ct);
-
-        LogJobFailed(logger, job.Id, ex);
+        if (await indexJobRepository.UpdateAsync(job, ct))
+        {
+            LogJobFailed(logger, job.Id, ex);
+        }
+        else
+        {
+            LogJobChangedWhileRunning(logger, job.Id);
+        }
     }
 
     private static void CleanupMaterializedDirectory(string? materializedRootDirectory)

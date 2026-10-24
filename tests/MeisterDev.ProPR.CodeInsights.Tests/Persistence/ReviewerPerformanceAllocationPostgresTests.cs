@@ -66,11 +66,10 @@ public sealed class ReviewerPerformanceAllocationPostgresTests(PostgresContainer
             Bucket = "day", Aggregation = "cumulative", Grouping = "client",
             Views = [new() { From = from, To = from.AddDays(249), ClientIds = clients }]
         };
-        var allocatedBefore = GC.GetTotalAllocatedBytes(true);
+        var reader = new ReviewerPerformanceRangeReader(db, providerRegistry: LocalScmPolicies.Registry);
         var timer = Stopwatch.StartNew();
-        var result = await new ReviewerPerformanceRangeReader(db, providerRegistry: LocalScmPolicies.Registry).QueryAsync(query, clients);
+        var (result, allocated, runs) = await MeasureAllocationsAsync(() => reader.QueryAsync(query, clients), 1_000_000_000);
         timer.Stop();
-        var allocated = GC.GetTotalAllocatedBytes(true) - allocatedBefore;
 
         var view = Assert.Single(result.Views);
         Assert.Equal(100_000, view.AggregateCells);
@@ -88,7 +87,8 @@ public sealed class ReviewerPerformanceAllocationPostgresTests(PostgresContainer
                 }
             });
         Console.WriteLine(
-            $"Client timeline: 100,000 cells, 400 repositories, 2,000 points, {timer.Elapsed.TotalMilliseconds:F0} ms, {allocated / 1_000_000d:F1} MB allocated.");
+            $"Client timeline: 100,000 cells, 400 repositories, 2,000 points, {timer.Elapsed.TotalMilliseconds / runs:F0} ms per run, "
+            + $"{allocated / 1_000_000d:F1} MB allocated in the smallest of {runs} runs.");
         Assert.True(allocated <= 1_000_000_000, $"The maximum client timeline allocated {allocated / 1_000_000d:F1} MB; budget <=1000 MB.");
     }
 
@@ -136,19 +136,44 @@ public sealed class ReviewerPerformanceAllocationPostgresTests(PostgresContainer
         var reader = new ReviewerPerformanceRangeReader(db, providerRegistry: LocalScmPolicies.Registry);
         // Warm the public query path without decoding malformed selectors before measuring process-wide allocations.
         await reader.QueryAsync(query with { Views = [query.Views[0] with { Repositories = [] }] }, [client]);
-        var allocatedBefore = GC.GetTotalAllocatedBytes(true);
+        var (result, allocated, runs) = await MeasureAllocationsAsync(() => reader.QueryAsync(query, [client]), allocationBudget);
 
-        var result = await reader.QueryAsync(query, [client]);
-
-        var allocated = GC.GetTotalAllocatedBytes(true) - allocatedBefore;
         var view = Assert.Single(result.Views);
         Assert.Equal(repositoryCount * 250, view.AggregateCells);
         var series = Assert.Single(view.Series);
         Assert.Equal(250, series.Points.Count);
         Assert.All(series.Points, point => Assert.Equal(0, point.OverallPrecision!.Counts.HarvestedThreads));
-        Console.WriteLine($"Malformed repository selection: {view.AggregateCells:N0} cells, 128 selectors, {allocated / 1_000_000d:F1} MB allocated.");
+        Console.WriteLine(
+            $"Malformed repository selection: {view.AggregateCells:N0} cells, 128 selectors, {allocated / 1_000_000d:F1} MB allocated in the smallest of {runs} runs.");
         Assert.True(
             allocated <= allocationBudget,
             $"The malformed repository selection allocated {allocated / 1_000_000d:F1} MB; budget <={allocationBudget / 1_000_000d:F0} MB.");
+    }
+
+    /// <summary>
+    ///     Runs the query up to five times, until one run stays within the allocation budget, and returns the result of
+    ///     the first run with the smallest allocation measured and the number of runs.
+    /// </summary>
+    /// <remarks>
+    ///     The allocation counter covers the whole process. In the pre-commit hook, one measurement counted more than 12
+    ///     GB for a query that allocates about 145 MB, because other work in the test process allocated at the same time.
+    ///     Such work only adds to a measurement, so the smallest measurement comes closest to the allocations of the
+    ///     query. A query that allocates more than its budget does so in every run and still fails.
+    /// </remarks>
+    private static async Task<(T Result, long Allocated, int Runs)> MeasureAllocationsAsync<T>(Func<Task<T>> query, long budget)
+    {
+        var before = GC.GetTotalAllocatedBytes(true);
+        var result = await query();
+        var smallest = GC.GetTotalAllocatedBytes(true) - before;
+        var runs = 1;
+        while (smallest > budget && runs < 5)
+        {
+            before = GC.GetTotalAllocatedBytes(true);
+            await query();
+            smallest = Math.Min(smallest, GC.GetTotalAllocatedBytes(true) - before);
+            runs++;
+        }
+
+        return (result, smallest, runs);
     }
 }

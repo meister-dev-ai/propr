@@ -107,6 +107,11 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
     ///         happens to collide: removing the lock failed this roughly one run in five. Asserting the
     ///         serialisation itself would need a recording git runner rather than the real one.
     ///     </para>
+    ///     <para>
+    ///         Each preparation runs the cleanup sweep before it takes the lock, so the sweep measures the mirror
+    ///         while another preparation fetches into it. The test therefore also covers a temporary file of git
+    ///         that is removed between the listing of its directory and the read of its size.
+    ///     </para>
     /// </summary>
     [Fact]
     public async Task PrepareAsync_ForConcurrentJobsOnOneRepository_PreparesEachOfThem()
@@ -140,6 +145,35 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
             {
                 await preparation.Workspace!.DisposeAsync();
             }
+        }
+    }
+
+    /// <summary>
+    ///     The cleanup sweep before each preparation removes what earlier reviews left behind, and the
+    ///     preparation does not depend on it. A directory without read permission makes the sweep fail, and
+    ///     the preparation still provides the workspace.
+    /// </summary>
+    [Fact]
+    public async Task PrepareAsync_WhenTheCleanupSweepFails_PreparesTheWorkspace()
+    {
+        Skip.If(
+            OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess,
+            "Taking the read permission from a directory needs Unix file modes and a user other than root.");
+
+        var unreadable = Path.Combine(this.MirrorsRoot, "unreadable", "locked");
+        Directory.CreateDirectory(unreadable);
+        File.SetUnixFileMode(unreadable, UnixFileMode.None);
+
+        try
+        {
+            var result = await this.CreateManager().PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+
+            Assert.Null(result.Failure);
+            await result.Workspace!.DisposeAsync();
+        }
+        finally
+        {
+            File.SetUnixFileMode(unreadable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
     }
 

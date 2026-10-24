@@ -56,6 +56,10 @@ public static class ProCursorModuleServiceCollectionExtensions
                 ConfigureInt(configuration, "PROCURSOR_REFRESH_POLL_SECONDS", value => opts.RefreshPollSeconds = value);
                 ConfigureInt(
                     configuration,
+                    "PROCURSOR_INDEX_JOB_LEASE_SECONDS",
+                    value => opts.IndexJobLeaseSeconds = value);
+                ConfigureInt(
+                    configuration,
                     "PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES",
                     value => opts.TempWorkspaceRetentionMinutes = value);
                 ConfigureInt(

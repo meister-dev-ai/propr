@@ -367,8 +367,9 @@ public sealed class CrawlConfigurationRepository(
     /// <inheritdoc />
     public async Task<IReadOnlyList<CrawlConfigurationDto>> GetAllActiveAsync(CancellationToken ct = default)
     {
+        var inactiveClients = dbContext.InactiveClientIds();
         var records = await this.BaseQuery()
-            .Where(c => c.IsActive && c.ReviewTargetLifecycle == ReviewTargetLifecycle.Enabled)
+            .Where(c => c.IsActive && c.ReviewTargetLifecycle == ReviewTargetLifecycle.Enabled && !inactiveClients.Contains(c.ClientId))
             .ToListAsync(ct);
 
         if (providerActivationService is not null)

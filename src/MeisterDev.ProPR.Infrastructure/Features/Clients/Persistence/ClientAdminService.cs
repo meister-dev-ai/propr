@@ -320,26 +320,6 @@ public sealed class ClientAdminService(
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteAsync(Guid clientId, CancellationToken ct = default)
-    {
-        var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
-        var client = await dbContext.Clients.FindAsync([clientId], ct);
-        if (client is null)
-        {
-            return false;
-        }
-
-        if (!TenantCatalog.IsClientVisible(client.TenantId, multiTenancyAvailable))
-        {
-            return false;
-        }
-
-        dbContext.Clients.Remove(client);
-        await dbContext.SaveChangesAsync(ct);
-        return true;
-    }
-
-    /// <inheritdoc />
     public Task<bool> ExistsAsync(Guid clientId, CancellationToken ct = default)
     {
         return this.ExistsVisibleAsync(clientId, ct);

@@ -16,21 +16,21 @@ public sealed class ProCursorTenantData(ProCursorOperationalDbContext db) : IPro
         CancellationToken ct = default)
     {
         var jobs = db.ProCursorIndexJobs.Where(job => knowledgeSourceIds.Contains(job.KnowledgeSourceId));
+
+        // The index worker that runs a cancelled job reads the cancellation when it renews the lease, and stops the
+        // job. A cancelled job keeps its lease, which bounds how long the job can still write.
         var cancelled = await jobs
-            .Where(job => job.Status == ProCursorIndexJobStatus.Pending)
+            .Where(job => job.Status == ProCursorIndexJobStatus.Pending || job.Status == ProCursorIndexJobStatus.Processing)
             .ExecuteUpdateAsync(
                 set => set
                     .SetProperty(job => job.Status, ProCursorIndexJobStatus.Cancelled)
                     .SetProperty(job => job.CompletedAt, DateTimeOffset.UtcNow),
                 ct);
-
-        // A running index job is left to finish. Cancelled, it would fail only when it completes, after it has written
-        // its snapshot.
-        var runningSince = await jobs
-            .Where(job => job.Status == ProCursorIndexJobStatus.Processing)
-            .Select(job => job.StartedAt ?? job.QueuedAt)
+        var runningUntil = await jobs
+            .Where(job => job.Status == ProCursorIndexJobStatus.Cancelled && job.LeaseExpiresAt != null)
+            .Select(job => job.LeaseExpiresAt!.Value)
             .ToListAsync(ct);
-        return new ProCursorIndexingStop(cancelled, runningSince);
+        return new ProCursorIndexingStop(cancelled, runningUntil);
     }
 
     public async Task<IReadOnlyDictionary<string, int>> DeleteAsync(

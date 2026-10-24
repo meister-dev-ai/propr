@@ -11,6 +11,13 @@ public sealed class ClientRecord
 {
     public bool IsActive { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    ///     When a deletion of the client last stopped work of the client, or null. The deletion waits a quiet period
+    ///     after this time.
+    /// </summary>
+    public DateTimeOffset? WorkStoppedAt { get; set; }
+
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public string DisplayName { get; set; } = string.Empty;

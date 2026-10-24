@@ -8,6 +8,8 @@ namespace MeisterDev.ProPR.Domain.Tests.Entities.ProCursor;
 
 public sealed class ProCursorIndexJobStatusTransitionTests
 {
+    private static readonly DateTimeOffset Lease = DateTimeOffset.UtcNow.AddMinutes(5);
+
     private static ProCursorIndexJob CreateJob()
     {
         return new ProCursorIndexJob(
@@ -36,7 +38,7 @@ public sealed class ProCursorIndexJobStatusTransitionTests
         var before = DateTimeOffset.UtcNow.AddSeconds(-1);
         var job = CreateJob();
 
-        job.MarkProcessing();
+        job.MarkProcessing(Lease);
 
         var after = DateTimeOffset.UtcNow.AddSeconds(1);
         Assert.Equal(ProCursorIndexJobStatus.Processing, job.Status);
@@ -44,6 +46,43 @@ public sealed class ProCursorIndexJobStatusTransitionTests
         Assert.InRange(job.StartedAt!.Value, before, after);
         Assert.Null(job.CompletedAt);
         Assert.Null(job.FailureReason);
+        Assert.Equal(Lease, job.LeaseExpiresAt);
+    }
+
+    [Fact]
+    public void RenewLease_FromProcessing_ExtendsTheLease()
+    {
+        var job = CreateJob();
+        job.MarkProcessing(Lease);
+
+        job.RenewLease(Lease.AddMinutes(1));
+
+        Assert.Equal(Lease.AddMinutes(1), job.LeaseExpiresAt);
+    }
+
+    [Fact]
+    public void RenewLease_FromCancelled_Throws()
+    {
+        var job = CreateJob();
+        job.MarkProcessing(Lease);
+        job.MarkCancelled();
+
+        Assert.Throws<InvalidOperationException>(() => job.RenewLease(Lease.AddMinutes(1)));
+
+        // The service that ran the cancelled job can write until the lease expires.
+        Assert.Equal(Lease, job.LeaseExpiresAt);
+    }
+
+    [Fact]
+    public void MarkPendingForRetry_FromProcessing_ReleasesTheLease()
+    {
+        var job = CreateJob();
+        job.MarkProcessing(Lease);
+
+        job.MarkPendingForRetry("stopped");
+
+        Assert.Equal(ProCursorIndexJobStatus.Pending, job.Status);
+        Assert.Null(job.LeaseExpiresAt);
     }
 
     [Fact]
@@ -51,7 +90,7 @@ public sealed class ProCursorIndexJobStatusTransitionTests
     {
         var before = DateTimeOffset.UtcNow.AddSeconds(-1);
         var job = CreateJob();
-        job.MarkProcessing();
+        job.MarkProcessing(Lease);
 
         job.MarkCompleted();
 
@@ -59,19 +98,21 @@ public sealed class ProCursorIndexJobStatusTransitionTests
         Assert.Equal(ProCursorIndexJobStatus.Completed, job.Status);
         Assert.InRange(job.CompletedAt!.Value, before, after);
         Assert.Null(job.FailureReason);
+        Assert.Null(job.LeaseExpiresAt);
     }
 
     [Fact]
     public void MarkFailed_FromProcessing_SetsFailedState()
     {
         var job = CreateJob();
-        job.MarkProcessing();
+        job.MarkProcessing(Lease);
 
         job.MarkFailed("boom");
 
         Assert.Equal(ProCursorIndexJobStatus.Failed, job.Status);
         Assert.Equal("boom", job.FailureReason);
         Assert.NotNull(job.CompletedAt);
+        Assert.Null(job.LeaseExpiresAt);
     }
 
     [Fact]

@@ -24,4 +24,25 @@ public sealed partial class ProCursorIndexWorker
         Level = LogLevel.Error,
         Message = "ProCursorIndexWorker: unhandled exception in index cycle - worker continues")]
     private static partial void LogCycleError(ILogger logger, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "ProCursor index job {JobId} was stopped because it was cancelled or recovered by another service.")]
+    private static partial void LogJobStoppedWithoutLease(ILogger logger, Guid jobId);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "ProCursor index job {JobId} ended with an error that is not recorded on the job. A worker recovers the job when its lease expires.")]
+    private static partial void LogJobEndUnrecorded(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The lease on ProCursor index job {JobId} could not be renewed. The next renewal tries again.")]
+    private static partial void LogLeaseRenewalFailed(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message =
+            "ProCursor index job {JobId} was stopped because its lease could not be renewed before it expires. A worker recovers the job when the lease has expired.")]
+    private static partial void LogLeaseUnrenewable(ILogger logger, Guid jobId);
 }

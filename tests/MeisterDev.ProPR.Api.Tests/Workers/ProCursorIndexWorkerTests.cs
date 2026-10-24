@@ -145,6 +145,155 @@ public sealed class ProCursorIndexWorkerTests
         Assert.Equal(ProCursorIndexJobStatus.Completed, jobs.Single(job => job.Id == thirdJobId).Status);
     }
 
+    // A job whose lease has expired has no service that runs it, for example because the ProCursor service stopped
+    // while the job ran. The next worker cycle returns the job to the queue and runs it again.
+    [Fact]
+    public async Task Worker_RecoversAJobWhoseLeaseExpired_AndRunsItAgain()
+    {
+        var provider = BuildServiceProvider(
+            new ImmediateRepositoryMaterializer(),
+            new ProCursorOptions
+            {
+                MaxIndexConcurrency = 1,
+                RefreshPollSeconds = 3600,
+                ChunkTargetLines = 50,
+            });
+
+        var sourceId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        await SeedSourceAndJobAsync(provider, sourceId, branchId, jobId, "source-a", "main", "text_only");
+        await UpdateJobAsync(provider, jobId, job => job.MarkProcessing(DateTimeOffset.UtcNow.AddMinutes(-1)));
+
+        var worker = provider.GetRequiredService<ProCursorIndexWorker>();
+        await worker.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await WaitForJobsAsync(provider, jobId);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
+        var recovered = await db.ProCursorIndexJobs.SingleAsync(current => current.Id == jobId);
+
+        Assert.Equal(2, recovered.AttemptCount);
+        Assert.Null(recovered.LeaseExpiresAt);
+    }
+
+    // The tenant deletion cancels a running job in the database. The worker reads the cancellation when it renews
+    // the lease, stops the job and leaves it cancelled.
+    [Fact]
+    public async Task Worker_StopsARunningJobThatWasCancelled()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = BuildServiceProvider(
+            new CancellableRepositoryMaterializer(started, stopped),
+            new ProCursorOptions
+            {
+                MaxIndexConcurrency = 1,
+                RefreshPollSeconds = 3600,
+                ChunkTargetLines = 50,
+
+                // The worker renews a lease of ten seconds every two seconds.
+                IndexJobLeaseSeconds = 10,
+            });
+
+        var sourceId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        await SeedSourceAndJobAsync(provider, sourceId, branchId, jobId, "source-a", "main", "text_only");
+
+        var worker = provider.GetRequiredService<ProCursorIndexWorker>();
+        await worker.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await UpdateJobAsync(provider, jobId, job => job.MarkCancelled());
+
+            await stopped.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await WaitUntilAsync(
+                () => worker.ActiveJobCount == 0,
+                TimeSpan.FromSeconds(10),
+                "The worker still counts the cancelled job as running.");
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
+        var job = await db.ProCursorIndexJobs.SingleAsync(current => current.Id == jobId);
+
+        Assert.Equal(ProCursorIndexJobStatus.Cancelled, job.Status);
+    }
+
+    // When the database cannot record a renewal, the worker stops the job before its lease expires. Another service
+    // can recover the job once the lease has expired, and two services then do not run the job at the same time. A
+    // renewal that hangs stops the job as well as one that fails.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Worker_StopsARunningJobWhoseLeaseCannotBeRenewed(bool renewalHangs)
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = BuildServiceProvider(
+            new CancellableRepositoryMaterializer(started, stopped),
+            new ProCursorOptions
+            {
+                MaxIndexConcurrency = 1,
+                RefreshPollSeconds = 3600,
+                ChunkTargetLines = 50,
+
+                // The worker renews a lease of ten seconds every two seconds.
+                IndexJobLeaseSeconds = 10,
+            });
+
+        var sourceId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        await SeedSourceAndJobAsync(provider, sourceId, branchId, jobId, "source-a", "main", "text_only");
+
+        var worker = provider.GetRequiredService<ProCursorIndexWorker>();
+        await worker.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var outage = provider.GetRequiredService<JobWriteOutage>();
+            outage.Hangs = renewalHangs;
+            outage.Active = true;
+
+            await stopped.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            await WaitUntilAsync(
+                () => worker.ActiveJobCount == 0,
+                TimeSpan.FromSeconds(10),
+                "The worker still counts the job without a lease as running.");
+        }
+        finally
+        {
+            provider.GetRequiredService<JobWriteOutage>().Active = false;
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        // The job stays claimed by the first attempt, so the recovery of an expired lease can take it.
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
+        var job = await db.ProCursorIndexJobs.SingleAsync(current => current.Id == jobId);
+
+        Assert.Equal(ProCursorIndexJobStatus.Processing, job.Status);
+        Assert.Equal(1, job.AttemptCount);
+        Assert.NotNull(job.LeaseExpiresAt);
+    }
+
     [Fact]
     public async Task Worker_WithIncompleteProCursorGraph_StartsAndCompletesCycleWithoutThrowing()
     {
@@ -182,7 +331,9 @@ public sealed class ProCursorIndexWorkerTests
         services.AddDbContext<ProCursorOperationalDbContext>(builder => builder.UseInMemoryDatabase(operationalDatabaseName));
 
         services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();
-        services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();
+        services.AddScoped<ProCursorIndexJobRepository>();
+        services.AddScoped<IProCursorIndexJobRepository, InMemoryIndexJobRepository>();
+        services.AddSingleton<JobWriteOutage>();
         services.AddScoped<IProCursorIndexSnapshotRepository, ProCursorIndexSnapshotRepository>();
         services.AddScoped<ProCursorSymbolGraphRepository>();
         services.AddScoped<IProCursorSymbolGraphRepository>(sp =>
@@ -288,6 +439,15 @@ public sealed class ProCursorIndexWorkerTests
                 null,
                 "refresh",
                 $"{sourceId:N}:{branchId:N}:{dedupSuffix}"));
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task UpdateJobAsync(ServiceProvider provider, Guid jobId, Action<ProCursorIndexJob> change)
+    {
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
+        var job = await db.ProCursorIndexJobs.SingleAsync(current => current.Id == jobId);
+        change(job);
         await db.SaveChangesAsync();
     }
 
@@ -409,6 +569,109 @@ public sealed class ProCursorIndexWorkerTests
                     requestedCommitSha ?? "commit-success",
                     rootDirectory,
                     []));
+        }
+    }
+
+    private sealed class ImmediateRepositoryMaterializer : IProCursorMaterializer
+    {
+        public ProCursorSourceKind SourceKind => ProCursorSourceKind.Repository;
+
+        public Task<ProCursorMaterializedSource> MaterializeAsync(
+            ProCursorKnowledgeSource source,
+            ProCursorTrackedBranch trackedBranch,
+            string? requestedCommitSha,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult(
+                new ProCursorMaterializedSource(
+                    source.Id,
+                    trackedBranch.Id,
+                    trackedBranch.BranchName,
+                    requestedCommitSha ?? "commit-recovered",
+                    CreateRootDirectory(),
+                    []));
+        }
+    }
+
+    /// <summary>
+    ///     Writes the recovery of an expired lease through the change tracker. The in-memory provider does not translate
+    ///     the conditional update of the repository, and the PostgreSQL repository tests cover its condition.
+    /// </summary>
+    /// <remarks>While <see cref="JobWriteOutage.Active" /> is set, every write of a job fails or hangs.</remarks>
+    private sealed class InMemoryIndexJobRepository(ProCursorIndexJobRepository inner, JobWriteOutage outage)
+        : IProCursorIndexJobRepository
+    {
+        public Task AddAsync(ProCursorIndexJob job, CancellationToken ct = default) => inner.AddAsync(job, ct);
+
+        public Task<ProCursorIndexJob?> GetByIdAsync(Guid jobId, CancellationToken ct = default) => inner.GetByIdAsync(jobId, ct);
+
+        public Task<ProCursorIndexJob?> GetNextPendingAsync(CancellationToken ct = default) => inner.GetNextPendingAsync(ct);
+
+        public Task<ProCursorIndexJob?> GetNextPendingAsync(IReadOnlyCollection<Guid> excludedSourceIds, CancellationToken ct = default) =>
+            inner.GetNextPendingAsync(excludedSourceIds, ct);
+
+        public Task<IReadOnlyList<ProCursorIndexJob>> ListActiveAsync(Guid knowledgeSourceId, CancellationToken ct = default) =>
+            inner.ListActiveAsync(knowledgeSourceId, ct);
+
+        public Task<bool> HasActiveJobAsync(Guid trackedBranchId, string dedupKey, CancellationToken ct = default) =>
+            inner.HasActiveJobAsync(trackedBranchId, dedupKey, ct);
+
+        public Task<IReadOnlyList<ProCursorIndexJob>> ListExpiredLeasesAsync(
+            DateTimeOffset now,
+            IReadOnlyCollection<Guid> excludedJobIds,
+            CancellationToken ct = default) => inner.ListExpiredLeasesAsync(now, excludedJobIds, ct);
+
+        public Task<bool> RecoverExpiredLeaseAsync(ProCursorIndexJob job, DateTimeOffset now, CancellationToken ct = default) =>
+            this.UpdateAsync(job, ct);
+
+        public async Task<bool> UpdateAsync(ProCursorIndexJob job, CancellationToken ct = default)
+        {
+            if (!outage.Active)
+            {
+                return await inner.UpdateAsync(job, ct);
+            }
+
+            if (outage.Hangs)
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+
+            throw new InvalidOperationException("The database cannot be reached.");
+        }
+    }
+
+    /// <summary>Makes the writes of jobs fail or hang, as if the database could not be reached.</summary>
+    private sealed class JobWriteOutage
+    {
+        public bool Active { get; set; }
+
+        public bool Hangs { get; set; }
+    }
+
+    /// <summary>Waits until the execution is cancelled, and reports the start and the cancellation.</summary>
+    private sealed class CancellableRepositoryMaterializer(TaskCompletionSource started, TaskCompletionSource stopped)
+        : IProCursorMaterializer
+    {
+        public ProCursorSourceKind SourceKind => ProCursorSourceKind.Repository;
+
+        public async Task<ProCursorMaterializedSource> MaterializeAsync(
+            ProCursorKnowledgeSource source,
+            ProCursorTrackedBranch trackedBranch,
+            string? requestedCommitSha,
+            CancellationToken ct = default)
+        {
+            started.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                stopped.TrySetResult();
+                throw;
+            }
+
+            throw new InvalidOperationException("The delay ends only when the execution is cancelled.");
         }
     }
 

@@ -100,14 +100,6 @@ public interface IClientAdminService
         CancellationToken ct = default,
         FindingBadgeStyle? findingBadgeStyle = null);
 
-    /// <summary>
-    ///     Deletes a client and all its crawl configurations.
-    ///     Returns <c>false</c> if the client was not found.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<bool> DeleteAsync(Guid clientId, CancellationToken ct = default);
-
     /// <summary>Returns <c>true</c> when a client with <paramref name="clientId" /> exists.</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>

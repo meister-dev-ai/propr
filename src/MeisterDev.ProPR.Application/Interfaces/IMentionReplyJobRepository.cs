@@ -30,9 +30,20 @@ public interface IMentionReplyJobRepository
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<bool> TryAddAsync(MentionReplyJob job, CancellationToken ct = default);
 
-    /// <summary>Returns all pending jobs, oldest first.</summary>
+    /// <summary>Returns all pending jobs of active clients, oldest first.</summary>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<IReadOnlyList<MentionReplyJob>> GetPendingAsync(CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the oldest pending jobs of active clients that were created before <paramref name="createdBefore" />.
+    /// </summary>
+    /// <param name="createdBefore">The latest creation time of a returned job.</param>
+    /// <param name="limit">The most jobs returned.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    Task<IReadOnlyList<MentionReplyJob>> GetPendingAsync(
+        DateTimeOffset createdBefore,
+        int limit,
+        CancellationToken ct = default);
 
     /// <summary>
     ///     Returns <c>true</c> when this comment has already been taken by some client.
@@ -82,7 +93,9 @@ public interface IMentionReplyJobRepository
 
     /// <summary>
     ///     Atomic compare-and-swap on <see cref="MentionJobStatus" />.
-    ///     Returns <c>false</c> if the current status does not equal <paramref name="from" />.
+    ///     Returns <c>false</c> if the current status does not equal <paramref name="from" />. Of two processes that
+    ///     try the same transition, one changes the job. A job of a client that is inactive, or whose tenant is
+    ///     inactive, does not move to <see cref="MentionJobStatus.Processing" />.
     /// </summary>
     /// <param name="jobId">The job identifier.</param>
     /// <param name="from">The expected current status.</param>
@@ -172,10 +185,12 @@ public interface IMentionReplyJobRepository
         CancellationToken ct = default);
 
     /// <summary>
-    ///     Transitions all <see cref="MentionJobStatus.Processing" /> jobs back to
-    ///     <see cref="MentionJobStatus.Pending" />. Called at startup to recover jobs
-    ///     that were in-flight when the process last terminated.
+    ///     Returns the jobs that have been in <see cref="MentionJobStatus.Processing" /> since before
+    ///     <paramref name="startedBefore" /> to <see cref="MentionJobStatus.Pending" />. The process that claimed such a
+    ///     job stopped while it answered. A job that another running process answers keeps its state.
     /// </summary>
+    /// <param name="startedBefore">The latest processing start of a job that counts as stalled.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
-    Task ResetStuckProcessingAsync(CancellationToken ct = default);
+    /// <returns>The number of jobs that were returned to pending.</returns>
+    Task<int> ReclaimStalledAsync(DateTimeOffset startedBefore, CancellationToken ct = default);
 }

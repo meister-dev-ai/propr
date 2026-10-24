@@ -54,10 +54,11 @@ public sealed class MentionConfigurationRepository(MeisterProPRDbContext dbConte
     /// <inheritdoc />
     public async Task<IReadOnlyList<MentionConfigurationDto>> GetAllActiveAsync(CancellationToken ct = default)
     {
+        var inactiveClients = dbContext.InactiveClientIds();
         var records = await dbContext.MentionConfigurations
             .AsNoTracking()
             .Include(c => c.RepoFilters)
-            .Where(c => c.IsActive)
+            .Where(c => c.IsActive && !inactiveClients.Contains(c.ClientId))
             .OrderBy(c => c.CreatedAt)
             .ToListAsync(ct);
 

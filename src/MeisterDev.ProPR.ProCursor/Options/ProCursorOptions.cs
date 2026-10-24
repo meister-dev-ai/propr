@@ -39,6 +39,14 @@ public sealed class ProCursorOptions
     public int RefreshPollSeconds { get; set; } = 30;
 
     /// <summary>
+    ///     Duration, in seconds, of the lease that the index worker holds on a running index job. The worker renews the
+    ///     lease five times per duration. When the lease of a job has expired, a worker returns the job to the queue or
+    ///     fails it. Bound to <c>PROCURSOR_INDEX_JOB_LEASE_SECONDS</c>.
+    /// </summary>
+    [Range(10, 3600, ErrorMessage = "IndexJobLeaseSeconds must be between 10 and 3600.")]
+    public int IndexJobLeaseSeconds { get; set; } = 300;
+
+    /// <summary>
     ///     Retention window, in minutes, for stale temp workspaces before cleanup. Bound to
     ///     <c>PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES</c>.
     /// </summary>

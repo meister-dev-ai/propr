@@ -34,9 +34,13 @@ internal sealed class ProCursorIndexJobEntityTypeConfiguration : IEntityTypeConf
             .HasMaxLength(64)
             .IsRequired();
 
+        // The status and the attempt count identify one claim of the job. As concurrency tokens they make every
+        // update of a tracked job conditional on that claim, so a service cannot claim a job that another service
+        // claimed after it was read, and cannot record the end of a job that was cancelled or recovered meanwhile.
         builder.Property(job => job.Status)
             .HasColumnName("status")
             .HasConversion<short>()
+            .IsConcurrencyToken()
             .IsRequired();
 
         builder.Property(job => job.DedupKey)
@@ -47,6 +51,7 @@ internal sealed class ProCursorIndexJobEntityTypeConfiguration : IEntityTypeConf
         builder.Property(job => job.AttemptCount)
             .HasColumnName("attempt_count")
             .HasDefaultValue(0)
+            .IsConcurrencyToken()
             .IsRequired();
 
         builder.Property(job => job.QueuedAt)
@@ -64,6 +69,10 @@ internal sealed class ProCursorIndexJobEntityTypeConfiguration : IEntityTypeConf
         builder.Property(job => job.FailureReason)
             .HasColumnName("failure_reason")
             .HasColumnType("text")
+            .IsRequired(false);
+
+        builder.Property(job => job.LeaseExpiresAt)
+            .HasColumnName("lease_expires_at")
             .IsRequired(false);
 
         builder.HasIndex(job => new { job.TrackedBranchId, job.DedupKey })
