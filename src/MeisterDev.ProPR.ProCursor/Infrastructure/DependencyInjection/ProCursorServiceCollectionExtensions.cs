@@ -103,6 +103,7 @@ public static class ProCursorModuleServiceCollectionExtensions
 
             services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();
             services.AddScoped<IProCursorIndexSnapshotRepository, ProCursorIndexSnapshotRepository>();
+            services.AddScoped<IProCursorTenantData, ProCursorTenantData>();
             services.AddScoped<ProCursorSymbolGraphRepository>();
             services.AddScoped<IProCursorSymbolGraphRepository>(sp =>
                 sp.GetRequiredService<ProCursorSymbolGraphRepository>());

@@ -24,6 +24,8 @@ internal sealed class TenantEntityTypeConfiguration : IEntityTypeConfiguration<T
             .HasColumnName("local_login_enabled")
             .HasDefaultValue(true)
             .IsRequired();
+        builder.Property(t => t.ProtocolRetentionDays)
+            .HasColumnName("protocol_retention_days");
         builder.Property(t => t.AllowedAiProviderKinds)
             .HasColumnName("allowed_ai_provider_kinds")
             .HasColumnType("jsonb")

@@ -17695,6 +17695,479 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns one tenant when the caller belongs to it or is a platform administrator. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantDto"];
+                        "application/json": components["schemas"]["TenantDto"];
+                        "text/json": components["schemas"]["TenantDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Stops the work of the tenant and deletes the tenant once that work has ended. Each request deactivates the
+         *     tenant, its clients and their webhook, crawl, mention and ProCursor configurations and ends their unfinished
+         *     jobs. While an execution may still be running, or for a minute after a request stopped any work, the request
+         *     answers 409 with the seconds to wait. A request after that deletes the tenant, its clients and every record
+         *     that belongs to them, including review jobs, protocols, retained discussions, usage reports and the ProCursor
+         *     indexes. Accounts that belong to this tenant alone are deleted with it.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The tenant was deleted; the answer lists the rows deleted per table. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantDeletionResult"];
+                        "application/json": components["schemas"]["TenantDeletionResult"];
+                        "text/json": components["schemas"]["TenantDeletionResult"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /**
+                 * @description The work of the tenant was stopped and the deletion waits for it; the Retry-After header gives the seconds to
+                 *     wait. A problem answer means that the tenant is the system tenant.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantDeletionWaitResponse"];
+                        "application/json": components["schemas"]["TenantDeletionWaitResponse"];
+                        "text/json": components["schemas"]["TenantDeletionWaitResponse"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Applies partial tenant policy updates. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateTenantRequest"];
+                    "text/json": components["schemas"]["UpdateTenantRequest"];
+                    "application/*+json": components["schemas"]["UpdateTenantRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantDto"];
+                        "application/json": components["schemas"]["TenantDto"];
+                        "text/json": components["schemas"]["TenantDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exports the tenant as one JSON document in the format `propr.tenant-export`, version 1: the tenant, its
+         *     clients with their SCM connections and scopes without secrets, thread memory, and review jobs with their
+         *     file results. Protocols and their events are included on request.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    includeProtocols?: boolean;
+                };
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The export. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/protocol-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets how long the protocol events of the tenant are kept. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["TenantProtocolRetentionRequest"];
+                    "text/json": components["schemas"]["TenantProtocolRetentionRequest"];
+                    "application/*+json": components["schemas"]["TenantProtocolRetentionRequest"];
+                };
+            };
+            responses: {
+                /** @description The retention was saved. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The retention is outside 1 to 3650 days. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/identity-erasures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erases one developer's identity from the review records of the tenant on the instruction of the customer,
+         *     who is the controller of that data. The tenant audit records the erasure.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AuthorErasureRequest"];
+                    "text/json": components["schemas"]["AuthorErasureRequest"];
+                    "application/*+json": components["schemas"]["AuthorErasureRequest"];
+                };
+            };
+            responses: {
+                /** @description The identity was erased; the answer counts the changed records. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IdentityErasureResult"];
+                        "application/json": components["schemas"]["IdentityErasureResult"];
+                        "text/json": components["schemas"]["IdentityErasureResult"];
+                    };
+                };
+                /** @description The instruction is missing or too long. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/{tenantId}/logical-models": {
         parameters: {
             query?: never;
@@ -19312,153 +19785,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/admin/tenants/{tenantId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Returns one tenant when the caller belongs to it or is a platform administrator. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    tenantId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["TenantDto"];
-                        "application/json": components["schemas"]["TenantDto"];
-                        "text/json": components["schemas"]["TenantDto"];
-                    };
-                };
-                /** @description Unauthorized */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Forbidden */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Applies partial tenant policy updates. */
-        patch: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    tenantId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["UpdateTenantRequest"];
-                    "text/json": components["schemas"]["UpdateTenantRequest"];
-                    "application/*+json": components["schemas"]["UpdateTenantRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["TenantDto"];
-                        "application/json": components["schemas"]["TenantDto"];
-                        "text/json": components["schemas"]["TenantDto"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Unauthorized */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Forbidden */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
         trace?: never;
     };
     "/admin/tenants/{tenantId}/sso-providers": {
@@ -21208,6 +21534,15 @@ export interface components {
             hasLocalPassword?: boolean;
             edition?: components["schemas"]["InstallationEdition"];
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+        };
+        /** @description An instruction to erase one developer's identity from the review records of a tenant. */
+        AuthorErasureRequest: {
+            /** @description The provider's identifier of the developer's account. */
+            externalUserId?: string | null;
+            /** @description The login of the account, which comments may name instead of the identifier. */
+            login?: string | null;
+            /** @description The reference of the controller's instruction, which the tenant audit records. */
+            instruction?: string | null;
         };
         /**
          * @description Where the current calendar month's counted authors stand against the number the license states for them.
@@ -23297,6 +23632,29 @@ export interface components {
             availability?: string | null;
             /** @description Human-readable explanation when the diff is not available. */
             availabilityMessage?: string | null;
+        };
+        /** @description The records an identity erasure changed. */
+        IdentityErasureResult: {
+            /**
+             * Format: int32
+             * @description Review jobs whose pull request author was erased.
+             */
+            reviewJobs?: number;
+            /**
+             * Format: int32
+             * @description Mention replies whose comment author was erased.
+             */
+            mentionReplies?: number;
+            /**
+             * Format: int32
+             * @description Retained thread comments whose author was erased.
+             */
+            retainedComments?: number;
+            /**
+             * Format: int32
+             * @description Protocol events of the affected executions, which were deleted because their prompts can name the author.
+             */
+            protocolEvents?: number;
         };
         /** @description Resolved ADO identity. */
         IdentityResponse: {
@@ -27612,6 +27970,31 @@ export interface components {
             displayName?: string | null;
             isActive?: boolean;
         };
+        /** @description The rows a tenant deletion removed, per table. */
+        TenantDeletionResult: {
+            /** Format: uuid */
+            tenantId?: string;
+            /** @description The rows each statement removed, by table. Rows that foreign keys cascaded are not listed. */
+            deletedRows?: {
+                [key: string]: number;
+            } | null;
+        };
+        /** @description The answer while a tenant deletion waits for the work of the tenant to end. */
+        TenantDeletionWaitResponse: {
+            /** @description Always `tenant_work_running`. */
+            error?: string | null;
+            /** @description What the caller does next. */
+            message?: string | null;
+            /**
+             * Format: int32
+             * @description The seconds after which the caller requests the deletion again, as in the Retry-After header.
+             */
+            retryAfterSeconds?: number;
+            /** @description The executions that may still be running, by kind. */
+            running?: {
+                [key: string]: number;
+            } | null;
+        };
         /** @description Tenant boundary data returned by administration and tenant-auth flows. */
         TenantDto: {
             /**
@@ -27724,6 +28107,14 @@ export interface components {
             assignedAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        /** @description The protocol retention of a tenant. */
+        TenantProtocolRetentionRequest: {
+            /**
+             * Format: int32
+             * @description How many days protocol events are kept, from 1 to 3650, or null to keep them.
+             */
+            days?: number | null;
         };
         /**
          * @description A tenant's per-file byte limits for reviews. Both values are optional; a null value leaves the
@@ -28204,6 +28595,19 @@ export interface components {
              * @description When this information arrived.
              */
             receivedAt?: string | null;
+        };
+        ValidationProblemDetails: {
+            type?: string | null;
+            title?: string | null;
+            /** Format: int32 */
+            status?: number | null;
+            detail?: string | null;
+            instance?: string | null;
+            errors?: {
+                [key: string]: string[];
+            } | null;
+        } & {
+            [key: string]: unknown;
         };
         /** @description Response payload for one webhook configuration. */
         WebhookConfigurationResponse: {

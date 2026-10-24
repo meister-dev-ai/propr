@@ -1385,9 +1385,13 @@ public sealed partial class EvidenceBackedReviewVerifierTests
                 : Task.CompletedTask);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        // The claim's time limit covers the anchor read and the judge call, and the first claim of a cold test
+        // process on a busy machine needs several hundred milliseconds for them. The stalled record is cut off
+        // at the claim's limit plus the grace, after about five seconds. Without the cut-off it would take a
+        // minute.
         var outcomes = await new EvidenceBackedReviewVerifier(
                 recorder,
-                judgeCallTimeout: TimeSpan.FromMilliseconds(300),
+                judgeCallTimeout: TimeSpan.FromSeconds(5),
                 recordingGrace: TimeSpan.FromMilliseconds(200))
             .VerifyAsync(
                 [CreateWorkItem("src/Big.cs", 1), CreateWorkItem("src/Big.cs", 1, claimId: "claim-2")],

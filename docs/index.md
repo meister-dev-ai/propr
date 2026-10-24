@@ -97,6 +97,7 @@ Questions, not symptoms. If something is broken, start at
 | [operate/upgrades-and-backups.md](operate/upgrades-and-backups.md) | You are rolling forward to a new release, or deciding what a restorable backup contains |
 | [operate/observability.md](operate/observability.md) | You are wiring probes, metrics, traces and logs, or reading what a health check means |
 | [operate/troubleshooting.md](operate/troubleshooting.md) | You have a symptom and want the page that diagnoses it |
+| [operate/tenant-data.md](operate/tenant-data.md) | You delete or export a tenant, limit how long its protocol events are kept, or erase a developer's identity |
 
 ### Guides
 

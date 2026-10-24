@@ -572,13 +572,16 @@ public sealed class FileByFileContextPrefetchStageTests
         Assert.True(result.WindowCount > 0);
     }
 
+    // The tests that use this analyzer and the Tree-sitter analyzer below expect the parse to succeed. Both get the
+    // highest parse time limit the option accepts, because a cold parse on a machine busy with other test suites
+    // can take longer than a second, and a parse that runs out of time falls back and fails the test.
     internal static RoslynSyntaxStructuralAnalyzer CreateRoslynAnalyzer()
     {
         var options = Microsoft.Extensions.Options.Options.Create(
             new AiReviewOptions
             {
                 MaxStructuralParseBytes = 524_288,
-                StructuralParseTimeoutMs = 1_000,
+                StructuralParseTimeoutMs = 5_000,
             });
         return new RoslynSyntaxStructuralAnalyzer(options, NullLogger<RoslynSyntaxStructuralAnalyzer>.Instance);
     }
@@ -594,7 +597,7 @@ public sealed class FileByFileContextPrefetchStageTests
             return null;
         }
 
-        var pool = new ParserPool(3, 524_288, 1_000);
+        var pool = new ParserPool(3, 524_288, 5_000);
         return new TreeSitterAnalyzer(
             probe,
             pool,

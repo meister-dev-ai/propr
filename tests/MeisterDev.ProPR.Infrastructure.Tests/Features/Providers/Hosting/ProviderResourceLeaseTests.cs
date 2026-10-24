@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Threading.Channels;
 using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;
 using MeisterDev.ProPR.TestSupport;
@@ -196,7 +197,7 @@ public sealed class ProviderResourceLeaseTests(PostgresContainerFixture fixture)
     {
         var resource = NewResource();
         var timeout = TimeSpan.FromMilliseconds(100);
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var clock = new TimerTrackingFakeTimeProvider();
 
         var holder = await this._harness.SeedConnectionAsync("Holds it");
         var waiter = await this._harness.SeedConnectionAsync("Waits for it");
@@ -206,8 +207,10 @@ public sealed class ProviderResourceLeaseTests(PostgresContainerFixture fixture)
 
         var waiting = Task.Run(() => this._harness.Leases(waiter, clock).AcquireAsync(resource, timeout));
 
-        // The first attempt has to reach the database and fail before its wait exists to be advanced past.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        // The first attempt reaches the database and fails, and the waiter then waits for what is left of its
+        // timeout. The clock is advanced once that wait exists, because a wait created after the advance would
+        // never end. A wait of a whole retry interval creates no timer of the timeout, and the test fails.
+        await clock.WaitForTimerAsync(timeout, TestTimeout);
         clock.Advance(timeout);
 
         var outcome = await waiting.WaitAsync(TestTimeout);
@@ -226,7 +229,7 @@ public sealed class ProviderResourceLeaseTests(PostgresContainerFixture fixture)
     {
         var binding = await this._harness.SeedConnectionAsync("Waits on a held lock");
         var resource = NewResource();
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var clock = new TimerTrackingFakeTimeProvider();
 
         // Holds the family's advisory lock for the length of this transaction, which an attempt takes
         // before it reads anything. Nothing else can make a real database stop answering on demand.
@@ -236,8 +239,10 @@ public sealed class ProviderResourceLeaseTests(PostgresContainerFixture fixture)
 
         var waiting = Task.Run(() => this._harness.Leases(binding, clock).AcquireAsync(resource, TimeSpan.Zero));
 
-        // The attempt has to reach the lock and block on it before its bound exists to be advanced past.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        // The clock is advanced past the attempt's bound once the bound exists and the attempt blocks on the lock.
+        // A bound created after the advance would never end the attempt.
+        await clock.WaitForTimerAsync(ProviderHostLimits.LeaseAttemptTimeout, TestTimeout);
+        await this.WaitForBlockedAdvisoryLockAsync();
         clock.Advance(ProviderHostLimits.LeaseAttemptTimeout + TimeSpan.FromSeconds(1));
 
         var failure = await Assert.ThrowsAsync<ProviderHostTimeoutException>(() => waiting.WaitAsync(TestTimeout));
@@ -264,5 +269,43 @@ public sealed class ProviderResourceLeaseTests(PostgresContainerFixture fixture)
     private static string NewResource()
     {
         return $"listener-port-{Guid.NewGuid():N}";
+    }
+
+    /// <summary>Waits until a session of the test database waits for an advisory lock.</summary>
+    private async Task WaitForBlockedAdvisoryLockAsync()
+    {
+        await using var db = this._harness.CreateContext();
+        using var bound = new CancellationTokenSource(TestTimeout);
+        while (await db.Database.SqlQuery<int>(
+                   $"""
+                    SELECT count(*)::int AS "Value"
+                    FROM pg_locks l JOIN pg_database d ON d.oid = l.database
+                    WHERE d.datname = current_database() AND l.locktype = 'advisory' AND NOT l.granted
+                    """).SingleAsync(bound.Token) == 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), bound.Token);
+        }
+    }
+
+    /// <summary>A fake clock that reports each timer it creates, so a test advances it only after a wait exists.</summary>
+    private sealed class TimerTrackingFakeTimeProvider() : FakeTimeProvider(DateTimeOffset.UtcNow)
+    {
+        private readonly Channel<TimeSpan> _registeredTimers = Channel.CreateUnbounded<TimeSpan>();
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = base.CreateTimer(callback, state, dueTime, period);
+            this._registeredTimers.Writer.TryWrite(dueTime);
+            return timer;
+        }
+
+        /// <summary>Waits until a timer with the given due time exists.</summary>
+        public async Task WaitForTimerAsync(TimeSpan dueTime, TimeSpan timeout)
+        {
+            using var bound = new CancellationTokenSource(timeout);
+            while (await this._registeredTimers.Reader.ReadAsync(bound.Token) != dueTime)
+            {
+            }
+        }
     }
 }

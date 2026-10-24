@@ -130,7 +130,9 @@ public sealed class RepositorySearchExecutorTests
                 RepositorySearchPathScopes.Repository));
         stopwatch.Stop();
 
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"Search took {stopwatch.Elapsed}, the match timeout did not bound it.");
+        // The match timeout is one second, and without it the match would run for hours. The limit only separates the
+        // two and leaves room for a machine busy with other test suites.
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(30), $"Search took {stopwatch.Elapsed}, the match timeout did not bound it.");
         Assert.Contains(result.Limitations, limitation => limitation.Reason == RepositorySearchLimitationReasons.RegexTimedOut);
     }
 

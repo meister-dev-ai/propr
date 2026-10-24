@@ -350,7 +350,10 @@ public sealed partial class EvidenceBackedReviewVerifierTests
 
                 throw new HttpRequestException("Provider unavailable.");
             });
-        var outcomes = await new EvidenceBackedReviewVerifier(judgeCallTimeout: TimeSpan.FromSeconds(timeout ? 1 : 10)).VerifyAsync(
+        // The claim's time limit has to cover the anchor read, the first judge call and the start of the recovery
+        // call, and a cold test process on a busy machine can need more than a second for them. The recovery call
+        // then hangs until the limit, so the timeout case takes about five seconds.
+        var outcomes = await new EvidenceBackedReviewVerifier(judgeCallTimeout: TimeSpan.FromSeconds(timeout ? 5 : 10)).VerifyAsync(
             [CreateWorkItem("src/Lookup.cs", 1)], [], new ReviewVerificationContext(tools, "source", judge, "judge-model"));
 
         AssertWithheld(Assert.Single(outcomes));

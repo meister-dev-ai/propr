@@ -50,8 +50,10 @@ A purge worker sweeps on the interval set by `REVIEW_ARCHIVE_PURGE_INTERVAL_SECO
 evaluated per pull request against its last activity - open pull requests are not exempt. If both
 toggles are off, that connection's archived data is deleted wholesale on the next sweep.
 
-The sweep touches archived raw content only. Review jobs, file results, findings, protocol traces and
-thread-memory records are never deleted.
+The sweep touches archived raw content only. Review jobs, file results, findings and thread-memory records are
+kept for the life of the tenant. A tenant can limit how long its protocol events are kept, and a platform
+administrator can delete or export a tenant and erase a developer's identity; see
+[tenant data](../operate/tenant-data.md).
 
 Model reasoning is captured into the protocol by default and can contain verbatim source excerpts. Set
 `AI_CAPTURE_REASONING_IN_PROTOCOL=false` where policy forbids storing that. Assistant text and tool calls

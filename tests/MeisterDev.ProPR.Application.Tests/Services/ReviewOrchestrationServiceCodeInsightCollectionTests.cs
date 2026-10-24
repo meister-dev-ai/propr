@@ -78,8 +78,10 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
         var work = harness.RunAsync(workToken.Token);
         try
         {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+            // Both limits only catch a hang. A run takes milliseconds, but on a machine busy with other test
+            // suites the continuations of the review and of the heartbeat can wait several seconds for a thread.
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
             while (heartbeat.StopReason != ReviewJobStopReason.Completed && DateTimeOffset.UtcNow < deadline)
             {
                 time.Advance(TimeSpan.FromSeconds(30));

@@ -157,11 +157,13 @@ public class VssConnectionFactoryTests
         var requestedPaths = new List<string>();
 
         // Two answers are prepared: the redirect, and a 200 at the address it points to. A transport that
-        // followed the hop would reach the second one and the request count would show it.
+        // followed the hop would reach the second one and the request count would show it. The server ends only
+        // through the cancellation of its accept, read or write. A loop condition on the token would end it
+        // without an exception when the cancellation arrives between two requests.
         var serving = Task.Run(
             async () =>
             {
-                while (!bound.Token.IsCancellationRequested)
+                while (true)
                 {
                     using var client = await listener.AcceptTcpClientAsync(bound.Token);
                     await using var stream = client.GetStream();

@@ -469,6 +469,13 @@ public static class ProPRHost
                 builder.Services.AddHostedService(sp => sp.GetRequiredService<ThreadMemoryKeywordWorker>());
             }
 
+            // ProtocolRetentionWorker deletes protocol events older than the retention a tenant sets. Without a
+            // retention a tenant keeps its events, so the worker changes nothing until an administrator sets one.
+            if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+            {
+                builder.Services.AddHostedService<ProtocolRetentionWorker>();
+            }
+
             builder.Services.AddSingleton<CodeInsightCatchUpWorker>();
             if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
             {

@@ -6834,6 +6834,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("monthly_budget_soft_cap_usd");
 
+                    b.Property<int?>("ProtocolRetentionDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("protocol_retention_days");
+
                     b.Property<string>("ReasoningCapturePolicy")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
