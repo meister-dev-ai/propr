@@ -52,8 +52,59 @@ public sealed class ReviewFindingConfidenceTests
         var resolved = ReviewFindingConfidence.Resolve(Risk(), [outcome]);
 
         Assert.Equal(FindingConfidence.Medium, resolved!.Confidence);
-        Assert.StartsWith("Unresolved assumption: The external caller permits input zero.", resolved.ConfidenceReason);
-        Assert.Contains("Counterevidence:", resolved.ConfidenceReason);
+        Assert.EndsWith("Unresolved assumption: The external caller permits input zero.", resolved.ConfidenceReason);
+    }
+
+    [Fact]
+    public void Resolve_StatesTheWitnessAndTheConsequenceBeforeTheCounterevidenceAndTheAssumptions()
+    {
+        var outcome = Outcome(FindingConfidence.High);
+        outcome = outcome with
+        {
+            ConfidenceEvidence = outcome.ConfidenceEvidence! with { Assumptions = ["The external caller permits input zero."] }
+        };
+
+        var resolved = ReviewFindingConfidence.Resolve(Risk(), [outcome]);
+
+        Assert.Equal(
+            "Witness: Input zero reaches Write. Consequence: Write deletes the existing entry. "
+            + "Counterevidence: No guard excludes input zero. Unresolved assumption: The external caller permits input zero.",
+            resolved!.ConfidenceReason);
+    }
+
+    // Eight assumptions of this length do not fit into the retained reason together with the evidence. The reason keeps
+    // the evidence and the assumptions that fit, and it ends after a complete sentence.
+    [Fact]
+    public void Resolve_ShortensALongReasonAfterTheLastSentenceThatFits()
+    {
+        var outcome = Outcome(FindingConfidence.High);
+        var assumptions = Enumerable.Range(1, VerificationConfidenceEvidence.MaxAssumptions)
+            .Select(number => $"Assumption {number} leaves open which caller reaches the handler, because the judge did not read that caller.")
+            .ToArray();
+        outcome = outcome with { ConfidenceEvidence = outcome.ConfidenceEvidence! with { Assumptions = assumptions } };
+
+        var reason = ReviewFindingConfidence.Resolve(Risk(), [outcome])!.ConfidenceReason!;
+
+        Assert.True(reason.Length <= FindingRiskAssessment.MaxReasonLength);
+        Assert.StartsWith("Witness: Input zero reaches Write. Consequence: Write deletes the existing entry.", reason);
+        Assert.EndsWith("because the judge did not read that caller.", reason);
+        Assert.Contains("Assumption 7 ", reason);
+        Assert.DoesNotContain("Assumption 8 ", reason);
+    }
+
+    // A witness without a sentence end that fills the retained length ends after its last complete word.
+    [Fact]
+    public void Resolve_ShortensALongReasonWithoutASentenceEndAfterItsLastWord()
+    {
+        var outcome = Outcome(FindingConfidence.High);
+        var witness = string.Join(' ', Enumerable.Repeat("unguarded", 102));
+        outcome = outcome with { ConfidenceEvidence = outcome.ConfidenceEvidence! with { Witness = witness } };
+
+        var reason = ReviewFindingConfidence.Resolve(Risk(), [outcome])!.ConfidenceReason!;
+
+        Assert.True(reason.Length <= FindingRiskAssessment.MaxReasonLength);
+        Assert.StartsWith("Witness: unguarded unguarded", reason);
+        Assert.EndsWith(" unguarded…", reason);
     }
 
     [Fact]
@@ -90,6 +141,25 @@ public sealed class ReviewFindingConfidenceTests
         Assert.Equal(unassessed ? FindingConfidence.Unknown : FindingConfidence.Low, combined!.Confidence);
         Assert.StartsWith(unassessed ? "One or more source findings have unassessed confidence." : weaker!.ConfidenceReason, combined.ConfidenceReason);
         Assert.True(combined.ConfidenceReason!.Length <= FindingRiskAssessment.MaxReasonLength);
+    }
+
+    [Fact]
+    public void Consolidate_ShortensCombinedRationalesAfterTheLastSentenceThatFits()
+    {
+        var sentences = string.Concat(Enumerable.Repeat("The external caller's inputs are unverified. ", 13)).TrimEnd();
+        var weaker = new FindingRiskAssessment(
+            FindingImpact.Low, FindingLikelihood.Possible, "Limited effect.", "Input zero.", "review_model",
+            FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.Low, sentences, ReviewFindingConfidence.VerificationSource);
+        var stronger = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Possible, "Data loss.", "Input zero.", "review_model",
+            FindingRiskAssessment.CurrentRubricVersion, FindingConfidence.High, sentences.Replace("external", "internal", StringComparison.Ordinal),
+            ReviewFindingConfidence.VerificationSource);
+
+        var combined = ReviewFindingConfidence.Consolidate(stronger, [stronger, weaker])!;
+
+        Assert.True(combined.ConfidenceReason!.Length <= FindingRiskAssessment.MaxReasonLength);
+        Assert.StartsWith(sentences, combined.ConfidenceReason);
+        Assert.EndsWith("The internal caller's inputs are unverified.", combined.ConfidenceReason);
     }
 
     [Fact]
@@ -197,7 +267,7 @@ public sealed class ReviewFindingConfidenceTests
 
         Assert.Equal(expected, resolved!.Confidence);
         Assert.Equal(ReviewFindingConfidence.VerificationSource, resolved.ConfidenceSource);
-        Assert.Equal(limited, resolved.ConfidenceReason!.StartsWith($"The finding was rated {proposed} before verification", StringComparison.Ordinal));
+        Assert.Equal(limited, resolved.ConfidenceReason!.Contains($"The finding was rated {proposed} before verification", StringComparison.Ordinal));
     }
 
     [Fact]

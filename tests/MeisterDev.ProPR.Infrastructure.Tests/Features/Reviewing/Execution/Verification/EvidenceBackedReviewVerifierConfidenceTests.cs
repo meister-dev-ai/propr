@@ -266,7 +266,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
         var resolved = ReviewFindingConfidence.Resolve(risk, [outcome]);
         Assert.Equal(FindingConfidence.High, resolved!.Confidence);
-        Assert.StartsWith("Certainty is unestablished;", resolved.ConfidenceReason);
+        Assert.Contains("Certainty is unestablished;", resolved.ConfidenceReason);
     }
 
     // Judge models sometimes end an answer whose last source quote ends in a brace with a stray quotation mark or brace.

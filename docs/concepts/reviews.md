@@ -89,9 +89,11 @@ Missing or malformed confidence evidence leaves a supported finding Unassessed a
 and classification. A check that fails, times out or answers unusably bounds confidence without removing an
 independently supported finding. A check that answers with another verdict than a confirmation gives the finding the
 disposition that verdict has for the verifier, so a claim the check finds not actionable or intended moves to the
-summary. Source refutation removes the false claim. Confidence reasons include unresolved assumptions and
-counterevidence; a combined finding cannot inherit stronger confidence from a single selected source. Historical
-carried-forward assessments retain their recorded values.
+summary. Source refutation removes the false claim. A confidence reason states the witness and the consequence first,
+then the counterevidence and the unresolved assumptions. A reason longer than 1,024 characters ends after its last
+complete sentence within that length. When no sentence ends after the first 512 characters, the reason ends after its
+last complete word, followed by an ellipsis. A combined finding cannot inherit stronger confidence from a single
+selected source. Historical carried-forward assessments retain their recorded values.
 
 Synthesis requests reconsideration with a retained finding ID, a specific doubt and counterevidence. ProPR verifies each
 challenged finding once, retaining the original producing pass's repository access and structured patch. A finding

@@ -56,15 +56,15 @@ public static class ReviewFindingConfidence
                 uncertainty = uncertainty.Prepend($"The finding was rated {proposed} before verification, and verification does not raise that level.");
             }
 
-            reason = string.Join(
-                " ", uncertainty.Concat(
+            // The witness and the consequence state why the finding holds, so they open the reason. When the reason is
+            // longer than the retained length, the assumptions at its end are left out first.
+            reason = WithinReasonLength(
+                string.Join(
+                    " ",
                     outcomes.Select(outcome =>
-                        "Counterevidence: " + outcome.ConfidenceEvidence!.Counterevidence + " Witness: " + outcome.ConfidenceEvidence.Witness
-                        + " Consequence: " + outcome.ConfidenceEvidence.Consequence)));
-            if (reason.Length > FindingRiskAssessment.MaxReasonLength)
-            {
-                reason = reason[..FindingRiskAssessment.MaxReasonLength];
-            }
+                            "Witness: " + outcome.ConfidenceEvidence!.Witness + " Consequence: " + outcome.ConfidenceEvidence.Consequence
+                            + " Counterevidence: " + outcome.ConfidenceEvidence.Counterevidence)
+                        .Concat(uncertainty)));
         }
         else if (outcomes.FirstOrDefault(outcome => outcome.ContradictionCheckStatus is not null) is { } checkedOutcome)
         {
@@ -107,11 +107,8 @@ public static class ReviewFindingConfidence
         var values = sources.OrderBy(value => value?.Confidence ?? FindingConfidence.Unknown).ToArray();
         var level = values.Select(value => value?.Confidence ?? FindingConfidence.Unknown).DefaultIfEmpty().Min();
         var source = values.All(value => value?.ConfidenceSource == VerificationSource) ? VerificationSource : "consolidated_assessment";
-        var reasons = string.Join(" ", values.Select(value => value?.ConfidenceReason ?? "One or more source findings have unassessed confidence.").Distinct());
-        if (reasons.Length > FindingRiskAssessment.MaxReasonLength)
-        {
-            reasons = reasons[..FindingRiskAssessment.MaxReasonLength];
-        }
+        var reasons = WithinReasonLength(
+            string.Join(" ", values.Select(value => value?.ConfidenceReason ?? "One or more source findings have unassessed confidence.").Distinct()));
 
         return new FindingRiskAssessment(
             risk.Impact, risk.Likelihood, risk.ImpactReason, risk.LikelihoodReason, risk.Source,
@@ -126,6 +123,44 @@ public static class ReviewFindingConfidence
         risk.ConfidenceSource != VerificationSource && risk.Confidence is > FindingConfidence.Unknown and <= FindingConfidence.Certain
             ? risk.Confidence
             : null;
+
+    /// <summary>
+    ///     Keeps a reason within <see cref="FindingRiskAssessment.MaxReasonLength" />. A longer reason ends after its last
+    ///     sentence within that length. When no sentence ends in the second half of that length, the reason ends after the
+    ///     last word in that half and an ellipsis follows. A reason without a space in that half is cut within a word.
+    /// </summary>
+    private static string WithinReasonLength(string reason)
+    {
+        const int maximum = FindingRiskAssessment.MaxReasonLength;
+        if (reason.Length <= maximum)
+        {
+            return reason;
+        }
+
+        for (var end = maximum; end > maximum / 2; end--)
+        {
+            // A sentence ends with a period, a question mark or an exclamation mark that whitespace follows.
+            if (reason[end - 1] is '.' or '?' or '!' && char.IsWhiteSpace(reason[end]))
+            {
+                return reason[..end];
+            }
+        }
+
+        // One character stays free for the ellipsis, and the cut does not split a surrogate pair.
+        var cut = maximum - 1;
+        if (char.IsHighSurrogate(reason[cut - 1]))
+        {
+            cut--;
+        }
+
+        var space = reason.LastIndexOf(' ', cut);
+        if (space > maximum / 2)
+        {
+            cut = space;
+        }
+
+        return string.Concat(reason.AsSpan(0, cut).TrimEnd(), "…");
+    }
 
     private static FindingConfidence SupportedLevel(VerificationConfidenceEvidence evidence)
     {
