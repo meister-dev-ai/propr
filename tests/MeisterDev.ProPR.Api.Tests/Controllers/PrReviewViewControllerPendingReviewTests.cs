@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -117,8 +118,9 @@ public sealed class PrReviewViewControllerPendingReviewTests
 
     private static PrReviewViewController CreateController(ReviewPrScan? scan)
     {
-        var jobRepository = Substitute.For<IJobRepository>();
-        jobRepository.GetByPrAsync(
+        var reader = Substitute.For<IPrReviewViewReader>();
+        var watermark = scan is null ? null : new PrReviewWatermark(scan.PendingReviewRevisionKey, scan.LastProcessedCommitId, scan.PendingReviewDetectedAt);
+        reader.ReadAsync(
                 ClientId,
                 ScopePath,
                 ProjectKey,
@@ -127,7 +129,7 @@ public sealed class PrReviewViewControllerPendingReviewTests
                 Arg.Any<int>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
-            .Returns([]);
+            .Returns(new PrReviewViewData([], [], [], watermark));
 
         var memoryRepository = Substitute.For<IThreadMemoryRepository>();
         memoryRepository.GetDigestsForPullRequestAsync(
@@ -141,26 +143,7 @@ public sealed class PrReviewViewControllerPendingReviewTests
                 Arg.Any<CancellationToken>())
             .Returns(new PagedResult<ThreadMemoryDigestDto>([], 0, 1, 50));
 
-        var threadPasses = Substitute.For<IThreadPassJobRepository>();
-        threadPasses.GetForPullRequestAsync(
-                ClientId,
-                ScopePath,
-                ProjectKey,
-                RepositoryId,
-                PullRequestId,
-                Arg.Any<int>(),
-                Arg.Any<CancellationToken>())
-            .Returns([]);
-
-        var prScanReader = Substitute.For<IReviewPrScanReader>();
-        prScanReader.GetAsync(ClientId, Arg.Any<string>(), Arg.Any<string>(), RepositoryId, PullRequestId, Arg.Any<CancellationToken>())
-            .Returns(scan);
-
-        var controller = new PrReviewViewController(
-            jobRepository,
-            memoryRepository,
-            threadPasses,
-            prScanReader)
+        var controller = new PrReviewViewController(reader, memoryRepository)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

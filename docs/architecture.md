@@ -5,6 +5,11 @@ review and crawl evidence; Domain owns durable state and evidence enums; Infrast
 mapping, migrations and SCM adapters. Review execution remains separate from analytics collection and
 queries. ProCursor is accessed through its bounded gateway contract.
 
+The Reviewing diagnostics summary reader projects the PR view's paged jobs, token totals, finding counts,
+memory contribution samples, thread-pass counts and revision watermarks. PostgreSQL aggregates counts and
+token fallbacks without materializing complete review results, protocol events or scan-thread collections.
+The detail readers retain their complete execution-trace and review-result contracts.
+
 Domain defines impact, occurrence likelihood, correctness confidence and the versioned risk rubric independently of finding
 classification. Reviewing requests assessment evidence in existing generation calls and retains it
 through verification, recovery and result transport. Provider adapters render severity and assessment badges above the finding description, with finding types

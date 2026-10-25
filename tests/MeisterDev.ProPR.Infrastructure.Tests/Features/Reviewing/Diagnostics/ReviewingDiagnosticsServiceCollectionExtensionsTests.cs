@@ -9,17 +9,69 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Diagnostics;
 
 public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
 {
+    [Fact]
+    public async Task AddReviewingDiagnostics_PrReviewView_UsesTheRegisteredInMemoryDbContext()
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<MeisterProPRDbContext>(options => options.UseInMemoryDatabase(Guid.NewGuid().ToString()));
+        services.AddScoped<IJobRepository, FakeJobRepository>();
+        services.AddReviewingDiagnostics();
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://provider.example", "project", "repository", 373, 1);
+        job.Protocols.Add(
+            new ReviewJobProtocol
+            {
+                Id = Guid.NewGuid(), JobId = job.Id, AttemptNumber = 1, StartedAt = DateTimeOffset.UtcNow, TotalInputTokens = 123,
+            });
+        db.ReviewJobs.Add(job);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var data = await scope.ServiceProvider.GetRequiredService<IPrReviewViewReader>()
+            .ReadAsync(job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, 1, 20);
+
+        var summary = Assert.Single(data.Jobs);
+        Assert.Equal(job.Id, summary.JobId);
+        Assert.Equal(123, summary.TotalInputTokens);
+        Assert.Empty(db.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task AddReviewingModule_PrReviewView_UsesTheOfflineJobRepository()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(false);
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration);
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://provider.example", "project", "repository", 373, 1);
+        await repository.AddAsync(job);
+
+        var data = await scope.ServiceProvider.GetRequiredService<IPrReviewViewReader>()
+            .ReadAsync(job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, 1, 20);
+
+        Assert.Equal(job.Id, Assert.Single(data.Jobs).JobId);
+        Assert.Empty(data.ThreadPasses);
+        Assert.Null(data.Watermark);
+    }
+
     [Fact]
     public void AddReviewingModule_WithoutDatabaseConnectionString_ResolvesInMemoryDiagnosticsReader()
     {

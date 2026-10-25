@@ -4,11 +4,10 @@
 using System.Text.Json;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
-using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
-using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using MeisterDev.ProPR.Web;
 
@@ -18,16 +17,11 @@ namespace MeisterDev.ProPR.Api.Controllers;
 [ApiController]
 [Route("clients/{clientId:guid}")]
 public sealed class PrReviewViewController(
-    IJobRepository jobRepository,
-    IThreadMemoryRepository memoryRepository,
-    IThreadPassJobRepository threadPassRepository,
-    IReviewPrScanReader? prScanReader = null) : ControllerBase
+    IPrReviewViewReader viewReader,
+    IThreadMemoryRepository memoryRepository) : ControllerBase
 {
     /// <summary>How much of a stored resolution summary the PR view renders.</summary>
     private const int ResolutionSummaryExcerptLength = 200;
-
-    /// <summary>Most thread passes over one pull request the view lists.</summary>
-    private const int ThreadPassLimit = 50;
 
     /// <summary>Most memories originating in this pull request that the view lists.</summary>
     private const int OriginatedMemoryLimit = 50;
@@ -78,7 +72,7 @@ public sealed class PrReviewViewController(
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 1, 100);
 
-        var jobs = await jobRepository.GetByPrAsync(
+        var viewData = await viewReader.ReadAsync(
             clientId,
             query.ProviderScopePath,
             query.ProviderProjectKey,
@@ -87,6 +81,7 @@ public sealed class PrReviewViewController(
             page,
             pageSize,
             cancellationToken);
+        var jobs = viewData.Jobs;
 
         var aggregation = AggregateTokenBreakdown(jobs);
         var breakdownConsistent = aggregation.Breakdown.Count == 0 ||
@@ -116,7 +111,7 @@ public sealed class PrReviewViewController(
             .ToList()
             .AsReadOnly();
 
-        var contributingMemoryIds = CollectContributingMemoryIds(jobs);
+        var contributingMemoryIds = CollectContributingMemoryIds(viewData.ContributingMemoryPayloads);
         var originatedIds = new HashSet<Guid>(originatedMemories.Select(m => m.MemoryRecordId));
         var externalContributingIds = contributingMemoryIds
             .Where(id => !originatedIds.Contains(id))
@@ -129,56 +124,8 @@ public sealed class PrReviewViewController(
             externalContributingIds,
             cancellationToken);
 
-        var jobSummaries = jobs.Select(j => new PrJobSummaryDto(
-                j.Id,
-                j.Status,
-                j.SubmittedAt,
-                j.CompletedAt,
-                j.Result?.Comments.Count,
-                j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
-                j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
-                j.TokenBreakdown,
-                j.TotalEstimatedCostUsd,
-                j.CostIsApproximate))
-            .ToList()
-            .AsReadOnly();
-
-        var threadPasses = await threadPassRepository.GetForPullRequestAsync(
-            clientId,
-            query.ProviderScopePath,
-            query.ProviderProjectKey,
-            query.RepositoryId,
-            query.PullRequestId.Value,
-            ThreadPassLimit,
-            cancellationToken);
-        var threadPassSummaries = threadPasses
-            .Select(pass => new PrThreadPassSummaryDto(
-                pass.Id,
-                pass.Status,
-                pass.CreatedAt,
-                pass.CompletedAt,
-                pass.HandledThreads.Count,
-                pass.TotalInputTokens,
-                pass.TotalOutputTokens,
-                pass.TotalEstimatedCostUsd,
-                pass.CostIsApproximate,
-                pass.ErrorMessage,
-                pass.BudgetBlockScope,
-                pass.BudgetBlockCapKind,
-                pass.BudgetBlockThresholdUsd,
-                pass.BudgetBlockSpentUsd))
-            .ToList()
-            .AsReadOnly();
-        var threadPassCost = ComputeThreadPassCostRollup(threadPasses);
-
-        var pendingReview = await ResolvePendingReviewAsync(
-            prScanReader,
-            clientId,
-            query.ProviderScopePath,
-            query.ProviderProjectKey,
-            query.RepositoryId,
-            query.PullRequestId.Value,
-            cancellationToken);
+        var threadPassCost = ComputeThreadPassCostRollup(viewData.ThreadPasses);
+        var pendingReview = ResolvePendingReview(viewData.Watermark);
 
         var dto = new PrReviewViewDto(
             query.ProviderScopePath,
@@ -190,14 +137,14 @@ public sealed class PrReviewViewController(
             aggregation.TotalOutput,
             aggregation.Breakdown.AsReadOnly(),
             breakdownConsistent,
-            jobSummaries,
+            jobs,
             originatedDigests.TotalCount,
             originatedMemories,
             externalContributingIds.Count,
             contributingMemories,
             costRollup.TotalEstimatedCostUsd,
             costRollup.CostIsApproximate,
-            threadPassSummaries,
+            viewData.ThreadPasses,
             threadPassCost.TotalEstimatedCostUsd,
             threadPassCost.CostIsApproximate,
             pendingReview);
@@ -206,35 +153,15 @@ public sealed class PrReviewViewController(
     }
 
     /// <summary>
-    ///     Decides whether the pull request is waiting for a review, which is the one thing a surface needs in
-    ///     order to offer one. Answered here so the ProPR UI and the browser extension cannot disagree.
+    ///     Returns pending revision metadata when the revision differs from the last reviewed revision.
+    ///     The UI and browser extension use the same comparison to decide whether to offer a review.
     /// </summary>
     /// <remarks>
-    ///     A declined revision that has since been reviewed is not pending: the review wrote its own watermark
-    ///     over the same revision, and comparing the two is what retires the state without a second write that
-    ///     could be missed.
+    ///     Reviewing a pending revision updates the reviewed watermark. Equal revision keys indicate that
+    ///     no pending review remains, without requiring another write to clear the pending watermark.
     /// </remarks>
-    private static async Task<PendingReviewDto?> ResolvePendingReviewAsync(
-        IReviewPrScanReader? prScanReader,
-        Guid clientId,
-        string organizationUrl,
-        string projectId,
-        string repositoryId,
-        int pullRequestId,
-        CancellationToken cancellationToken)
+    private static PendingReviewDto? ResolvePendingReview(PrReviewWatermark? scan)
     {
-        if (prScanReader is null)
-        {
-            return null;
-        }
-
-        var scan = await prScanReader.GetAsync(
-            clientId,
-            organizationUrl,
-            projectId,
-            repositoryId,
-            pullRequestId,
-            cancellationToken);
         if (scan is null || string.IsNullOrEmpty(scan.PendingReviewRevisionKey))
         {
             return null;
@@ -251,15 +178,15 @@ public sealed class PrReviewViewController(
             scan.PendingReviewDetectedAt);
     }
 
-    private static TokenAggregation AggregateTokenBreakdown(IReadOnlyList<ReviewJob> jobs)
+    private static TokenAggregation AggregateTokenBreakdown(IReadOnlyList<PrJobSummaryDto> jobs)
     {
         var breakdown = new List<TokenBreakdownEntry>();
         long totalInput = 0;
         long totalOutput = 0;
         foreach (var job in jobs)
         {
-            totalInput += job.TotalInputTokensAggregated ?? job.Protocols.Sum(p => p.TotalInputTokens) ?? 0;
-            totalOutput += job.TotalOutputTokensAggregated ?? job.Protocols.Sum(p => p.TotalOutputTokens) ?? 0;
+            totalInput += job.TotalInputTokens ?? 0;
+            totalOutput += job.TotalOutputTokens ?? 0;
             foreach (var entry in job.TokenBreakdown)
             {
                 var existing = breakdown.Find(e =>
@@ -305,7 +232,7 @@ public sealed class PrReviewViewController(
         return new CostRollup(totalEstimatedCostUsd, costIsApproximate);
     }
 
-    private static CostRollup ComputeThreadPassCostRollup(IReadOnlyList<ThreadPassJob> passes)
+    private static CostRollup ComputeThreadPassCostRollup(IReadOnlyList<PrThreadPassSummaryDto> passes)
     {
         // Null when nothing priced was recorded, so an operator reads "not known" rather than "free".
         var anyPriced = passes.Any(pass => pass.TotalEstimatedCostUsd.HasValue);
@@ -314,19 +241,12 @@ public sealed class PrReviewViewController(
             passes.Any(pass => pass.CostIsApproximate));
     }
 
-    private static HashSet<Guid> CollectContributingMemoryIds(IReadOnlyList<ReviewJob> jobs)
+    private static HashSet<Guid> CollectContributingMemoryIds(IReadOnlyList<string> payloads)
     {
         var contributingMemoryIds = new HashSet<Guid>();
-        foreach (var job in jobs)
+        foreach (var payload in payloads)
         {
-            foreach (var protocol in job.Protocols)
-            {
-                foreach (var ev in protocol.Events.Where(e =>
-                             e.Name == ReviewProtocolEventNames.MemoryReconsiderationCompleted && e.InputTextSample != null))
-                {
-                    AddContributingMemoryIdsFromEvent(ev.InputTextSample!, contributingMemoryIds);
-                }
-            }
+            AddContributingMemoryIdsFromEvent(payload, contributingMemoryIds);
         }
 
         return contributingMemoryIds;
@@ -336,7 +256,7 @@ public sealed class PrReviewViewController(
     {
         try
         {
-            var doc = JsonDocument.Parse(inputTextSample);
+            using var doc = JsonDocument.Parse(inputTextSample);
             if (!doc.RootElement.TryGetProperty("contributingMemoryIds", out var idsEl))
             {
                 return;

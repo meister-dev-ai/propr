@@ -69,6 +69,7 @@ discussion consumers to complete. See [discussion synchronization](docs/operate/
 Open a pull request from **Reviews** to inspect its review history, discussion, and retained diffs. The
 **Browser** tab fills the content area with independently scrolling file and diff panes, file search, and
 finding filters. See [the PR review screen](docs/concepts/reviews.md#pr-review-screen).
+PR statistics use summary database reads. Full review results and protocol event bodies load through their detail views.
 
 Findings carry impact, occurrence likelihood and correctness confidence with supporting reasons. ProPR derives risk severity
 independently of the Error, Warning, Suggestion or Info classification. Review screens, Code Quality and

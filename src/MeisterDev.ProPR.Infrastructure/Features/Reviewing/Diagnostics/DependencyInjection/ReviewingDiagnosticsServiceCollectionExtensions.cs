@@ -23,6 +23,13 @@ public static class ReviewingDiagnosticsServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddReviewingDiagnostics(this IServiceCollection services)
     {
+        services.AddScoped<IPrReviewViewReader>(sp =>
+        {
+            var jobRepository = sp.GetRequiredService<IJobRepository>();
+            return jobRepository is InMemoryReviewJobRepository inMemoryRepository
+                ? new InMemoryPrReviewViewReader(inMemoryRepository)
+                : new EfPrReviewViewReader(sp.GetRequiredService<MeisterProPRDbContext>());
+        });
         services.AddScoped<IReviewDiagnosticsReader>(sp =>
         {
             var jobRepository = sp.GetRequiredService<IJobRepository>();

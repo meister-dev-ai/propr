@@ -11,6 +11,11 @@ Open a pull request from **Reviews**. The toolbar contains **Back to reviews**, 
 and the **Stats**, **Conversation**, **Browser**, and licensed **Code Quality** tabs. Stats shows review
 jobs, thread passes, tokens, costs, and memory records.
 
+Stats reads paged review summaries and up to 50 thread passes. Token totals use stored job usage, with
+protocol totals supplying missing values. Memory details are limited to 50 originating and 50 contributing
+records. The originating count includes all matching records. Full result and protocol bodies are available
+through their detail views.
+
 The Browser tab uses the available content height. The file list and diff scroll independently. Search
 matches file names and paths without regard to case. Finding filters select files with findings, without
 findings, or with comments. Code Insights adds filters for finding kind, classification, risk severity,
