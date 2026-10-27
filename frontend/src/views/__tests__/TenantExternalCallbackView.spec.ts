@@ -76,9 +76,11 @@ describe('TenantExternalCallbackView', () => {
     expect(replaceMock).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Tenant sign-in could not be completed. Please try again or contact a tenant administrator.')
     expect(wrapper.text()).not.toContain('Signing you in and loading your access...')
+    expect(window.location.hash).toBe('')
+    expect(window.location.href).not.toContain('tenant-access')
   })
 
-  it('shows an error when navigation fails after session establishment', async () => {
+  it('reports an established session apart from a start page that does not load', async () => {
     replaceMock.mockRejectedValue(new Error('navigation failed'))
 
     const wrapper = await mountView('#accessToken=tenant-access&refreshToken=tenant-refresh&expiresIn=900&tokenType=Bearer')
@@ -90,7 +92,12 @@ describe('TenantExternalCallbackView', () => {
       tokenType: 'Bearer',
     })
     expect(replaceMock).toHaveBeenCalledWith({ name: 'home' })
-    expect(wrapper.text()).toContain('Tenant sign-in could not be completed. Please try again or contact a tenant administrator.')
+    expect(wrapper.find('.error').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('Signing you in and loading your access...')
+    expect(wrapper.get('[data-testid="tenant-callback-signed-in"]').text())
+      .toBe('You are signed in, but the start page could not be loaded.')
+    expect(wrapper.text()).toContain('Open the start page')
+    expect(wrapper.text()).not.toContain('Back to tenant sign-in')
+    expect(window.location.href).not.toContain('tenant-access')
   })
 })

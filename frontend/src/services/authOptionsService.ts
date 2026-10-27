@@ -13,11 +13,19 @@ import type { RuntimeMode } from '@/app/runtime/createRuntime'
 
 type AuthOptionsDto = components['schemas']['AuthOptionsDto']
 
+/** The identity provider through which platform administrators sign in. */
+export interface PlatformAdminSignIn {
+  /** The name of the provider on the sign-in page. */
+  displayName: string
+}
+
 export interface AuthOptions {
   edition: InstallationEdition
   availableSignInMethods: string[]
   capabilities: PremiumCapability[]
   publicBaseUrl: string | null
+  /** The identity provider for platform administrators, or null when the installation offers none. */
+  platformAdminSignIn: PlatformAdminSignIn | null
 }
 
 export function supportsTenantSignIn(options: AuthOptions | null | undefined): boolean {
@@ -34,7 +42,20 @@ function normalizeAuthOptions(options: AuthOptionsDto | null | undefined): AuthO
     availableSignInMethods: options?.availableSignInMethods ?? ['password'],
     capabilities: (options?.capabilities ?? []).map((capability) => normalizeCapability(capability)),
     publicBaseUrl: options?.publicBaseUrl ?? null,
+    platformAdminSignIn: options?.platformAdminSignIn?.displayName
+      ? { displayName: options.platformAdminSignIn.displayName }
+      : null,
   }
+}
+
+/**
+ * Returns the API address that starts the sign-in of a platform administrator through the identity provider. The
+ * API sends the browser to the provider and returns it to returnUrl.
+ */
+export function getPlatformAdminSignInUrl(returnUrl: string): string {
+  const baseUrl = getActiveRuntime().apiBaseUrl.replace(/\/+$/, '')
+  const query = new URLSearchParams({ returnUrl })
+  return `${baseUrl}/auth/platform-admin/challenge?${query.toString()}`
 }
 
 export interface AuthOptionsService {

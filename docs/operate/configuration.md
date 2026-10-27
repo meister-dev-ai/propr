@@ -15,10 +15,15 @@ A wrong value behaves in one of three ways:
 | Set it to something unparsable - a word where a number belongs, or a blank value | Silently ignored; the default is used. |
 | Set it to a parsable value outside the accepted range | **Startup fails** for most settings, with a message naming the setting and its bounds. |
 
-Three groups depart from that:
+Five groups depart from that:
 
 - `MEISTER_SESSION_IDLE_MINUTES` and `MEISTER_SESSION_ABSOLUTE_HOURS` fail startup on anything that is
   not a positive integer. They do not fall back to their default.
+- The `MEISTER_PLATFORM_ADMIN_SSO_*` variables fail startup on any value outside the accepted ones, and when one
+  of them is set without `MEISTER_PLATFORM_ADMIN_SSO_AUTHORITY`. See
+  [single sign-on for platform administrators](#single-sign-on-for-platform-administrators).
+- `MEISTER_PLATFORM_ADMIN_ELEVATION_MAX_MINUTES` fails startup on anything that is not a whole number from 1 to
+  1440. It does not fall back to its default.
 - A value under the minimum of an interval marked "clamped" is silently raised to that minimum.
 - **Most `AI_*` review-tuning settings are not range-checked.** An out-of-range value is used as
   given. Their listed ranges describe supported operation. The two
@@ -156,6 +161,42 @@ variable named. Give both services the same key, and the blob URI where you use 
 | `MEISTER_AUTH_RATELIMIT_WINDOW_SECONDS` | Length of that window | `60` | 1–3600 | no |
 
 What these controls are for: [sign-in and sessions](../reference/security.md#sign-in-and-sessions).
+
+## Single sign-on for platform administrators
+
+Platform administrators can sign in through one OpenID Connect identity provider beside the local form at
+`/login`. This sign-in needs a commercial license that includes single sign-on (`sso-authentication`, see
+[editions](../reference/editions.md)); without it, ProPR ignores the provider and offers the local form only.
+Setting `MEISTER_PLATFORM_ADMIN_SSO_AUTHORITY` turns the provider on. How the role decides the rights of an account
+is described under [platform administrators and the identity provider of the installation](../reference/security.md#platform-administrators-and-the-identity-provider-of-the-installation).
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_PLATFORM_ADMIN_SSO_AUTHORITY` | The issuer URL of the provider, for example `https://id.example.com/realms/staff` | unset: platform administrators sign in with local accounts only | absolute `https` URL without credentials, query or fragment; `http` in Development | no |
+| `MEISTER_PLATFORM_ADMIN_SSO_METADATA_URL` | The address ProPR reads the provider's discovery document from | `<authority>/.well-known/openid-configuration` | absolute `https` URL without credentials or fragment; `http` in Development | no |
+| `MEISTER_PLATFORM_ADMIN_SSO_CLIENT_ID` | The client ID of ProPR at the provider | none | required with the authority | no |
+| `MEISTER_PLATFORM_ADMIN_SSO_CLIENT_SECRET` | The client secret of ProPR at the provider | none | required with the authority | no |
+| `MEISTER_PLATFORM_ADMIN_SSO_ROLE_CLAIM` | The ID token claim that lists the roles of the account | `roles` | the name of a top-level claim whose value is a string or an array of strings | no |
+| `MEISTER_PLATFORM_ADMIN_SSO_REQUIRED_ROLE` | The role that gives an account platform administrator rights | none | required with the authority; compared case-sensitively | no |
+| `MEISTER_PLATFORM_ADMIN_SSO_DISPLAY_NAME` | The name on the sign-in button | the host of the authority | at most 80 characters on one line | no |
+
+Register ProPR at the provider as a confidential client that uses the authorization code flow, with
+`<MEISTER_PUBLIC_BASE_URL>/auth/platform-admin/callback` as its redirect URI. Without `MEISTER_PUBLIC_BASE_URL`,
+the redirect URI starts with the address the browser reaches the API on. When the user interface runs on another
+origin than `MEISTER_PUBLIC_BASE_URL`, list that origin in `CORS_ORIGINS`, because the sign-in returns the access
+token only to the origins named under
+[platform administrators and the identity provider of the installation](../reference/security.md#platform-administrators-and-the-identity-provider-of-the-installation). ProPR sends a PKCE code challenge
+(`S256`) and a nonce, and it sends the client secret in the body of the token request (`client_secret_post`).
+It requests the scopes `openid`, `profile` and `email`.
+
+The ID token must carry the role claim at its top level. Keycloak puts realm roles into the nested claim
+`realm_access.roles` by default, which ProPR does not read; add a realm role mapper to the client that writes the
+roles into a claim named `roles` of the ID token.
+
+Set `MEISTER_PLATFORM_ADMIN_SSO_METADATA_URL` when ProPR reaches the provider at another address than the browser
+does, for example over an internal network. The discovery document at that address must name the authority as its
+issuer, or ProPR refuses every sign-in through the provider. Outside Development, the authorization endpoint and the
+token endpoint that the document names must use `https` as well.
 
 ## Review workers
 
@@ -645,6 +686,15 @@ reasoning contains, and when to turn it off:
 [what ProPR stores](../reference/security.md#what-propr-stores). A tenant can override
 `AI_CAPTURE_REASONING_IN_PROTOCOL` for its own reviews:
 [model reasoning in the job trace](../ai/compliance.md#model-reasoning-in-the-job-trace).
+
+## Platform administrator elevations
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_PLATFORM_ADMIN_ELEVATION_MAX_MINUTES` | Longest duration, in minutes, that a platform administrator can request for one elevation into the content of a tenant | `240` | 1–1440 | no |
+
+What an elevation grants and what ProPR records about it:
+[platform administrator access to tenant content](../reference/security.md#platform-administrator-access-to-tenant-content).
 
 ## A process-wide Azure credential
 

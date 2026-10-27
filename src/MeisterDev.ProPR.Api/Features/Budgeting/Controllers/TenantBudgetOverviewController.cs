@@ -18,6 +18,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Exposes tenant-wide FinOps surfaces: the per-client budget overview and the aggregate spend view.</summary>
 [ApiController]
 [Route("admin/tenants/{tenantId:guid}/budget")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class TenantBudgetOverviewController(
     ITenantBudgetOverviewService overviewService,
     ITenantBudgetSpendService spendService,

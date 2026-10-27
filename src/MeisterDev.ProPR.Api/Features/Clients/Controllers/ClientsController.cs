@@ -26,6 +26,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Manages client registration, lookup, updates, and deletion.</summary>
 [ApiController]
 [Route("clients")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class ClientsController(
     IClientAdminService clientAdminService,
     ITenantAdminService tenantAdminService,

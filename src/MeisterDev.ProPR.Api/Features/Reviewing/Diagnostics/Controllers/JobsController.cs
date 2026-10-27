@@ -5,6 +5,7 @@
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Reviewing.Contracts;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.PlatformAdminElevation;
 using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Queries.GetFileDiff;
 using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
@@ -25,6 +26,8 @@ public sealed class JobsController(
     GetReviewJobProtocolHandler getReviewJobProtocolHandler,
     GetFileDiffHandler getFileDiffHandler) : ControllerBase
 {
+    private static readonly IReadOnlySet<Guid> NoWithheldClients = new HashSet<Guid>();
+
     /// <summary>
     ///     Returns all review jobs across all clients, newest first.
     ///     Requires an Admin JWT or <c>X-User-Pat</c> for unrestricted access, or valid user authentication for scoped client
@@ -39,6 +42,7 @@ public sealed class JobsController(
     /// <returns>Paginated list of all jobs.</returns>
     /// <response code="200">Jobs returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
+    [TenantData(TenantDataAccess.Mixed)]
     [HttpGet]
     [HttpGet("/jobs")]
     [ProducesResponseType(typeof(JobListResponse), StatusCodes.Status200OK)]
@@ -79,7 +83,33 @@ public sealed class JobsController(
             pullRequestId,
             cancellationToken);
 
-        return this.Ok(new JobListResponse(total, items.Select(ToListItem).ToList()));
+        var withheld = await this.WithheldClientsAsync(items.Select(item => item.ClientId), "the review job list", cancellationToken);
+        return this.Ok(new JobListResponse(total, items.Select(item => ToListItem(item, withheld)).ToList()));
+    }
+
+    /// <summary>
+    ///     Returns the clients whose content a platform administrator may not read among the given clients, and registers
+    ///     the reads of the others that an elevation grants. For every other caller the set is empty.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>> WithheldClientsAsync(
+        IEnumerable<Guid?> clientIds,
+        string resource,
+        CancellationToken cancellationToken)
+    {
+        if (!PlatformAdminContent.AppliesTo(this.HttpContext))
+        {
+            return NoWithheldClients;
+        }
+
+        var ids = clientIds.OfType<Guid>().Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return NoWithheldClients;
+        }
+
+        var grants = await PlatformAdminContent.ResolveAsync(this.HttpContext, ids, cancellationToken);
+        PlatformAdminContent.Use(this.HttpContext, grants, resource);
+        return grants.Where(grant => grant.Kind == ContentAccessKind.Refused).Select(grant => grant.ClientId).ToHashSet();
     }
 
     /// <summary>
@@ -113,6 +143,14 @@ public sealed class JobsController(
             0 => new ClientScope(null, true, null),
             _ => new ClientScope(clientRoles.Keys.ToList(), false, null),
         };
+    }
+
+    private static JobListItem ToListItem(JobListPageItemDto j, IReadOnlySet<Guid> withheld)
+    {
+        var item = ToListItem(j);
+        return j.ClientId is { } clientId && withheld.Contains(clientId)
+            ? item with { ResultSummaryExcerpt = null, ErrorMessage = null, PrTitle = null, ContentWithheld = true }
+            : item;
     }
 
     private static JobListItem ToListItem(JobListPageItemDto j)
@@ -165,6 +203,7 @@ public sealed class JobsController(
     /// <response code="200">History page returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller has no access to the requested client.</response>
+    [TenantData(TenantDataAccess.Mixed)]
     [HttpGet("pull-requests")]
     [HttpGet("/jobs/pull-requests")]
     [ProducesResponseType(typeof(PullRequestHistoryResponse), StatusCodes.Status200OK)]
@@ -206,25 +245,34 @@ public sealed class JobsController(
             scope.ClientIds,
             cancellationToken);
 
+        var withheld = await this.WithheldClientsAsync(
+            groups.Select(group => group.ClientId).Concat(groups.SelectMany(group => group.Jobs.Select(job => job.ClientId))),
+            "the pull request history",
+            cancellationToken);
         return this.Ok(
             new PullRequestHistoryResponse(
                 total,
-                groups.Select(g => new PullRequestHistoryItem(
-                        g.ProviderScopePath,
-                        g.ProviderProjectKey,
-                        g.RepositoryId,
-                        g.PullRequestId,
-                        g.ClientId,
-                        g.PrTitle,
-                        g.PrRepositoryName,
-                        g.PrSourceBranch,
-                        g.PrTargetBranch,
-                        g.LatestActivityAt,
-                        g.TotalInputTokens,
-                        g.TotalOutputTokens,
-                        g.TotalEstimatedCostUsd,
-                        g.CostIsApproximate,
-                        g.Jobs.Select(ToListItem).ToList()))
+                groups.Select(g =>
+                    {
+                        var groupWithheld = g.ClientId is { } groupClientId && withheld.Contains(groupClientId);
+                        return new PullRequestHistoryItem(
+                            g.ProviderScopePath,
+                            g.ProviderProjectKey,
+                            g.RepositoryId,
+                            g.PullRequestId,
+                            g.ClientId,
+                            groupWithheld ? null : g.PrTitle,
+                            g.PrRepositoryName,
+                            g.PrSourceBranch,
+                            g.PrTargetBranch,
+                            g.LatestActivityAt,
+                            g.TotalInputTokens,
+                            g.TotalOutputTokens,
+                            g.TotalEstimatedCostUsd,
+                            g.CostIsApproximate,
+                            g.Jobs.Select(job => ToListItem(job, withheld)).ToList(),
+                            groupWithheld);
+                    })
                     .ToList()));
     }
 
@@ -235,6 +283,7 @@ public sealed class JobsController(
     /// <response code="200">Job detail returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="404">Job not found.</response>
+    [TenantData(TenantDataAccess.Mixed)]
     [HttpGet("{id:guid}")]
     [HttpGet("/jobs/{id:guid}")]
     [ProducesResponseType(typeof(JobDetailResponse), StatusCodes.Status200OK)]
@@ -277,6 +326,9 @@ public sealed class JobsController(
         // Keyed off the cap kind, because that is what a budget block always records. A stop whose cap was
         // never named carries the kind alone, and reporting no budget status at all for it would read as a
         // job no budget touched.
+        var withheld = (await this.WithheldClientsAsync([job.ClientId], "the details of a review job", cancellationToken))
+            .Contains(job.ClientId);
+
         var budgetStatus = job.BudgetBlockCapKind is not null || job.BudgetBlockScope is not null
             ? new BudgetStatusDto(
                 job.BudgetBlockScope,
@@ -295,7 +347,7 @@ public sealed class JobsController(
                 job.CompletedAt,
                 job.TotalInputTokensAggregated,
                 job.TotalOutputTokensAggregated,
-                job.ErrorMessage,
+                withheld ? null : job.ErrorMessage,
                 job.AiModel,
                 job.ReviewTemperature,
                 breakdown,
@@ -305,9 +357,10 @@ public sealed class JobsController(
                 job.TotalEstimatedCostUsd,
                 job.CostIsApproximate,
                 budgetStatus,
-                job.ResultSummary,
+                withheld ? null : job.ResultSummary,
                 job.AdmissionRefusalReason,
-                job.HeldUntil));
+                job.HeldUntil,
+                withheld));
     }
 
     /// <summary>Returns the summary, comments, and available impact, likelihood and confidence assessments for a completed job.</summary>
@@ -317,6 +370,7 @@ public sealed class JobsController(
     /// <response code="200">Review result returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="404">Job not found or result not yet available.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ReviewJob, RouteValue = "id", Resource = "the result of a review job")]
     [HttpGet("{id:guid}/result")]
     [HttpGet("/jobs/{id:guid}/result")]
     [ProducesResponseType(typeof(ReviewJobResultDto), StatusCodes.Status200OK)]
@@ -380,6 +434,7 @@ public sealed class JobsController(
     /// <response code="200">Protocols returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="404">Job not found.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ReviewJob, RouteValue = "id", Resource = "the protocol of a review job")]
     [HttpGet("{id:guid}/protocol")]
     [HttpGet("/jobs/{id:guid}/protocol")]
     [ProducesResponseType(typeof(IReadOnlyList<ProtocolResponse>), StatusCodes.Status200OK)]
@@ -431,6 +486,7 @@ public sealed class JobsController(
     /// <response code="200">Protocol pass returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="404">Job or protocol pass not found.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ReviewJob, RouteValue = "id", Resource = "a protocol pass of a review job")]
     [HttpGet("{id:guid}/protocol/{protocolId:guid}")]
     [HttpGet("/jobs/{id:guid}/protocol/{protocolId:guid}")]
     [ProducesResponseType(typeof(ProtocolResponse), StatusCodes.Status200OK)]
@@ -483,6 +539,7 @@ public sealed class JobsController(
     /// <response code="200">File diff (or availability) returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="404">Job or file result not found.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ReviewJob, RouteValue = "jobId", Resource = "the diff of a reviewed file")]
     [HttpGet("{jobId:guid}/files/{fileResultId:guid}/diff")]
     [HttpGet("/jobs/{jobId:guid}/files/{fileResultId:guid}/diff")]
     [ProducesResponseType(typeof(FileDiffDto), StatusCodes.Status200OK)]
@@ -523,6 +580,10 @@ public sealed class JobsController(
     }
 
     /// <summary>Single job item in the list response.</summary>
+    /// <remarks>
+    ///     For a platform administrator without access to the content of the client, the title of the pull request, the
+    ///     excerpt of the summary and the error message are withheld and <c>ContentWithheld</c> is true.
+    /// </remarks>
     public sealed record JobListItem(
         Guid Id,
         Guid? ClientId,
@@ -549,7 +610,8 @@ public sealed class JobsController(
         int? FilesInScope = null,
         decimal? TotalEstimatedCostUsd = null,
         bool CostIsApproximate = false,
-        bool BudgetSoftCapped = false);
+        bool BudgetSoftCapped = false,
+        bool ContentWithheld = false);
 
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);
@@ -570,6 +632,10 @@ public sealed class JobsController(
     /// <param name="TotalEstimatedCostUsd">Cost summed across the runs, or null when none of them is priced.</param>
     /// <param name="CostIsApproximate">True when a run is approximate or the pull request mixes priced and unpriced runs.</param>
     /// <param name="Jobs">Every run against this pull request, running work first, then most recent first.</param>
+    /// <param name="ContentWithheld">
+    ///     True when the caller is a platform administrator without access to the content of the client, so the title
+    ///     of the pull request is withheld.
+    /// </param>
     public sealed record PullRequestHistoryItem(
         string ProviderScopePath,
         string ProviderProjectKey,
@@ -585,7 +651,8 @@ public sealed class JobsController(
         long TotalOutputTokens,
         decimal? TotalEstimatedCostUsd,
         bool CostIsApproximate,
-        IReadOnlyList<JobListItem> Jobs);
+        IReadOnlyList<JobListItem> Jobs,
+        bool ContentWithheld = false);
 
     /// <summary>Response for the pull-request-grouped review history endpoint.</summary>
     /// <param name="Total">Total number of pull requests matching the filters, across all pages.</param>
@@ -608,6 +675,10 @@ public sealed class JobsController(
         decimal? SpentUsd);
 
     /// <summary>Detailed response for a single job, including the per-tier token breakdown.</summary>
+    /// <remarks>
+    ///     For a platform administrator without access to the content of the client, the error message and the summary
+    ///     are withheld and <c>ContentWithheld</c> is true.
+    /// </remarks>
     public sealed record JobDetailResponse(
         Guid Id,
         Guid ClientId,
@@ -629,7 +700,8 @@ public sealed class JobsController(
         BudgetStatusDto? BudgetStatus = null,
         string? ResultSummary = null,
         string? AdmissionRefusalReason = null,
-        DateTimeOffset? HeldUntil = null);
+        DateTimeOffset? HeldUntil = null,
+        bool ContentWithheld = false);
 
     /// <summary>Response for the job result endpoint, combining status metadata with the review result.</summary>
     public sealed record ReviewJobResultDto(

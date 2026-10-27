@@ -41,6 +41,16 @@
         </button>
       </form>
 
+      <section v-if="vm.platformAdminSignIn.value" class="platform-admin-sign-in">
+        <a
+          data-testid="platform-admin-sign-in-link"
+          class="btn-secondary platform-admin-sign-in-link"
+          :href="vm.platformAdminSignInHref.value"
+        >
+          Sign in with {{ vm.platformAdminSignIn.value.displayName }}
+        </a>
+      </section>
+
       <section v-if="vm.canUseTenantSignIn.value" class="tenant-login-entry">
         <div>
           <h2 class="tenant-login-entry-title">Single sign-on</h2>
@@ -99,6 +109,12 @@ const vm = useLoginViewModel()
 
 .login-auth-submessage {
   color: var(--color-text-muted);
+}
+
+.platform-admin-sign-in {
+  display: flex;
+  flex-direction: column;
+  margin-top: 1rem;
 }
 
 .tenant-login-entry {

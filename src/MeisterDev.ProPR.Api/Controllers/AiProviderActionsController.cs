@@ -36,6 +36,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <param name="invocations">Reads the record of a run.</param>
 [ApiController]
 [Route("ai-provider-actions")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class AiProviderActionsController(
     IAiConnectionRepository connections,
     ProviderActionDispatcher dispatcher,

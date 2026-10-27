@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRuntime } from '@/app/runtime/createRuntime'
 import { resetActiveRuntime, setActiveRuntime } from '@/app/runtime/runtimeContext'
-import { getAuthOptions, supportsTenantSignIn } from '@/services/authOptionsService'
+import { getAuthOptions, getPlatformAdminSignInUrl, supportsTenantSignIn } from '@/services/authOptionsService'
 
 describe('authOptionsService', () => {
   beforeEach(() => {
@@ -87,6 +87,50 @@ describe('authOptionsService', () => {
 
     expect(options.edition).toBe('community')
     expect(supportsTenantSignIn(options)).toBe(false)
+  })
+
+  it('carries the identity provider for platform administrators when the installation offers one', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          edition: 'commercial',
+          availableSignInMethods: ['password', 'sso'],
+          capabilities: [],
+          platformAdminSignIn: { displayName: 'Meister DEV staff' },
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    )
+
+    const options = await getAuthOptions()
+
+    expect(options.platformAdminSignIn).toEqual({ displayName: 'Meister DEV staff' })
+  })
+
+  it('reads a payload without the identity provider for platform administrators as none', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ edition: 'commercial', platformAdminSignIn: null }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const options = await getAuthOptions()
+
+    expect(options.platformAdminSignIn).toBeNull()
+  })
+
+  it('builds the address that starts the platform administrator sign-in on the API base URL', () => {
+    setActiveRuntime(createRuntime({ mode: 'live', apiBaseUrl: '/custom-api/' }))
+
+    const url = getPlatformAdminSignInUrl('https://propr.example.test/login/callback')
+
+    expect(url).toBe(
+      '/custom-api/auth/platform-admin/challenge?returnUrl=https%3A%2F%2Fpropr.example.test%2Flogin%2Fcallback',
+    )
   })
 
   it('uses the mock adapter path when the active runtime is mock', async () => {

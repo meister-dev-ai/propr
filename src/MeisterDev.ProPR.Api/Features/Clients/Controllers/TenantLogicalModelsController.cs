@@ -18,6 +18,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("tenants/{tenantId:guid}/logical-models")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class TenantLogicalModelsController(ILogicalModelCatalogRepository catalog) : ControllerBase
 {
     /// <summary>The tenant-catalog logical models for this tenant.</summary>

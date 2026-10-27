@@ -6,6 +6,7 @@ using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
+using MeisterDev.ProPR.Application.Features.PlatformAdminElevation;
 using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -29,6 +30,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin/runners")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class AdminRunnersController(
     IRunnerRegistrationService? runners = null,
     IRunnerRegistry? registry = null,
@@ -53,6 +55,7 @@ public sealed class AdminRunnersController(
     ///     does not identify a host.
     /// </summary>
     /// <param name="ct">Cancellation token for the request.</param>
+    [TenantData(TenantDataAccess.Mixed)]
     [HttpGet]
     [ProducesResponseType(typeof(RunnerRegistryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -78,6 +81,7 @@ public sealed class AdminRunnersController(
     /// <summary>Every runner enrolled in one tenant, with its health, scope, and current work.</summary>
     /// <param name="tenantId">The tenant whose registry to read.</param>
     /// <param name="ct">Cancellation token for the request.</param>
+    [TenantData(TenantDataAccess.Mixed)]
     [HttpGet("{tenantId:guid}")]
     [ProducesResponseType(typeof(RunnerRegistryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -125,6 +129,7 @@ public sealed class AdminRunnersController(
         var completedSince = now.AddDays(-1);
 
         var runnerDtos = new List<RunnerDto>();
+        var clientOfJob = new Dictionary<Guid, Guid>();
         var tokenDtos = new List<RunnerRegistrationTokenSummaryDto>();
         var executingJobs = 0;
         var pendingJobs = 0;
@@ -137,6 +142,11 @@ public sealed class AdminRunnersController(
             var fleetWorkload = workload is null
                 ? RunnerFleetWorkload.Empty
                 : await workload.GetWorkloadAsync(tenantId, completedSince, ct);
+
+            foreach (var job in fleetWorkload.ByRunner.Values.SelectMany(runnerWorkload => runnerWorkload.Executing))
+            {
+                clientOfJob[job.JobId] = job.ClientId;
+            }
 
             runnerDtos.AddRange(
                 enrolled.Select(runner => ToDto(
@@ -169,7 +179,7 @@ public sealed class AdminRunnersController(
         var activeRunners = runnerDtos.Count(runner => runner.Health == "active");
 
         return new RunnerRegistryDto(
-            runnerDtos,
+            await this.WithholdTitlesAsync(runnerDtos, clientOfJob, ct),
             activeRunners,
             status?.Mode.ToString() ?? "InProcess",
             executingJobs,
@@ -183,6 +193,50 @@ public sealed class AdminRunnersController(
                     status.Stall.PendingJobCount,
                     status.Stall.OldestPendingSince,
                     status.Stall.Detail));
+    }
+
+    /// <summary>
+    ///     Withholds the pull request title of every review whose client a platform administrator may not read, and
+    ///     registers the reads that an elevation grants. A title is content of the tenant, and the registry is metadata
+    ///     otherwise. A tenant administrator reads the titles of their own tenant as before.
+    /// </summary>
+    private async Task<List<RunnerDto>> WithholdTitlesAsync(
+        List<RunnerDto> runnerDtos,
+        IReadOnlyDictionary<Guid, Guid> clientOfJob,
+        CancellationToken ct)
+    {
+        if (!PlatformAdminContent.AppliesTo(this.HttpContext))
+        {
+            return runnerDtos;
+        }
+
+        var titled = runnerDtos.SelectMany(runner => runner.Executing).Where(job => job.Title is not null).ToList();
+        if (titled.Count == 0)
+        {
+            return runnerDtos;
+        }
+
+        var clientIds = titled.Select(job => clientOfJob.GetValueOrDefault(job.JobId)).Where(id => id != Guid.Empty).Distinct().ToList();
+        IReadOnlyList<ContentAccessGrant> grants = clientIds.Count == 0
+            ? []
+            : await PlatformAdminContent.ResolveAsync(this.HttpContext, clientIds, ct);
+        PlatformAdminContent.Use(this.HttpContext, grants, "the pull request titles in the runner registry");
+
+        // A client without a grant, for example one that no longer exists, counts as unreadable.
+        var readable = grants.Where(grant => grant.Kind != ContentAccessKind.Refused).Select(grant => grant.ClientId).ToHashSet();
+        return
+        [
+            .. runnerDtos.Select(runner => runner with
+            {
+                Executing =
+                [
+                    .. runner.Executing.Select(job =>
+                        job.Title is null || readable.Contains(clientOfJob.GetValueOrDefault(job.JobId))
+                            ? job
+                            : job with { Title = null, ContentWithheld = true }),
+                ],
+            }),
+        ];
     }
 
     /// <summary>
@@ -625,13 +679,18 @@ public sealed record RunnerDto(
 /// <param name="Title">The pull request's title, when the job recorded one.</param>
 /// <param name="StartedAt">When the runner started it.</param>
 /// <param name="ReclaimCount">How many times this review has been taken back from a runner that went quiet.</param>
+/// <param name="ContentWithheld">
+///     True when the caller is a platform administrator whose elevations do not cover the client of the review. The
+///     title is then withheld.
+/// </param>
 public sealed record RunnerJobDto(
     Guid JobId,
     string? RepositoryName,
     int PullRequestNumber,
     string? Title,
     DateTimeOffset? StartedAt,
-    int ReclaimCount);
+    int ReclaimCount,
+    bool ContentWithheld = false);
 
 /// <summary>A queue that has work nothing is taking.</summary>
 /// <param name="Cause">Why.</param>

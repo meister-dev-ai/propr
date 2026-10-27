@@ -19,6 +19,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Admin endpoints for managing webhook configurations and recent delivery history.</summary>
 [ApiController]
 [Route("admin/webhook-configurations")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class AdminWebhookConfigsController(
     IWebhookConfigurationRepository webhookConfigurationRepository,
     IWebhookDeliveryLogRepository webhookDeliveryLogRepository,

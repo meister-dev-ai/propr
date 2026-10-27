@@ -8,7 +8,10 @@ const routerPushMock = vi.fn()
 const establishSessionMock = vi.fn(async () => {})
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: routerPushMock }),
+  useRouter: () => ({
+    push: routerPushMock,
+    resolve: (to: { name: string }) => ({ href: to.name === 'login-callback' ? '/login/callback' : '/' }),
+  }),
 }))
 
 vi.mock('@/composables/useSession', () => ({
@@ -142,6 +145,53 @@ describe('useLoginViewModel (FR-007, FR-008, FR-012)', () => {
       name: 'tenant-login',
       params: { tenantSlug: 'acme' },
     })
+  })
+
+  it('offers the identity provider for platform administrators with an address that returns to the callback page', async () => {
+    const authOptionsService = vi.fn(async () => ({
+      edition: 'commercial' as const,
+      availableSignInMethods: ['password', 'sso'],
+      capabilities: [],
+      publicBaseUrl: null,
+      platformAdminSignIn: { displayName: 'Meister DEV staff' },
+    }) as AuthOptions)
+    const platformAdminSignInUrl = vi.fn((returnUrl: string) => `/api/auth/platform-admin/challenge?returnUrl=${returnUrl}`)
+    const vm = useLoginViewModel({
+      loginService: vi.fn(),
+      authOptionsService,
+      autoLoadAuthOptions: false,
+      platformAdminSignInUrl,
+    })
+
+    await vm.loadAuthOptions()
+
+    expect(vm.platformAdminSignIn.value).toEqual({ displayName: 'Meister DEV staff' })
+    expect(vm.platformAdminSignInHref.value).toBe(
+      `/api/auth/platform-admin/challenge?returnUrl=${window.location.origin}/login/callback`,
+    )
+  })
+
+  it('offers no identity provider for platform administrators when the installation has none', async () => {
+    const authOptionsService = vi.fn(async () => ({
+      edition: 'community' as const,
+      availableSignInMethods: ['password'],
+      capabilities: [],
+      publicBaseUrl: null,
+      platformAdminSignIn: null,
+    }) as AuthOptions)
+    const platformAdminSignInUrl = vi.fn()
+    const vm = useLoginViewModel({
+      loginService: vi.fn(),
+      authOptionsService,
+      autoLoadAuthOptions: false,
+      platformAdminSignInUrl,
+    })
+
+    await vm.loadAuthOptions()
+
+    expect(vm.platformAdminSignIn.value).toBeNull()
+    expect(vm.platformAdminSignInHref.value).toBe('')
+    expect(platformAdminSignInUrl).not.toHaveBeenCalled()
   })
 
   it('closeTenantPrompt resets slug, validation, and prompt visibility', () => {

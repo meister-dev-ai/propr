@@ -44,6 +44,10 @@ internal sealed class TenantAuditEntryEntityTypeConfiguration : IEntityTypeConfi
             .HasColumnName("occurred_at")
             .IsRequired();
 
+        builder.Property(entry => entry.ElevationId)
+            .HasColumnName("elevation_id")
+            .IsRequired(false);
+
         builder.HasOne(entry => entry.Tenant)
             .WithMany(tenant => tenant.AuditEntries)
             .HasForeignKey(entry => entry.TenantId)
@@ -54,6 +58,11 @@ internal sealed class TenantAuditEntryEntityTypeConfiguration : IEntityTypeConfi
             .HasForeignKey(entry => entry.ActorUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasOne(entry => entry.Elevation)
+            .WithMany()
+            .HasForeignKey(entry => entry.ElevationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(entry => new { entry.TenantId, entry.OccurredAt })
             .IsDescending(false, true)
             .HasDatabaseName("ix_tenant_audit_entries_tenant_occurred_at");
@@ -61,5 +70,8 @@ internal sealed class TenantAuditEntryEntityTypeConfiguration : IEntityTypeConfi
         builder.HasIndex(entry => new { entry.ActorUserId, entry.OccurredAt })
             .IsDescending(false, true)
             .HasDatabaseName("ix_tenant_audit_entries_actor_occurred_at");
+
+        builder.HasIndex(entry => new { entry.ElevationId, entry.OccurredAt })
+            .HasDatabaseName("ix_tenant_audit_entries_elevation_occurred_at");
     }
 }

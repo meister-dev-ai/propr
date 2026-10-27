@@ -658,7 +658,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
     }
 }
 
-public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Program>
+public class TenantAdministrationApiFactory : WebApplicationFactory<Program>
 {
     private const string TestJwtSecret = "test-tenant-admin-jwt-secret-32chars!";
 
@@ -963,7 +963,7 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             services.AddScoped<ITenantMemberClientAccessService, TenantMemberClientAccessService>();
             services.AddScoped<ITenantSsoProviderService, TenantSsoProviderService>();
             services.AddScoped<ISessionFactory, SessionFactory>();
-            services.AddHttpClient("TenantSsoAuth")
+            services.AddHttpClient(AuthorizationCodeFlow.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => new StubHttpMessageHandler(this.DequeueExternalAuthResponse));
 
             services.AddSingleton(Substitute.For<IPullRequestFetcher>());
@@ -992,18 +992,21 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             // Validate id_tokens against a static, in-memory OIDC configuration keyed off the derived
             // metadata address, so the SSO callback exercises the real signature/issuer/audience/lifetime
             // path without any network fetch. The trusted public key matches OidcSigningCredentials.
-            services.RemoveAll<ITenantOidcTokenValidator>();
-            services.AddSingleton<ITenantOidcTokenValidator>(_ => new TenantOidcTokenValidator(
+            services.RemoveAll<IOidcTokenValidator>();
+            services.AddSingleton<IOidcTokenValidator>(_ => new OidcTokenValidator(
                 metadataAddress =>
                 {
+                    var issuer = metadataAddress.Replace("/.well-known/openid-configuration", string.Empty, StringComparison.Ordinal);
                     var configuration = new OpenIdConnectConfiguration
                     {
-                        Issuer = metadataAddress.Replace("/.well-known/openid-configuration", string.Empty, StringComparison.Ordinal),
+                        Issuer = issuer,
+                        AuthorizationEndpoint = $"{issuer}/protocol/openid-connect/auth",
+                        TokenEndpoint = $"{issuer}/protocol/openid-connect/token",
                     };
                     configuration.SigningKeys.Add(OidcSigningKey);
                     return new StaticConfigurationManager<OpenIdConnectConfiguration>(configuration);
                 },
-                Substitute.For<ILogger<TenantOidcTokenValidator>>()));
+                Substitute.For<ILogger<OidcTokenValidator>>()));
 
             services.AddScoped<ITenantAuthService, TenantAuthService>();
         });

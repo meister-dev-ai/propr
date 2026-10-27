@@ -17,7 +17,7 @@ vi.mock('@/composables/useSession', () => ({
 
 import { useTenantCallbackViewModel } from '@/features/tenants/view-models/useTenantCallbackViewModel'
 
-describe('useTenantCallbackViewModel (FR-007, FR-008, FR-012)', () => {
+describe('useTenantCallbackViewModel', () => {
   beforeEach(() => {
     replaceMock.mockReset()
     replaceMock.mockResolvedValue(undefined)
@@ -95,6 +95,20 @@ describe('useTenantCallbackViewModel (FR-007, FR-008, FR-012)', () => {
     await vm.completeTenantSignIn()
     expect(vm.errorMessage.value).toBe('Tenant sign-in could not be completed. Please try again or contact a tenant administrator.')
     expect(replaceMock).not.toHaveBeenCalled()
+    expect(vm.loading.value).toBe(false)
+  })
+
+  it('reports an established session apart from a start page that does not load', async () => {
+    replaceMock.mockRejectedValueOnce(new Error('navigation failed'))
+    const vm = useTenantCallbackViewModel({
+      getLocationHash: () => '#accessToken=at-1&expiresIn=3600&tokenType=Bearer',
+      autoComplete: false,
+    })
+
+    await vm.completeTenantSignIn()
+    expect(establishSessionMock).toHaveBeenCalled()
+    expect(vm.errorMessage.value).toBe('')
+    expect(vm.signedIn.value).toBe(true)
     expect(vm.loading.value).toBe(false)
   })
 

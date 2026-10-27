@@ -11,6 +11,7 @@ namespace MeisterDev.ProPR.Api.Features.Reviewing.Intake.Controllers;
 /// <summary>Resolves a pull request's web address to the clients and coordinates that can act on it.</summary>
 [ApiController]
 [Route("pull-requests")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class PullRequestResolutionController(ResolvePullRequestHandler resolvePullRequestHandler)
     : ControllerBase
 {

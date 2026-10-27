@@ -39,6 +39,7 @@ public sealed class PrReviewViewController(
     /// <response code="200">PR view returned (empty DTO with zero jobs when the PR has no review jobs).</response>
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="401">Missing or invalid credentials.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the pull request view")]
     [HttpGet("reviewing/pr-view")]
     [HttpGet("pr-view")]
     [ProducesResponseType(typeof(PrReviewViewDto), StatusCodes.Status200OK)]

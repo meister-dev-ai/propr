@@ -15,6 +15,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Admin endpoints for managing application users.</summary>
 [ApiController]
 [Route("admin")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class AdminUsersController(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,

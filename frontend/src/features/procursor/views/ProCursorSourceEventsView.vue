@@ -13,7 +13,13 @@
       <p class="view-subtitle" style="margin-top: 0.25rem;">Recent ProCursor capture events, filtered organically.</p>
     </div>
 
-    <div class="section-card">
+    <ElevationRequiredNotice
+      v-if="elevationRequired"
+      :requirement="elevationRequired"
+      subject="this usage log"
+      @started="loadEvents"
+    />
+    <div v-else class="section-card">
       <div class="section-card-header">
         <h3>Usage Log</h3>
         <div class="section-card-header-actions">
@@ -50,6 +56,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getProCursorRecentEvents } from '@/services/proCursorService'
 import ProCursorUsageRecentEventsTable from '@/components/usage/ProCursorUsageRecentEventsTable.vue'
+import ElevationRequiredNotice from '@/features/elevations/components/ElevationRequiredNotice.vue'
+import { ElevationRequiredError, type ElevationRequirement } from '@/services/elevationRequirement'
 import type { ProCursorTokenUsageEventDto } from '@/types/proCursorTokenUsage'
 
 const route = useRoute()
@@ -58,6 +66,7 @@ const sourceId = route.params.sourceId as string
 
 const loading = ref(false)
 const error = ref('')
+const elevationRequired = ref<ElevationRequirement | null>(null)
 const events = ref<ProCursorTokenUsageEventDto[]>([])
 
 const filterText = ref('')
@@ -97,14 +106,22 @@ const filteredEvents = computed(() => {
   return result
 })
 
+// The notice stays until a request succeeds, so a retry never shows events that an elevation no longer covers.
 async function loadEvents() {
   loading.value = true
   error.value = ''
   try {
     const response = await getProCursorRecentEvents(clientId, sourceId, 250)
     events.value = response.items ?? []
+    elevationRequired.value = null
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unknown error'
+    if (err instanceof ElevationRequiredError) {
+      events.value = []
+      elevationRequired.value = err.requirement
+    } else {
+      elevationRequired.value = null
+      error.value = err instanceof Error ? err.message : 'Unknown error'
+    }
   } finally {
     loading.value = false
   }

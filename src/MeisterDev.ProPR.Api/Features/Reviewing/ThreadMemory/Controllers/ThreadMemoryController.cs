@@ -14,6 +14,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Admin endpoints for managing thread memory embeddings and the memory activity log.</summary>
 [ApiController]
 [Route("admin/reviewing/thread-memory")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ThreadMemoryController(
     IThreadMemoryRepository memoryRepository,
     IReviewPrScanThreadStatusStore scanRepository,
@@ -37,6 +38,7 @@ public sealed partial class ThreadMemoryController(
     /// <response code="200">Paginated list of stored embeddings.</response>
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="403">Caller is not an admin.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientQuery, Resource = "the thread memory of the client")]
     [HttpGet]
     [HttpGet("/admin/thread-memory")]
     [ProducesResponseType(typeof(PagedResult<ThreadMemoryRecordDto>), StatusCodes.Status200OK)]

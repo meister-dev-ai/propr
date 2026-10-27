@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Features.ProCursor.Broker.Controllers;
 
@@ -16,6 +17,7 @@ namespace MeisterDev.ProPR.Api.Features.ProCursor.Broker.Controllers;
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
 [Route("internal/propr/procursor/broker/embeddings")]
+[TenantData(TenantDataAccess.ServiceChannel)]
 public sealed class ProCursorEmbeddingBrokerController(
     IProCursorEmbeddingBroker embeddingBroker,
     ILogger<ProCursorEmbeddingBrokerController> logger) : ControllerBase

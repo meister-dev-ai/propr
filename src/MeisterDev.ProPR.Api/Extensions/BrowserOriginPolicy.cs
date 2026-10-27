@@ -15,12 +15,21 @@ internal static class BrowserOriginPolicy
         "https://localhost:5173",
     ];
 
+    /// <summary>The origins of a frontend that runs on the developer's machine.</summary>
+    public static IReadOnlyList<string> LocalDevelopmentOrigins => FixedOrigins;
+
+    /// <summary>The origins an operator lists in <c>CORS_ORIGINS</c>.</summary>
+    public static string[] GetConfiguredOrigins(IConfiguration configuration)
+    {
+        return (configuration["CORS_ORIGINS"] ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
     public static string[] GetAllowedOrigins(
         IConfiguration configuration,
         IEnumerable<ScmBrowserOriginDeclaration> declarations)
     {
-        var extraOrigins = (configuration["CORS_ORIGINS"] ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var extraOrigins = GetConfiguredOrigins(configuration);
 
         var publicUiOrigin = PublicApplicationUrlResolver.GetConfiguredPublicUiOrigin(configuration);
 

@@ -18,6 +18,7 @@ export interface RouteParityItem {
 export const routeParity: RouteParityItem[] = [
   { id: 'home', workflowName: 'Role-aware default redirect' },
   { id: 'login', workflowName: 'Platform recovery sign-in' },
+  { id: 'login-callback', workflowName: 'Platform administrator sign-in completion' },
   { id: 'tenant-directory', workflowName: 'Tenant directory access' },
   { id: 'tenant-login', workflowName: 'Tenant-scoped sign-in' },
   { id: 'tenant-login-callback', workflowName: 'External tenant sign-in completion' },
@@ -33,6 +34,7 @@ export const routeParity: RouteParityItem[] = [
   { id: 'provider-add-ins', workflowName: 'Platform admin AI provider add-in inventory' },
   { id: 'licensing', workflowName: 'Platform admin licensing' },
   { id: 'usage-statistics', workflowName: 'Platform admin anonymous usage statistics' },
+  { id: 'elevations', workflowName: 'Platform admin elevations into tenant content' },
   { id: 'runners', workflowName: 'Tenant admin runners' },
   { id: 'client-detail-providers', workflowName: 'Client provider shortcut' },
   { id: 'pr-review', workflowName: 'Client-access PR review request' },

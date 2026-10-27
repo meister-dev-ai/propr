@@ -15,6 +15,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Manages AI pull request review jobs.</summary>
 [ApiController]
 [Route("clients/{clientId:guid}")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class ReviewsController(IJobRepository jobRepository, ICustomerDashboardReader dashboardReader) : ControllerBase
 {
     /// <summary>Reads a bounded page of persisted review metadata for the specified client.</summary>

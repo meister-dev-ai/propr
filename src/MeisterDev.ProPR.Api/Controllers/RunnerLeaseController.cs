@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Authorization;
 using MeisterDev.ProPR.Application.Options;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 
@@ -27,6 +28,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 [ApiController]
 [Route("runners")]
 [Authorize(AuthenticationSchemes = RunnerAuthenticationDefaults.Scheme)]
+[TenantData(TenantDataAccess.ServiceChannel)]
 public sealed class RunnerLeaseController(
     IRunnerLeaseOfferService offers,
     IReviewJobLeaseStore leases,

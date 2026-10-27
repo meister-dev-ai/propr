@@ -11635,6 +11635,654 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/platform-admin/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Starts the sign-in. ProPR sends the browser to the identity provider and keeps the state of the sign-in in an
+         *     httpOnly cookie.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /**
+                     * @description The frontend page the sign-in returns to. Its origin is the origin of `MEISTER_PUBLIC_BASE_URL`, one of
+                     *     `CORS_ORIGINS`, or without `MEISTER_PUBLIC_BASE_URL` the origin of this request.
+                     */
+                    returnUrl?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Found */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/platform-admin/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Completes the sign-in at the redirect from the identity provider. On success it sets the refresh cookie and
+         *     returns the browser to the frontend with the access token in the URL fragment. A refused sign-in returns to
+         *     the frontend with `error` and `message` in the fragment.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    state?: string;
+                    code?: string;
+                    error?: string;
+                    error_description?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Found */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/elevations/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the active elevations of the caller and the longest duration the installation permits. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The active elevations of the caller. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformAdminElevationStatusResponse"];
+                        "application/json": components["schemas"]["PlatformAdminElevationStatusResponse"];
+                        "text/json": components["schemas"]["PlatformAdminElevationStatusResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The license of the installation does not include multi-tenancy. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/elevations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the elevations of all platform administrators, the newest first. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Limits the list to the elevations of one tenant. */
+                    tenantId?: string;
+                    /** @description The page, starting at 1. */
+                    page?: number;
+                    /** @description The elevations per page, from 1 to 200. */
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of elevations. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformAdminElevationDtoPagedResult"];
+                        "application/json": components["schemas"]["PlatformAdminElevationDtoPagedResult"];
+                        "text/json": components["schemas"]["PlatformAdminElevationDtoPagedResult"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The license of the installation does not include multi-tenancy. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Starts an elevation of the caller for one tenant, or for one client of a tenant. The elevation grants read
+         *     access to the content of its scope until it expires or is ended. It grants no write access.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StartPlatformAdminElevationRequest"];
+                    "text/json": components["schemas"]["StartPlatformAdminElevationRequest"];
+                    "application/*+json": components["schemas"]["StartPlatformAdminElevationRequest"];
+                };
+            };
+            responses: {
+                /** @description The elevation started. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformAdminElevationDto"];
+                        "application/json": components["schemas"]["PlatformAdminElevationDto"];
+                        "text/json": components["schemas"]["PlatformAdminElevationDto"];
+                    };
+                };
+                /**
+                 * @description The reason is missing or too long, the duration is outside the permitted range, the client identifier is empty,
+                 *     or the tenant is the System tenant.
+                 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist, or the client does not belong to it. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The license of the installation does not include multi-tenancy. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/elevations/{elevationId}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ends an active elevation before its expiry. Any platform administrator can end any elevation. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    elevationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The elevation ended. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformAdminElevationDto"];
+                        "application/json": components["schemas"]["PlatformAdminElevationDto"];
+                        "text/json": components["schemas"]["PlatformAdminElevationDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The elevation does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /**
+                 * @description The elevation had already ended or expired, or the license of the installation does not include
+                 *     multi-tenancy.
+                 */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/elevations/{elevationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns one elevation. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    elevationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The elevation. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformAdminElevationDto"];
+                        "application/json": components["schemas"]["PlatformAdminElevationDto"];
+                        "text/json": components["schemas"]["PlatformAdminElevationDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The elevation does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The license of the installation does not include multi-tenancy. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/elevations/{elevationId}/audit-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the audit entries of one elevation, the oldest first: its start, every content read and its end or
+         *     expiry. The same entries are in the audit history of the tenant.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    elevationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The audit entries of the elevation. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantAuditEntryDto"][];
+                        "application/json": components["schemas"]["TenantAuditEntryDto"][];
+                        "text/json": components["schemas"]["TenantAuditEntryDto"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The elevation does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The license of the installation does not include multi-tenancy. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/propr/procursor/broker/embeddings/deployment": {
         parameters: {
             query?: never;
@@ -17480,6 +18128,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/audit-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns one page of the audit history of the tenant, the newest entry first. The history contains changes to
+         *     the tenant's settings, memberships, sign-in providers and machine credentials, identity erasures, and the
+         *     elevations of platform administrators with every content read under them.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description The page, starting at 1. */
+                    page?: number;
+                    /** @description The entries per page, from 1 to 200. */
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description The tenant. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of the audit history. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantAuditEntryDtoPagedResult"];
+                        "application/json": components["schemas"]["TenantAuditEntryDtoPagedResult"];
+                        "text/json": components["schemas"]["TenantAuditEntryDtoPagedResult"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller administers neither this tenant nor the installation. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The license of the installation does not include multi-tenancy. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/tenants/{tenantSlug}/providers": {
         parameters: {
             query?: never;
@@ -21701,9 +22443,13 @@ export interface components {
         /** @description Public authentication bootstrap information for the current installation edition. */
         AuthOptionsDto: {
             edition?: components["schemas"]["InstallationEdition"];
+            /** @description The sign-in methods the installation offers. */
             availableSignInMethods?: string[] | null;
+            /** @description The licensed capabilities and their state. */
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+            /** @description The public base URL of the API. */
             publicBaseUrl?: string | null;
+            platformAdminSignIn?: components["schemas"]["PlatformAdminSignInOptionDto"] | null;
         };
         /** @description Authenticated session snapshot shared with the admin UI after sign-in. */
         AuthenticatedSessionDto: {
@@ -24014,6 +24760,7 @@ export interface components {
             admissionRefusalReason?: string | null;
             /** Format: date-time */
             heldUntil?: string | null;
+            contentWithheld?: boolean;
         };
         /** @description Single job item in the list response. */
         JobListItem: {
@@ -24055,6 +24802,7 @@ export interface components {
             totalEstimatedCostUsd?: number | null;
             costIsApproximate?: boolean;
             budgetSoftCapped?: boolean;
+            contentWithheld?: boolean;
         };
         /** @description Response for the job list endpoint. */
         JobListResponse: {
@@ -24836,6 +25584,93 @@ export interface components {
             providers?: components["schemas"]["PermittedProviderDescriptor"][] | null;
             /** @description Whether the tenant has stated a provider policy at all. */
             isRestricted?: boolean;
+        };
+        /**
+         * @description A time-bound grant with which a platform administrator reads the content of one tenant, or of one client of a
+         *     tenant, read-only.
+         */
+        PlatformAdminElevationDto: {
+            /**
+             * Format: uuid
+             * @description The elevation.
+             */
+            id?: string;
+            /**
+             * Format: uuid
+             * @description The platform administrator, or null when the account was deleted.
+             */
+            administratorUserId?: string | null;
+            /** @description The user name of the platform administrator when the elevation started. */
+            administratorName?: string | null;
+            /**
+             * Format: uuid
+             * @description The tenant the elevation covers.
+             */
+            tenantId?: string;
+            /** @description The display name of that tenant. */
+            tenantDisplayName?: string | null;
+            /**
+             * Format: uuid
+             * @description The one client the elevation covers, or null when it covers every client of the tenant.
+             */
+            clientId?: string | null;
+            /** @description The display name of that client. */
+            clientDisplayName?: string | null;
+            /** @description Why the platform administrator started the elevation, for example a ticket number. */
+            reason?: string | null;
+            /**
+             * Format: date-time
+             * @description When the elevation started.
+             */
+            startedAt?: string;
+            /**
+             * Format: date-time
+             * @description When the elevation expires.
+             */
+            expiresAt?: string;
+            /**
+             * Format: date-time
+             * @description When the elevation ended early or its expiry was recorded, or null.
+             */
+            endedAt?: string | null;
+            /** @description The user name of the platform administrator who ended the elevation early, or null. */
+            endedByName?: string | null;
+            state?: components["schemas"]["PlatformAdminElevationState"];
+            /**
+             * Format: int32
+             * @description How many content reads ProPR recorded under the elevation.
+             */
+            contentReads?: number;
+        };
+        /** @description Generic paginated result wrapper. */
+        PlatformAdminElevationDtoPagedResult: {
+            items?: components["schemas"]["PlatformAdminElevationDto"][] | null;
+            /** Format: int32 */
+            totalCount?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+        };
+        /**
+         * @description The state of an elevation at the time it is read.
+         * @enum {string}
+         */
+        PlatformAdminElevationState: "active" | "ended" | "expired";
+        /** @description The elevations of the calling platform administrator, with the bound of the installation. */
+        PlatformAdminElevationStatusResponse: {
+            /**
+             * Format: int32
+             * @description The longest duration, in minutes, the installation permits for one elevation.
+             */
+            maxDurationMinutes?: number;
+            /** @description The active elevations of the caller, the one that expires first first. */
+            active?: components["schemas"]["PlatformAdminElevationDto"][] | null;
+        };
+        /** @description The identity provider through which platform administrators can sign in. */
+        PlatformAdminSignInOptionDto: {
+            /** @description The name of the provider on the sign-in page. */
+            displayName?: string | null;
         };
         /** @description Summary of a single review job within the PR view. */
         PrJobSummaryDto: {
@@ -25927,6 +26762,11 @@ export interface components {
             costIsApproximate?: boolean;
             /** @description Every run against this pull request, running work first, then most recent first. */
             jobs?: components["schemas"]["JobListItem"][] | null;
+            /**
+             * @description True when the caller is a platform administrator without access to the content of the client, so the title
+             *     of the pull request is withheld.
+             */
+            contentWithheld?: boolean;
         };
         /** @description Response for the pull-request-grouped review history endpoint. */
         PullRequestHistoryResponse: {
@@ -27296,6 +28136,11 @@ export interface components {
              * @description How many times this review has been taken back from a runner that went quiet.
              */
             reclaimCount?: number;
+            /**
+             * @description True when the caller is a platform administrator whose elevations do not cover the client of the review. The
+             *     title is then withheld.
+             */
+            contentWithheld?: boolean;
         };
         /**
          * @description Everything non-secret a review needs, resolved once when the job is dispatched.
@@ -28062,6 +28907,27 @@ export interface components {
         SetUserActiveRequest: {
             isActive: boolean;
         };
+        /** @description A request of a platform administrator to start an elevation for themselves. */
+        StartPlatformAdminElevationRequest: {
+            /**
+             * Format: uuid
+             * @description The tenant whose content the elevation covers.
+             */
+            tenantId?: string;
+            /**
+             * Format: uuid
+             * @description One client of the tenant, to limit the elevation to that client; null covers every client of the tenant. An empty
+             *     identifier is refused.
+             */
+            clientId?: string | null;
+            /** @description Why the administrator needs the content, for example a ticket number. Recorded with every read. */
+            reason?: string | null;
+            /**
+             * Format: int32
+             * @description How long the elevation lasts, from 1 minute to the maximum of the installation.
+             */
+            durationMinutes?: number;
+        };
         /** @description Submits the values an action asked for, continuing the run that asked. */
         SubmitProviderActionValuesRequest: {
             /** @description The values by declared input name. They belong to the run and reach no column. */
@@ -28193,6 +29059,52 @@ export interface components {
             timeZoneId?: string | null;
             /** @description The host name of the replica that made the last observation. */
             machineName?: string | null;
+        };
+        /** @description One entry of the audit history of a tenant. */
+        TenantAuditEntryDto: {
+            /**
+             * Format: uuid
+             * @description The entry.
+             */
+            id?: string;
+            /**
+             * Format: uuid
+             * @description The tenant the entry belongs to.
+             */
+            tenantId?: string;
+            /** @description What happened, for example `tenant.membership.assigned` or `elevation.content_read`. */
+            eventType?: string | null;
+            /** @description One sentence that describes the event. */
+            summary?: string | null;
+            /** @description Further detail of the event, when there is any. */
+            detail?: string | null;
+            /**
+             * Format: uuid
+             * @description The account that caused the event, or null when ProPR caused it or the account was deleted.
+             */
+            actorUserId?: string | null;
+            /** @description The user name of that account, when it still exists. */
+            actorName?: string | null;
+            /**
+             * Format: uuid
+             * @description The elevation of a platform administrator the event belongs to, when it belongs to one.
+             */
+            elevationId?: string | null;
+            /**
+             * Format: date-time
+             * @description When the event happened.
+             */
+            occurredAt?: string;
+        };
+        /** @description Generic paginated result wrapper. */
+        TenantAuditEntryDtoPagedResult: {
+            items?: components["schemas"]["TenantAuditEntryDto"][] | null;
+            /** Format: int32 */
+            totalCount?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
         };
         /** @description Tenant-authenticated session payload returned by tenant login endpoints. */
         TenantAuthSessionDto: {

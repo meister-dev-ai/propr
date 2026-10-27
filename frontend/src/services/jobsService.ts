@@ -10,6 +10,7 @@
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { RuntimeMode } from '@/app/runtime/createRuntime'
 import { sanitizeErrorMessage } from '@/services/credentialSafety'
+import { ElevationRequiredError, throwForFailedResponse } from '@/services/elevationRequirement'
 import { authedFetch, createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { components } from '@/types'
 
@@ -401,9 +402,14 @@ async function getPrViewInternal(
 
   try {
     const res = await authedFetch(`${getJobsBaseUrl()}/clients/${clientId}/pr-view?${q}`)
-    if (!res.ok) throw new Error(`GET /clients/${clientId}/pr-view: ${res.status}`)
+    if (!res.ok) await throwForFailedResponse(res, `GET /clients/${clientId}/pr-view`)
     return res.json() as Promise<PrReviewViewDto>
   } catch (error) {
+    // The view offers to start an elevation for a refused pull request, so this refusal keeps its type.
+    if (error instanceof ElevationRequiredError) {
+      throw error
+    }
+
     throw new Error(sanitizeErrorMessage(error, `Failed to load PR view for client ${clientId}.`))
   }
 }

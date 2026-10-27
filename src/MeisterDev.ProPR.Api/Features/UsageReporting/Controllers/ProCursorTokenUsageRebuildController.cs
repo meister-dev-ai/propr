@@ -15,6 +15,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/procursor/token-usage")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class ProCursorTokenUsageRebuildController(IProCursorTokenUsageRebuildService rebuildService) : ControllerBase
 {
     /// <summary>

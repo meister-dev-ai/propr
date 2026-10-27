@@ -3,13 +3,17 @@
 
 namespace MeisterDev.ProPR.Infrastructure.Data.Models;
 
-/// <summary>EF persistence model for a tenant-scoped external identity link.</summary>
+/// <summary>
+///     EF persistence model for an external identity link. A link made through a tenant identity provider carries
+///     the tenant and the provider. A link made through the identity provider for platform administrators carries
+///     neither, because that provider is configured for the installation and has no row of its own.
+/// </summary>
 public sealed class ExternalIdentityRecord
 {
     public Guid Id { get; set; }
-    public Guid TenantId { get; set; }
+    public Guid? TenantId { get; set; }
     public Guid UserId { get; set; }
-    public Guid SsoProviderId { get; set; }
+    public Guid? SsoProviderId { get; set; }
     public string Issuer { get; set; } = string.Empty;
     public string Subject { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;

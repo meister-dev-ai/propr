@@ -5,7 +5,10 @@ using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Domain.Entities;
 
-/// <summary>An application user who may authenticate through local credentials or tenant-scoped external sign-in.</summary>
+/// <summary>
+///     An application user who may authenticate through local credentials, through a tenant identity provider, or
+///     through the identity provider for platform administrators.
+/// </summary>
 public sealed class AppUser
 {
     /// <summary>Unique identifier.</summary>
@@ -47,7 +50,7 @@ public sealed class AppUser
     /// <summary>Tenant memberships that grant access within specific tenants.</summary>
     public ICollection<TenantMembership> TenantMemberships { get; } = [];
 
-    /// <summary>External identities linked to this user for tenant-scoped sign-in.</summary>
+    /// <summary>External identities linked to this user for sign-in through an identity provider.</summary>
     public ICollection<ExternalIdentity> ExternalIdentities { get; } = [];
 
     /// <summary>Personal access tokens issued by this user.</summary>

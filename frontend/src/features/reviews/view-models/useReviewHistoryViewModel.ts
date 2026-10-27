@@ -41,6 +41,8 @@ export interface PrGroup {
   costIsApproximate: boolean
   clientId: string
   items: JobListItem[]
+  /** True when the caller is a platform administrator without access to the content of the client. */
+  contentWithheld: boolean
 }
 
 export interface ReviewHistoryService {
@@ -506,5 +508,6 @@ function toPrGroup(item: PullRequestHistoryItem): PrGroup {
     costIsApproximate: item.costIsApproximate ?? false,
     clientId: item.clientId ?? '',
     items: (item.jobs ?? []) as JobListItem[],
+    contentWithheld: item.contentWithheld ?? false,
   }
 }

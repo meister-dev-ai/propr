@@ -75,6 +75,13 @@
                 <span>Synchronizing vector store...</span>
               </div>
 
+              <ElevationRequiredNotice
+                v-else-if="embeddingsElevation"
+                :requirement="embeddingsElevation"
+                subject="this thread memory"
+                @started="loadEmbeddings(1)"
+              />
+
               <div v-else-if="embeddingsError" class="error-state-v2">
                 <i class="fi fi-rr-warning error-icon"></i>
                 <p>{{ embeddingsError }}</p>
@@ -384,6 +391,8 @@ import ProgressOrb from '@/components/ProgressOrb.vue'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
 import { createAdminClient } from '@/services/api'
 import { describeMemoryOutcome } from '@/features/thread-memory/memoryOutcome'
+import ElevationRequiredNotice from '@/features/elevations/components/ElevationRequiredNotice.vue'
+import { ElevationRequiredError, type ElevationRequirement } from '@/services/elevationRequirement'
 import {
   fetchStoredEmbeddings,
   deleteEmbedding,
@@ -409,6 +418,7 @@ const search = ref('')
 const embeddings = ref<ThreadMemoryRecordDto[]>([])
 const embeddingsLoading = ref(false)
 const embeddingsError = ref('')
+const embeddingsElevation = ref<ElevationRequirement | null>(null)
 const embeddingsPage = ref(1)
 const embeddingsTotal = ref(0)
 const PAGE_SIZE = 50
@@ -467,13 +477,18 @@ async function loadEmbeddings(page: number) {
   if (!selectedClientId.value) return
   embeddingsLoading.value = true
   embeddingsError.value = ''
+  embeddingsElevation.value = null
   embeddingsPage.value = page
   try {
     const result = await fetchStoredEmbeddings(selectedClientId.value, search.value || undefined, page, PAGE_SIZE)
     embeddings.value = result.items
     embeddingsTotal.value = result.totalCount
   } catch (e) {
-    embeddingsError.value = e instanceof Error ? e.message : 'Failed to load embeddings.'
+    if (e instanceof ElevationRequiredError) {
+      embeddingsElevation.value = e.requirement
+    } else {
+      embeddingsError.value = e instanceof Error ? e.message : 'Failed to load embeddings.'
+    }
   } finally {
     embeddingsLoading.value = false
   }

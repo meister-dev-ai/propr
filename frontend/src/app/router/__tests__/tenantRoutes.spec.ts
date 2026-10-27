@@ -186,6 +186,27 @@ describe('tenant router scaffolding', () => {
     expect(router.currentRoute.value.name).toBe('access-denied')
   })
 
+  it('admits a platform administrator to the elevations page when multi-tenancy is licensed', async () => {
+    isAuthenticated.value = true
+    isAdmin.value = true
+
+    const router = await importRouter()
+    await router.push({ name: 'elevations' })
+
+    expect(router.currentRoute.value.name).toBe('elevations')
+  })
+
+  it('blocks the elevations page when multi-tenancy is not licensed', async () => {
+    isAuthenticated.value = true
+    isAdmin.value = true
+    availableCapabilities.value = []
+
+    const router = await importRouter()
+    await router.push({ name: 'elevations' })
+
+    expect(router.currentRoute.value.name).toBe('access-denied')
+  })
+
   it('blocks the tenant workspace when multi-tenancy is not licensed', async () => {
     isAuthenticated.value = true
     isAdmin.value = true

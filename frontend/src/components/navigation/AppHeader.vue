@@ -21,7 +21,7 @@
            worse than no link. The route guard and the server both repeat the check. -->
       <RouterLink v-if="canViewCodeQuality" :to="{ name: 'code-quality' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'code-quality' }"><i class="fi fi-rr-chart-histogram"></i> Code Quality</RouterLink>
       <div v-if="hasAnyAdministrationAccess" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
-        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'provider-add-ins' || $route.name === 'licensing' || $route.name === 'usage-statistics' || $route.name === 'runners' || $route.name === 'runners-all' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
+        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'elevations' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'provider-add-ins' || $route.name === 'licensing' || $route.name === 'usage-statistics' || $route.name === 'runners' || $route.name === 'runners-all' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
           <i class="fi fi-rr-shield-check"></i> Administration
           <!-- A dot rather than a count or an error colour. Shown only to platform administrators, who are
                the only ones who can act on it. -->
@@ -33,6 +33,7 @@
             <p class="dropdown-section-title">Access</p>
           <RouterLink v-if="defaultTenantAdminRoute" :to="defaultTenantAdminRoute" class="dropdown-item" :class="{ 'active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-building"></i> Tenants</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
+          <RouterLink v-if="canViewElevations" :to="{ name: 'elevations' }" class="dropdown-item" :class="{ 'active': $route.name === 'elevations' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-eye"></i> Elevations</RouterLink>
           </div>
           <div v-if="isAdmin" class="dropdown-section">
             <p class="dropdown-section-title">Providers</p>
@@ -118,6 +119,9 @@ const canViewCodeQuality = computed(
 const canAccessTenantAdministration = computed(
   () => isCapabilityAvailable('multi-tenancy') && (isAdmin.value || Object.values(tenantRoles.value).some((role) => role >= 1)),
 )
+
+// Elevations are part of multi-tenancy. The route guard and the API check the capability as well.
+const canViewElevations = computed(() => isAdmin.value && isCapabilityAvailable('multi-tenancy'))
 
 const hasAnyTenantAdminRole = computed(
   () => isAdmin.value || Object.values(tenantRoles.value).some((role) => role >= 1),

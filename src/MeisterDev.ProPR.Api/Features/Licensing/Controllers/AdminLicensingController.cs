@@ -21,6 +21,7 @@ namespace MeisterDev.ProPR.Api.Features.Licensing.Controllers;
 /// <summary>Administrative endpoints for the installation's license and premium capability state.</summary>
 [ApiController]
 [Route("admin/licensing")]
+[TenantData(TenantDataAccess.None)]
 public sealed class AdminLicensingController(
     GetLicensingSummaryHandler? getLicensingSummaryHandler = null,
     UpdateLicensingHandler? updateLicensingHandler = null,

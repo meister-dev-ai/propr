@@ -90,6 +90,42 @@ External services send `X-Tenant-Machine-Token` and keep the token server-side.
 | AI configuration | Machine callers can verify candidate edits and select verified client-owned Default, High and Embedding purposes. See [AI credentials](../ai/credentials.md). |
 | Rate limits | Requests can return 429. The API-host limit defaults to 256 requests/second; `MEISTER_MACHINE_AUTH_GLOBAL_PERMITS_PER_SECOND` is clamped to 1–4096. Each credential permits 16 BCrypt verifications/second. Retry after the next one-second window. |
 
+## Platform administrator elevations
+
+A platform administrator starts an elevation for themselves to read the content of one tenant, or of one client
+of a tenant, for a limited time. The endpoints that need one are listed under
+[platform administrator access to tenant content](security.md#platform-administrator-access-to-tenant-content).
+All elevation endpoints require a platform administrator and the `multi-tenancy` capability.
+
+| Operation | Request | Outcome |
+|---|---|---|
+| Start | `POST /api/admin/elevations` with `tenantId`, optional `clientId`, `reason` and `durationMinutes` | ProPR starts an elevation of the caller and answers `201` with it. An empty reason, a duration above the maximum of the installation, an empty `clientId` and the System tenant answer `400`; leave out `clientId` to cover every client of the tenant. |
+| Active elevations | `GET /api/admin/elevations/active` | ProPR returns the active elevations of the caller and `maxDurationMinutes`. |
+| End | `POST /api/admin/elevations/{elevationId}/end` | ProPR ends the elevation and answers `200`. An elevation that has already ended or expired answers `409`. |
+| List | `GET /api/admin/elevations` with optional `tenantId`, `page` and `pageSize` | ProPR returns the elevations of all platform administrators, the newest first, each with its number of content reads. |
+| Records | `GET /api/admin/elevations/{elevationId}/audit-entries` | ProPR returns the start, the content reads and the end or expiry of one elevation. |
+
+```bash
+curl -k -X POST https://localhost:5443/api/admin/elevations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{"tenantId": "<tenant-id>", "clientId": "<client-id>", "reason": "SUP-1042", "durationMinutes": 60}'
+```
+
+A content request of a platform administrator without an elevation answers `403`:
+
+```json
+{ "error": "...", "code": "elevation_required", "tenantId": "<tenant-id>", "clientId": "<client-id>" }
+```
+
+## Tenant audit history
+
+`GET /api/admin/tenants/{tenantId}/audit-entries` with optional `page` and `pageSize` returns the audit history of
+a tenant, the newest entry first, to its tenant administrators and to platform administrators. Each entry has an
+`eventType`, a `summary`, an optional `detail`, the acting user and the time. An entry that belongs to an
+elevation carries its `elevationId`; the event types of elevations are `elevation.started`, `elevation.ended`,
+`elevation.expired` and `elevation.content_read`. The endpoint requires the `multi-tenancy` capability.
+
 ## Repository review targets
 
 All paths below start with `/api/clients/{clientId}/review-targets`. The client requires the crawl

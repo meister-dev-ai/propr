@@ -8,6 +8,7 @@
 
 import { authedFetch } from '@/services/api'
 import { API_BASE_URL } from '@/services/apiBase'
+import { throwForFailedResponse } from '@/services/elevationRequirement'
 
 const BASE = API_BASE_URL
 
@@ -64,7 +65,7 @@ export async function fetchStoredEmbeddings(
   if (search) params.set('search', search)
 
   const res = await authedFetch(`${BASE}/admin/thread-memory?${params}`)
-  if (!res.ok) throw new Error(`GET /admin/thread-memory: ${res.status}`)
+  if (!res.ok) await throwForFailedResponse(res, 'GET /admin/thread-memory')
   return res.json() as Promise<PagedResult<ThreadMemoryRecordDto>>
 }
 

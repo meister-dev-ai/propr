@@ -71,6 +71,13 @@
             <p v-if="vm.policyError.value" class="error">{{ vm.policyError.value }}</p>
           </div>
         </section>
+
+        <PlatformAdminElevationPanel
+          v-if="isAdmin && tenantNeedsElevation(vm.tenantId)"
+          class="tenant-elevation-panel"
+          :tenant-id="vm.tenantId"
+          :tenant-name="vm.tenant.value?.displayName"
+        />
       </div>
 
       <div v-if="activeSection === 'clients'">
@@ -95,6 +102,10 @@
 
       <div v-if="activeSection === 'members'">
         <TenantMembersSection />
+      </div>
+
+      <div v-if="activeSection === 'audit'">
+        <TenantAuditHistorySection :tenant-id="vm.tenantId" />
       </div>
 
       <div v-if="vm.isTenantSsoAvailable.value && activeSection === 'sso'">
@@ -128,6 +139,9 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { AppNavDrawer, PageWithSidebar } from '@/components'
 import { useSession } from '@/composables/useSession'
 import TenantAiConnectionsSection from '@/features/tenants/components/TenantAiConnectionsSection.vue'
+import TenantAuditHistorySection from '@/features/tenants/components/TenantAuditHistorySection.vue'
+import PlatformAdminElevationPanel from '@/features/elevations/components/PlatformAdminElevationPanel.vue'
+import { tenantNeedsElevation } from '@/composables/usePlatformAdminElevations'
 import TenantBudgetSection from '@/features/tenants/components/TenantBudgetSection.vue'
 import TenantClientsSection from '@/features/tenants/components/TenantClientsSection.vue'
 import TenantLogicalModelsSection from '@/features/tenants/components/TenantLogicalModelsSection.vue'
@@ -146,6 +160,7 @@ type TenantSection =
   | 'logical-models'
   | 'pricing'
   | 'members'
+  | 'audit'
   | 'sso'
   | 'compliance'
   | 'budget'
@@ -168,7 +183,7 @@ const route = useRoute()
 const router = useRouter()
 const vm = useTenantSettingsViewModel()
 
-const { isCapabilityAvailable } = useSession()
+const { isCapabilityAvailable, isAdmin } = useSession()
 const isBudgetingAvailable = computed(() => isCapabilityAvailable('budgeting'))
 
 // The System tenant owns no connections, catalog or policy of its own, so those sections are not offered for it
@@ -207,6 +222,7 @@ const groups = computed<SidebarGroup[]>(() => [
       ...(isEditable.value
         ? [{ section: 'compliance' as TenantSection, label: 'Compliance', icon: 'fi-rr-lock' }]
         : []),
+      { section: 'audit', label: 'Audit history', icon: 'fi-rr-time-past' },
     ],
   },
   {
@@ -264,6 +280,10 @@ watch(activeSection, (section) => {
 </script>
 
 <style scoped>
+.tenant-elevation-panel {
+  margin-top: 1rem;
+}
+
 .tenant-policy-body {
   display: flex;
   flex-direction: column;

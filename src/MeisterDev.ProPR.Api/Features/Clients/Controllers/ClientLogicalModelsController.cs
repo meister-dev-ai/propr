@@ -20,6 +20,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("clients/{clientId:guid}/logical-models")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class ClientLogicalModelsController(
     ILogicalModelCatalogRepository catalog,
     IClientRegistry clients,

@@ -19,6 +19,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Exposes a client's USD spend against its monthly budget, with a trajectory projection and history.</summary>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/budget")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ClientBudgetConsumptionController(
     IClientBudgetConsumptionService consumptionService,
     IClientBudgetResetService resetService,

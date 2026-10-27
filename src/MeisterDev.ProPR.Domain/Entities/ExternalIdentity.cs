@@ -3,20 +3,29 @@
 
 namespace MeisterDev.ProPR.Domain.Entities;
 
-/// <summary>Tenant-scoped mapping from an external identity to an internal user.</summary>
+/// <summary>
+///     Mapping from an external identity to an internal user, made through a tenant identity provider or through the
+///     identity provider for platform administrators.
+/// </summary>
 public sealed class ExternalIdentity
 {
     /// <summary>Unique identifier.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Tenant this identity link belongs to.</summary>
-    public Guid TenantId { get; set; }
+    /// <summary>
+    ///     Tenant this identity link belongs to, or <see langword="null" /> for a link made through the identity
+    ///     provider for platform administrators.
+    /// </summary>
+    public Guid? TenantId { get; set; }
 
     /// <summary>Internal application user linked to the external identity.</summary>
     public Guid UserId { get; set; }
 
-    /// <summary>Provider configuration that issued this identity.</summary>
-    public Guid SsoProviderId { get; set; }
+    /// <summary>
+    ///     Tenant provider configuration that issued this identity, or <see langword="null" /> for a link made through
+    ///     the identity provider for platform administrators.
+    /// </summary>
+    public Guid? SsoProviderId { get; set; }
 
     /// <summary>External issuer identifier.</summary>
     public string Issuer { get; set; } = string.Empty;

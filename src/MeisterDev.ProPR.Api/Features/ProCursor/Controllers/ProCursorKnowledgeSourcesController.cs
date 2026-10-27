@@ -18,6 +18,7 @@ namespace MeisterDev.ProPR.Api.Features.ProCursor.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/procursor/sources")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ProCursorKnowledgeSourcesController(
     IClientAdminService clientAdminService,
     IReviewConfigurationSelectionService selections,

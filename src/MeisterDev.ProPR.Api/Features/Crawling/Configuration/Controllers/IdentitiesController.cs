@@ -13,6 +13,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Resolves Azure DevOps identities for use in crawl configuration.</summary>
 [ApiController]
 [Route("identities")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class IdentitiesController(IScmProviderRegistry registry) : ControllerBase
 {
     /// <summary>

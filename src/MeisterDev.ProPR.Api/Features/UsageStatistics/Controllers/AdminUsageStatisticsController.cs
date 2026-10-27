@@ -19,6 +19,7 @@ namespace MeisterDev.ProPR.Api.Features.UsageStatistics.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin/usage-statistics")]
+[TenantData(TenantDataAccess.None)]
 public sealed class AdminUsageStatisticsController(UsageStatisticsService? usageStatisticsService = null)
     : ControllerBase
 {

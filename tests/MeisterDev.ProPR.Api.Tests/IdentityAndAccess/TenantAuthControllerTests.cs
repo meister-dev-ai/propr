@@ -5,6 +5,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
@@ -656,6 +657,75 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             .GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-invalid&state={Uri.EscapeDataString("invalid-state")}");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>
+    ///     A state that the caller wrote itself carries the right tenant, provider and callback address, but not the
+    ///     protection of the installation's keys. The callback refuses it before any request to the provider, which
+    ///     would fail here because no provider answer is queued.
+    /// </summary>
+    [Fact]
+    public async Task ExternalCallback_WithAStateWithoutProtection_Returns401AndDoesNotCallProvider()
+    {
+        factory.ResetLicensing();
+        factory.ResetExternalAuthResponses();
+
+        var tenantSlug = $"acme-{Guid.NewGuid():N}";
+        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
+        var providerId = await factory.SeedSsoProviderAsync(
+            tenantId,
+            "Acme Entra",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
+            clientId: "entra-client-id");
+        var client = factory.CreateClient();
+        var unprotectedState = JsonSerializer.Serialize(
+            new
+            {
+                TenantSlug = tenantSlug,
+                ProviderId = providerId,
+                CallbackUrl = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug),
+                FrontendReturnUrl = (string?)null,
+                IssuedAtUtc = DateTimeOffset.UtcNow,
+                Nonce = "written-by-the-caller",
+            });
+
+        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code&state={Uri.EscapeDataString(unprotectedState)}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>
+    ///     A token endpoint that answers with valid JSON that is not an object sends no ID token, so the callback refuses
+    ///     the sign-in.
+    /// </summary>
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("\"id_token\"")]
+    public async Task ExternalCallback_WhenTheTokenAnswerIsNotAJsonObject_Returns401(string tokenAnswer)
+    {
+        factory.ResetLicensing();
+        factory.ResetExternalAuthResponses();
+
+        var tenantSlug = $"acme-{Guid.NewGuid():N}";
+        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
+        var providerId = await factory.SeedSsoProviderAsync(
+            tenantId,
+            "Acme Entra",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
+            clientId: "entra-client-id");
+        using var client = CreateNonRedirectingClient(factory);
+        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+        factory.QueueExternalAuthResponse(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(tokenAnswer, Encoding.UTF8, "application/json"),
+        });
+
+        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code&state={Uri.EscapeDataString(state)}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("external_identity_rejected", body.RootElement.GetProperty("error").GetString());
     }
 
     [Fact]

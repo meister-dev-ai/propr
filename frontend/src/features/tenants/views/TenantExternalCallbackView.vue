@@ -11,12 +11,20 @@
       </div>
 
       <p v-if="vm.loading.value" class="tenant-callback-copy">Signing you in and loading your access...</p>
-      <p v-else-if="vm.errorMessage.value" class="error">{{ vm.errorMessage.value }}</p>
-      <p v-else class="tenant-callback-copy">Tenant sign-in did not complete.</p>
+      <template v-else-if="vm.signedIn.value">
+        <p class="tenant-callback-copy" data-testid="tenant-callback-signed-in">
+          You are signed in, but the start page could not be loaded.
+        </p>
+        <RouterLink class="tenant-login-recovery" :to="{ name: 'home' }">Open the start page</RouterLink>
+      </template>
+      <template v-else>
+        <p v-if="vm.errorMessage.value" class="error">{{ vm.errorMessage.value }}</p>
+        <p v-else class="tenant-callback-copy">Tenant sign-in did not complete.</p>
 
-      <RouterLink class="tenant-login-recovery" :to="{ name: 'tenant-login', params: { tenantSlug: vm.tenantSlug } }">
-        Back to tenant sign-in
-      </RouterLink>
+        <RouterLink class="tenant-login-recovery" :to="{ name: 'tenant-login', params: { tenantSlug: vm.tenantSlug } }">
+          Back to tenant sign-in
+        </RouterLink>
+      </template>
     </div>
   </div>
 </template>

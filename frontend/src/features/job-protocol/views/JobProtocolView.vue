@@ -83,6 +83,12 @@
         </div>
 
         <p v-if="vm.loading" class="loading">Loading…</p>
+        <ElevationRequiredNotice
+            v-else-if="vm.elevationRequired"
+            :requirement="vm.elevationRequired"
+            subject="the protocol of this review"
+            @started="vm.reload()"
+        />
         <p v-else-if="vm.error" class="error">{{ vm.error }}</p>
         <p v-else-if="vm.protocols.length === 0" class="empty-state">No protocol available for this job.</p>
 
@@ -131,6 +137,7 @@ import JobProtocolTokensTab from '@/features/job-protocol/components/JobProtocol
 import JobProtocolTraceTab from '@/features/job-protocol/components/JobProtocolTraceTab.vue'
 import { useJobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 import { formatUsd } from '@/components/usageDashboardFormatters'
+import ElevationRequiredNotice from '@/features/elevations/components/ElevationRequiredNotice.vue'
 
 const vm = useJobProtocolViewModel()
 </script>

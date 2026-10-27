@@ -34,6 +34,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks read access to the client.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the retained comment threads of a pull request")]
     [HttpGet("threads")]
     [ProducesResponseType(typeof(IReadOnlyList<RetainedThreadDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -88,6 +89,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks read access to the client.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the retained files of a pull request")]
     [HttpGet("files")]
     [ProducesResponseType(typeof(IReadOnlyList<RetainedFileDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -134,6 +136,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks read access to the client.</response>
     /// <response code="404">No diff is retained for the file.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "a retained file diff")]
     [HttpGet("file-diff")]
     [ProducesResponseType(typeof(RetainedFileDiffDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

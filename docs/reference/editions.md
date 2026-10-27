@@ -25,7 +25,7 @@ the rest.
 
 | Capability | Key | Without it |
 |---|---|---|
-| Single sign-on | `sso-authentication` | Tenant users sign in with local accounts only |
+| Single sign-on | `sso-authentication` | Tenant users and platform administrators sign in with local accounts only, and ProPR ignores an identity provider configured for platform administrators |
 | Parallel review execution | `parallel-review-execution` | One review at a time, one file at a time, however many replicas run |
 | Distributed review execution | `distributed-execution` | No runner can enroll or lease; reviews run in the control plane |
 | Multiple SCM providers | `multiple-scm-providers` | One SCM provider connection per client |
@@ -44,6 +44,10 @@ Without `parallel-review-execution` the queue drains one review at a time whatev
 `multi-tenancy` the model catalog can be browsed and attached to a client, but overriding a price or
 hand-defining a model is a tenant-scoped screen; see
 [a model is missing its context window or price](../ai/models-and-catalog.md#a-model-is-missing-its-context-window-or-price).
+
+Elevations of platform administrators are part of `multi-tenancy`; see
+[platform administrator access to tenant content](security.md#platform-administrator-access-to-tenant-content).
+Without the capability, the management UI hides the elevation controls.
 
 ## How a disabled capability behaves
 

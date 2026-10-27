@@ -11,6 +11,7 @@ using MeisterDev.ProPR.CodeInsights.Survival;
 using MeisterDev.ProPR.CodeInsights.Support;
 using MeisterDev.ProPR.CodeInsights.Http;
 using Microsoft.AspNetCore.Http;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.CodeInsights.Controllers;
 
@@ -57,6 +58,7 @@ public sealed class CodeQualityController(
     /// <response code="200">The series, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller has no client access, lacks the licence, or asked for a client it cannot see.</response>
+    [TenantData(TenantDataAccess.Metadata)]
     [HttpGet("types-over-time")]
     [ProducesResponseType(typeof(CodeInsightTypeSeriesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -131,6 +133,7 @@ public sealed class CodeQualityController(
     /// <response code="200">The ranking, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller has no client access, lacks the licence, or asked for a client it cannot see.</response>
+    [TenantData(TenantDataAccess.Mixed)]
     [HttpGet("concentration")]
     [ProducesResponseType(typeof(IReadOnlyList<CodeInsightConcentrationResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -149,7 +152,13 @@ public sealed class CodeQualityController(
         [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
-        var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
+        // The file grain ranks file paths of the customer's repositories, which are content; the other grains rank
+        // clients, repositories, pull requests and jobs, which are metadata.
+        var scope = await scopeResolver.ResolveForClientAccessAsync(
+            this.HttpContext,
+            clientId,
+            ct,
+            CodeInsightQueries.ParseGrain(grain) == CodeInsightGrain.File ? "the code-quality concentration by file" : null);
         if (scope.Denied is not null)
         {
             return scope.Denied;
@@ -204,6 +213,7 @@ public sealed class CodeQualityController(
     /// <response code="200">The directory, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller has no client access, lacks the licence, or asked for a client it cannot see.</response>
+    [TenantData(TenantDataAccess.Metadata)]
     [HttpGet("repositories")]
     [ProducesResponseType(typeof(CodeInsightRepositoryDirectoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -292,6 +302,7 @@ public sealed class CodeQualityController(
     /// <response code="200">The hotspots, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller has no client access, lacks the licence, or asked for a client it cannot see.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.Action, Resource = "the code-quality hotspots")]
     [HttpGet("hotspots")]
     [ProducesResponseType(typeof(CodeInsightHotspotResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -310,7 +321,7 @@ public sealed class CodeQualityController(
         [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
-        var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
+        var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct, "the code-quality hotspots");
         if (scope.Denied is not null)
         {
             return scope.Denied;
@@ -372,6 +383,7 @@ public sealed class CodeQualityController(
     /// <response code="200">The survival counts, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller has no client access, lacks the licence, or asked for a client it cannot see.</response>
+    [TenantData(TenantDataAccess.Metadata)]
     [HttpGet("survival")]
     [ProducesResponseType(typeof(CodeInsightSurvivalReport), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -442,6 +454,7 @@ public sealed class CodeQualityController(
     /// <response code="200">The findings, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller has no client access, lacks the licence, or asked for a client it cannot see.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.Action, Resource = "code-quality findings")]
     [HttpGet("findings")]
     [ProducesResponseType(typeof(IReadOnlyList<CodeInsightFindingResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -464,7 +477,7 @@ public sealed class CodeQualityController(
         [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
-        var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct);
+        var scope = await scopeResolver.ResolveForClientAccessAsync(this.HttpContext, clientId, ct, "code-quality findings");
         if (scope.Denied is not null)
         {
             return scope.Denied;
@@ -527,6 +540,7 @@ public sealed class CodeQualityController(
     /// <response code="200">The risk distribution, including Unknown historical assessments.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">The caller cannot access the selected client or the licensed capability.</response>
+    [TenantData(TenantDataAccess.Metadata)]
     [HttpGet("risk-over-time")]
     [ProducesResponseType(typeof(CodeInsightTypeSeriesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

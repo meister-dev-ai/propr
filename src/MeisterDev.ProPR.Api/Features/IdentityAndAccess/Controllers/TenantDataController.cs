@@ -54,6 +54,7 @@ public sealed class TenantDataController(ITenantDataLifecycle lifecycle) : Contr
     ///     The work of the tenant was stopped and the deletion waits for it; the Retry-After header gives the seconds to
     ///     wait. A problem answer means that the tenant is the system tenant.
     /// </response>
+    [TenantData(TenantDataAccess.DataRequest)]
     [HttpDelete]
     [ProducesResponseType(typeof(TenantDeletionResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -106,6 +107,7 @@ public sealed class TenantDataController(ITenantDataLifecycle lifecycle) : Contr
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">The caller is not a platform administrator.</response>
     /// <response code="404">The tenant does not exist.</response>
+    [TenantData(TenantDataAccess.DataRequest)]
     [HttpGet("export")]
     [Produces("application/json")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -144,6 +146,7 @@ public sealed class TenantDataController(ITenantDataLifecycle lifecycle) : Contr
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">The caller is not a platform administrator.</response>
     /// <response code="404">The tenant does not exist.</response>
+    [TenantData(TenantDataAccess.Metadata)]
     [HttpPut("protocol-retention")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -173,6 +176,7 @@ public sealed class TenantDataController(ITenantDataLifecycle lifecycle) : Contr
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">The caller is not a platform administrator.</response>
     /// <response code="404">The tenant does not exist.</response>
+    [TenantData(TenantDataAccess.DataRequest)]
     [HttpPost("identity-erasures")]
     [ProducesResponseType(typeof(IdentityErasureResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]

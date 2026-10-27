@@ -27,6 +27,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </remarks>
 [ApiController]
 [Route("admin/ai-provider-add-ins")]
+[TenantData(TenantDataAccess.None)]
 public sealed class AdminAiProviderAddInsController(
     ProviderAddInCatalog catalog,
     ProviderAddInActivationService activations) : ControllerBase

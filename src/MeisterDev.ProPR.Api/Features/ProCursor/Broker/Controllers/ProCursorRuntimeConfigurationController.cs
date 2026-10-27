@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Features.ProCursor.Broker.Controllers;
 
@@ -15,6 +16,7 @@ namespace MeisterDev.ProPR.Api.Features.ProCursor.Broker.Controllers;
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
 [Route("internal/propr/procursor/runtime-config")]
+[TenantData(TenantDataAccess.ServiceChannel)]
 public sealed class ProCursorRuntimeConfigurationController(ProCursorRuntimeConfigurationProjectionService projectionService) : ControllerBase
 {
     /// <summary>

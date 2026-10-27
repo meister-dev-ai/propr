@@ -15,6 +15,7 @@ namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 /// <summary>Manages client-scoped SCM provider scope selections.</summary>
 [ApiController]
 [Route("clients/{clientId:guid}/provider-connections/{connectionId:guid}/scopes")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ClientProviderScopesController(
     IClientScmConnectionRepository connectionRepository,
     IClientScmScopeRepository scopeRepository,

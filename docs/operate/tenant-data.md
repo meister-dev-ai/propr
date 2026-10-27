@@ -2,7 +2,9 @@
 
 ProPR has four endpoints for the data of a tenant: tenant deletion, tenant export, protocol retention and
 identity erasure. They are independent of each other and are under `/api/admin/tenants/{tenantId}`. Only a
-platform administrator can call them.
+platform administrator can call them. The deletion, the export and the identity erasure carry out a request of
+the customer, so a platform administrator calls them without an
+[elevation](../reference/security.md#platform-administrator-access-to-tenant-content).
 
 ## Tenant deletion
 

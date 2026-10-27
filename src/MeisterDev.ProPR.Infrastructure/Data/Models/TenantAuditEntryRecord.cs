@@ -14,6 +14,10 @@ public sealed class TenantAuditEntryRecord
     public string? Detail { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
 
+    /// <summary>The elevation of a platform administrator the entry belongs to, when it belongs to one.</summary>
+    public Guid? ElevationId { get; set; }
+
     public TenantRecord? Tenant { get; set; }
     public AppUserRecord? ActorUser { get; set; }
+    public PlatformAdminElevationRecord? Elevation { get; set; }
 }

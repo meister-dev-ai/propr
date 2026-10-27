@@ -7,8 +7,11 @@ using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.Features.Licensing.Dtos;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Options;
+using MeisterDev.ProPR.Web;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Api.Features.Licensing.Controllers;
 
@@ -17,8 +20,10 @@ namespace MeisterDev.ProPR.Api.Features.Licensing.Controllers;
 [AllowAnonymous]
 [ApiController]
 [Route("auth/options")]
+[TenantData(TenantDataAccess.None)]
 public sealed class AuthOptionsController(
     IConfiguration configuration,
+    IOptions<PlatformAdminSsoOptions> platformAdminSsoOptions,
     ILicensingCapabilityService? licensingCapabilityService = null)
     : ControllerBase
 {
@@ -37,6 +42,27 @@ public sealed class AuthOptionsController(
         }
 
         var options = await licensingCapabilityService.GetAuthOptionsAsync(ct);
-        return this.Ok(options with { PublicBaseUrl = publicBaseUrl });
+        return this.Ok(
+            options with
+            {
+                PublicBaseUrl = publicBaseUrl,
+                PlatformAdminSignIn = this.GetPlatformAdminSignIn(options),
+            });
+    }
+
+    /// <summary>
+    ///     Returns the identity provider for platform administrators when the installation configured one and the
+    ///     license grants single sign-on. Without the license, the provider is ignored and the sign-in page offers the
+    ///     local sign-in only.
+    /// </summary>
+    private PlatformAdminSignInOptionDto? GetPlatformAdminSignIn(AuthOptionsDto options)
+    {
+        var settings = platformAdminSsoOptions.Value;
+        var isLicensed = options.Capabilities.Any(capability =>
+            string.Equals(capability.Key, PremiumCapabilityKey.SsoAuthentication, StringComparison.OrdinalIgnoreCase)
+            && capability.IsAvailable);
+        return settings.IsConfigured && isLicensed
+            ? new PlatformAdminSignInOptionDto(settings.EffectiveDisplayName)
+            : null;
     }
 }

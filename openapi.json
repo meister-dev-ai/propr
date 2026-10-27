@@ -16908,6 +16908,922 @@
         }
       }
     },
+    "/auth/platform-admin/challenge": {
+      "get": {
+        "tags": [
+          "PlatformAdminAuth"
+        ],
+        "summary": "Starts the sign-in. ProPR sends the browser to the identity provider and keeps the state of the sign-in in an\nhttpOnly cookie.",
+        "parameters": [
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "description": "The frontend page the sign-in returns to. Its origin is the origin of `MEISTER_PUBLIC_BASE_URL`, one of\n`CORS_ORIGINS`, or without `MEISTER_PUBLIC_BASE_URL` the origin of this request.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/platform-admin/callback": {
+      "get": {
+        "tags": [
+          "PlatformAdminAuth"
+        ],
+        "summary": "Completes the sign-in at the redirect from the identity provider. On success it sets the refresh cookie and\nreturns the browser to the frontend with the access token in the URL fragment. A refused sign-in returns to\nthe frontend with `error` and `message` in the fragment.",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error_description",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/elevations/active": {
+      "get": {
+        "tags": [
+          "PlatformAdminElevations"
+        ],
+        "summary": "Returns the active elevations of the caller and the longest duration the installation permits.",
+        "responses": {
+          "200": {
+            "description": "The active elevations of the caller.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationStatusResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationStatusResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The license of the installation does not include multi-tenancy.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/elevations": {
+      "post": {
+        "tags": [
+          "PlatformAdminElevations"
+        ],
+        "summary": "Starts an elevation of the caller for one tenant, or for one client of a tenant. The elevation grants read\naccess to the content of its scope until it expires or is ended. It grants no write access.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPlatformAdminElevationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPlatformAdminElevationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPlatformAdminElevationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The elevation started.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The reason is missing or too long, the duration is outside the permitted range, the client identifier is empty,\nor the tenant is the System tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tenant does not exist, or the client does not belong to it.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The license of the installation does not include multi-tenancy.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "PlatformAdminElevations"
+        ],
+        "summary": "Lists the elevations of all platform administrators, the newest first.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "Limits the list to the elevations of one tenant.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "The page, starting at 1.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "The elevations per page, from 1 to 200.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of elevations.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDtoPagedResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDtoPagedResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDtoPagedResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The license of the installation does not include multi-tenancy.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/elevations/{elevationId}/end": {
+      "post": {
+        "tags": [
+          "PlatformAdminElevations"
+        ],
+        "summary": "Ends an active elevation before its expiry. Any platform administrator can end any elevation.",
+        "parameters": [
+          {
+            "name": "elevationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The elevation ended.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The elevation does not exist.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The elevation had already ended or expired, or the license of the installation does not include\nmulti-tenancy.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/elevations/{elevationId}": {
+      "get": {
+        "tags": [
+          "PlatformAdminElevations"
+        ],
+        "summary": "Returns one elevation.",
+        "parameters": [
+          {
+            "name": "elevationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The elevation.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdminElevationDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The elevation does not exist.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The license of the installation does not include multi-tenancy.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/elevations/{elevationId}/audit-entries": {
+      "get": {
+        "tags": [
+          "PlatformAdminElevations"
+        ],
+        "summary": "Returns the audit entries of one elevation, the oldest first: its start, every content read and its end or\nexpiry. The same entries are in the audit history of the tenant.",
+        "parameters": [
+          {
+            "name": "elevationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The audit entries of the elevation.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantAuditEntryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantAuditEntryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantAuditEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The elevation does not exist.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The license of the installation does not include multi-tenancy.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/propr/procursor/broker/embeddings/deployment": {
       "post": {
         "tags": [
@@ -25026,6 +25942,148 @@
         }
       }
     },
+    "/admin/tenants/{tenantId}/audit-entries": {
+      "get": {
+        "tags": [
+          "TenantAuditEntries"
+        ],
+        "summary": "Returns one page of the audit history of the tenant, the newest entry first. The history contains changes to\nthe tenant's settings, memberships, sign-in providers and machine credentials, identity erasures, and the\nelevations of platform administrators with every content read under them.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "The tenant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "The page, starting at 1.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "The entries per page, from 1 to 200.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of the audit history.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAuditEntryDtoPagedResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAuditEntryDtoPagedResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAuditEntryDtoPagedResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller administers neither this tenant nor the installation.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tenant does not exist.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The license of the installation does not include multi-tenancy.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/tenants/{tenantSlug}/providers": {
       "get": {
         "tags": [
@@ -31720,6 +32778,7 @@
             "items": {
               "type": "string"
             },
+            "description": "The sign-in methods the installation offers.",
             "nullable": true
           },
           "capabilities": {
@@ -31727,10 +32786,20 @@
             "items": {
               "$ref": "#/components/schemas/PremiumCapabilityDto"
             },
+            "description": "The licensed capabilities and their state.",
             "nullable": true
           },
           "publicBaseUrl": {
             "type": "string",
+            "description": "The public base URL of the API.",
+            "nullable": true
+          },
+          "platformAdminSignIn": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAdminSignInOptionDto"
+              }
+            ],
             "nullable": true
           }
         },
@@ -36190,6 +37259,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "contentWithheld": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -36303,6 +37375,9 @@
             "type": "boolean"
           },
           "budgetSoftCapped": {
+            "type": "boolean"
+          },
+          "contentWithheld": {
             "type": "boolean"
           }
         },
@@ -37920,6 +38995,151 @@
         },
         "additionalProperties": false,
         "description": "What a client may configure, and enough to explain anything it may not."
+      },
+      "PlatformAdminElevationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The elevation.",
+            "format": "uuid"
+          },
+          "administratorUserId": {
+            "type": "string",
+            "description": "The platform administrator, or null when the account was deleted.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "administratorName": {
+            "type": "string",
+            "description": "The user name of the platform administrator when the elevation started.",
+            "nullable": true
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "The tenant the elevation covers.",
+            "format": "uuid"
+          },
+          "tenantDisplayName": {
+            "type": "string",
+            "description": "The display name of that tenant.",
+            "nullable": true
+          },
+          "clientId": {
+            "type": "string",
+            "description": "The one client the elevation covers, or null when it covers every client of the tenant.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "clientDisplayName": {
+            "type": "string",
+            "description": "The display name of that client.",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the platform administrator started the elevation, for example a ticket number.",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "When the elevation started.",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the elevation expires.",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": "string",
+            "description": "When the elevation ended early or its expiry was recorded, or null.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "endedByName": {
+            "type": "string",
+            "description": "The user name of the platform administrator who ended the elevation early, or null.",
+            "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/PlatformAdminElevationState"
+          },
+          "contentReads": {
+            "type": "integer",
+            "description": "How many content reads ProPR recorded under the elevation.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A time-bound grant with which a platform administrator reads the content of one tenant, or of one client of a\ntenant, read-only."
+      },
+      "PlatformAdminElevationDtoPagedResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformAdminElevationDto"
+            },
+            "nullable": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Generic paginated result wrapper."
+      },
+      "PlatformAdminElevationState": {
+        "enum": [
+          "active",
+          "ended",
+          "expired"
+        ],
+        "type": "string",
+        "description": "The state of an elevation at the time it is read."
+      },
+      "PlatformAdminElevationStatusResponse": {
+        "type": "object",
+        "properties": {
+          "maxDurationMinutes": {
+            "type": "integer",
+            "description": "The longest duration, in minutes, the installation permits for one elevation.",
+            "format": "int32"
+          },
+          "active": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformAdminElevationDto"
+            },
+            "description": "The active elevations of the caller, the one that expires first first.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The elevations of the calling platform administrator, with the bound of the installation."
+      },
+      "PlatformAdminSignInOptionDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "The name of the provider on the sign-in page.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The identity provider through which platform administrators can sign in."
       },
       "PrJobSummaryDto": {
         "type": "object",
@@ -40468,6 +41688,10 @@
             },
             "description": "Every run against this pull request, running work first, then most recent first.",
             "nullable": true
+          },
+          "contentWithheld": {
+            "type": "boolean",
+            "description": "True when the caller is a platform administrator without access to the content of the client, so the title\nof the pull request is withheld."
           }
         },
         "additionalProperties": false,
@@ -43308,6 +44532,10 @@
             "type": "integer",
             "description": "How many times this review has been taken back from a runner that went quiet.",
             "format": "int32"
+          },
+          "contentWithheld": {
+            "type": "boolean",
+            "description": "True when the caller is a platform administrator whose elevations do not cover the client of the review. The\ntitle is then withheld."
           }
         },
         "additionalProperties": false,
@@ -44576,6 +45804,34 @@
         "additionalProperties": false,
         "description": "Enable/disable request for a user."
       },
+      "StartPlatformAdminElevationRequest": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "The tenant whose content the elevation covers.",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "One client of the tenant, to limit the elevation to that client; null covers every client of the tenant. An empty\nidentifier is refused.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the administrator needs the content, for example a ticket number. Recorded with every read.",
+            "nullable": true
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "description": "How long the elevation lasts, from 1 minute to the maximum of the installation.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A request of a platform administrator to start an elevation for themselves."
+      },
       "SubmitProviderActionValuesRequest": {
         "type": "object",
         "properties": {
@@ -44822,6 +46078,86 @@
         },
         "additionalProperties": false,
         "description": "The components describing the host a replica runs on. None of them is part of the profile hash, and a\nchange to any of them records nothing."
+      },
+      "TenantAuditEntryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The entry.",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "The tenant the entry belongs to.",
+            "format": "uuid"
+          },
+          "eventType": {
+            "type": "string",
+            "description": "What happened, for example `tenant.membership.assigned` or `elevation.content_read`.",
+            "nullable": true
+          },
+          "summary": {
+            "type": "string",
+            "description": "One sentence that describes the event.",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "description": "Further detail of the event, when there is any.",
+            "nullable": true
+          },
+          "actorUserId": {
+            "type": "string",
+            "description": "The account that caused the event, or null when ProPR caused it or the account was deleted.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "actorName": {
+            "type": "string",
+            "description": "The user name of that account, when it still exists.",
+            "nullable": true
+          },
+          "elevationId": {
+            "type": "string",
+            "description": "The elevation of a platform administrator the event belongs to, when it belongs to one.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "occurredAt": {
+            "type": "string",
+            "description": "When the event happened.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One entry of the audit history of a tenant."
+      },
+      "TenantAuditEntryDtoPagedResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantAuditEntryDto"
+            },
+            "nullable": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Generic paginated result wrapper."
       },
       "TenantAuthSessionDto": {
         "type": "object",
@@ -46507,6 +47843,12 @@
       "name": "Jobs"
     },
     {
+      "name": "PlatformAdminAuth"
+    },
+    {
+      "name": "PlatformAdminElevations"
+    },
+    {
       "name": "ProCursorEmbeddingBroker"
     },
     {
@@ -46559,6 +47901,9 @@
     },
     {
       "name": "TenantAiConnections"
+    },
+    {
+      "name": "TenantAuditEntries"
     },
     {
       "name": "TenantAuth"

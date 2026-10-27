@@ -60,6 +60,9 @@ export interface ClientDetailDto {
   autoResolveSeverities?: CommentSeverity[] | null
   withholdOutOfScopeFindings?: boolean | null
   codeInsightsCollectionEnabled?: boolean | null
+  /** The tenant of the client; a platform administrator reads its content only during an elevation. */
+  tenantId?: string | null
+  tenantDisplayName?: string | null
 }
 
 export interface ReviewProfileCatalogItemDto {

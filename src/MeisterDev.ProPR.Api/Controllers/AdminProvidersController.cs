@@ -14,6 +14,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Global admin endpoints for installation-wide provider-family activation policy.</summary>
 [ApiController]
 [Route("admin/providers")]
+[TenantData(TenantDataAccess.None)]
 public sealed class AdminProvidersController(IProviderActivationService? providerActivationService = null)
     : ControllerBase
 {

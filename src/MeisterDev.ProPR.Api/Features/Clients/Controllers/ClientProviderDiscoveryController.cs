@@ -22,6 +22,7 @@ namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 [ProducesResponseType(StatusCodes.Status404NotFound)]
 [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
 [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ClientProviderDiscoveryController(
     IReviewConfigurationSelectionService selections,
     ILicensingCapabilityService? licensingCapabilityService = null,

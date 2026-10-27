@@ -10,9 +10,11 @@ using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Api.Features.Crawling.Webhooks.Validators;
+using MeisterDev.ProPR.Api.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Validators;
 using MeisterDev.ProPR.Api.Features.Licensing;
+using MeisterDev.ProPR.Api.Features.PlatformAdminElevation;
 using MeisterDev.ProPR.Api.Features.ProCursor.Broker.Auth;
 using MeisterDev.ProPR.Api.Features.ProCursor.Broker.Services;
 using MeisterDev.ProPR.Api.Features.ProCursor;
@@ -180,6 +182,9 @@ public static class ProPRHost
             builder.Services.AddUsageStatisticsModule(builder.Configuration, builder.Environment);
             builder.Services.AddReviewArchiveModule(builder.Configuration, builder.Environment);
             builder.Services.AddCodeInsightsModule(builder.Configuration, builder.Environment);
+            builder.Services.AddPlatformAdminElevation(
+                builder.Configuration,
+                hasDatabaseConnectionString && !isTesting && !disableHostedServices);
             builder.Services.AddProCursorRemoteMode(builder.Configuration);
             // Decides which clients a code-insight read may aggregate over. Two audiences, two rules, one place: the
             // code-quality views take client access, reviewer performance takes tenant administration.
@@ -759,6 +764,12 @@ public static class ProPRHost
                 Program.LogLicensingIdentity(
                     licensingIdentityScope.ServiceProvider.GetRequiredService<ILogger<Program>>(),
                     licensingIdentity);
+
+                // Writes whether the identity provider for platform administrators is in use, and the reason when the
+                // license does not cover it.
+                await PlatformAdminSsoStartupDiagnostics.ReportAsync(
+                    licensingIdentityScope.ServiceProvider,
+                    licensingIdentityScope.ServiceProvider.GetRequiredService<ILogger<Program>>());
             }
 
             app.UseForwardedHeaders();

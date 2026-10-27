@@ -14,6 +14,7 @@ using MeisterDev.ProPR.CodeInsights.Rollups;
 using MeisterDev.ProPR.CodeInsights.Support;
 using MeisterDev.ProPR.CodeInsights.Http;
 using Microsoft.AspNetCore.Http;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.CodeInsights.Controllers;
 
@@ -36,6 +37,7 @@ namespace MeisterDev.ProPR.CodeInsights.Controllers;
 /// </remarks>
 [ApiController]
 [Route("reviewer-performance")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ReviewerPerformanceController(
     IOptionsMonitor<CodeInsightsOptions> options,
     CodeInsightScopeResolver scopeResolver,
@@ -256,6 +258,7 @@ public sealed partial class ReviewerPerformanceController(
     /// <response code="200">The harvested threads, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not administer a tenant, lacks the licence, or named a client it cannot see.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.Action, Resource = "missed findings")]
     [HttpGet("misses")]
     [ProducesResponseType(typeof(IReadOnlyList<CodeInsightMissResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -269,7 +272,7 @@ public sealed partial class ReviewerPerformanceController(
         [FromQuery] int limit = 50,
         CancellationToken ct = default)
     {
-        var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, clientId, ct);
+        var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, clientId, ct, "missed findings");
         if (scope.Denied is not null)
         {
             return scope.Denied;
@@ -335,6 +338,7 @@ public sealed partial class ReviewerPerformanceController(
     /// <response code="200">The findings, possibly empty.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not administer a tenant, lacks the licence, or named a client it cannot see.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.Action, Resource = "reviewer-performance findings")]
     [HttpGet("findings")]
     [ProducesResponseType(typeof(IReadOnlyList<CodeInsightFindingResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -353,7 +357,7 @@ public sealed partial class ReviewerPerformanceController(
         [FromQuery] string? confidence = null,
         CancellationToken ct = default)
     {
-        var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, clientId, ct);
+        var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, clientId, ct, "reviewer-performance findings");
         if (scope.Denied is not null)
         {
             return scope.Denied;

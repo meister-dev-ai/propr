@@ -13,6 +13,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Admin endpoint for dismissing a review finding into thread memory for one client.</summary>
 [ApiController]
 [Route("clients/{clientId:guid}")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class FindingDismissalController(ILogger<FindingDismissalController> logger) : ControllerBase
 {
     /// <summary>

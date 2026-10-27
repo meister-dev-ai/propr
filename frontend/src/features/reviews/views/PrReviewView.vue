@@ -76,6 +76,12 @@
         </div>
 
         <p v-if="loading" class="loading">Loading…</p>
+        <ElevationRequiredNotice
+            v-else-if="elevationRequired"
+            :requirement="elevationRequired"
+            subject="this pull request"
+            @started="loadData"
+        />
         <p v-else-if="error" class="error">{{ error }}</p>
 
         <template v-else-if="data">
@@ -351,6 +357,8 @@ import {
 } from '@/services/jobsService'
 import { useSession } from '@/composables/useSession'
 import { describeMemoryOutcome } from '@/features/thread-memory/memoryOutcome'
+import ElevationRequiredNotice from '@/features/elevations/components/ElevationRequiredNotice.vue'
+import { ElevationRequiredError, type ElevationRequirement } from '@/services/elevationRequirement'
 import { RoleLevel } from '@/composables/roles'
 
 const route = useRoute()
@@ -358,6 +366,7 @@ const { hasClientRole, isCapabilityAvailable } = useSession()
 
 const loading = ref(false)
 const error = ref('')
+const elevationRequired = ref<ElevationRequirement | null>(null)
 const data = ref<PrReviewViewDto | null>(null)
 const memoryTab = ref<'originated' | 'contributed'>('originated')
 type PrTab = 'stats' | 'conversation' | 'browser' | 'codeQuality'
@@ -576,6 +585,7 @@ async function loadData() {
 
     loading.value = true
     error.value = ''
+    elevationRequired.value = null
     try {
         data.value = await getPrView(clientId.value, {
             providerScopePath: providerScopePath.value,
@@ -584,7 +594,11 @@ async function loadData() {
             pullRequestId: pullRequestId.value,
         })
     } catch (err) {
-        error.value = err instanceof Error ? err.message : 'Failed to load PR view.'
+        if (err instanceof ElevationRequiredError) {
+            elevationRequired.value = err.requirement
+        } else {
+            error.value = err instanceof Error ? err.message : 'Failed to load PR view.'
+        }
     } finally {
         loading.value = false
     }

@@ -25,12 +25,16 @@ public sealed class TenantAuthService(
     IPasswordHashService passwordHashService,
     ISecretProtectionCodec secretProtectionCodec,
     IHttpClientFactory httpClientFactory,
-    ITenantOidcTokenValidator oidcTokenValidator,
+    IOidcTokenValidator oidcTokenValidator,
     IAccountLockoutService accountLockoutService,
     ILogger<TenantAuthService> logger) : ITenantAuthService
 {
     private const string ClientSecretPurpose = "tenant-sso-provider-client-secret";
     private const string ChallengeStatePurpose = "tenant-sso-external-auth-state";
+
+    // GitHub refuses API requests without a user agent.
+    private const string GitHubUserAgent = "MeisterDev.ProPR-TenantAuth/1.0";
+
     private static readonly TimeSpan ChallengeStateLifetime = TimeSpan.FromMinutes(15);
 
     public async Task<TenantLoginOptionsDto?> GetLoginOptionsAsync(string tenantSlug, CancellationToken ct = default)
@@ -543,7 +547,7 @@ public sealed class TenantAuthService(
         var user = new AppUser
         {
             Id = Guid.NewGuid(),
-            Username = await this.GenerateUniqueUsernameAsync(email, ct),
+            Username = await ExternalAccountNames.CreateUniqueUsernameAsync(userRepository, email, ct),
             Email = email,
             NormalizedEmail = normalizedEmail,
             GlobalRole = AppUserRole.User,
@@ -613,7 +617,7 @@ public sealed class TenantAuthService(
             DateTimeOffset.UtcNow,
             Guid.NewGuid().ToString("N"));
 
-        return secretProtectionCodec.Protect(JsonSerializer.Serialize(state), ChallengeStatePurpose);
+        return ProtectedSignInState.Protect(secretProtectionCodec, state, ChallengeStatePurpose);
     }
 
     private TenantExternalChallengeState? TryValidateChallengeState(
@@ -621,22 +625,10 @@ public sealed class TenantAuthService(
         string tenantSlug,
         string callbackUrl)
     {
-        if (string.IsNullOrWhiteSpace(protectedState))
-        {
-            return null;
-        }
-
-        TenantExternalChallengeState? state;
-        try
-        {
-            var json = secretProtectionCodec.Unprotect(protectedState, ChallengeStatePurpose);
-            state = JsonSerializer.Deserialize<TenantExternalChallengeState>(json);
-        }
-        catch
-        {
-            return null;
-        }
-
+        var state = ProtectedSignInState.TryRead<TenantExternalChallengeState>(
+            secretProtectionCodec,
+            protectedState,
+            ChallengeStatePurpose);
         if (state is null)
         {
             return null;
@@ -753,7 +745,7 @@ public sealed class TenantAuthService(
         }
 
         using var userRequest = CreateGitHubApiRequest(configuration.UserEndpoint!, accessToken);
-        using var userResponse = await httpClientFactory.CreateClient("TenantSsoAuth").SendAsync(userRequest, ct);
+        using var userResponse = await httpClientFactory.CreateClient(AuthorizationCodeFlow.HttpClientName).SendAsync(userRequest, ct);
         if (!userResponse.IsSuccessStatusCode)
         {
             logger.LogWarning(
@@ -790,7 +782,7 @@ public sealed class TenantAuthService(
     private async Task<(string? Email, bool EmailVerified)> ResolveGitHubEmailAsync(Uri emailsEndpoint, string accessToken, CancellationToken ct)
     {
         using var emailsRequest = CreateGitHubApiRequest(emailsEndpoint, accessToken);
-        using var emailsResponse = await httpClientFactory.CreateClient("TenantSsoAuth").SendAsync(emailsRequest, ct);
+        using var emailsResponse = await httpClientFactory.CreateClient(AuthorizationCodeFlow.HttpClientName).SendAsync(emailsRequest, ct);
         if (!emailsResponse.IsSuccessStatusCode)
         {
             return (null, false);
@@ -854,30 +846,24 @@ public sealed class TenantAuthService(
             formValues["grant_type"] = "authorization_code";
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, configuration.TokenEndpoint)
-        {
-            Content = new FormUrlEncodedContent(formValues),
-        };
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        if (configuration.ProviderKind == TenantSsoProviderKind.GitHub)
-        {
-            request.Headers.UserAgent.ParseAdd("MeisterDev.ProPR-TenantAuth/1.0");
-        }
-
-        using var response = await httpClientFactory.CreateClient("TenantSsoAuth").SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
+        var (statusCode, document) = await AuthorizationCodeFlow.RedeemCodeAsync(
+            httpClientFactory.CreateClient(AuthorizationCodeFlow.HttpClientName),
+            configuration.TokenEndpoint,
+            formValues,
+            configuration.ProviderKind == TenantSsoProviderKind.GitHub ? GitHubUserAgent : null,
+            logger,
+            ct);
+        if (document is null)
         {
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason} StatusCode={StatusCode}",
                 provider.TenantId,
                 provider.Id,
                 "token_exchange_failed",
-                (int)response.StatusCode);
-            return null;
+                (int?)statusCode);
         }
 
-        return await ReadJsonDocumentAsync(response, ct);
+        return document;
     }
 
     private string? TryUnprotectClientSecret(string? protectedSecret)
@@ -976,30 +962,6 @@ public sealed class TenantAuthService(
         await dbContext.SaveChangesAsync(ct);
     }
 
-    private async Task<string> GenerateUniqueUsernameAsync(string email, CancellationToken ct)
-    {
-        var localPart = email.Split('@', 2)[0].Trim().ToLowerInvariant();
-        var baseUsername = new string(
-            localPart
-                .Where(character => char.IsLetterOrDigit(character) || character is '.' or '_' or '-')
-                .ToArray());
-
-        if (string.IsNullOrWhiteSpace(baseUsername))
-        {
-            baseUsername = "user";
-        }
-
-        var candidate = baseUsername;
-        var suffix = 1;
-        while (await userRepository.GetByUsernameAsync(candidate, ct) is not null)
-        {
-            candidate = $"{baseUsername}{suffix}";
-            suffix++;
-        }
-
-        return candidate;
-    }
-
     private static string BuildCallbackUrl(Uri applicationBaseUri, string tenantSlug)
     {
         return new Uri(applicationBaseUri, $"auth/external/callback/{Uri.EscapeDataString(tenantSlug)}").ToString();
@@ -1034,7 +996,7 @@ public sealed class TenantAuthService(
             queryParameters.Add(new KeyValuePair<string, string>("allow_signup", "false"));
         }
 
-        return BuildUri(configuration.AuthorizationEndpoint, queryParameters).ToString();
+        return AuthorizationCodeFlow.BuildAuthorizationUri(configuration.AuthorizationEndpoint, queryParameters).ToString();
     }
 
     private static TenantSsoProviderConfiguration? TryResolveProviderConfiguration(TenantSsoProviderRecord provider)
@@ -1133,7 +1095,7 @@ public sealed class TenantAuthService(
         var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        request.Headers.UserAgent.ParseAdd("MeisterDev.ProPR-TenantAuth/1.0");
+        request.Headers.UserAgent.ParseAdd(GitHubUserAgent);
         return request;
     }
 
@@ -1141,20 +1103,6 @@ public sealed class TenantAuthService(
     {
         var content = await response.Content.ReadAsStringAsync(ct);
         return JsonDocument.Parse(content);
-    }
-
-    private static Uri BuildUri(Uri baseUri, IEnumerable<KeyValuePair<string, string>> queryParameters)
-    {
-        var builder = new UriBuilder(baseUri);
-        var existingQuery = builder.Query;
-        var query = string.Join(
-            "&",
-            queryParameters.Select(parameter =>
-                $"{Uri.EscapeDataString(parameter.Key)}={Uri.EscapeDataString(parameter.Value)}"));
-        builder.Query = string.IsNullOrWhiteSpace(existingQuery)
-            ? query
-            : $"{existingQuery.TrimStart('?')}&{query}";
-        return builder.Uri;
     }
 
     private static IReadOnlyList<string> GetEffectiveScopes(TenantSsoProviderRecord provider, TenantSsoProviderKind providerKind)
@@ -1171,8 +1119,10 @@ public sealed class TenantAuthService(
 
     private static bool TryGetString(JsonElement element, string propertyName, out string value)
     {
+        // A provider can answer with valid JSON that is not an object, such as [] or null. TryGetProperty throws for
+        // such a value, so the answer is treated as one without the property.
         value = string.Empty;
-        if (!element.TryGetProperty(propertyName, out var property))
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(propertyName, out var property))
         {
             return false;
         }
@@ -1190,7 +1140,7 @@ public sealed class TenantAuthService(
     private static bool TryGetBoolean(JsonElement element, string propertyName, out bool value)
     {
         value = false;
-        if (!element.TryGetProperty(propertyName, out var property))
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(propertyName, out var property))
         {
             return false;
         }

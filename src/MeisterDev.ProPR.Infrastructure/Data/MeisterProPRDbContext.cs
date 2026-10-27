@@ -105,6 +105,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Tenant administration audit history.</summary>
     public DbSet<TenantAuditEntryRecord> TenantAuditEntries => this.Set<TenantAuditEntryRecord>();
 
+    /// <summary>Time-bound elevations of platform administrators into the content of one tenant or one client.</summary>
+    public DbSet<PlatformAdminElevationRecord> PlatformAdminElevations => this.Set<PlatformAdminElevationRecord>();
+
     /// <summary>Per-client role assignments for users.</summary>
     public DbSet<UserClientRoleRecord> UserClientRoles => this.Set<UserClientRoleRecord>();
 

@@ -18,6 +18,7 @@ namespace MeisterDev.ProPR.Api.Features.Reviewing.Intake.Controllers;
 ///     <see cref="ClientRole.ClientAdministrator" />.
 /// </summary>
 [ApiController]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class BlockedPullRequestsController(
     IBlockedPullRequestStore blockedPullRequestStore,
     ILogger<BlockedPullRequestsController> logger) : ControllerBase

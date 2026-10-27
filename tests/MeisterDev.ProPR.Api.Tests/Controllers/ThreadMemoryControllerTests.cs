@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
+using MeisterDev.ProPR.Api.Tests.Features.PlatformAdminElevation;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -104,6 +105,9 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
 
             builder.ConfigureServices(services =>
             {
+                // The tests read content as a platform administrator from a host that stores no tenants.
+                services.AddInstallationContentAccess();
+
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());

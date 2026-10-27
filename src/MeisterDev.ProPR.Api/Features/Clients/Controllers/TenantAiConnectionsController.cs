@@ -28,6 +28,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("tenants/{tenantId:guid}/ai-connections")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class TenantAiConnectionsController(
     IAiConnectionRepository connections,
     IAiProviderDriverRegistry providerDrivers,

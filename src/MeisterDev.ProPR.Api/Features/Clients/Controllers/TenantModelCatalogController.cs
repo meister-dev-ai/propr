@@ -19,6 +19,7 @@ namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 /// </summary>
 [ApiController]
 [Route("tenants/{tenantId:guid}/model-catalog/overrides")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class TenantModelCatalogController(IModelCatalogRepository catalog) : ControllerBase
 {
     /// <summary>

@@ -11,6 +11,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Operator-managed credentials for hosted services assigned to one tenant.</summary>
 [ApiController]
 [Route("admin/tenants/{tenantId:guid}/machine-credentials")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class TenantMachineCredentialsController(TenantMachineCredentialService credentials) : ControllerBase
 {
     /// <summary>Issues a credential and returns its secret once to the platform administrator.</summary>

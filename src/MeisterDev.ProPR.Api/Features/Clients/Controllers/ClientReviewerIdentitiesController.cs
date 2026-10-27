@@ -17,6 +17,7 @@ namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 /// <summary>Manages configured provider reviewer-trigger identities for one client provider connection.</summary>
 [ApiController]
 [Route("clients/{clientId:guid}/provider-connections/{connectionId:guid}")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ClientReviewerIdentitiesController(
     IClientScmConnectionRepository connectionRepository,
     IClientReviewerIdentityRepository reviewerIdentityRepository,

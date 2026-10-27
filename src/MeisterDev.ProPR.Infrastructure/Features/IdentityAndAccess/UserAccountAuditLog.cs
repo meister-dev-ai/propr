@@ -8,11 +8,14 @@ namespace MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 
 /// <summary>
 ///     Serilog-backed implementation of <see cref="IUserAccountAuditLog" />. Each event carries a
-///     stable <c>AuditEvent</c> property so downstream sinks can route on it, plus the acting and
-///     target user identifiers.
+///     stable <c>AuditEvent</c> property so downstream sinks can route on it, plus the target user
+///     identifier, and the acting user for an administrator's change.
 /// </summary>
 public sealed class UserAccountAuditLog(ILogger<UserAccountAuditLog> logger) : IUserAccountAuditLog
 {
+    /// <summary>The value of the <c>Method</c> property of a sign-in through the provider for platform administrators.</summary>
+    private const string PlatformIdentityProviderMethod = "platform_identity_provider";
+
     public void Disabled(Guid actorUserId, Guid targetUserId, string targetUsername)
     {
         logger.LogInformation(
@@ -63,5 +66,52 @@ public sealed class UserAccountAuditLog(ILogger<UserAccountAuditLog> logger) : I
             targetUserId,
             targetUsername,
             "last_active_admin");
+    }
+
+    public void SignedInThroughPlatformIdentityProvider(Guid userId, string username, string issuer, string subject)
+    {
+        logger.LogInformation(
+            "{AuditEvent} target={TargetUserId} username={TargetUsername} method={Method} issuer={Issuer} subject={Subject}",
+            "user.signed_in",
+            userId,
+            username,
+            PlatformIdentityProviderMethod,
+            issuer,
+            subject);
+    }
+
+    public void PlatformIdentityProviderSignInRefused(Guid? userId, string? username, string issuer, string subject, string reason)
+    {
+        logger.LogWarning(
+            "{AuditEvent} blocked target={TargetUserId} username={TargetUsername} method={Method} issuer={Issuer} subject={Subject} reason={Reason}",
+            "user.signed_in",
+            userId,
+            username,
+            PlatformIdentityProviderMethod,
+            issuer,
+            subject,
+            reason);
+    }
+
+    public void PlatformAdministratorRightsGranted(Guid userId, string username, string issuer, string subject)
+    {
+        logger.LogInformation(
+            "{AuditEvent} target={TargetUserId} username={TargetUsername} issuer={Issuer} subject={Subject}",
+            "user.platform_admin_granted",
+            userId,
+            username,
+            issuer,
+            subject);
+    }
+
+    public void PlatformAdministratorRightsRevoked(Guid userId, string username, string issuer, string subject)
+    {
+        logger.LogInformation(
+            "{AuditEvent} target={TargetUserId} username={TargetUsername} issuer={Issuer} subject={Subject}",
+            "user.platform_admin_revoked",
+            userId,
+            username,
+            issuer,
+            subject);
     }
 }

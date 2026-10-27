@@ -14,6 +14,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Exposes daily token consumption aggregates for a client.</summary>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/token-usage")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ClientTokenUsageController(
     IClientTokenUsageRepository tokenUsageRepository,
     ILogger<ClientTokenUsageController> logger) : ControllerBase

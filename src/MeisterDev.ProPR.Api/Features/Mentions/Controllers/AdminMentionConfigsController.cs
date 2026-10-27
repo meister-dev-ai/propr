@@ -27,6 +27,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </remarks>
 [ApiController]
 [Route("admin/mention-configurations")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class AdminMentionConfigsController(
     IMentionConfigurationRepository mentionConfigRepo,
     IUserRepository userRepository,

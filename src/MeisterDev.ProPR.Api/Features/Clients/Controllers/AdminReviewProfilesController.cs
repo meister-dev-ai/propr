@@ -14,6 +14,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Admin endpoints for the selectable review aggressiveness profile catalog and per-client defaults.</summary>
 [ApiController]
 [Route("admin")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class AdminReviewProfilesController(IClientAdminService clientAdminService) : ControllerBase
 {
     private static ReviewProfileCatalogItemResponse ToReviewProfileCatalogItemResponse(ReviewPipelineProfile profile)

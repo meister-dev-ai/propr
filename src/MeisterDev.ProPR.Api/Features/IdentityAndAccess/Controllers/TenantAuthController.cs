@@ -24,6 +24,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 [AllowAnonymous]
 [ApiController]
 [Route("auth")]
+[TenantData(TenantDataAccess.None)]
 public sealed class TenantAuthController(
     IEnumerable<ScmBrowserOriginDeclaration> browserOriginDeclarations,
     ITenantAuthService tenantAuthService,
@@ -117,7 +118,10 @@ public sealed class TenantAuthController(
             return capability;
         }
 
-        var frontendReturnUrl = this.TryResolveFrontendReturnUrl(returnUrl);
+        var frontendReturnUrl = ExternalSignInRedirects.TryResolveFrontendReturnUrl(
+            returnUrl,
+            configuration,
+            browserOriginDeclarations.ToArray());
 
         var challenge = await tenantAuthService.BuildExternalChallengeAsync(
             tenantSlug,
@@ -130,7 +134,7 @@ public sealed class TenantAuthController(
             return this.NotFound();
         }
 
-        var challengeRedirectUri = TryResolveAllowedAbsoluteRedirectUri(
+        var challengeRedirectUri = ExternalSignInRedirects.TryResolveProviderRedirectUri(
             challenge.RedirectUrl,
             challenge.AllowedRedirectOrigin);
         if (challengeRedirectUri is null)
@@ -138,7 +142,7 @@ public sealed class TenantAuthController(
             return this.NotFound();
         }
 
-        return this.RedirectToValidatedAbsoluteUri(challengeRedirectUri);
+        return ExternalSignInRedirects.RedirectTo(this.Response, challengeRedirectUri);
     }
 
     /// <summary>Completes tenant-scoped external sign-in and returns the shared application session payload.</summary>
@@ -178,16 +182,18 @@ public sealed class TenantAuthController(
 
             var failureCode = completion.FailureCode ?? "external_identity_rejected";
             var failureMessage = completion.FailureMessage ?? "External identity rejected by tenant policy.";
-            var failedRedirectUri = this.TryBuildFrontendCallbackRedirectUri(
+            var failedRedirectUri = ExternalSignInRedirects.TryBuildFrontendCallbackUri(
                 completion.FrontendReturnUrl,
                 new Dictionary<string, string?>
                 {
                     ["error"] = failureCode,
                     ["message"] = failureMessage,
-                });
+                },
+                configuration,
+                browserOriginDeclarations.ToArray());
             if (failedRedirectUri is not null)
             {
-                return this.RedirectToValidatedAbsoluteUri(failedRedirectUri);
+                return ExternalSignInRedirects.RedirectTo(this.Response, failedRedirectUri);
             }
 
             return this.Unauthorized(new { error = failureCode, message = failureMessage });
@@ -198,17 +204,19 @@ public sealed class TenantAuthController(
         // Refresh token goes only into the httpOnly cookie (set on this redirect response),
         // never the URL fragment, which would leak it via history/referrer.
         RefreshTokenCookie.Set(this.Response, session.RefreshToken, session.RefreshTokenExpiresAt, this.Request.IsHttps);
-        var successfulRedirectUri = this.TryBuildFrontendCallbackRedirectUri(
+        var successfulRedirectUri = ExternalSignInRedirects.TryBuildFrontendCallbackUri(
             completion.FrontendReturnUrl,
             new Dictionary<string, string?>
             {
                 ["accessToken"] = sessionDto.AccessToken,
                 ["expiresIn"] = sessionDto.ExpiresIn.ToString(CultureInfo.InvariantCulture),
                 ["tokenType"] = sessionDto.TokenType,
-            });
+            },
+            configuration,
+            browserOriginDeclarations.ToArray());
         if (successfulRedirectUri is not null)
         {
-            return this.RedirectToValidatedAbsoluteUri(successfulRedirectUri);
+            return ExternalSignInRedirects.RedirectTo(this.Response, successfulRedirectUri);
         }
 
         return this.Ok(sessionDto);
@@ -217,88 +225,6 @@ public sealed class TenantAuthController(
     private Uri GetApplicationBaseUri()
     {
         return PublicApplicationUrlResolver.GetApplicationBaseUri(this.Request, configuration);
-    }
-
-    private IActionResult RedirectToValidatedAbsoluteUri(Uri redirectUri)
-    {
-        this.Response.StatusCode = StatusCodes.Status302Found;
-        this.Response.Headers.Location = redirectUri.AbsoluteUri;
-        return new EmptyResult();
-    }
-
-    private static Uri? TryResolveAllowedAbsoluteRedirectUri(string? redirectUrl, string allowedOrigin)
-    {
-        if (!Uri.TryCreate(redirectUrl, UriKind.Absolute, out var redirectUri))
-        {
-            return null;
-        }
-
-        if (!IsSupportedRedirectScheme(redirectUri))
-        {
-            return null;
-        }
-
-        var redirectOrigin = redirectUri.GetLeftPart(UriPartial.Authority);
-        return string.Equals(redirectOrigin, allowedOrigin, StringComparison.OrdinalIgnoreCase)
-            ? redirectUri
-            : null;
-    }
-
-    private Uri? TryResolveFrontendReturnUrl(string? returnUrl)
-    {
-        if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var returnUri))
-        {
-            return null;
-        }
-
-        return this.IsAllowedBrowserRedirectUri(returnUri)
-            ? returnUri
-            : null;
-    }
-
-    private Uri? TryBuildFrontendCallbackRedirectUri(
-        string? frontendReturnUrl,
-        IReadOnlyDictionary<string, string?> fragmentValues)
-    {
-        if (!Uri.TryCreate(frontendReturnUrl, UriKind.Absolute, out var returnUri))
-        {
-            return null;
-        }
-
-        if (!this.IsAllowedBrowserRedirectUri(returnUri))
-        {
-            return null;
-        }
-
-        var fragment = string.Join(
-            "&",
-            fragmentValues
-                .Where(entry => !string.IsNullOrWhiteSpace(entry.Value))
-                .Select(entry => $"{Uri.EscapeDataString(entry.Key)}={Uri.EscapeDataString(entry.Value!)}"));
-
-        var builder = new UriBuilder(returnUri)
-        {
-            Fragment = fragment,
-        };
-
-        return builder.Uri;
-    }
-
-    private bool IsAllowedBrowserRedirectUri(Uri redirectUri)
-    {
-        if (!IsSupportedRedirectScheme(redirectUri))
-        {
-            return false;
-        }
-
-        var origin = redirectUri.GetLeftPart(UriPartial.Authority);
-        return BrowserOriginPolicy.IsAllowedOrigin(origin, configuration, browserOriginDeclarations.ToArray());
-    }
-
-    private static bool IsSupportedRedirectScheme(Uri redirectUri)
-    {
-        return string.Equals(redirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-               || string.Equals(redirectUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
     }
 }
 

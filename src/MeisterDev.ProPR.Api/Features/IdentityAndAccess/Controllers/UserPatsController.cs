@@ -14,6 +14,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Personal access token management for the authenticated user.</summary>
 [ApiController]
 [Route("users/me/pats")]
+[TenantData(TenantDataAccess.None)]
 public sealed class UserPatsController(IUserPatRepository userPatRepository) : ControllerBase
 {
     /// <summary>Generates a new PAT for the current user. Returns the plaintext token once.</summary>

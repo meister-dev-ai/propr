@@ -45,6 +45,7 @@ public sealed class JobCodeInsightsController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks access to the job's client.</response>
     /// <response code="404">Job not found.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ReviewJob, RouteValue = "id", Resource = "the finding classifications of a review job")]
     [HttpGet("{id:guid}/code-insights/findings")]
     [HttpGet("/jobs/{id:guid}/code-insights/findings")]
     [ProducesResponseType(typeof(IReadOnlyList<CodeInsightFindingClassificationView>), StatusCodes.Status200OK)]

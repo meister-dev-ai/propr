@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 
@@ -27,6 +28,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 [ApiController]
 [Route("runners/execution")]
 [Authorize(AuthenticationSchemes = RunnerAuthenticationDefaults.Scheme)]
+[TenantData(TenantDataAccess.ServiceChannel)]
 public sealed class RunnerExecutionController(
     IRunnerToolProxy tools,
     IRunnerMemoryProxy memory,

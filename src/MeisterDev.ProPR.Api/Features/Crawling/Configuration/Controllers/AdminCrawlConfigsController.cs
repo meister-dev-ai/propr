@@ -25,6 +25,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Admin endpoints for managing crawl configurations across all clients.</summary>
 [ApiController]
 [Route("admin/crawl-configurations")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class AdminCrawlConfigsController(
     ICrawlConfigurationRepository crawlConfigRepo,
     IUserRepository userRepository,

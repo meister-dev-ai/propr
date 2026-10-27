@@ -49,6 +49,7 @@ public sealed class RunnerWorkloadReader(MeisterProPRDbContext dbContext) : IRun
             .Select(job => new
             {
                 job.Id,
+                job.ClientId,
                 job.LeaseOwner,
                 job.PrRepositoryName,
                 job.PullRequestId,
@@ -104,6 +105,7 @@ public sealed class RunnerWorkloadReader(MeisterProPRDbContext dbContext) : IRun
                         .Take(MaxNamedPerRunner)
                         .Select(job => new RunnerExecutingJob(
                             job.Id,
+                            job.ClientId,
                             job.PrRepositoryName,
                             job.PullRequestId,
                             job.PrTitle,

@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Commands.HandlePro
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 
@@ -18,6 +19,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 [AllowAnonymous]
 [ApiController]
 [Route("webhooks/v1/providers/{provider}/{pathKey}")]
+[TenantData(TenantDataAccess.ServiceChannel)]
 public sealed partial class ProviderWebhookReceiverController(
     HandleProviderWebhookDeliveryHandler providerDeliveryHandler,
     ILogger<ProviderWebhookReceiverController> logger) : ControllerBase

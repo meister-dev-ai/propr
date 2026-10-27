@@ -12,6 +12,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Authenticated user security endpoints.</summary>
 [ApiController]
 [Route("identity/users/me")]
+[TenantData(TenantDataAccess.None)]
 public sealed class UserSecurityController(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,

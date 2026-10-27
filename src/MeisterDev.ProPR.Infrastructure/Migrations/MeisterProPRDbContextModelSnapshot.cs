@@ -5682,7 +5682,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_sign_in_at");
 
-                    b.Property<Guid>("SsoProviderId")
+                    b.Property<Guid?>("SsoProviderId")
                         .HasColumnType("uuid")
                         .HasColumnName("sso_provider_id");
 
@@ -5691,7 +5691,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("subject");
 
-                    b.Property<Guid>("TenantId")
+                    b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
@@ -5705,11 +5705,19 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("Issuer", "Subject")
+                        .IsUnique()
+                        .HasDatabaseName("ix_external_identities_platform_subject")
+                        .HasFilter("tenant_id IS NULL");
+
                     b.HasIndex("TenantId", "SsoProviderId", "Issuer", "Subject")
                         .IsUnique()
                         .HasDatabaseName("ix_external_identities_tenant_provider_subject");
 
-                    b.ToTable("external_identities", (string)null);
+                    b.ToTable("external_identities", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_external_identities_tenant_and_provider", "(tenant_id IS NULL) = (sso_provider_id IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.InstallationEditionRecord", b =>
@@ -6234,6 +6242,81 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("mention_repo_filters", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.PlatformAdminElevationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AdministratorName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("administrator_name");
+
+                    b.Property<Guid?>("AdministratorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("administrator_user_id");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("concurrency_stamp");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("EndedByName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("ended_by_name");
+
+                    b.Property<Guid?>("EndedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ended_by_user_id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId")
+                        .HasDatabaseName("ix_platform_admin_elevations_client_id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_platform_admin_elevations_open_expires_at")
+                        .HasFilter("ended_at IS NULL");
+
+                    b.HasIndex("AdministratorUserId", "ExpiresAt")
+                        .HasDatabaseName("ix_platform_admin_elevations_administrator_expires_at");
+
+                    b.HasIndex("TenantId", "StartedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_platform_admin_elevations_tenant_started_at");
+
+                    b.ToTable("platform_admin_elevations", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.PremiumCapabilityOverrideRecord", b =>
                 {
                     b.Property<string>("CapabilityKey")
@@ -6718,6 +6801,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("detail");
 
+                    b.Property<Guid?>("ElevationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("elevation_id");
+
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -6743,6 +6830,9 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasIndex("ActorUserId", "OccurredAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_tenant_audit_entries_actor_occurred_at");
+
+                    b.HasIndex("ElevationId", "OccurredAt")
+                        .HasDatabaseName("ix_tenant_audit_entries_elevation_occurred_at");
 
                     b.HasIndex("TenantId", "OccurredAt")
                         .IsDescending(false, true)
@@ -8068,14 +8158,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.TenantSsoProviderRecord", "SsoProvider")
                         .WithMany("ExternalIdentities")
                         .HasForeignKey("SsoProviderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
                         .WithMany("ExternalIdentities")
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.AppUserRecord", "User")
                         .WithMany("ExternalIdentities")
@@ -8110,6 +8198,31 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("MentionConfiguration");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.PlatformAdminElevationRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.AppUserRecord", "AdministratorUser")
+                        .WithMany()
+                        .HasForeignKey("AdministratorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AdministratorUser");
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.PromptOverrideRecord", b =>
@@ -8195,6 +8308,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasForeignKey("ActorUserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.PlatformAdminElevationRecord", "Elevation")
+                        .WithMany()
+                        .HasForeignKey("ElevationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
                         .WithMany("AuditEntries")
                         .HasForeignKey("TenantId")
@@ -8202,6 +8320,8 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ActorUser");
+
+                    b.Navigation("Elevation");
 
                     b.Navigation("Tenant");
                 });

@@ -1,12 +1,14 @@
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
 using MeisterDev.ProPR.Application.Features.Reviewing.Usage;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Features.Reviewing.Usage.Controllers;
 
 /// <summary>Provides finalized review usage to tenant machine callers.</summary>
 [ApiController]
 [Route("clients/{clientId:guid}/reviewing/completed-usage")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class CompletedReviewUsageController(ICompletedReviewUsageExport export) : ControllerBase
 {
     /// <summary>Returns a keyset page of finalized usage facts for a tenant-owned client.</summary>

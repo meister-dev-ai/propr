@@ -24,6 +24,7 @@ namespace MeisterDev.ProPR.Api.Features.Crawling.Configuration.Controllers;
 /// <summary>Manages repository review targets within one client.</summary>
 [ApiController]
 [Route("clients/{clientId:guid}/review-targets")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class ClientReviewTargetsController(
     ICrawlConfigurationRepository configurations,
     IClientScmConnectionRepository connections,
@@ -117,6 +118,7 @@ public sealed class ClientReviewTargetsController(
     /// <response code="403">Current client or source access is unavailable.</response>
     /// <response code="409">The crawl configuration capability is unavailable.</response>
     /// <response code="503">Shared page storage is unavailable.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the open pull requests of the client")]
     [HttpPost("overview")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ClientPullRequestOverviewPage), StatusCodes.Status200OK)]
@@ -438,6 +440,7 @@ public sealed class ClientReviewTargetsController(
     /// <response code="404">The target or provider adapter is unavailable.</response>
     /// <response code="409">The crawl configuration capability is unavailable.</response>
     /// <response code="502">The provider could not list pull requests.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the open pull requests of a review target")]
     [HttpGet("{targetId:guid}/open-reviews")]
     [ProducesResponseType(typeof(IReadOnlyList<ClientOpenReviewResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

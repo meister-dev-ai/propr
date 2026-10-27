@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
+import { ElevationRequiredError, readElevationRequired } from '@/services/elevationRequirement'
 import type { components } from '@/types'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { RuntimeMode } from '@/app/runtime/createRuntime'
@@ -331,6 +332,11 @@ async function getProCursorRecentEventsInternal(
   )
 
   if (!response.ok) {
+    const requirement = readElevationRequired(error)
+    if (requirement) {
+      throw new ElevationRequiredError(requirement)
+    }
+
     throw createRequestError(error, 'Failed to load recent ProCursor usage events.')
   }
 

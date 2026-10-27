@@ -116,6 +116,29 @@ describe('AppHeader', () => {
     expect(wrapper.text()).toContain('Memory')
   })
 
+  it('offers Elevations to a platform administrator when multi-tenancy is licensed', async () => {
+    isAdmin.value = true
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    const elevationsLink = wrapper.findAllComponents(RouterLinkStub)
+      .find((component) => component.text() === 'Elevations')
+
+    expect(elevationsLink?.props('to')).toEqual({ name: 'elevations' })
+  })
+
+  it('leaves Elevations out for a platform administrator when multi-tenancy is not licensed', async () => {
+    isAdmin.value = true
+    availableCapabilities.value = []
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    expect(wrapper.text()).not.toContain('Elevations')
+    expect(wrapper.text()).toContain('Users')
+  })
+
   it('shows the Clients navigation for read-only client users', async () => {
     clientRoles.value = { 'client-1': 0 }
 

@@ -18,6 +18,15 @@
                     <p class="detail-page-subtitle">Client Configuration</p>
                 </div>
 
+                <PlatformAdminElevationPanel
+                    v-if="isAdmin && client && tenantNeedsElevation(client.tenantId)"
+                    compact
+                    :tenant-id="client.tenantId ?? ''"
+                    :tenant-name="client.tenantDisplayName"
+                    :client-id="client.id"
+                    :client-name="client.displayName"
+                />
+
                 <div v-if="!notFound && !loading && client" class="sidebar-nav">
                     <div v-if="canManageClient" class="sidebar-nav-group">
                         <h4>Configuration</h4>
@@ -233,9 +242,13 @@ import ClientCodeInsightsCollectionSection from "@/features/clients/components/C
 import UsageDashboard from "@/components/UsageDashboard.vue";
 import ReviewHistorySection from "@/features/reviews/components/ReviewHistorySection.vue";
 import TextViewerModal from "@/components/text/TextViewerModal.vue";
+import PlatformAdminElevationPanel from "@/features/elevations/components/PlatformAdminElevationPanel.vue";
+import { tenantNeedsElevation } from "@/composables/usePlatformAdminElevations";
+import { useSession } from "@/composables/useSession";
 import { ClientDetailVmKey, useClientDetailViewModel } from "@/features/clients/view-models/useClientDetailViewModel";
 
 const vm = useClientDetailViewModel();
+const { isAdmin } = useSession();
 // Shared with sub-tab components (e.g. ClientSystemTab) via inject.
 provide(ClientDetailVmKey, vm);
 const {

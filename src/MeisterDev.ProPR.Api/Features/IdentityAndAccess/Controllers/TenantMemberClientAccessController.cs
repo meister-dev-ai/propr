@@ -18,6 +18,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin/tenants/{tenantId:guid}")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class TenantMemberClientAccessController(
     ITenantAdminService tenantAdminService,
     ITenantMemberClientAccessService memberClientAccessService) : ControllerBase

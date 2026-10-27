@@ -17,6 +17,7 @@ namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 /// </summary>
 [ApiController]
 [Route("clients/{clientId:guid}/model-catalog")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class ClientModelCatalogController(IModelCatalogRepository catalog) : ControllerBase
 {
     /// <summary>Lists the catalog providers available to pick from.</summary>

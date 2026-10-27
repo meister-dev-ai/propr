@@ -207,9 +207,11 @@ so each can read what the other protected.
 
 ProPR has two sign-in surfaces.
 
-- **Platform administrators** sign in at `/login`. This page stays available even if a tenant disables
-  local login or misconfigures its identity providers, so you cannot lock yourself out. The endpoint
-  behind it is `POST /api/auth/login`.
+- **Platform administrators** sign in at `/login`. The local form on this page stays available even if a
+  tenant disables local login or misconfigures its identity providers, so you cannot lock yourself out. The
+  endpoint behind it is `POST /api/auth/login`. An installation can add an identity provider for platform
+  administrators to the same page; see
+  [platform administrators and the identity provider of the installation](#platform-administrators-and-the-identity-provider-of-the-installation).
 - **Tenant users** sign in at `/tenants/<tenant-slug>/login`, which selects the enabled identity
   providers, the allowed email domains, and whether local login is permitted at all.
 
@@ -235,6 +237,49 @@ made explicitly. An existing account with no local password is linked to the ext
 
 If nobody can sign in, or sessions end sooner than you expect, start at
 [troubleshooting](../operate/troubleshooting.md).
+
+### Platform administrators and the identity provider of the installation
+
+Platform administrators can sign in through one OpenID Connect identity provider that the installation
+configures, for example the Keycloak realm of its staff. The `MEISTER_PLATFORM_ADMIN_SSO_*` variables under
+[single sign-on for platform administrators](../operate/configuration.md#single-sign-on-for-platform-administrators)
+configure it, and the license key `sso-authentication` unlocks it. Without that key, ProPR ignores the provider,
+the sign-in page shows the local form only, and the API writes a warning to its log when it starts.
+
+ProPR links an account to the identity at the provider, the pair of issuer and subject. The role in the ID token
+decides at every sign-in:
+
+| Sign-in through the provider | What ProPR does |
+|---|---|
+| The role claim contains the required role, and no account is linked to the identity | ProPR creates an account with platform administrator rights and links it to the identity. |
+| The role claim contains the required role, and an account is linked | ProPR signs the account in. An account that lost its rights earlier receives them again. |
+| The role claim does not contain the required role | ProPR refuses the sign-in with `platform_role_missing`. A linked account loses its platform administrator rights, and ProPR revokes its refresh tokens and personal access tokens. An access token the account already holds expires within 15 minutes. |
+| The linked account is disabled | ProPR refuses the sign-in. |
+
+ProPR reads the role only when someone signs in through the provider. A session that started before the role
+was removed at the provider keeps its rights until it ends. To end it at once, disable the account under
+**Administration → Users**.
+
+The sign-in through the provider never links an existing account. If an account with the same email address
+has a local password, the first sign-in is refused with `external_link_requires_confirmation`. If the address
+belongs to an account without a password, for example one that a tenant identity provider created, ProPR creates
+a separate account. The account that the sign-in creates carries no email address, so a tenant identity
+provider, which finds accounts by email, cannot sign in to it.
+
+The sign-in uses the authorization code flow with PKCE and a nonce. The state of a sign-in stays in an httpOnly
+cookie of the browser that started it, and ProPR refuses a callback that arrives without that cookie.
+
+ProPR sends the browser back with the access token in the URL fragment, and only to a page on one of these
+origins: the origin of `MEISTER_PUBLIC_BASE_URL`, an origin listed in `CORS_ORIGINS`, or, when
+`MEISTER_PUBLIC_BASE_URL` is not set, the origin the browser reached the API at. In Development the local
+frontend origins on ports 3000 and 5173 qualify as well. The origins that the API accepts for the Azure DevOps
+extension do not qualify.
+
+Keep at least one local platform administrator account. The local sign-in still works when the provider is
+unreachable, when the license no longer grants `sso-authentication`, and when no account holds the role any
+more. If the last active platform administrator loses the role, ProPR writes a warning to its log. Its next start
+then creates the bootstrap administrator from `MEISTER_BOOTSTRAP_ADMIN_USER` and
+`MEISTER_BOOTSTRAP_ADMIN_PASSWORD`, and fails without these variables.
 
 ## Automation credentials
 
@@ -278,6 +323,94 @@ Creating a local user account does not grant tenant access until a membership is
 Every client-scoped operation is authorized against the specific client in the request, so access to
 one client never confers access to another.
 
+## Platform administrator access to tenant content
+
+A platform administrator reads the content of a tenant only during an elevation that covers the tenant or the
+client the content belongs to. The content of a tenant is the text from its repositories and pull request
+conversations and the answers of the AI about them. Without an elevation, a platform administrator reads the
+metadata of every tenant: its clients and their configuration without secrets, the review jobs with their status,
+times, sizes, finding counts, token and cost figures, the usage and budget figures, and the audit history of the
+tenant.
+
+The System tenant belongs to the installation, and its clients need no elevation. Every other client needs an
+elevation, also when the platform administrator holds a role on it through a tenant membership or a client
+assignment. Tenant administrators and tenant members read the content of their clients through their roles,
+without an elevation. A tenant machine credential belongs to its tenant and holds no platform administrator role.
+It reads the reviews of its tenant without an elevation, and ProPR writes no elevation records for these reads.
+
+Elevations are part of [multi-tenancy](editions.md#what-requires-a-commercial-license). An installation without
+multi-tenancy uses the System tenant only.
+
+### Elevations
+
+A platform administrator starts an elevation for themselves on the page of a tenant or of one of its clients, or
+with `POST /admin/elevations`. An elevation has a scope, a reason and a duration. The scope is the tenant or one of
+its clients, and the reason is a text such as a ticket number. `MEISTER_PLATFORM_ADMIN_ELEVATION_MAX_MINUTES` sets
+the longest duration, four hours by default; see
+[the environment variable reference](../operate/configuration.md#platform-administrator-elevations).
+
+An elevation ends at its expiry, and any platform administrator can end it earlier. While an elevation is active,
+the management UI shows a banner with the remaining time on every page.
+
+An elevation grants read access to the content of its scope, not write access. A platform administrator changes the
+data of a tenant under the same rules with and without an elevation.
+
+ProPR records the start, the end or the expiry, and every content read of an elevation in the audit history of the
+tenant, with the platform administrator, the scope and the reason. The record of a read also contains the request,
+the client and the review job. ProPR writes the record before it sends the content. If ProPR cannot write the
+record, it answers the request with `503` and sends no content.
+
+Tenant administrators learn of an elevation in the **Audit history** section of their tenant, not by email.
+Platform administrators read every elevation with its records on the **Elevations** page under **Administration**.
+The endpoints behind both pages are described under
+[platform administrator elevations](api.md#platform-administrator-elevations) and
+[tenant audit history](api.md#tenant-audit-history) in the API reference.
+
+### Endpoints that return content
+
+If no elevation covers the client, ProPR answers a content request of a platform administrator with `403` and the
+code `elevation_required`. The answer contains the identifiers of the tenant and the client. In place of the
+refused content, the management UI offers to start an elevation for that client. ProPR answers `400` when a
+content request of a platform administrator carries no readable client identifier or names `clientId` more than
+once. It answers `404` when the client or the review job does not exist.
+
+The routes below are the routes of the API; the bundled frontend proxy serves them under `/api`. The routes under
+`/jobs` are aliases of the routes under `/reviewing/jobs`.
+
+| Endpoint | Content |
+|---|---|
+| `GET /reviewing/jobs/{id}/result` | ProPR returns the summary and the findings of a review job. |
+| `GET /reviewing/jobs/{id}/protocol` and `GET /reviewing/jobs/{id}/protocol/{protocolId}` | ProPR returns the protocol traces of a review job or a thread pass, with their events. |
+| `GET /reviewing/jobs/{jobId}/files/{fileResultId}/diff` | ProPR returns the diff of a reviewed file. |
+| `GET /reviewing/jobs/{id}/code-insights/findings` | ProPR returns the classification of the findings of a review job, with the reasons of their risk assessment. |
+| `GET /reviewing/jobs/{jobId}/status`, `GET /reviews/{jobId}` and `GET /clients/{clientId}/reviewing/jobs/{jobId}/status` | ProPR returns the status of a review job with its result. |
+| `GET /clients/{clientId}/reviewing/pr-view` | ProPR returns the reviews, summaries and thread memory of one pull request. |
+| `GET /clients/{clientId}/review-archive/pull-requests/threads`, `.../files` and `.../file-diff` | ProPR returns the retained comment threads, files and diffs of a pull request. |
+| `GET /admin/reviewing/thread-memory` and `GET /admin/thread-memory` | ProPR returns the thread memory of the client named in `clientId`. |
+| `POST /clients/{clientId}/review-targets/overview` and `GET /clients/{clientId}/review-targets/{targetId}/open-reviews` | ProPR returns the open pull requests with their titles and authors, read from the source-control host. |
+| `GET /admin/clients/{clientId}/procursor/sources/{sourceId}/token-usage/events` and `GET /admin/clients/{clientId}/procursor/token-usage/export` | ProPR returns the ProCursor usage events with the paths of the indexed sources. |
+
+For the endpoints that span several clients, ProPR answers a platform administrator with the metadata of every
+client and limits the content to the clients whose content the administrator may read:
+
+| Endpoint | Answer to a platform administrator |
+|---|---|
+| `GET /reviewing/jobs` and `GET /reviewing/jobs/pull-requests` | ProPR lists every review job. For a client that needs an elevation, it withholds the title of the pull request, the excerpt of the summary and the error message, and marks the item with `contentWithheld`. |
+| `GET /reviewing/jobs/{id}` | ProPR returns the details of the review job with its token breakdown and its cost. For a client that needs an elevation, it withholds the summary and the error message. |
+| `GET /admin/runners` and `GET /admin/runners/{tenantId}` | ProPR lists the runners with the reviews each one runs. For a client that needs an elevation, it withholds the title of the pull request and marks the review with `contentWithheld`. |
+| `GET /code-quality/findings`, `GET /code-quality/hotspots`, `GET /reviewer-performance/findings` and `GET /reviewer-performance/misses` | ProPR answers with the findings and files of the clients whose content the administrator may read. A request that names another client in `clientId` is refused with `elevation_required`. |
+| `GET /code-quality/concentration` | ProPR limits the ranking by file to the clients whose content the administrator may read. The rankings by client, repository, pull request and job cover every client. |
+
+ProPR records a read through these endpoints under an elevation like every other content read. The endpoints
+outside the two tables return metadata or no data of a tenant.
+
+### Data requests of a customer
+
+A platform administrator carries out the data requests of a customer without an elevation: the export of a tenant
+with `GET /admin/tenants/{tenantId}/export`, the deletion of a tenant with `DELETE /admin/tenants/{tenantId}` and
+the erasure of an identity with `POST /admin/tenants/{tenantId}/identity-erasures`. ProPR records these requests as
+described on [tenant data](../operate/tenant-data.md).
+
 ## Tenant isolation of AI credentials
 
 An AI connection belongs either to a tenant or to one of that tenant's clients. Logical models
@@ -294,3 +427,12 @@ reference is refused, not treated as unrestricted.
 Changes to a tenant's AI provider configuration are recorded with who made them. Provider connection
 operations, webhook deliveries, and review decisions are all stored and inspectable from the management
 UI.
+
+Changes to user accounts go to the application log as events with an `AuditEvent` property. A platform
+administrator's changes are written as `user.disabled`, `user.reenabled` and `user.deleted`. A sign-in through
+the identity provider for platform administrators is written as `user.signed_in`, and a refused one as a
+blocked `user.signed_in` with its reason. Every grant and every removal of platform administrator rights by
+that sign-in is written as `user.platform_admin_granted` or `user.platform_admin_revoked`.
+
+The audit history of a tenant also records the elevations of platform administrators and every content read
+under them; see [platform administrator access to tenant content](#platform-administrator-access-to-tenant-content).

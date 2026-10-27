@@ -19,6 +19,7 @@ namespace MeisterDev.ProPR.Api.Features.Reviewing.Intake.Controllers;
 
 /// <summary>Handles submission and status retrieval for review intake jobs.</summary>
 [ApiController]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ReviewJobsController(
     SubmitReviewJobHandler submitReviewJobHandler,
     RestartReviewJobHandler restartReviewJobHandler,
@@ -31,6 +32,7 @@ public sealed partial class ReviewJobsController(
     /// <param name="clientId">The owning client.</param>
     /// <param name="jobId">The review job identifier.</param>
     /// <param name="ct">Cancellation token.</param>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the status and result of a review job")]
     [HttpGet("/clients/{clientId:guid}/reviewing/jobs/{jobId:guid}/status")]
     [ProducesResponseType(typeof(ReviewStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -55,6 +57,7 @@ public sealed partial class ReviewJobsController(
     /// <response code="401">Missing or invalid app authentication.</response>
     /// <response code="403">Caller lacks access to the job's owning client.</response>
     /// <response code="404">Job not found.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ReviewJob, RouteValue = "jobId", Resource = "the status and result of a review job")]
     [HttpGet("/reviewing/jobs/{jobId:guid}/status")]
     [HttpGet("reviews/{jobId:guid}")]
     [ProducesResponseType(typeof(ReviewStatusResponse), StatusCodes.Status200OK)]

@@ -83,7 +83,7 @@ public sealed class TenantDataLifecycleTests(PostgresContainerFixture fixture) :
         var owned = await _seeder.OwnedColumnsAsync();
         foreach (var table in owned.Select(item => item.Table).Distinct().Where(table => table is not ("tenants" or "clients")))
         {
-            await _seeder.InsertAsync(table, Ids(owned, table, tenant, client));
+            await _seeder.InsertAsync(table, await RowAsync(owned, table, tenant, client));
         }
 
         await _seeder.InsertAsync("review_jobs", Ids(owned, "review_jobs", otherTenant, otherClient));
@@ -113,7 +113,7 @@ public sealed class TenantDataLifecycleTests(PostgresContainerFixture fixture) :
         var owned = await _seeder.OwnedColumnsAsync();
         foreach (var table in owned.Select(item => item.Table).Distinct().Where(table => table is not ("tenants" or "clients")))
         {
-            await _seeder.InsertAsync(table, Ids(owned, table, tenant, client));
+            await _seeder.InsertAsync(table, await RowAsync(owned, table, tenant, client));
         }
 
         await _seeder.InsertAsync("review_jobs", Ids(owned, "review_jobs", tenant, kept));
@@ -533,6 +533,27 @@ public sealed class TenantDataLifecycleTests(PostgresContainerFixture fixture) :
         owned.Where(item => item.Table == table).ToDictionary(
             item => item.Column,
             item => (object)(item.Column is "tenant_id" or "TenantId" ? tenant : client), StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The values of a row of <paramref name="table" /> that belongs to the tenant and the client. A link of a tenant
+    ///     identity provider names its provider together with its tenant, as a check constraint requires, so it gets a
+    ///     provider of the same tenant. The seeder leaves the optional provider column empty on its own.
+    /// </summary>
+    private async Task<Dictionary<string, object>> RowAsync(
+        IReadOnlyList<(string Table, string Column)> owned, string table,
+        Guid tenant, Guid client)
+    {
+        var row = Ids(owned, table, tenant, client);
+        if (table == "external_identities")
+        {
+            row["sso_provider_id"] = await _seeder.InsertAsync(
+                                         "tenant_sso_providers",
+                                         new Dictionary<string, object> { ["tenant_id"] = tenant })
+                                     ?? throw new InvalidOperationException("tenant_sso_providers has no id column.");
+        }
+
+        return row;
+    }
 
     private async Task<long> CountAsync(string sql, Guid first, Guid second)
     {

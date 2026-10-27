@@ -17,6 +17,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/procursor")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadRepository readRepository) : ControllerBase
 {
     private const int MaxTopSourcesLimit = 1000;
@@ -203,6 +204,7 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
     /// <response code="404">The requested source was not found for the client.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the ProCursor usage events of a knowledge source")]
     [HttpGet("sources/{sourceId:guid}/token-usage/events")]
     [ProducesResponseType(typeof(ProCursorTokenUsageEventsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -243,6 +245,7 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
     /// <response code="400">The query parameters were invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
+    [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the ProCursor usage export")]
     [HttpGet("token-usage/export")]
     [Produces("text/csv")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]

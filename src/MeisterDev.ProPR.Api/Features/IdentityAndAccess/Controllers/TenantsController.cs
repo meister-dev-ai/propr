@@ -21,6 +21,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Administrative tenant endpoints for platform and tenant administrators.</summary>
 [ApiController]
 [Route("admin/tenants")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class TenantsController(
     ITenantAdminService tenantAdminService,
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase

@@ -5,11 +5,13 @@ using System.Globalization;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
+using MeisterDev.ProPR.Application.Features.PlatformAdminElevation;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using MeisterDev.ProPR.CodeInsights;
 using MeisterDev.ProPR.CodeInsights.Metrics;
@@ -44,7 +46,8 @@ internal sealed class CodeInsightAudienceHarness
         bool isAdmin = false,
         string? minimumSampleSize = null,
         ICodeInsightHistoricalRefreshStore? historicalRefreshStore = null,
-        IModelEvidenceMaintenance? modelEvidenceMaintenance = null)
+        IModelEvidenceMaintenance? modelEvidenceMaintenance = null,
+        IPlatformAdminElevationService? elevations = null)
     {
         this.Rollups = Substitute.For<ICodeInsightRollupReader>();
         this.Metrics = Substitute.For<ICodeInsightMetricReader>();
@@ -158,6 +161,12 @@ internal sealed class CodeInsightAudienceHarness
             .Returns(ValueTask.FromResult(licensed));
 
         var httpContext = new DefaultHttpContext();
+        this.HttpContext = httpContext;
+        if (elevations is not null)
+        {
+            httpContext.RequestServices = new ServiceCollection().AddSingleton(elevations).BuildServiceProvider();
+        }
+
         if (authenticated)
         {
             httpContext.Items["UserId"] = Guid.NewGuid().ToString();
@@ -226,6 +235,9 @@ internal sealed class CodeInsightAudienceHarness
     }
 
     public ICodeInsightHistoryImporter Importer { get; } = Substitute.For<ICodeInsightHistoryImporter>();
+
+    /// <summary>The request both controllers answer, for a test that inspects what the request registered.</summary>
+    public HttpContext HttpContext { get; }
 
     public ICodeInsightRollupReader Rollups { get; }
 

@@ -53,6 +53,7 @@ public sealed record RunnerWorkload(
 
 /// <summary>One review a runner is holding.</summary>
 /// <param name="JobId">The review job.</param>
+/// <param name="ClientId">The client the review belongs to, which decides who may read its title.</param>
 /// <param name="RepositoryName">The repository, as the provider names it.</param>
 /// <param name="PullRequestNumber">The pull request under review.</param>
 /// <param name="Title">The pull request's title, when the job recorded one.</param>
@@ -63,6 +64,7 @@ public sealed record RunnerWorkload(
 /// </param>
 public sealed record RunnerExecutingJob(
     Guid JobId,
+    Guid ClientId,
     string? RepositoryName,
     int PullRequestNumber,
     string? Title,

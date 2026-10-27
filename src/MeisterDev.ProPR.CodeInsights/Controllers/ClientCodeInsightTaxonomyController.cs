@@ -17,6 +17,7 @@ namespace MeisterDev.ProPR.CodeInsights.Controllers;
 /// </summary>
 [ApiController]
 [Route("clients/{clientId:guid}/code-insights/taxonomy")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class ClientCodeInsightTaxonomyController(ICodeInsightTaxonomyService taxonomyService)
     : ControllerBase
 {

@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using MeisterDev.ProPR.Api.Tests.Features.PlatformAdminElevation;
 using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
@@ -297,6 +298,9 @@ public sealed class ReviewArchiveReadApiIntegrationTests(ReviewArchiveReadApiInt
             var dbRoot = this._dbRoot;
             builder.ConfigureServices(services =>
             {
+                // The tests read content as a platform administrator from a host that stores no tenants.
+                services.AddInstallationContentAccess();
+
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());

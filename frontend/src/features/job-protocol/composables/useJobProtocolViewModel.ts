@@ -6,6 +6,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, 
 import { useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
 import { createAdminClient } from '@/services/api'
+import { readElevationRequired, type ElevationRequirement } from '@/services/elevationRequirement'
 import { createDismissal } from '@/services/findingDismissalsService'
 import { restartJob, stopJob } from '@/services/jobsService'
 import { fetchFindingClassifications, type CodeInsightFindingClassification } from '@/services/codeInsightFindingsService'
@@ -180,6 +181,9 @@ export function useJobProtocolViewModel() {
 
     const loading = ref(false)
     const error = ref('')
+    // Set when the server refused the protocol because no elevation of the platform administrator covers the
+    // client. The view then offers to start one in place of the protocol.
+    const elevationRequired = ref<ElevationRequirement | null>(null)
     const activeTab = ref<'summary' | 'traces' | 'tokens'>('summary')
     const protocols = shallowRef<ReviewProtocolPass[]>([])
     const loadedProtocolIds = ref<Set<string>>(new Set())
@@ -1997,6 +2001,11 @@ export function useJobProtocolViewModel() {
             const data = protocolRes.data as ReviewProtocolPass[] | undefined
             const fetchError = protocolRes.error
 
+            elevationRequired.value = readElevationRequired(fetchError)
+            if (elevationRequired.value) {
+                return
+            }
+
             if (fetchError) {
                 if (showLoading) error.value = 'Protocol not found for this job.'
                 return
@@ -2416,6 +2425,8 @@ export function useJobProtocolViewModel() {
     return reactive({
         loading,
         error,
+        elevationRequired,
+        reload: () => loadProtocol(true),
         activeTab,
         protocols,
         loadedProtocolIds,

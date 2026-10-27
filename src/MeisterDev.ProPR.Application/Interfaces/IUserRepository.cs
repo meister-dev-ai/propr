@@ -89,6 +89,6 @@ public interface IUserRepository
     /// <summary>Deletes a tenant membership when it exists.</summary>
     Task<bool> RemoveTenantMembershipAsync(Guid tenantId, Guid membershipId, CancellationToken ct = default);
 
-    /// <summary>Persists a new tenant-scoped external identity link.</summary>
+    /// <summary>Persists a new external identity link.</summary>
     Task AddExternalIdentityAsync(ExternalIdentity externalIdentity, CancellationToken ct = default);
 }

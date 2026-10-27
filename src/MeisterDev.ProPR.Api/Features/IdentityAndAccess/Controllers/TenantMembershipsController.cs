@@ -16,6 +16,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Administrative tenant membership endpoints scoped to a single tenant.</summary>
 [ApiController]
 [Route("admin/tenants/{tenantId:guid}/memberships")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class TenantMembershipsController(
     ITenantAdminService tenantAdminService,
     ITenantMembershipService tenantMembershipService) : ControllerBase

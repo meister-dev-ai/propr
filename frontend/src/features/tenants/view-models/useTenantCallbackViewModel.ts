@@ -5,28 +5,32 @@
 import { onMounted, ref, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSession } from '@/composables/useSession'
+import {
+  readSignInCallbackFragment,
+  takeSignInCallbackFragment,
+  type SignInCallbackFragment,
+} from '@/features/auth/signInCallbackFragment'
 
 export interface TenantCallbackViewModel {
   readonly name: 'useTenantCallbackViewModel'
   tenantSlug: string
   loading: Ref<boolean>
   errorMessage: Ref<string>
+  /** True when the session is established but the start page could not be opened. */
+  signedIn: Ref<boolean>
   completeTenantSignIn: () => Promise<void>
 }
 
 export interface UseTenantCallbackViewModelOptions {
   /** Override tenantSlug (defaults to useRoute().params.tenantSlug). */
   tenantSlug?: string
-  /** Override the source of URL fragment params. Defaults to window.location.hash. */
+  /**
+   * Override the source of URL fragment params. Defaults to the fragment of the current page, which is removed from
+   * the address bar and the history entry as soon as it is read.
+   */
   getLocationHash?: () => string
   /** Skip the onMounted run; tests call completeTenantSignIn directly. */
   autoComplete?: boolean
-}
-
-function toOptionalNumber(value: string | null): number | undefined {
-  if (!value) return undefined
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 export function useTenantCallbackViewModel(
@@ -37,37 +41,41 @@ export function useTenantCallbackViewModel(
   const { establishSession } = useSession()
 
   const tenantSlug = options.tenantSlug ?? String(route.params.tenantSlug ?? '')
-  const getHash = options.getLocationHash
-    ?? (() => (typeof window === 'undefined' ? '' : window.location.hash))
+  const getLocationHash = options.getLocationHash
+  const takeFragment = (): SignInCallbackFragment =>
+    getLocationHash ? readSignInCallbackFragment(getLocationHash()) : takeSignInCallbackFragment()
   const autoComplete = options.autoComplete ?? true
 
   const loading = ref(true)
   const errorMessage = ref('')
+  const signedIn = ref(false)
 
   async function completeTenantSignIn(): Promise<void> {
-    const rawHash = getHash()
-    const fragmentSource = rawHash.startsWith('#') ? rawHash.slice(1) : rawHash
-    const fragment = new URLSearchParams(fragmentSource)
-    const accessToken = fragment.get('accessToken')
-    // The refresh token is no longer in the fragment — it is set as an httpOnly cookie by the callback.
-    if (accessToken) {
-      try {
-        await establishSession({
-          accessToken,
-          expiresIn: toOptionalNumber(fragment.get('expiresIn')),
-          tokenType: fragment.get('tokenType') ?? undefined,
-        })
-        await router.replace({ name: 'home' })
-      } catch {
-        errorMessage.value = 'Tenant sign-in could not be completed. Please try again or contact a tenant administrator.'
-        loading.value = false
-      }
+    // The fragment is read and removed before any asynchronous work, so no failure below leaves the access token in
+    // the address bar or in the history.
+    const { session, message } = takeFragment()
+    if (!session) {
+      errorMessage.value = message
+        ?? 'Tenant sign-in failed. Please try again or contact a tenant administrator.'
+      loading.value = false
       return
     }
 
-    errorMessage.value = fragment.get('message')
-      ?? 'Tenant sign-in failed. Please try again or contact a tenant administrator.'
-    loading.value = false
+    try {
+      await establishSession(session)
+    } catch {
+      errorMessage.value = 'Tenant sign-in could not be completed. Please try again or contact a tenant administrator.'
+      loading.value = false
+      return
+    }
+
+    try {
+      await router.replace({ name: 'home' })
+    } catch {
+      // The session is established; only the start page did not load.
+      signedIn.value = true
+      loading.value = false
+    }
   }
 
   if (autoComplete) {
@@ -79,6 +87,7 @@ export function useTenantCallbackViewModel(
     tenantSlug,
     loading,
     errorMessage,
+    signedIn,
     completeTenantSignIn,
   }
 }

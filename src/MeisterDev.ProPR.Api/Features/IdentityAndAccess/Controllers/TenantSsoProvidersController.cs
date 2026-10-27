@@ -22,6 +22,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Administrative CRUD endpoints for tenant-owned SSO providers.</summary>
 [ApiController]
 [Route("admin/tenants/{tenantId:guid}/sso-providers")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed class TenantSsoProvidersController(
     ITenantAdminService tenantAdminService,
     ITenantSsoProviderService tenantSsoProviderService,

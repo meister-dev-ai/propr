@@ -15,6 +15,7 @@ namespace MeisterDev.ProPR.Api.Features.PromptCustomization.Controllers;
 /// <summary>Manages per-client and per-crawl-config AI review prompt overrides.</summary>
 [ApiController]
 [Route("clients/{clientId:guid}/prompt-overrides")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class PromptOverridesController(
     IPromptOverrideService promptOverrideService,
     ILogger<PromptOverridesController> logger) : ControllerBase

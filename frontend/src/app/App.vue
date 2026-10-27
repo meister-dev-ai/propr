@@ -22,6 +22,7 @@
         </button>
       </template>
     </AppHeader>
+    <PlatformAdminElevationBanner v-if="isAuthenticated" />
     <div
       v-if="isAuthenticated"
       v-show="!isPrReview || noticesOpen"
@@ -49,6 +50,7 @@ import AppHeader from '@/components/navigation/AppHeader.vue'
 import AppNotification from '@/components/feedback/AppNotification.vue'
 import UsageStatisticsNotice from '@/features/usage-statistics/components/UsageStatisticsNotice.vue'
 import AuthorOverageNotice from '@/features/licensing/components/AuthorOverageNotice.vue'
+import PlatformAdminElevationBanner from '@/features/elevations/components/PlatformAdminElevationBanner.vue'
 import { useSession } from '@/composables/useSession'
 import { useLicensing } from '@/composables/useLicensing'
 import { useUsageStatistics } from '@/composables/useUsageStatistics'

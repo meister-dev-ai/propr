@@ -18,6 +18,14 @@
                         <a :href="group.prUrl" target="_blank" rel="noopener noreferrer" class="pr-link">
                             {{ group.prTitle ?? 'PR #' + group.pullRequestId }}
                         </a>
+                        <span
+                            v-if="group.contentWithheld"
+                            class="withheld-badge"
+                            title="The title belongs to the content of the tenant. Start an elevation for the client to read it."
+                            data-testid="pr-title-withheld"
+                        >
+                            Title withheld
+                        </span>
                         <span class="repo-name">{{ group.prRepositoryName ?? group.repositoryId }}</span>
                         <span v-if="group.prSourceBranch && group.prTargetBranch" class="branch-context">
                             {{ group.prSourceBranch }} &rarr; {{ group.prTargetBranch }}
@@ -140,6 +148,9 @@
                                         </span>
                                     </span>
                                 </div>
+                            </template>
+                            <template v-else-if="item.contentWithheld">
+                                <span class="withheld-text" data-testid="summary-withheld">Withheld until an elevation covers this client</span>
                             </template>
                             <template v-else>
                                 {{ item.resultSummaryExcerpt ?? item.errorMessage ?? '—' }}
@@ -347,7 +358,7 @@ function statusLabel(status: JobStatus | undefined): string {
 // The summary cell is only clickable when it has real content to show; a bare '—' fallback should not
 // open an empty modal.
 function hasSummaryContent(item: JobListItem): boolean {
-    return Boolean(item.hasResultSummary || item.errorMessage)
+    return !item.contentWithheld && Boolean(item.hasResultSummary || item.errorMessage)
 }
 
 function statusBadgeClass(status: JobStatus | undefined): string {
@@ -451,6 +462,20 @@ function prReviewLink(group: PrGroup): object {
     background: var(--color-bg-subtle, rgba(0,0,0,0.06));
     padding: 0.1rem 0.4rem;
     border-radius: var(--radius-xs);
+}
+
+.withheld-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-warning);
+    border: 1px solid var(--color-warning);
+    padding: 0.1rem 0.45rem;
+    border-radius: var(--radius-xs);
+}
+
+.withheld-text {
+    font-style: italic;
+    color: var(--color-text-muted);
 }
 
 .blocked-badge {

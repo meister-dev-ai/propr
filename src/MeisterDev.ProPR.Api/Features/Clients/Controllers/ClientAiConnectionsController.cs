@@ -26,6 +26,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>Manages provider-neutral AI connection profiles for a client.</summary>
 [ApiController]
 [Route("clients/{clientId:guid}/ai-connections")]
+[TenantData(TenantDataAccess.Metadata)]
 public sealed partial class ClientAiConnectionsController(
     IAiConnectionRepository aiConnections,
     IAiProviderDriverRegistry providerDrivers,

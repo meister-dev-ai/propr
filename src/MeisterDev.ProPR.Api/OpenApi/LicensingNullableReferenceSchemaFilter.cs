@@ -22,6 +22,7 @@ public sealed class LicensingNullableReferenceSchemaFilter : ISchemaFilter
     private static readonly IReadOnlyDictionary<Type, string[]> NullableReferenceProperties =
         new Dictionary<Type, string[]>
         {
+            [typeof(AuthOptionsDto)] = ["platformAdminSignIn"],
             [typeof(LicenseLimitDto)] = ["effectiveCeiling", "effectiveSource"],
             [typeof(LicensingSummaryDto)] = ["authorOverage", "authorPeakMonth"],
             [typeof(PremiumCapabilityDto)] = ["reason"],

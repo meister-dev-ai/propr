@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
+using MeisterDev.ProPR.Application.Features.PlatformAdminElevation;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -45,10 +46,19 @@ public sealed class CodeInsightScopeResolver(
     ///     Resolves the scope for a read any client user may perform: the clients the caller holds a role on, or
     ///     every client for a platform administrator.
     /// </summary>
+    /// <param name="httpContext">The current HTTP context.</param>
+    /// <param name="requestedClientId">Narrows to one client the caller may already see.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="contentResource">
+    ///     What the read returns, when it returns content. For a platform administrator a content read covers only the
+    ///     clients whose content the administrator may read, and a named client outside them is refused with
+    ///     <c>elevation_required</c>.
+    /// </param>
     public async Task<CodeInsightScope> ResolveForClientAccessAsync(
         HttpContext httpContext,
         Guid? requestedClientId,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? contentResource = null)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
 
@@ -59,7 +69,7 @@ public sealed class CodeInsightScopeResolver(
 
         if (AuthHelpers.IsAdmin(httpContext))
         {
-            return await this.ResolveForAdministratorAsync(requestedClientId, ct);
+            return await this.ResolveForAdministratorAsync(httpContext, requestedClientId, contentResource, ct);
         }
 
         if (AuthHelpers.RequireAnyClientRole(httpContext, ClientRole.ClientUser) is { } roleCheck)
@@ -79,10 +89,18 @@ public sealed class CodeInsightScopeResolver(
     ///     a client administrator holding several roles is still not the person who decides whether the reviewer is
     ///     earning its keep.
     /// </remarks>
+    /// <param name="httpContext">The current HTTP context.</param>
+    /// <param name="requestedClientId">Narrows to one client the caller may already see.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="contentResource">
+    ///     What the read returns, when it returns content. For a platform administrator a content read covers only the
+    ///     clients whose content the administrator may read.
+    /// </param>
     public async Task<CodeInsightScope> ResolveForTenantAdministrationAsync(
         HttpContext httpContext,
         Guid? requestedClientId,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? contentResource = null)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
 
@@ -93,7 +111,7 @@ public sealed class CodeInsightScopeResolver(
 
         if (AuthHelpers.IsAdmin(httpContext))
         {
-            return await this.ResolveForAdministratorAsync(requestedClientId, ct);
+            return await this.ResolveForAdministratorAsync(httpContext, requestedClientId, contentResource, ct);
         }
 
         var administeredTenants = AuthHelpers.GetTenantRoles(httpContext)
@@ -133,8 +151,17 @@ public sealed class CodeInsightScopeResolver(
         return new ObjectResult(new { error = message }) { StatusCode = StatusCodes.Status403Forbidden };
     }
 
-    private async Task<CodeInsightScope> ResolveForAdministratorAsync(Guid? requestedClientId, CancellationToken ct)
+    private async Task<CodeInsightScope> ResolveForAdministratorAsync(
+        HttpContext httpContext,
+        Guid? requestedClientId,
+        string? contentResource,
+        CancellationToken ct)
     {
+        if (contentResource is not null)
+        {
+            return await this.ResolveContentForAdministratorAsync(httpContext, requestedClientId, contentResource, ct);
+        }
+
         if (requestedClientId is not null)
         {
             return new CodeInsightScope([requestedClientId.Value], null);
@@ -142,6 +169,43 @@ public sealed class CodeInsightScopeResolver(
 
         var all = await clientAdminService.GetAllAsync(ct);
         return new CodeInsightScope(all.Select(client => client.Id).ToList(), null);
+    }
+
+    /// <summary>
+    ///     Narrows a content read of a platform administrator to the clients whose content the administrator may read,
+    ///     and registers the reads an elevation grants so they are recorded in the audit history of the tenant.
+    /// </summary>
+    private async Task<CodeInsightScope> ResolveContentForAdministratorAsync(
+        HttpContext httpContext,
+        Guid? requestedClientId,
+        string contentResource,
+        CancellationToken ct)
+    {
+        if (requestedClientId is { } requested)
+        {
+            var grant = (await PlatformAdminContent.ResolveAsync(httpContext, [requested], ct)).FirstOrDefault();
+            if (grant is { Kind: ContentAccessKind.Refused })
+            {
+                return new CodeInsightScope([], PlatformAdminContent.Refusal(grant));
+            }
+
+            if (grant is not null)
+            {
+                PlatformAdminContent.Use(httpContext, grant, contentResource);
+            }
+
+            return new CodeInsightScope([requested], null);
+        }
+
+        var readable = (await PlatformAdminContent.ResolveReadableAsync(httpContext, ct))
+            .Where(grant => grant.Kind != ContentAccessKind.Refused)
+            .ToDictionary(grant => grant.ClientId);
+        var clients = (await clientAdminService.GetAllAsync(ct))
+            .Select(client => client.Id)
+            .Where(readable.ContainsKey)
+            .ToList();
+        PlatformAdminContent.Use(httpContext, clients.Select(clientId => readable[clientId]), contentResource);
+        return new CodeInsightScope(clients, null);
     }
 
     /// <summary>Returns a refusal when the caller is unauthenticated or the installation is not licensed.</summary>

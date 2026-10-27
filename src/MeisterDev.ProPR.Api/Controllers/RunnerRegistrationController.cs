@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 
@@ -28,6 +29,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("runners")]
+[TenantData(TenantDataAccess.ServiceChannel)]
 public sealed class RunnerRegistrationController(IRunnerRegistrationService registration) : ControllerBase
 {
     /// <summary>Enrolls a host presenting an operator-issued registration token.</summary>

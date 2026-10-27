@@ -19,6 +19,7 @@ namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 /// </remarks>
 [ApiController]
 [Route("admin/model-catalog")]
+[TenantData(TenantDataAccess.None)]
 public sealed partial class AdminModelCatalogController(
     IModelCatalogImportService catalogImport,
     ILogger<AdminModelCatalogController> logger) : ControllerBase

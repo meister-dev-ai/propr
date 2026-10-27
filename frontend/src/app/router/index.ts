@@ -60,6 +60,11 @@ const router = createRouter({
       component: () => import('@/features/auth/views/LoginView.vue'),
     },
     {
+      path: '/login/callback',
+      name: 'login-callback',
+      component: () => import('@/features/auth/views/LoginCallbackView.vue'),
+    },
+    {
       path: '/tenants/:tenantSlug/login',
       name: 'tenant-login',
       component: () => import('@/features/tenants/views/TenantLoginView.vue'),
@@ -176,6 +181,14 @@ const router = createRouter({
       name: 'usage-statistics',
       component: () => import('@/features/usage-statistics/views/UsageStatisticsView.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      // The elevations of all platform administrators with the content each one read. Platform administrators
+      // only, because the list spans every tenant. Elevations are part of multi-tenancy.
+      path: '/elevations',
+      name: 'elevations',
+      component: () => import('@/features/elevations/views/ElevationsView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true, requiresCapability: 'multi-tenancy' },
     },
     {
       // The whole installation's fleet. Reserved to platform administrators, because it spans tenants and
