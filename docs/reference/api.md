@@ -90,6 +90,42 @@ External services send `X-Tenant-Machine-Token` and keep the token server-side.
 | AI configuration | Machine callers can verify candidate edits and select verified client-owned Default, High and Embedding purposes. See [AI credentials](../ai/credentials.md). |
 | Rate limits | Requests can return 429. The API-host limit defaults to 256 requests/second; `MEISTER_MACHINE_AUTH_GLOBAL_PERMITS_PER_SECOND` is clamped to 1–4096. Each credential permits 16 BCrypt verifications/second. Retry after the next one-second window. |
 
+## Provisioned users
+
+A hosting platform keeps the accounts of its customers with these endpoints. They require a platform administrator
+and the identity provider for provisioned users, which
+[single sign-on for provisioned users](../operate/configuration.md#single-sign-on-for-provisioned-users) configures.
+Without the provider, ProPR answers them with `404` and `provisioned_sign_in_not_configured`. `{subject}` is the subject of the
+person at that provider, as the `sub` claim of the ID token carries it, encoded as a path segment. Every operation is
+idempotent. Who signs in, and when the access of a user ends, is described under
+[provisioned users](security.md#provisioned-users-and-the-identity-provider-of-a-hosting-platform).
+
+| Operation | Request | Outcome |
+|---|---|---|
+| Create or update a user | `PUT /api/admin/provisioned-users/{subject}` with `email` and an optional `displayName` | ProPR creates the user and answers `201`, or updates the email address and the display name and answers `200`. The answer contains `subject`, `userId`, `username`, `email`, `displayName` and `isActive`. |
+| Set a membership | `PUT /api/admin/tenants/{tenantId}/provisioned-members/{subject}` with `clientIds` | ProPR gives the user the role `TenantUser` in the tenant and the role `ClientUser` on exactly these clients, and answers `200` with the membership. ProPR answers `400` with `client_not_in_tenant` for a client of another tenant, `404` with `provisioned_user_not_found` for a subject without user, and `409` for the System tenant. |
+| Remove a membership | `DELETE /api/admin/tenants/{tenantId}/provisioned-members/{subject}` | ProPR removes the membership and the roles on the clients of the tenant, and answers `204` also when there was nothing to remove. When the user holds no membership any more, ProPR disables it and revokes its refresh tokens and personal access tokens. |
+| List the members of a tenant | `GET /api/admin/tenants/{tenantId}/provisioned-members` | ProPR returns the provisioned users with a membership in the tenant, ordered by subject, each with `subject`, `userId`, `email`, `displayName`, `isActive`, `role` and `clientIds`. |
+
+ProPR answers a request for a subject whose account holds platform administrator rights with `409` and
+`platform_administrator`, and changes nothing. To delete a provisioned user, delete its account with
+`DELETE /api/admin/users/{userId}/permanent`. The platform can provision the subject again afterwards.
+
+```bash
+curl -k -X PUT "https://localhost:5443/api/admin/provisioned-users/7f1c2b9e-3a4d-4e5f-8a6b-9c0d1e2f3a4b" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Pat: <token>" \
+  -d '{"email": "ada@customer.example", "displayName": "Ada Customer"}'
+
+curl -k -X PUT "https://localhost:5443/api/admin/tenants/<tenant-id>/provisioned-members/7f1c2b9e-3a4d-4e5f-8a6b-9c0d1e2f3a4b" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Pat: <token>" \
+  -d '{"clientIds": ["<client-id>"]}'
+```
+
+The person signs in through the button on `/login`, which opens `GET /api/auth/provisioned-user/challenge` with the
+page to return to in `returnUrl`.
+
 ## Platform administrator elevations
 
 A platform administrator starts an elevation for themselves to read the content of one tenant, or of one client

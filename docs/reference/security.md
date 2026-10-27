@@ -205,7 +205,7 @@ so each can read what the other protected.
 
 ## Sign-in and sessions
 
-ProPR has two sign-in surfaces.
+ProPR has three sign-ins.
 
 - **Platform administrators** sign in at `/login`. The local form on this page stays available even if a
   tenant disables local login or misconfigures its identity providers, so you cannot lock yourself out. The
@@ -215,6 +215,9 @@ ProPR has two sign-in surfaces.
 - **Tenant users** sign in at `/tenants/<tenant-slug>/login` through the identity providers that the tenant
   enables. The tenant also sets the allowed email domains of each provider and whether local login is permitted;
   see [tenant users and the identity providers of a tenant](#tenant-users-and-the-identity-providers-of-a-tenant).
+- **Provisioned users** sign in at `/login` through the identity provider of a hosting platform that runs ProPR for
+  its customers. The platform creates their accounts and memberships through the administration API; see
+  [provisioned users and the identity provider of a hosting platform](#provisioned-users-and-the-identity-provider-of-a-hosting-platform).
 
 Passwords are stored as BCrypt hashes. A session issues a short-lived access token plus an httpOnly
 refresh cookie, and the browser refreshes silently. `MEISTER_JWT_SECRET` signs the access tokens and
@@ -262,8 +265,9 @@ belongs to an account without a password, for example one that a tenant identity
 a separate account. The account that the sign-in creates carries no email address.
 
 The sign-in uses the authorization code flow with PKCE and a nonce. The state of a sign-in stays in an httpOnly
-cookie of the browser that started it, and ProPR refuses a callback that arrives without that cookie. The page the
-sign-in returns to follows [the return address of a sign-in](#the-return-address-of-a-sign-in).
+cookie of the browser that started it. ProPR refuses a callback that arrives without that cookie, and accepts each
+state once. The page the sign-in returns to follows
+[the return address of a sign-in](#the-return-address-of-a-sign-in).
 
 Keep at least one local platform administrator account. The local sign-in still works when the provider is
 unreachable, when the license no longer grants `sso-authentication`, and when no account holds the role any
@@ -330,15 +334,44 @@ Edit a provider to change its settings.
 When a provider refuses a sign-in, ProPR writes the error code and the description of the provider to its log. The
 person reads a fixed message for the error code.
 
+### Provisioned users and the identity provider of a hosting platform
+
+A hosting platform that runs ProPR for its customers keeps their accounts on the installation. The platform calls the
+[provisioning endpoints](api.md#provisioned-users) as a platform administrator. It creates the user of a person who
+has an account at its identity provider, and it sets the membership of that user in the tenant of each organization of
+the person. The `MEISTER_PROVISIONED_USER_SSO_*` variables under
+[single sign-on for provisioned users](../operate/configuration.md#single-sign-on-for-provisioned-users) configure the
+identity provider, and the license key `sso-authentication` unlocks the sign-in through it.
+
+ProPR knows a provisioned user by the issuer of the provider and the subject of the person at the provider. A sign-in
+through the provider reaches the account of that pair. It creates no account, links no account and never looks up an
+account by its email address. ProPR refuses the sign-in with the message that the account has no access to this
+installation in these cases: the platform provisioned no user for the subject, the user holds no membership, the
+account is disabled, or the account holds platform administrator rights.
+
+A membership makes the user a tenant user with the role `ClientUser` on the clients that the platform names. The user
+reads the reviews, the results and the execution traces of these clients, and creates personal access tokens under
+**Settings**. The account has no password.
+
+| What the platform does | What ProPR does |
+|---|---|
+| The platform creates the user. | ProPR creates an account without a password and keeps it disabled until the user holds a membership. |
+| The platform sets a membership. | ProPR sets the role `TenantUser` in the tenant and the role `ClientUser` on exactly the listed clients, and removes the roles of the user on the other clients of the tenant. It enables the account, unless a platform administrator disabled the account under **Administration → Users**. |
+| The platform removes a membership. | ProPR removes the membership and the roles on the clients of the tenant. From the next request on, the access tokens and personal access tokens of the user reach none of these clients. |
+| The platform removes the last membership. | ProPR also disables the account and revokes its refresh tokens and personal access tokens. ProPR refuses every request of a disabled account, also with an access token that is still valid. |
+
+The sign-in uses the same flow as the sign-in of platform administrators: the authorization code flow with PKCE and a
+nonce, and a state that stays in an httpOnly cookie of the browser and that ProPR accepts once. The page the sign-in
+returns to follows [the return address of a sign-in](#the-return-address-of-a-sign-in).
+
 ### The return address of a sign-in
 
-The sign-in of platform administrators and the sign-in of tenant users return the access token in the URL fragment
-of a page of the user interface. ProPR sends the browser only to a page on one of these origins: the origin of
-`MEISTER_PUBLIC_BASE_URL`, an origin listed in `CORS_ORIGINS`, or, when `MEISTER_PUBLIC_BASE_URL` is not set, the
-origin the browser reached the API at. In Development the local frontend origins on ports 3000 and 5173 qualify as
-well. The origins that the API accepts for the Azure DevOps extension do not qualify. ProPR checks the page when the
-sign-in starts, where it answers `400` with `return_url_not_allowed` for a page on another origin, and again at the
-callback.
+A sign-in through an identity provider returns the access token in the URL fragment of a page of the user
+interface. ProPR sends the browser only to a page on one of these origins: the origin of `MEISTER_PUBLIC_BASE_URL`, an
+origin listed in `CORS_ORIGINS`, or, when `MEISTER_PUBLIC_BASE_URL` is not set, the origin the browser reached the API
+at. In Development the local frontend origins on ports 3000 and 5173 qualify as well. The origins that the API accepts
+for the Azure DevOps extension do not qualify. ProPR checks the page when the sign-in starts, where it answers `400`
+with `return_url_not_allowed` for a page on another origin, and again at the callback.
 
 ## Automation credentials
 
@@ -492,6 +525,12 @@ administrator's changes are written as `user.disabled`, `user.reenabled` and `us
 the identity provider for platform administrators is written as `user.signed_in`, and a refused one as a
 blocked `user.signed_in` with its reason. Every grant and every removal of platform administrator rights by
 that sign-in is written as `user.platform_admin_granted` or `user.platform_admin_revoked`.
+
+A sign-in through the identity provider for provisioned users is written as `user.signed_in` with the method
+`provisioned_identity_provider`, and a refused one as a blocked `user.signed_in` with its reason. The provisioning of a
+user is written as `user.provisioned`. When ProPR disables or enables a provisioned account for its memberships, it
+writes `user.disabled` with the reason `no_membership` or `user.reenabled` with the reason `membership`. The changes of
+memberships and client access are in the audit history of the tenant.
 
 The audit history of a tenant also records the elevations of platform administrators and every content read
 under them; see [platform administrator access to tenant content](#platform-administrator-access-to-tenant-content).

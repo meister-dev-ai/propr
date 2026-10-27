@@ -18,7 +18,7 @@ export interface RouteParityItem {
 export const routeParity: RouteParityItem[] = [
   { id: 'home', workflowName: 'Role-aware default redirect' },
   { id: 'login', workflowName: 'Platform recovery sign-in' },
-  { id: 'login-callback', workflowName: 'Platform administrator sign-in completion' },
+  { id: 'login-callback', workflowName: 'Sign-in completion through an identity provider of the installation' },
   { id: 'tenant-directory', workflowName: 'Tenant directory access' },
   { id: 'tenant-login', workflowName: 'Tenant-scoped sign-in' },
   { id: 'tenant-login-callback', workflowName: 'External tenant sign-in completion' },

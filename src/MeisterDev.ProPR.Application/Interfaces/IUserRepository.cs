@@ -22,7 +22,13 @@ public interface IUserRepository
     /// <summary>Persists a new user.</summary>
     Task AddAsync(AppUser user, CancellationToken ct = default);
 
-    /// <summary>Sets the IsActive flag for the given user.</summary>
+    /// <summary>
+    ///     Sets whether the account is active, as a platform administrator decides it. For a provisioned user, the
+    ///     decision also ends the inactive state that ProPR keeps while the user holds no membership, so a membership
+    ///     that the hosting platform sets later does not enable an account that an administrator disabled. The method
+    ///     takes the lock of the provisioned user that the membership changes of the platform take, so a change that runs
+    ///     at the same time cannot overwrite the decision.
+    /// </summary>
     Task SetActiveAsync(Guid id, bool isActive, CancellationToken ct = default);
 
     /// <summary>Returns the number of users that are global administrators and currently active.</summary>

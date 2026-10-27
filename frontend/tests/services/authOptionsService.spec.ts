@@ -4,7 +4,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRuntime } from '@/app/runtime/createRuntime'
 import { resetActiveRuntime, setActiveRuntime } from '@/app/runtime/runtimeContext'
-import { getAuthOptions, getPlatformAdminSignInUrl, supportsTenantSignIn } from '@/services/authOptionsService'
+import {
+  getAuthOptions,
+  getPlatformAdminSignInUrl,
+  getProvisionedUserSignInUrl,
+  supportsTenantSignIn,
+} from '@/services/authOptionsService'
 
 describe('authOptionsService', () => {
   beforeEach(() => {
@@ -121,6 +126,38 @@ describe('authOptionsService', () => {
     const options = await getAuthOptions()
 
     expect(options.platformAdminSignIn).toBeNull()
+  })
+
+  it('carries the identity provider for provisioned users when the installation offers one', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          edition: 'commercial',
+          availableSignInMethods: ['password', 'sso'],
+          capabilities: [],
+          provisionedUserSignIn: { displayName: 'Meister DEV' },
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    )
+
+    const options = await getAuthOptions()
+
+    expect(options.provisionedUserSignIn).toEqual({ displayName: 'Meister DEV' })
+    expect(options.platformAdminSignIn).toBeNull()
+  })
+
+  it('builds the address that starts the sign-in of provisioned users on the API base URL', () => {
+    setActiveRuntime(createRuntime({ mode: 'live', apiBaseUrl: '/custom-api/' }))
+
+    const url = getProvisionedUserSignInUrl('https://propr.example.test/login/callback')
+
+    expect(url).toBe(
+      '/custom-api/auth/provisioned-user/challenge?returnUrl=https%3A%2F%2Fpropr.example.test%2Flogin%2Fcallback',
+    )
   })
 
   it('builds the address that starts the platform administrator sign-in on the API base URL', () => {

@@ -22,6 +22,12 @@ public sealed class ExternalSignInCookie
     public static readonly ExternalSignInCookie PlatformAdminFlow = new("meisterpropr_platform_admin_sign_in", TimeSpan.FromMinutes(15));
 
     /// <summary>
+    ///     The state, the nonce and the PKCE code verifier of a sign-in of a provisioned user, from the redirect to the
+    ///     provider until the provider's callback.
+    /// </summary>
+    public static readonly ExternalSignInCookie ProvisionedUserFlow = new("meisterpropr_provisioned_user_sign_in", TimeSpan.FromMinutes(15));
+
+    /// <summary>
     ///     The state, the nonce and the PKCE code verifier of a tenant sign-in, from the redirect to the provider until the
     ///     provider's callback.
     /// </summary>

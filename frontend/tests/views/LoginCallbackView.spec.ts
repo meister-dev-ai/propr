@@ -67,7 +67,7 @@ describe('LoginCallbackView', () => {
     expect(establishSessionMock).not.toHaveBeenCalled()
     expect(replaceMock).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="login-callback-error"]').text())
-      .toBe('The sign-in through the identity provider failed. Try again, or sign in with your username and password.')
+      .toBe('The sign-in through the identity provider failed. Go back to the sign-in page and try again.')
   })
 
   it('shows an error when the session cannot be established, and leaves no token in the address', async () => {
@@ -78,7 +78,7 @@ describe('LoginCallbackView', () => {
 
     expect(replaceMock).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="login-callback-error"]').text())
-      .toBe('The sign-in could not be completed. Try again, or sign in with your username and password.')
+      .toBe('The sign-in could not be completed. Go back to the sign-in page and try again.')
     expect(window.location.hash).toBe('')
     expect(window.location.href).not.toContain('platform-access')
   })

@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
+using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
@@ -58,14 +59,45 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
 
     public async Task SetActiveAsync(Guid id, bool isActive, CancellationToken ct = default)
     {
+        await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+
+        // The account of a provisioned user takes the lock that every membership change of the hosting platform takes.
+        // A membership change of the same user that runs at the same time either commits first, and the decision
+        // applies after it, or waits for the decision and reads it.
+        var isProvisioned = await db.ProvisionedUsers.AsNoTracking().AnyAsync(user => user.UserId == id, ct);
+        if (isProvisioned && db.Database.IsRelational())
+        {
+            await ProvisionedUserLock.AcquireAsync(db, id, ct);
+        }
+
         var record = await db.AppUsers.FindAsync([id], ct);
         if (record is null)
         {
             return;
         }
 
+        // The context may hold values that it read before the lock, so the decision is written whatever those values
+        // are.
         record.IsActive = isActive;
+        db.Entry(record).Property(user => user.IsActive).IsModified = true;
+
+        // A platform administrator decided about the account. The decision replaces the inactive state that ProPR keeps
+        // for a provisioned user without a membership, so a membership that the hosting platform sets later does not
+        // enable an account that the administrator disabled.
+        if (isProvisioned)
+        {
+            var provisioned = await db.ProvisionedUsers.FirstAsync(user => user.UserId == id, ct);
+            provisioned.InactiveWithoutMembershipSince = null;
+            db.Entry(provisioned).Property(user => user.InactiveWithoutMembershipSince).IsModified = true;
+        }
+
         await db.SaveChangesAsync(ct);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(ct);
+        }
     }
 
     public Task<int> CountActiveAdminsAsync(CancellationToken ct = default)

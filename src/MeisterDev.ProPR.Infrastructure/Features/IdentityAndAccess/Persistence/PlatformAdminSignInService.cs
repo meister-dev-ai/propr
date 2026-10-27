@@ -3,8 +3,6 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Security.Claims;
-using System.Text.Json;
-using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
@@ -20,8 +18,8 @@ using Npgsql;
 namespace MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Persistence;
 
 /// <summary>
-///     Signs platform administrators in through the OpenID Connect identity provider configured for the installation,
-///     with the authorization code flow, PKCE, a nonce, and a state bound to the browser by a cookie.
+///     Signs platform administrators in through the OpenID Connect identity provider configured for the installation.
+///     <see cref="InstallationOidcSignIn" /> runs the flow and returns the identity at the provider.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -43,138 +41,64 @@ public sealed class PlatformAdminSignInService(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,
     IUserPatRepository userPatRepository,
-    ISecretProtectionCodec secretProtectionCodec,
-    IHttpClientFactory httpClientFactory,
-    IOidcTokenValidator oidcTokenValidator,
+    InstallationOidcSignIn signIn,
     IUserAccountAuditLog auditLog,
     IOptions<PlatformAdminSsoOptions> options,
     ILogger<PlatformAdminSignInService> logger) : IPlatformAdminSignInService
 {
-    private const string FlowPurpose = "platform-admin-sso-sign-in-flow";
-    private const string CallbackPath = "auth/platform-admin/callback";
-    private static readonly TimeSpan FlowLifetime = TimeSpan.FromMinutes(15);
+    private static readonly InstallationSignInKind Kind = new(
+        "platform_admin",
+        "auth/platform-admin/callback",
+        "platform-admin-sso-sign-in-flow",
+        "The identity provider for platform administrators cannot be reached. Sign in with a local account or try again later.");
 
     /// <inheritdoc />
-    public async Task<PlatformAdminSignInChallenge?> BuildChallengeAsync(
+    public string ProviderUnavailableMessage => Kind.UnavailableMessage;
+
+    /// <inheritdoc />
+    public Task<InstallationSignInChallenge?> BuildChallengeAsync(
         Uri applicationBaseUri,
         Uri frontendReturnUrl,
         CancellationToken ct = default)
     {
-        var settings = options.Value;
-        var metadata = await this.GetProviderMetadataAsync(settings, ct);
-        if (metadata is null)
-        {
-            return null;
-        }
-
-        var flow = new PlatformAdminSignInFlow(
-            AuthorizationCodeFlow.CreateRandomValue(),
-            AuthorizationCodeFlow.CreateRandomValue(),
-            AuthorizationCodeFlow.CreateRandomValue(),
-            BuildCallbackUrl(applicationBaseUri),
-            frontendReturnUrl.ToString(),
-            DateTimeOffset.UtcNow);
-
-        var redirectUri = AuthorizationCodeFlow.BuildAuthorizationUri(
-            metadata.AuthorizationEndpoint,
-            [
-                new KeyValuePair<string, string>("client_id", settings.ClientId!),
-                new KeyValuePair<string, string>("response_type", "code"),
-                new KeyValuePair<string, string>("redirect_uri", flow.CallbackUrl),
-                new KeyValuePair<string, string>("scope", "openid profile email"),
-                new KeyValuePair<string, string>("state", flow.State),
-                new KeyValuePair<string, string>("nonce", flow.Nonce),
-                new KeyValuePair<string, string>("code_challenge", AuthorizationCodeFlow.ComputeCodeChallenge(flow.CodeVerifier)),
-                new KeyValuePair<string, string>("code_challenge_method", "S256"),
-            ]);
-
-        return new PlatformAdminSignInChallenge(
-            redirectUri.ToString(),
-            metadata.AuthorizationEndpoint.GetLeftPart(UriPartial.Authority),
-            ProtectedSignInState.Protect(secretProtectionCodec, flow, FlowPurpose));
+        return signIn.BuildChallengeAsync(Kind, options.Value, applicationBaseUri, frontendReturnUrl, ct);
     }
 
     /// <inheritdoc />
-    public async Task<PlatformAdminSignInCompletion> CompleteSignInAsync(
+    public async Task<InstallationSignInCompletion> CompleteSignInAsync(
         Uri applicationBaseUri,
-        PlatformAdminSignInCallback callback,
+        InstallationSignInCallback callback,
         string? protectedFlow,
         CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(callback);
-
         var settings = options.Value;
-        var flow = ProtectedSignInState.TryRead<PlatformAdminSignInFlow>(secretProtectionCodec, protectedFlow, FlowPurpose);
-        if (flow is null
-            || !string.Equals(flow.State, callback.State, StringComparison.Ordinal)
-            || !string.Equals(flow.CallbackUrl, BuildCallbackUrl(applicationBaseUri), StringComparison.Ordinal)
-            || flow.IssuedAtUtc + FlowLifetime < DateTimeOffset.UtcNow)
+        var result = await signIn.CompleteAsync(Kind, settings, applicationBaseUri, callback, protectedFlow, ct);
+        if (result.Identity is not { } validated)
         {
-            return this.Refuse(
-                "invalid_state",
-                "The sign-in request is invalid or has expired. Start the sign-in again.",
-                flow?.FrontendReturnUrl);
+            return new InstallationSignInCompletion(null, result.FrontendReturnUrl, result.FailureCode, result.FailureMessage);
         }
 
-        if (!string.IsNullOrWhiteSpace(callback.Error))
-        {
-            return this.Refuse(
-                "provider_error",
-                callback.ErrorDescription ?? "The identity provider refused the sign-in.",
-                flow.FrontendReturnUrl,
-                callback.Error);
-        }
-
-        if (string.IsNullOrWhiteSpace(callback.Code))
-        {
-            return this.Refuse(
-                "missing_authorization_code",
-                "The identity provider did not return an authorization code.",
-                flow.FrontendReturnUrl);
-        }
-
-        var metadata = await this.GetProviderMetadataAsync(settings, ct);
-        if (metadata is null)
-        {
-            return this.Refuse(
-                "provider_unavailable",
-                "The identity provider for platform administrators cannot be reached. Sign in with a local account or try again later.",
-                flow.FrontendReturnUrl);
-        }
-
-        var identity = await this.RedeemAndValidateAsync(settings, metadata, flow, callback.Code.Trim(), ct);
-        if (identity.FailureCode is not null)
-        {
-            return this.Refuse(
-                identity.FailureCode,
-                "The identity provider did not confirm the sign-in. Start the sign-in again.",
-                flow.FrontendReturnUrl);
-        }
-
+        var identity = ReadIdentity(validated, settings);
         return identity.HoldsRequiredRole
-            ? await this.SignInWithRoleAsync(identity, flow.FrontendReturnUrl, ct)
-            : await this.RefuseWithoutRoleAsync(identity, flow.FrontendReturnUrl, ct);
+            ? await this.SignInWithRoleAsync(identity, result.FrontendReturnUrl!, ct)
+            : await this.RefuseWithoutRoleAsync(identity, result.FrontendReturnUrl!, ct);
     }
 
-    private static string BuildCallbackUrl(Uri applicationBaseUri)
+    /// <summary>Reads the claims that decide the account and its rights from the validated ID token.</summary>
+    private static PlatformIdentity ReadIdentity(InstallationOidcIdentity validated, PlatformAdminSsoOptions settings)
     {
-        return new Uri(applicationBaseUri, CallbackPath).ToString();
-    }
+        var principal = validated.Principal;
+        var emailVerified = bool.TryParse(principal.FindFirst("email_verified")?.Value, out var verified) && verified;
+        var holdsRequiredRole = principal.FindAll(settings.EffectiveRoleClaim)
+            .Any(claim => string.Equals(claim.Value, settings.RequiredRole, StringComparison.Ordinal));
 
-    private static bool TryGetString(JsonElement element, string propertyName, out string value)
-    {
-        // A token endpoint can answer with valid JSON that is not an object, such as [] or null. TryGetProperty throws
-        // for such a value, so the answer is treated as one without the property.
-        value = string.Empty;
-        if (element.ValueKind != JsonValueKind.Object
-            || !element.TryGetProperty(propertyName, out var property)
-            || property.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        value = property.GetString() ?? string.Empty;
-        return !string.IsNullOrWhiteSpace(value);
+        return new PlatformIdentity(
+            validated.Issuer,
+            validated.Subject,
+            FirstClaim(principal, "email"),
+            emailVerified,
+            FirstClaim(principal, "preferred_username"),
+            holdsRequiredRole);
     }
 
     private static string? FirstClaim(ClaimsPrincipal principal, string claimType)
@@ -183,107 +107,7 @@ public sealed class PlatformAdminSignInService(
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
-    private async Task<OidcProviderMetadata?> GetProviderMetadataAsync(PlatformAdminSsoOptions settings, CancellationToken ct)
-    {
-        var metadata = await oidcTokenValidator.GetProviderMetadataAsync(settings.MetadataAddress, ct);
-        if (metadata is null)
-        {
-            logger.LogWarning(
-                "PlatformAdminSignInUnavailable MetadataAddress={MetadataAddress} Reason={Reason}",
-                SecretSafeRendering.Address(settings.MetadataAddress),
-                "oidc_discovery_unavailable");
-            return null;
-        }
-
-        // The discovery document names the issuer every token is validated against. It must be the configured
-        // authority, so a metadata address that points at another realm or provider cannot widen whose tokens count.
-        if (!settings.IsAuthority(metadata.Issuer))
-        {
-            logger.LogWarning(
-                "PlatformAdminSignInUnavailable MetadataAddress={MetadataAddress} Reason={Reason} Issuer={Issuer}",
-                SecretSafeRendering.Address(settings.MetadataAddress),
-                "issuer_mismatch",
-                metadata.Issuer);
-            return null;
-        }
-
-        return metadata;
-    }
-
-    private async Task<PlatformIdentity> RedeemAndValidateAsync(
-        PlatformAdminSsoOptions settings,
-        OidcProviderMetadata metadata,
-        PlatformAdminSignInFlow flow,
-        string authorizationCode,
-        CancellationToken ct)
-    {
-        var (statusCode, document) = await AuthorizationCodeFlow.RedeemCodeAsync(
-            httpClientFactory.CreateClient(AuthorizationCodeFlow.HttpClientName),
-            metadata.TokenEndpoint,
-            [
-                new KeyValuePair<string, string>("grant_type", "authorization_code"),
-                new KeyValuePair<string, string>("client_id", settings.ClientId!),
-                new KeyValuePair<string, string>("client_secret", settings.ClientSecret!),
-                new KeyValuePair<string, string>("code", authorizationCode),
-                new KeyValuePair<string, string>("redirect_uri", flow.CallbackUrl),
-                new KeyValuePair<string, string>("code_verifier", flow.CodeVerifier),
-            ],
-            null,
-            logger,
-            ct);
-
-        using (document)
-        {
-            if (document is null)
-            {
-                logger.LogWarning(
-                    "PlatformAdminSignInRejected Reason={Reason} StatusCode={StatusCode}",
-                    "token_exchange_failed",
-                    (int?)statusCode);
-                return PlatformIdentity.Failure("token_exchange_failed");
-            }
-
-            if (!TryGetString(document.RootElement, "id_token", out var idToken))
-            {
-                logger.LogWarning("PlatformAdminSignInRejected Reason={Reason}", "missing_id_token");
-                return PlatformIdentity.Failure("missing_id_token");
-            }
-
-            var validation = await oidcTokenValidator.ValidateAsync(
-                new OidcTokenValidationRequest(idToken, settings.MetadataAddress, settings.ClientId!, flow.Nonce),
-                ct);
-            if (!validation.IsValid || validation.Principal is null || !settings.IsAuthority(validation.Issuer))
-            {
-                var reason = validation.FailureCode ?? "unexpected_token_issuer";
-                logger.LogWarning("PlatformAdminSignInRejected Reason={Reason}", reason);
-                return PlatformIdentity.Failure(reason);
-            }
-
-            // The subject is an opaque identifier and is compared as the token carries it; " alice" is not "alice".
-            var principal = validation.Principal;
-            var subject = principal.FindFirst("sub")?.Value;
-            if (string.IsNullOrWhiteSpace(subject))
-            {
-                logger.LogWarning("PlatformAdminSignInRejected Reason={Reason}", "missing_identity_claims");
-                return PlatformIdentity.Failure("missing_identity_claims");
-            }
-
-            var emailVerified = bool.TryParse(principal.FindFirst("email_verified")?.Value, out var verified) && verified;
-            var holdsRequiredRole = principal.FindAll(settings.EffectiveRoleClaim)
-                .Any(claim => string.Equals(claim.Value, settings.RequiredRole, StringComparison.Ordinal));
-
-            return new PlatformIdentity(
-                validation.Issuer!,
-                subject,
-                FirstClaim(principal, "email"),
-                emailVerified,
-                FirstClaim(principal, "preferred_username"),
-                holdsRequiredRole,
-                null);
-        }
-    }
-
-    private async Task<PlatformAdminSignInCompletion> SignInWithRoleAsync(
+    private async Task<InstallationSignInCompletion> SignInWithRoleAsync(
         PlatformIdentity identity,
         string frontendReturnUrl,
         CancellationToken ct)
@@ -340,7 +164,7 @@ public sealed class PlatformAdminSignInService(
         return await this.CreateAccountAsync(identity, frontendReturnUrl, ct);
     }
 
-    private async Task<PlatformAdminSignInCompletion> CreateAccountAsync(
+    private async Task<InstallationSignInCompletion> CreateAccountAsync(
         PlatformIdentity identity,
         string frontendReturnUrl,
         CancellationToken ct)
@@ -390,7 +214,7 @@ public sealed class PlatformAdminSignInService(
         return await this.SignedInAsync(account.Id, frontendReturnUrl, ct);
     }
 
-    private async Task<PlatformAdminSignInCompletion> RefuseWithoutRoleAsync(
+    private async Task<InstallationSignInCompletion> RefuseWithoutRoleAsync(
         PlatformIdentity identity,
         string frontendReturnUrl,
         CancellationToken ct)
@@ -477,41 +301,17 @@ public sealed class PlatformAdminSignInService(
         link.LastSignInAt = lastSignInAt;
     }
 
-    private async Task<PlatformAdminSignInCompletion> SignedInAsync(Guid userId, string frontendReturnUrl, CancellationToken ct)
+    private async Task<InstallationSignInCompletion> SignedInAsync(Guid userId, string frontendReturnUrl, CancellationToken ct)
     {
         var user = await userRepository.GetByIdAsync(userId, ct)
                    ?? throw new InvalidOperationException($"The account {userId} was not found after the sign-in saved it.");
-        return new PlatformAdminSignInCompletion(user, frontendReturnUrl);
+        return new InstallationSignInCompletion(user, frontendReturnUrl);
     }
 
-    private PlatformAdminSignInCompletion Refuse(
-        string failureCode,
-        string failureMessage,
-        string? frontendReturnUrl,
-        string? providerError = null)
+    private InstallationSignInCompletion Refuse(string failureCode, string failureMessage, string? frontendReturnUrl)
     {
-        logger.LogWarning(
-            "PlatformAdminSignInRejected Reason={Reason} ProviderError={ProviderError}",
-            failureCode,
-            providerError?.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t"));
-        return new PlatformAdminSignInCompletion(null, frontendReturnUrl, failureCode, failureMessage);
-    }
-
-    /// <summary>The state of one sign-in, which the browser keeps in a protected cookie until the callback.</summary>
-    private sealed record PlatformAdminSignInFlow(
-        string State,
-        string Nonce,
-        string CodeVerifier,
-        string CallbackUrl,
-        string FrontendReturnUrl,
-        DateTimeOffset IssuedAtUtc)
-    {
-        /// <summary>Renders the flow without its nonce and code verifier; see <see cref="SecretSafeRendering" />.</summary>
-        public override string ToString()
-        {
-            return $"{nameof(PlatformAdminSignInFlow)} {{ CallbackUrl = {this.CallbackUrl}, "
-                   + $"CodeVerifier = {SecretSafeRendering.Elide(this.CodeVerifier)}, IssuedAtUtc = {this.IssuedAtUtc:O} }}";
-        }
+        logger.LogWarning("PlatformAdminSignInRejected Reason={Reason}", failureCode);
+        return new InstallationSignInCompletion(null, frontendReturnUrl, failureCode, failureMessage);
     }
 
     /// <summary>The identity at the provider, as the validated ID token states it.</summary>
@@ -521,12 +321,5 @@ public sealed class PlatformAdminSignInService(
         string? Email,
         bool EmailVerified,
         string? PreferredUsername,
-        bool HoldsRequiredRole,
-        string? FailureCode)
-    {
-        public static PlatformIdentity Failure(string failureCode)
-        {
-            return new PlatformIdentity(string.Empty, string.Empty, null, false, null, false, failureCode);
-        }
-    }
+        bool HoldsRequiredRole);
 }

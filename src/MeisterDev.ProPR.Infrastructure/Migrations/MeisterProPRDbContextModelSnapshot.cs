@@ -6746,6 +6746,59 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("ai_provider_resource_leases", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProvisionedUserRecord", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("email");
+
+                    b.Property<DateTimeOffset?>("InactiveWithoutMembershipSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("inactive_without_membership_since");
+
+                    b.Property<string>("Issuer")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("issuer");
+
+                    b.Property<DateTimeOffset?>("LastSignInAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sign_in_at");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("subject");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("Issuer", "Subject")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provisioned_users_issuer_subject");
+
+                    b.ToTable("provisioned_users", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.RefreshTokenRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8293,6 +8346,17 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasForeignKey("ConnectionProfileId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ProvisionedUserRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.AppUserRecord", "User")
+                        .WithOne()
+                        .HasForeignKey("MeisterDev.ProPR.Infrastructure.Data.Models.ProvisionedUserRecord", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.RefreshTokenRecord", b =>

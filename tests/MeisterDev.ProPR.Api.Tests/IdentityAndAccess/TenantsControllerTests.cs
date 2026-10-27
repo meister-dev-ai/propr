@@ -974,6 +974,7 @@ public class TenantAdministrationApiFactory : WebApplicationFactory<Program>
             services.AddScoped<ITenantMembershipService, TenantMembershipService>();
             services.AddScoped<ITenantMemberClientAccessService, TenantMemberClientAccessService>();
             services.AddScoped<ITenantSsoProviderService, TenantSsoProviderService>();
+            services.AddScoped<IProvisionedUserService, ProvisionedUserService>();
             services.AddScoped<ISessionFactory, SessionFactory>();
             services.AddHttpClient(AuthorizationCodeFlow.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => new StubHttpMessageHandler(this.DequeueExternalAuthResponse));

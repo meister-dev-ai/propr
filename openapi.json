@@ -20492,6 +20492,787 @@
         }
       }
     },
+    "/auth/provisioned-user/challenge": {
+      "get": {
+        "tags": [
+          "ProvisionedUserAuth"
+        ],
+        "summary": "Starts the sign-in. ProPR sends the browser to the identity provider for provisioned users and keeps the state\nof the sign-in in an httpOnly cookie.",
+        "parameters": [
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "description": "The frontend page the sign-in returns to. Its origin is the origin of `MEISTER_PUBLIC_BASE_URL`, one of\n`CORS_ORIGINS`, or without `MEISTER_PUBLIC_BASE_URL` the origin of this request.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/provisioned-user/callback": {
+      "get": {
+        "tags": [
+          "ProvisionedUserAuth"
+        ],
+        "summary": "Completes the sign-in at the redirect from the identity provider. When a hosting platform provisioned the\nidentity and the account holds a membership, ProPR sets the refresh cookie and returns the browser to the\nfrontend with the access token in the URL fragment. For every other identity, ProPR returns the browser to the\nfrontend with `error=no_access` and a fixed message in the fragment.",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error_description",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/provisioned-users/{subject}": {
+      "put": {
+        "tags": [
+          "ProvisionedUsers"
+        ],
+        "summary": "Creates the user of a person at the identity provider for provisioned users, or updates its email address and\ndisplay name. ProPR creates the account without a password and keeps it inactive until the user holds a\nmembership.",
+        "parameters": [
+          {
+            "name": "subject",
+            "in": "path",
+            "description": "The subject of the person at the provider, as the `sub` claim of its ID token carries it.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The email address and the display name of the person.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionedUserRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionedUserRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionedUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The user existed; ProPR applied the email address and the display name.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedUserDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedUserDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedUserDto"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "ProPR created the user.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedUserDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedUserDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedUserDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The subject, the email address or the display name is not accepted.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The installation configured no identity provider for provisioned users.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The account of the subject holds platform administrator rights.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/tenants/{tenantId}/provisioned-members": {
+      "get": {
+        "tags": [
+          "ProvisionedUsers"
+        ],
+        "summary": "Lists the provisioned users that hold a membership in the tenant, with their clients of the tenant.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "The tenant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The provisioned members of the tenant, ordered by subject.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProvisionedMemberDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProvisionedMemberDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProvisionedMemberDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tenant does not exist, or the installation configured no identity provider for provisioned users.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/tenants/{tenantId}/provisioned-members/{subject}": {
+      "put": {
+        "tags": [
+          "ProvisionedUsers"
+        ],
+        "summary": "Sets the membership of a provisioned user in the tenant: the tenant role `TenantUser` and the role\n`ClientUser` on exactly the clients of the request. ProPR removes the roles of the user on the other\nclients of the tenant, and enables a user that it kept inactive for the lack of a membership.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "The tenant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "description": "The subject of the person at the identity provider for provisioned users.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The clients of the tenant that the user reads.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionedMembershipRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionedMembershipRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionedMembershipRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The membership as ProPR stored it.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedMemberDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedMemberDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionedMemberDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The subject is not accepted, or a client does not belong to the tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tenant or the user does not exist, or the installation configured no identity provider for provisioned users.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The tenant is the System tenant, or the account of the subject holds platform administrator rights.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ProvisionedUsers"
+        ],
+        "summary": "Removes the membership of a provisioned user in the tenant with the roles of the user on the clients of the\ntenant. When the user holds no membership any more, ProPR disables the user and revokes its refresh tokens and\npersonal access tokens.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "The tenant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "description": "The subject of the person at the identity provider for provisioned users.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The user holds no membership in the tenant, also when it held none before or does not exist."
+          },
+          "400": {
+            "description": "The subject is not accepted.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tenant does not exist, or the installation configured no identity provider for provisioned users.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The tenant is the System tenant, or the account of the subject holds platform administrator rights.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/reviewing/pr-view": {
       "get": {
         "tags": [
@@ -33184,6 +33965,9 @@
               }
             ],
             "nullable": true
+          },
+          "provisionedUserSignIn": {
+            "$ref": "#/components/schemas/ProvisionedUserSignInOptionDto"
           }
         },
         "additionalProperties": false,
@@ -41990,6 +42774,136 @@
         "additionalProperties": false,
         "description": "Operator-facing provider operational status response."
       },
+      "ProvisionedMemberDto": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject of the person at the identity provider for provisioned users.",
+            "nullable": true
+          },
+          "userId": {
+            "type": "string",
+            "description": "The account of the user.",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "description": "The email address that the platform sent.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The display name that the platform sent.",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the account can sign in and use its personal access tokens."
+          },
+          "role": {
+            "$ref": "#/components/schemas/TenantRole"
+          },
+          "clientIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The clients of the tenant on which the user holds a role.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The membership of a provisioned user in a tenant."
+      },
+      "ProvisionedMembershipRequest": {
+        "required": [
+          "clientIds"
+        ],
+        "type": "object",
+        "properties": {
+          "clientIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The clients; an empty list keeps the membership without any client.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The clients of a tenant that a provisioned user reads."
+      },
+      "ProvisionedUserDto": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject of the person at the identity provider for provisioned users.",
+            "nullable": true
+          },
+          "userId": {
+            "type": "string",
+            "description": "The account of the user.",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string",
+            "description": "The username of the account.",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "description": "The email address that the platform sent.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The display name that the platform sent.",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the account can sign in and use its personal access tokens."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A user that a hosting platform provisioned."
+      },
+      "ProvisionedUserRequest": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The email address of the person.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The display name of the person, or null.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The person behind a provisioned user, as the hosting platform knows it."
+      },
+      "ProvisionedUserSignInOptionDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "The name of the provider on the sign-in page.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The identity provider through which the users that a hosting platform provisioned can sign in."
+      },
       "PullRequestHistoryItem": {
         "type": "object",
         "properties": {
@@ -48372,6 +49286,12 @@
     },
     {
       "name": "ProviderWebhookReceiver"
+    },
+    {
+      "name": "ProvisionedUserAuth"
+    },
+    {
+      "name": "ProvisionedUsers"
     },
     {
       "name": "PrReviewView"

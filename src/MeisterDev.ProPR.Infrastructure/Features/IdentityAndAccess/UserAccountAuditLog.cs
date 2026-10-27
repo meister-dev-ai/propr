@@ -16,6 +16,9 @@ public sealed class UserAccountAuditLog(ILogger<UserAccountAuditLog> logger) : I
     /// <summary>The value of the <c>Method</c> property of a sign-in through the provider for platform administrators.</summary>
     private const string PlatformIdentityProviderMethod = "platform_identity_provider";
 
+    /// <summary>The value of the <c>Method</c> property of a sign-in through the provider for provisioned users.</summary>
+    private const string ProvisionedIdentityProviderMethod = "provisioned_identity_provider";
+
     public void Disabled(Guid actorUserId, Guid targetUserId, string targetUsername)
     {
         logger.LogInformation(
@@ -113,5 +116,64 @@ public sealed class UserAccountAuditLog(ILogger<UserAccountAuditLog> logger) : I
             username,
             issuer,
             subject);
+    }
+
+    public void SignedInThroughProvisionedIdentityProvider(Guid userId, string username, string issuer, string subject)
+    {
+        logger.LogInformation(
+            "{AuditEvent} target={TargetUserId} username={TargetUsername} method={Method} issuer={Issuer} subject={Subject}",
+            "user.signed_in",
+            userId,
+            username,
+            ProvisionedIdentityProviderMethod,
+            issuer,
+            subject);
+    }
+
+    public void ProvisionedIdentityProviderSignInRefused(Guid? userId, string? username, string issuer, string subject, string reason)
+    {
+        logger.LogWarning(
+            "{AuditEvent} blocked target={TargetUserId} username={TargetUsername} method={Method} issuer={Issuer} subject={Subject} reason={Reason}",
+            "user.signed_in",
+            userId,
+            username,
+            ProvisionedIdentityProviderMethod,
+            issuer,
+            subject,
+            reason);
+    }
+
+    public void ProvisionedUserCreated(Guid actorUserId, Guid userId, string username, string issuer, string subject)
+    {
+        logger.LogInformation(
+            "{AuditEvent} actor={ActorUserId} target={TargetUserId} username={TargetUsername} issuer={Issuer} subject={Subject}",
+            "user.provisioned",
+            actorUserId,
+            userId,
+            username,
+            issuer,
+            subject);
+    }
+
+    public void ProvisionedUserDisabledWithoutMembership(Guid actorUserId, Guid userId, string username)
+    {
+        logger.LogInformation(
+            "{AuditEvent} actor={ActorUserId} target={TargetUserId} username={TargetUsername} reason={Reason}",
+            "user.disabled",
+            actorUserId,
+            userId,
+            username,
+            "no_membership");
+    }
+
+    public void ProvisionedUserEnabledByMembership(Guid actorUserId, Guid userId, string username)
+    {
+        logger.LogInformation(
+            "{AuditEvent} actor={ActorUserId} target={TargetUserId} username={TargetUsername} reason={Reason}",
+            "user.reenabled",
+            actorUserId,
+            userId,
+            username,
+            "membership");
     }
 }

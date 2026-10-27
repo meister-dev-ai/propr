@@ -22,6 +22,8 @@ vi.mock('@/services/authOptionsService', () => ({
   supportsTenantSignIn: () => false,
   getPlatformAdminSignInUrl: (returnUrl: string) =>
     `/api/auth/platform-admin/challenge?returnUrl=${encodeURIComponent(returnUrl)}`,
+  getProvisionedUserSignInUrl: (returnUrl: string) =>
+    `/api/auth/provisioned-user/challenge?returnUrl=${encodeURIComponent(returnUrl)}`,
 }))
 
 async function mountView() {
@@ -29,7 +31,7 @@ async function mountView() {
   return mount(LoginView)
 }
 
-describe('LoginView with the identity provider for platform administrators', () => {
+describe('LoginView with the identity providers of the installation', () => {
   beforeEach(() => {
     getAuthOptionsMock.mockReset()
   })
@@ -55,6 +57,28 @@ describe('LoginView with the identity provider for platform administrators', () 
     )
   })
 
+  it('shows a link to the identity provider for provisioned users beside the other sign-ins', async () => {
+    getAuthOptionsMock.mockResolvedValue({
+      edition: 'commercial',
+      availableSignInMethods: ['password', 'sso'],
+      capabilities: [],
+      publicBaseUrl: null,
+      platformAdminSignIn: { displayName: 'Meister DEV staff' },
+      provisionedUserSignIn: { displayName: 'Meister DEV' },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('#username').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="platform-admin-sign-in-link"]').exists()).toBe(true)
+    const link = wrapper.get('[data-testid="provisioned-user-sign-in-link"]')
+    expect(link.text()).toBe('Sign in with Meister DEV')
+    expect(link.attributes('href')).toBe(
+      `/api/auth/provisioned-user/challenge?returnUrl=${encodeURIComponent(`${window.location.origin}/login/callback`)}`,
+    )
+  })
+
   it('shows the local form alone when the installation offers no identity provider', async () => {
     getAuthOptionsMock.mockResolvedValue({
       edition: 'commercial',
@@ -62,6 +86,7 @@ describe('LoginView with the identity provider for platform administrators', () 
       capabilities: [],
       publicBaseUrl: null,
       platformAdminSignIn: null,
+      provisionedUserSignIn: null,
     })
 
     const wrapper = await mountView()
@@ -70,5 +95,6 @@ describe('LoginView with the identity provider for platform administrators', () 
     expect(wrapper.find('#username').exists()).toBe(true)
     expect(wrapper.find('#password').exists()).toBe(true)
     expect(wrapper.find('[data-testid="platform-admin-sign-in-link"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="provisioned-user-sign-in-link"]').exists()).toBe(false)
   })
 })

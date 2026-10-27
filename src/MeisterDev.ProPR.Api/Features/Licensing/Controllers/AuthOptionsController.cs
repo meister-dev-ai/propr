@@ -24,6 +24,7 @@ namespace MeisterDev.ProPR.Api.Features.Licensing.Controllers;
 public sealed class AuthOptionsController(
     IConfiguration configuration,
     IOptions<PlatformAdminSsoOptions> platformAdminSsoOptions,
+    IOptions<ProvisionedUserSsoOptions> provisionedUserSsoOptions,
     ILicensingCapabilityService? licensingCapabilityService = null)
     : ControllerBase
 {
@@ -42,27 +43,25 @@ public sealed class AuthOptionsController(
         }
 
         var options = await licensingCapabilityService.GetAuthOptionsAsync(ct);
+
+        // The identity providers of the installation are offered when the installation configured them and the license
+        // grants single sign-on. Without the license, ProPR ignores them, and the sign-in page offers the local sign-in
+        // only.
+        var isLicensed = options.Capabilities.Any(capability =>
+            string.Equals(capability.Key, PremiumCapabilityKey.SsoAuthentication, StringComparison.OrdinalIgnoreCase)
+            && capability.IsAvailable);
+        var platformAdmin = platformAdminSsoOptions.Value;
+        var provisionedUser = provisionedUserSsoOptions.Value;
         return this.Ok(
             options with
             {
                 PublicBaseUrl = publicBaseUrl,
-                PlatformAdminSignIn = this.GetPlatformAdminSignIn(options),
+                PlatformAdminSignIn = isLicensed && platformAdmin.IsConfigured
+                    ? new PlatformAdminSignInOptionDto(platformAdmin.EffectiveDisplayName)
+                    : null,
+                ProvisionedUserSignIn = isLicensed && provisionedUser.IsConfigured
+                    ? new ProvisionedUserSignInOptionDto(provisionedUser.EffectiveDisplayName)
+                    : null,
             });
-    }
-
-    /// <summary>
-    ///     Returns the identity provider for platform administrators when the installation configured one and the
-    ///     license grants single sign-on. Without the license, the provider is ignored and the sign-in page offers the
-    ///     local sign-in only.
-    /// </summary>
-    private PlatformAdminSignInOptionDto? GetPlatformAdminSignIn(AuthOptionsDto options)
-    {
-        var settings = platformAdminSsoOptions.Value;
-        var isLicensed = options.Capabilities.Any(capability =>
-            string.Equals(capability.Key, PremiumCapabilityKey.SsoAuthentication, StringComparison.OrdinalIgnoreCase)
-            && capability.IsAvailable);
-        return settings.IsConfigured && isLicensed
-            ? new PlatformAdminSignInOptionDto(settings.EffectiveDisplayName)
-            : null;
     }
 }

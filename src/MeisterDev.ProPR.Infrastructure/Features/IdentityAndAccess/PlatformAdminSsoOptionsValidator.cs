@@ -17,80 +17,40 @@ namespace MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 /// </param>
 public sealed class PlatformAdminSsoOptionsValidator(bool isDevelopment) : IValidateOptions<PlatformAdminSsoOptions>
 {
+    private static readonly InstallationSsoProviderKeys Keys = new(
+        PlatformAdminSsoOptions.AuthorityKey,
+        PlatformAdminSsoOptions.MetadataUrlKey,
+        PlatformAdminSsoOptions.ClientIdKey,
+        PlatformAdminSsoOptions.ClientSecretKey,
+        PlatformAdminSsoOptions.DisplayNameKey);
+
     /// <inheritdoc />
     public ValidateOptionsResult Validate(string? name, PlatformAdminSsoOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var failures = new List<string>();
         if (!options.IsConfigured)
         {
-            var settingsWithoutAuthority = new (string Key, string? Value)[]
-                {
+            return InstallationSsoProviderValidation.RefuseSettingsWithoutAuthority(
+                PlatformAdminSsoOptions.AuthorityKey,
+                "let platform administrators sign in through the identity provider",
+                [
                     (PlatformAdminSsoOptions.MetadataUrlKey, options.MetadataUrl),
                     (PlatformAdminSsoOptions.ClientIdKey, options.ClientId),
                     (PlatformAdminSsoOptions.ClientSecretKey, options.ClientSecret),
                     (PlatformAdminSsoOptions.RoleClaimKey, options.RoleClaim),
                     (PlatformAdminSsoOptions.RequiredRoleKey, options.RequiredRole),
                     (PlatformAdminSsoOptions.DisplayNameKey, options.DisplayName),
-                }
-                .Where(setting => !string.IsNullOrWhiteSpace(setting.Value))
-                .Select(setting => setting.Key)
-                .ToList();
-
-            return settingsWithoutAuthority.Count == 0
-                ? ValidateOptionsResult.Success
-                : ValidateOptionsResult.Fail(
-                    $"{string.Join(", ", settingsWithoutAuthority)} {(settingsWithoutAuthority.Count == 1 ? "is" : "are")} set "
-                    + $"without {PlatformAdminSsoOptions.AuthorityKey}. Set {PlatformAdminSsoOptions.AuthorityKey} to let "
-                    + "platform administrators sign in through the identity provider, or remove the other settings.");
+                ]);
         }
 
-        this.CheckAddress(failures, PlatformAdminSsoOptions.AuthorityKey, options.Authority, allowQuery: false);
-        if (!string.IsNullOrWhiteSpace(options.MetadataUrl))
-        {
-            this.CheckAddress(failures, PlatformAdminSsoOptions.MetadataUrlKey, options.MetadataUrl, allowQuery: true);
-        }
-
-        RequireValue(failures, PlatformAdminSsoOptions.ClientIdKey, options.ClientId);
-        RequireValue(failures, PlatformAdminSsoOptions.ClientSecretKey, options.ClientSecret);
-        RequireValue(failures, PlatformAdminSsoOptions.RequiredRoleKey, options.RequiredRole);
-
-        if (options.DisplayName is { } displayName
-            && (displayName.Length > PlatformAdminSsoOptions.MaxDisplayNameLength || displayName.Any(char.IsControl)))
-        {
-            failures.Add(
-                $"{PlatformAdminSsoOptions.DisplayNameKey} must be at most {PlatformAdminSsoOptions.MaxDisplayNameLength} "
-                + "characters on one line.");
-        }
+        var failures = InstallationSsoProviderValidation.CheckProvider(options, Keys, isDevelopment);
+        InstallationSsoProviderValidation.RequireValue(
+            failures,
+            PlatformAdminSsoOptions.RequiredRoleKey,
+            options.RequiredRole,
+            PlatformAdminSsoOptions.AuthorityKey);
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
-    }
-
-    private static void RequireValue(List<string> failures, string key, string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            failures.Add($"{key} must be set when {PlatformAdminSsoOptions.AuthorityKey} is set.");
-        }
-    }
-
-    private void CheckAddress(List<string> failures, string key, string? value, bool allowQuery)
-    {
-        var isAcceptable = Uri.TryCreate(value, UriKind.Absolute, out var address)
-                           && (address.Scheme == Uri.UriSchemeHttps || (isDevelopment && address.Scheme == Uri.UriSchemeHttp))
-                           && address.UserInfo.Length == 0
-                           && (allowQuery || address.Query.Length == 0)
-                           && address.Fragment.Length == 0;
-        if (isAcceptable)
-        {
-            return;
-        }
-
-        var parts = allowQuery ? "credentials or fragment" : "credentials, query or fragment";
-        failures.Add(
-            isDevelopment
-                ? $"{key} must be an absolute http or https URL without {parts}."
-                : $"{key} must be an absolute https URL without {parts}. Plain http is accepted in Development only.");
     }
 }

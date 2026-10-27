@@ -19,6 +19,12 @@ export interface PlatformAdminSignIn {
   displayName: string
 }
 
+/** The identity provider through which the users that a hosting platform provisioned sign in. */
+export interface ProvisionedUserSignIn {
+  /** The name of the provider on the sign-in page. */
+  displayName: string
+}
+
 export interface AuthOptions {
   edition: InstallationEdition
   availableSignInMethods: string[]
@@ -26,6 +32,8 @@ export interface AuthOptions {
   publicBaseUrl: string | null
   /** The identity provider for platform administrators, or null when the installation offers none. */
   platformAdminSignIn: PlatformAdminSignIn | null
+  /** The identity provider for provisioned users, or null when the installation offers none. */
+  provisionedUserSignIn: ProvisionedUserSignIn | null
 }
 
 export function supportsTenantSignIn(options: AuthOptions | null | undefined): boolean {
@@ -45,6 +53,9 @@ function normalizeAuthOptions(options: AuthOptionsDto | null | undefined): AuthO
     platformAdminSignIn: options?.platformAdminSignIn?.displayName
       ? { displayName: options.platformAdminSignIn.displayName }
       : null,
+    provisionedUserSignIn: options?.provisionedUserSignIn?.displayName
+      ? { displayName: options.provisionedUserSignIn.displayName }
+      : null,
   }
 }
 
@@ -53,9 +64,21 @@ function normalizeAuthOptions(options: AuthOptionsDto | null | undefined): AuthO
  * API sends the browser to the provider and returns it to returnUrl.
  */
 export function getPlatformAdminSignInUrl(returnUrl: string): string {
+  return buildChallengeUrl('platform-admin', returnUrl)
+}
+
+/**
+ * Returns the API address that starts the sign-in of a provisioned user through the identity provider for provisioned
+ * users. The API sends the browser to the provider and returns it to returnUrl.
+ */
+export function getProvisionedUserSignInUrl(returnUrl: string): string {
+  return buildChallengeUrl('provisioned-user', returnUrl)
+}
+
+function buildChallengeUrl(signIn: 'platform-admin' | 'provisioned-user', returnUrl: string): string {
   const baseUrl = getActiveRuntime().apiBaseUrl.replace(/\/+$/, '')
   const query = new URLSearchParams({ returnUrl })
-  return `${baseUrl}/auth/platform-admin/challenge?${query.toString()}`
+  return `${baseUrl}/auth/${signIn}/challenge?${query.toString()}`
 }
 
 export interface AuthOptionsService {

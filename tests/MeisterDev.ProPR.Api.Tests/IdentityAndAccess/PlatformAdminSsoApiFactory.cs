@@ -5,13 +5,9 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
-using MeisterDev.ProPR.Domain.Entities;
-using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Persistence;
-using MeisterDev.ProPR.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using NSubstitute;
@@ -110,93 +106,7 @@ public sealed class PlatformAdminSsoApiFactory : TenantAdministrationApiFactory
             services.RemoveAll<IUserAccountAuditLog>();
             services.AddSingleton(this.AuditLog);
             services.AddScoped<IPlatformAdminSignInService, PlatformAdminSignInService>();
-            services.RemoveAll<IRefreshTokenRepository>();
-            services.AddScoped<RefreshTokenRepository>();
-            services.AddScoped<IRefreshTokenRepository>(serviceProvider => new RowByRowRefreshTokenRepository(
-                serviceProvider.GetRequiredService<MeisterProPRDbContext>(),
-                serviceProvider.GetRequiredService<RefreshTokenRepository>(),
-                this.TakeRefreshTokenRevocationFailure));
-            services.RemoveAll<IUserPatRepository>();
-            services.AddScoped<UserPatRepository>();
-            services.AddScoped<IUserPatRepository, RowByRowUserPatRepository>();
+            RowByRowRevocations.Register(services, this.TakeRefreshTokenRevocationFailure);
         });
-    }
-
-    /// <summary>
-    ///     The refresh token repository of the host, with a revocation that the in-memory database runs. The
-    ///     repository revokes with a bulk update, which the in-memory provider does not translate, so this one sets
-    ///     the same column row by row.
-    /// </summary>
-    private sealed class RowByRowRefreshTokenRepository(
-        MeisterProPRDbContext database,
-        RefreshTokenRepository repository,
-        Func<bool> takeRevocationFailure)
-        : IRefreshTokenRepository
-    {
-        public Task AddAsync(RefreshToken token, CancellationToken ct = default)
-        {
-            return repository.AddAsync(token, ct);
-        }
-
-        public Task<RefreshToken?> GetActiveByHashAsync(string tokenHash, CancellationToken ct = default)
-        {
-            return repository.GetActiveByHashAsync(tokenHash, ct);
-        }
-
-        public Task TouchLastUsedAsync(Guid id, DateTimeOffset lastUsedAt, CancellationToken ct = default)
-        {
-            return repository.TouchLastUsedAsync(id, lastUsedAt, ct);
-        }
-
-        public async Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
-        {
-            if (takeRevocationFailure())
-            {
-                throw new InvalidOperationException("The revocation of the refresh tokens failed.");
-            }
-
-            var now = DateTimeOffset.UtcNow;
-            foreach (var token in await database.RefreshTokens.Where(t => t.UserId == userId && t.RevokedAt == null).ToListAsync(ct))
-            {
-                token.RevokedAt = now;
-            }
-
-            await database.SaveChangesAsync(ct);
-        }
-    }
-
-    /// <summary>The personal access token repository of the host, with a revocation that the in-memory database runs.</summary>
-    private sealed class RowByRowUserPatRepository(MeisterProPRDbContext database, UserPatRepository repository)
-        : IUserPatRepository
-    {
-        public Task AddAsync(UserPat pat, CancellationToken ct = default)
-        {
-            return repository.AddAsync(pat, ct);
-        }
-
-        public Task<UserPat?> GetActiveByRawTokenAsync(string rawToken, CancellationToken ct = default)
-        {
-            return repository.GetActiveByRawTokenAsync(rawToken, ct);
-        }
-
-        public Task<IReadOnlyList<UserPat>> ListForUserAsync(Guid userId, CancellationToken ct = default)
-        {
-            return repository.ListForUserAsync(userId, ct);
-        }
-
-        public Task RevokeAsync(Guid patId, Guid userId, CancellationToken ct = default)
-        {
-            return repository.RevokeAsync(patId, userId, ct);
-        }
-
-        public async Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
-        {
-            foreach (var pat in await database.UserPats.Where(p => p.UserId == userId && !p.IsRevoked).ToListAsync(ct))
-            {
-                pat.IsRevoked = true;
-            }
-
-            await database.SaveChangesAsync(ct);
-        }
     }
 }

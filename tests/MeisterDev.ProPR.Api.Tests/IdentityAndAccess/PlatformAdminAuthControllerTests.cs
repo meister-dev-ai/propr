@@ -354,6 +354,43 @@ public sealed class PlatformAdminAuthControllerTests(PlatformAdminSsoApiFactory 
         Assert.False(providerAsked);
     }
 
+    /// <summary>
+    ///     The callback removes the cookie of the sign-in, but a copy of the cookie and of the address of the callback
+    ///     reaches the callback again. ProPR accepts each state once and refuses the copy before it asks the provider.
+    /// </summary>
+    [Fact]
+    public async Task Callback_RepeatedWithTheSameStateAndCookie_RefusesWithoutAskingTheProvider()
+    {
+        this.Reset();
+        var subject = NewSubject();
+        using var browser = factory.CreateBrowser();
+        var challenge = await browser.GetAsync(ChallengePath);
+        var flowCookie = TenantSignIns.CookieOf(challenge, "meisterpropr_platform_admin_sign_in");
+        var query = QueryHelpers.ParseQuery(challenge.Headers.Location!.Query);
+        var state = Single(query, "state");
+        var nonce = Single(query, "nonce");
+        factory.QueueExternalAuthResponse(_ =>
+            Json(new { id_token = PlatformAdminSsoApiFactory.CreateIdToken(subject, null, nonce, [PlatformAdminSsoApiFactory.RequiredRole]) }));
+        var callbackPath = $"/auth/platform-admin/callback?code=code&state={Uri.EscapeDataString(state)}";
+        var first = await browser.GetAsync(callbackPath);
+        Assert.NotNull(Fragment(first, "accessToken"));
+        var providerAsked = false;
+        factory.QueueExternalAuthResponse(_ =>
+        {
+            providerAsked = true;
+            return Json(new { id_token = PlatformAdminSsoApiFactory.CreateIdToken(subject, null, nonce, [PlatformAdminSsoApiFactory.RequiredRole]) });
+        });
+        using var replayingClient = factory.CreateBrowser();
+        using var replay = new HttpRequestMessage(HttpMethod.Get, callbackPath);
+        replay.Headers.Add("Cookie", flowCookie);
+
+        var response = await replayingClient.SendAsync(replay);
+
+        Assert.Equal("invalid_state", Fragment(response, "error"));
+        Assert.Null(Fragment(response, "accessToken"));
+        Assert.False(providerAsked);
+    }
+
     [Fact]
     public async Task Callback_WithoutTheCookieOfTheChallenge_Refuses()
     {

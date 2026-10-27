@@ -14165,6 +14165,542 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/provisioned-user/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Starts the sign-in. ProPR sends the browser to the identity provider for provisioned users and keeps the state
+         *     of the sign-in in an httpOnly cookie.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /**
+                     * @description The frontend page the sign-in returns to. Its origin is the origin of `MEISTER_PUBLIC_BASE_URL`, one of
+                     *     `CORS_ORIGINS`, or without `MEISTER_PUBLIC_BASE_URL` the origin of this request.
+                     */
+                    returnUrl?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Found */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/provisioned-user/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Completes the sign-in at the redirect from the identity provider. When a hosting platform provisioned the
+         *     identity and the account holds a membership, ProPR sets the refresh cookie and returns the browser to the
+         *     frontend with the access token in the URL fragment. For every other identity, ProPR returns the browser to the
+         *     frontend with `error=no_access` and a fixed message in the fragment.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    state?: string;
+                    code?: string;
+                    error?: string;
+                    error_description?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Found */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/provisioned-users/{subject}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Creates the user of a person at the identity provider for provisioned users, or updates its email address and
+         *     display name. ProPR creates the account without a password and keeps it inactive until the user holds a
+         *     membership.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The subject of the person at the provider, as the `sub` claim of its ID token carries it. */
+                    subject: string;
+                };
+                cookie?: never;
+            };
+            /** @description The email address and the display name of the person. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProvisionedUserRequest"];
+                    "text/json": components["schemas"]["ProvisionedUserRequest"];
+                    "application/*+json": components["schemas"]["ProvisionedUserRequest"];
+                };
+            };
+            responses: {
+                /** @description The user existed; ProPR applied the email address and the display name. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProvisionedUserDto"];
+                        "application/json": components["schemas"]["ProvisionedUserDto"];
+                        "text/json": components["schemas"]["ProvisionedUserDto"];
+                    };
+                };
+                /** @description ProPR created the user. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProvisionedUserDto"];
+                        "application/json": components["schemas"]["ProvisionedUserDto"];
+                        "text/json": components["schemas"]["ProvisionedUserDto"];
+                    };
+                };
+                /** @description The subject, the email address or the display name is not accepted. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation configured no identity provider for provisioned users. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The account of the subject holds platform administrator rights. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/provisioned-members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the provisioned users that hold a membership in the tenant, with their clients of the tenant. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The tenant. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The provisioned members of the tenant, ordered by subject. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProvisionedMemberDto"][];
+                        "application/json": components["schemas"]["ProvisionedMemberDto"][];
+                        "text/json": components["schemas"]["ProvisionedMemberDto"][];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist, or the installation configured no identity provider for provisioned users. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/provisioned-members/{subject}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Sets the membership of a provisioned user in the tenant: the tenant role `TenantUser` and the role
+         *     `ClientUser` on exactly the clients of the request. ProPR removes the roles of the user on the other
+         *     clients of the tenant, and enables a user that it kept inactive for the lack of a membership.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The tenant. */
+                    tenantId: string;
+                    /** @description The subject of the person at the identity provider for provisioned users. */
+                    subject: string;
+                };
+                cookie?: never;
+            };
+            /** @description The clients of the tenant that the user reads. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProvisionedMembershipRequest"];
+                    "text/json": components["schemas"]["ProvisionedMembershipRequest"];
+                    "application/*+json": components["schemas"]["ProvisionedMembershipRequest"];
+                };
+            };
+            responses: {
+                /** @description The membership as ProPR stored it. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProvisionedMemberDto"];
+                        "application/json": components["schemas"]["ProvisionedMemberDto"];
+                        "text/json": components["schemas"]["ProvisionedMemberDto"];
+                    };
+                };
+                /** @description The subject is not accepted, or a client does not belong to the tenant. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant or the user does not exist, or the installation configured no identity provider for provisioned users. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant is the System tenant, or the account of the subject holds platform administrator rights. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Removes the membership of a provisioned user in the tenant with the roles of the user on the clients of the
+         *     tenant. When the user holds no membership any more, ProPR disables the user and revokes its refresh tokens and
+         *     personal access tokens.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The tenant. */
+                    tenantId: string;
+                    /** @description The subject of the person at the identity provider for provisioned users. */
+                    subject: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The user holds no membership in the tenant, also when it held none before or does not exist. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The subject is not accepted. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist, or the installation configured no identity provider for provisioned users. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant is the System tenant, or the account of the subject holds platform administrator rights. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/reviewing/pr-view": {
         parameters: {
             query?: never;
@@ -22772,6 +23308,7 @@ export interface components {
             /** @description The public base URL of the API. */
             publicBaseUrl?: string | null;
             platformAdminSignIn?: components["schemas"]["PlatformAdminSignInOptionDto"] | null;
+            provisionedUserSignIn?: components["schemas"]["ProvisionedUserSignInOptionDto"];
         };
         /** @description Authenticated session snapshot shared with the admin UI after sign-in. */
         AuthenticatedSessionDto: {
@@ -27033,6 +27570,60 @@ export interface components {
         ProviderOperationalStatusDto: {
             connections?: components["schemas"]["ProviderConnectionOperationalStatusDto"][] | null;
             providerFamilies?: components["schemas"]["ProviderFamilyOperationalStatusDto"][] | null;
+        };
+        /** @description The membership of a provisioned user in a tenant. */
+        ProvisionedMemberDto: {
+            /** @description The subject of the person at the identity provider for provisioned users. */
+            subject?: string | null;
+            /**
+             * Format: uuid
+             * @description The account of the user.
+             */
+            userId?: string;
+            /** @description The email address that the platform sent. */
+            email?: string | null;
+            /** @description The display name that the platform sent. */
+            displayName?: string | null;
+            /** @description Whether the account can sign in and use its personal access tokens. */
+            isActive?: boolean;
+            role?: components["schemas"]["TenantRole"];
+            /** @description The clients of the tenant on which the user holds a role. */
+            clientIds?: string[] | null;
+        };
+        /** @description The clients of a tenant that a provisioned user reads. */
+        ProvisionedMembershipRequest: {
+            /** @description The clients; an empty list keeps the membership without any client. */
+            clientIds: string[] | null;
+        };
+        /** @description A user that a hosting platform provisioned. */
+        ProvisionedUserDto: {
+            /** @description The subject of the person at the identity provider for provisioned users. */
+            subject?: string | null;
+            /**
+             * Format: uuid
+             * @description The account of the user.
+             */
+            userId?: string;
+            /** @description The username of the account. */
+            username?: string | null;
+            /** @description The email address that the platform sent. */
+            email?: string | null;
+            /** @description The display name that the platform sent. */
+            displayName?: string | null;
+            /** @description Whether the account can sign in and use its personal access tokens. */
+            isActive?: boolean;
+        };
+        /** @description The person behind a provisioned user, as the hosting platform knows it. */
+        ProvisionedUserRequest: {
+            /** @description The email address of the person. */
+            email: string | null;
+            /** @description The display name of the person, or null. */
+            displayName?: string | null;
+        };
+        /** @description The identity provider through which the users that a hosting platform provisioned can sign in. */
+        ProvisionedUserSignInOptionDto: {
+            /** @description The name of the provider on the sign-in page. */
+            displayName?: string | null;
         };
         /** @description One pull request in the grouped review history, with every review run against it. */
         PullRequestHistoryItem: {

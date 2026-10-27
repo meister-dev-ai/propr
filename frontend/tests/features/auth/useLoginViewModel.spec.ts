@@ -154,6 +154,7 @@ describe('useLoginViewModel (FR-007, FR-008, FR-012)', () => {
       capabilities: [],
       publicBaseUrl: null,
       platformAdminSignIn: { displayName: 'Meister DEV staff' },
+      provisionedUserSignIn: null,
     }) as AuthOptions)
     const platformAdminSignInUrl = vi.fn((returnUrl: string) => `/api/auth/platform-admin/challenge?returnUrl=${returnUrl}`)
     const vm = useLoginViewModel({
@@ -178,6 +179,7 @@ describe('useLoginViewModel (FR-007, FR-008, FR-012)', () => {
       capabilities: [],
       publicBaseUrl: null,
       platformAdminSignIn: null,
+      provisionedUserSignIn: null,
     }) as AuthOptions)
     const platformAdminSignInUrl = vi.fn()
     const vm = useLoginViewModel({
@@ -192,6 +194,32 @@ describe('useLoginViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.platformAdminSignIn.value).toBeNull()
     expect(vm.platformAdminSignInHref.value).toBe('')
     expect(platformAdminSignInUrl).not.toHaveBeenCalled()
+  })
+
+  it('offers the identity provider for provisioned users with an address that returns to the callback page', async () => {
+    const authOptionsService = vi.fn(async () => ({
+      edition: 'commercial' as const,
+      availableSignInMethods: ['password', 'sso'],
+      capabilities: [],
+      publicBaseUrl: null,
+      platformAdminSignIn: null,
+      provisionedUserSignIn: { displayName: 'Meister DEV' },
+    }) as AuthOptions)
+    const provisionedUserSignInUrl = vi.fn((returnUrl: string) => `/api/auth/provisioned-user/challenge?returnUrl=${returnUrl}`)
+    const vm = useLoginViewModel({
+      loginService: vi.fn(),
+      authOptionsService,
+      autoLoadAuthOptions: false,
+      provisionedUserSignInUrl,
+    })
+
+    await vm.loadAuthOptions()
+
+    expect(vm.provisionedUserSignIn.value).toEqual({ displayName: 'Meister DEV' })
+    expect(vm.provisionedUserSignInHref.value).toBe(
+      `/api/auth/provisioned-user/challenge?returnUrl=${window.location.origin}/login/callback`,
+    )
+    expect(vm.platformAdminSignInHref.value).toBe('')
   })
 
   it('closeTenantPrompt resets slug, validation, and prompt visibility', () => {

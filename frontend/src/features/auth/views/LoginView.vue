@@ -41,13 +41,23 @@
         </button>
       </form>
 
-      <section v-if="vm.platformAdminSignIn.value" class="platform-admin-sign-in">
+      <section v-if="vm.platformAdminSignIn.value" class="installation-sign-in">
         <a
           data-testid="platform-admin-sign-in-link"
           class="btn-secondary platform-admin-sign-in-link"
           :href="vm.platformAdminSignInHref.value"
         >
           Sign in with {{ vm.platformAdminSignIn.value.displayName }}
+        </a>
+      </section>
+
+      <section v-if="vm.provisionedUserSignIn.value" class="installation-sign-in">
+        <a
+          data-testid="provisioned-user-sign-in-link"
+          class="btn-secondary provisioned-user-sign-in-link"
+          :href="vm.provisionedUserSignInHref.value"
+        >
+          Sign in with {{ vm.provisionedUserSignIn.value.displayName }}
         </a>
       </section>
 
@@ -111,7 +121,7 @@ const vm = useLoginViewModel()
   color: var(--color-text-muted);
 }
 
-.platform-admin-sign-in {
+.installation-sign-in {
   display: flex;
   flex-direction: column;
   margin-top: 1rem;

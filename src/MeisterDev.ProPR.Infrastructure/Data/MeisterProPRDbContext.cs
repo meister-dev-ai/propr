@@ -105,6 +105,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>The one-time values of external sign-ins that ProPR accepted, kept until they expire.</summary>
     public DbSet<ExternalSignInRedemptionRecord> ExternalSignInRedemptions => this.Set<ExternalSignInRedemptionRecord>();
 
+    /// <summary>The accounts that a hosting platform provisioned, by the issuer and the subject of the person.</summary>
+    public DbSet<ProvisionedUserRecord> ProvisionedUsers => this.Set<ProvisionedUserRecord>();
+
     /// <summary>Tenant administration audit history.</summary>
     public DbSet<TenantAuditEntryRecord> TenantAuditEntries => this.Set<TenantAuditEntryRecord>();
 

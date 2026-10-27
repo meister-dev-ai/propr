@@ -765,9 +765,9 @@ public static class ProPRHost
                     licensingIdentityScope.ServiceProvider.GetRequiredService<ILogger<Program>>(),
                     licensingIdentity);
 
-                // Writes whether the identity provider for platform administrators is in use, and the reason when the
-                // license does not cover it.
-                await PlatformAdminSsoStartupDiagnostics.ReportAsync(
+                // Writes whether the identity providers of the installation are in use, and the reason when the license
+                // does not cover them.
+                await InstallationSsoStartupDiagnostics.ReportAsync(
                     licensingIdentityScope.ServiceProvider,
                     licensingIdentityScope.ServiceProvider.GetRequiredService<ILogger<Program>>());
             }

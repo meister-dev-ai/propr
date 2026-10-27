@@ -15,13 +15,16 @@ A wrong value behaves in one of three ways:
 | Set it to something unparsable - a word where a number belongs, or a blank value | Silently ignored; the default is used. |
 | Set it to a parsable value outside the accepted range | **Startup fails** for most settings, with a message naming the setting and its bounds. |
 
-Five groups depart from that:
+Six groups depart from that:
 
 - `MEISTER_SESSION_IDLE_MINUTES` and `MEISTER_SESSION_ABSOLUTE_HOURS` fail startup on anything that is
   not a positive integer. They do not fall back to their default.
 - The `MEISTER_PLATFORM_ADMIN_SSO_*` variables fail startup on any value outside the accepted ones, and when one
   of them is set without `MEISTER_PLATFORM_ADMIN_SSO_AUTHORITY`. See
   [single sign-on for platform administrators](#single-sign-on-for-platform-administrators).
+- The `MEISTER_PROVISIONED_USER_SSO_*` variables fail startup on any value outside the accepted ones, and when one
+  of them is set without `MEISTER_PROVISIONED_USER_SSO_AUTHORITY`. See
+  [single sign-on for provisioned users](#single-sign-on-for-provisioned-users).
 - `MEISTER_PLATFORM_ADMIN_ELEVATION_MAX_MINUTES` fails startup on anything that is not a whole number from 1 to
   1440. It does not fall back to its default.
 - A value under the minimum of an interval marked "clamped" is silently raised to that minimum.
@@ -197,6 +200,35 @@ Set `MEISTER_PLATFORM_ADMIN_SSO_METADATA_URL` when ProPR reaches the provider at
 does, for example over an internal network. The discovery document at that address must name the authority as its
 issuer, or ProPR refuses every sign-in through the provider. Outside Development, the authorization endpoint and the
 token endpoint that the document names must use `https` as well.
+
+## Single sign-on for provisioned users
+
+**Commercial feature.** This sign-in needs a commercial license that includes single sign-on
+(`sso-authentication`, see [editions](../reference/editions.md)).
+
+A hosting platform that runs ProPR for its customers provisions their accounts through the administration API, and
+these customers sign in through one OpenID Connect identity provider beside the other sign-ins at `/login`.
+Setting `MEISTER_PROVISIONED_USER_SSO_AUTHORITY` turns on the sign-in and the
+provisioning endpoints. How the platform decides who signs in is described under
+[provisioned users and the identity provider of a hosting platform](../reference/security.md#provisioned-users-and-the-identity-provider-of-a-hosting-platform).
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_PROVISIONED_USER_SSO_AUTHORITY` | The issuer URL of the provider, for example `https://id.example.com/realms/customers` | unset: no sign-in of provisioned users, and the provisioning endpoints answer `404` | absolute `https` URL without credentials, query or fragment; `http` in Development | no |
+| `MEISTER_PROVISIONED_USER_SSO_METADATA_URL` | The address ProPR reads the provider's discovery document from | `<authority>/.well-known/openid-configuration` | absolute `https` URL without credentials or fragment; `http` in Development | no |
+| `MEISTER_PROVISIONED_USER_SSO_CLIENT_ID` | The client ID of ProPR at the provider | none | required with the authority | no |
+| `MEISTER_PROVISIONED_USER_SSO_CLIENT_SECRET` | The client secret of ProPR at the provider | none | required with the authority | no |
+| `MEISTER_PROVISIONED_USER_SSO_DISPLAY_NAME` | The name on the sign-in button | the host of the authority | at most 80 characters on one line | no |
+
+Register ProPR at the provider as a confidential client that uses the authorization code flow, with
+`<MEISTER_PUBLIC_BASE_URL>/auth/provisioned-user/callback` as its redirect URI. ProPR reads the subject of the ID
+token and no role. The return address, PKCE, the nonce, the client secret in the body of the token request, the scopes
+and the metadata URL are the same as under
+[single sign-on for platform administrators](#single-sign-on-for-platform-administrators).
+
+ProPR records every provisioned user under the authority without a trailing slash. After a change of
+`MEISTER_PROVISIONED_USER_SSO_AUTHORITY`, the users that the platform provisioned under the former authority no longer
+sign in, and the platform provisions them again.
 
 ## Review workers
 

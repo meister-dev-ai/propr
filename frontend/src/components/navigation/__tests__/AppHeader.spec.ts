@@ -246,6 +246,23 @@ describe('AppHeader', () => {
     expect(runnersLink?.props('to')).toEqual({ name: 'runners', params: { tenantId: 'tenant-1' } })
   })
 
+  // A provisioned user is a tenant member with client access to the workspaces of its organization. With every
+  // capability licensed, the header offers the reviews, the clients and the settings, and no administration.
+  it('offers a tenant member with client access no administration entry', async () => {
+    tenantRoles.value = { 'tenant-1': 0 }
+    clientRoles.value = { 'client-1': 0 }
+    availableCapabilities.value = ['multi-tenancy', 'code-insights', 'distributed-execution']
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.text()).toContain('Reviews')
+    expect(wrapper.text()).toContain('Clients')
+    expect(wrapper.find('[aria-label="Settings"]').exists()).toBe(true)
+    expect(wrapper.find('.dropdown-toggle').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Tenants')
+    expect(wrapper.text()).not.toContain('Users')
+  })
+
   it('keeps Runners hidden from a tenant member who administers nothing', async () => {
     tenantRoles.value = { 'tenant-1': 0 }
     availableCapabilities.value = ['distributed-execution']

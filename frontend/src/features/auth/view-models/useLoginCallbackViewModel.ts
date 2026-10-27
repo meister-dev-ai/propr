@@ -31,8 +31,9 @@ export interface UseLoginCallbackViewModelOptions {
 }
 
 /**
- * Completes the sign-in of a platform administrator through the identity provider of the installation. The API
- * returns the browser to this page with the session or the reason for a refusal in the URL fragment.
+ * Completes a sign-in through an identity provider of the installation: the provider for platform administrators or
+ * the provider for provisioned users. The API returns the browser to this page with the session or the reason for a
+ * refusal in the URL fragment.
  */
 export function useLoginCallbackViewModel(options: UseLoginCallbackViewModelOptions = {}): LoginCallbackViewModel {
   const router = useRouter()
@@ -52,7 +53,7 @@ export function useLoginCallbackViewModel(options: UseLoginCallbackViewModelOpti
     const { session, message } = takeFragment()
     if (!session) {
       errorMessage.value = message
-        ?? 'The sign-in through the identity provider failed. Try again, or sign in with your username and password.'
+        ?? 'The sign-in through the identity provider failed. Go back to the sign-in page and try again.'
       loading.value = false
       return
     }
@@ -60,7 +61,7 @@ export function useLoginCallbackViewModel(options: UseLoginCallbackViewModelOpti
     try {
       await establishSession(session)
     } catch {
-      errorMessage.value = 'The sign-in could not be completed. Try again, or sign in with your username and password.'
+      errorMessage.value = 'The sign-in could not be completed. Go back to the sign-in page and try again.'
       loading.value = false
       return
     }

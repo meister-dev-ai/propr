@@ -8,9 +8,11 @@ import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import {
   getAuthOptions,
   getPlatformAdminSignInUrl,
+  getProvisionedUserSignInUrl,
   supportsTenantSignIn,
   type AuthOptions,
   type PlatformAdminSignIn,
+  type ProvisionedUserSignIn,
 } from '@/services/authOptionsService'
 import { useSession } from '@/composables/useSession'
 
@@ -48,6 +50,10 @@ export interface LoginViewModel {
   platformAdminSignIn: ComputedRef<PlatformAdminSignIn | null>
   /** The address that starts the sign-in through that provider; empty without a provider. */
   platformAdminSignInHref: ComputedRef<string>
+  /** The identity provider for provisioned users, or null when the installation offers none. */
+  provisionedUserSignIn: ComputedRef<ProvisionedUserSignIn | null>
+  /** The address that starts the sign-in through that provider; empty without a provider. */
+  provisionedUserSignInHref: ComputedRef<string>
 
   username: Ref<string>
   password: Ref<string>
@@ -74,6 +80,8 @@ export interface UseLoginViewModelOptions {
   autoLoadAuthOptions?: boolean
   /** Override the address builder of the platform administrator sign-in. Used by tests. */
   platformAdminSignInUrl?: (returnUrl: string) => string
+  /** Override the address builder of the sign-in of provisioned users. Used by tests. */
+  provisionedUserSignInUrl?: (returnUrl: string) => string
 }
 
 export function useLoginViewModel(options: UseLoginViewModelOptions = {}): LoginViewModel {
@@ -108,16 +116,23 @@ export function useLoginViewModel(options: UseLoginViewModelOptions = {}): Login
   const canUseTenantSignIn = computed(() => supportsTenantSignIn(authOptions.value))
 
   const platformAdminSignIn = computed(() => authOptions.value?.platformAdminSignIn ?? null)
+  const provisionedUserSignIn = computed(() => authOptions.value?.provisionedUserSignIn ?? null)
 
-  // The provider returns the browser to the callback page of this frontend, as an absolute address on its origin.
-  const platformAdminSignInHref = computed(() => {
-    if (!platformAdminSignIn.value) return ''
+  // Both providers return the browser to the callback page of this frontend, as an absolute address on its origin.
+  function callbackReturnUrl(): string {
     const callbackPath = router.resolve({ name: 'login-callback' }).href
-    const returnUrl = typeof window === 'undefined'
+    return typeof window === 'undefined'
       ? callbackPath
       : new URL(callbackPath, window.location.origin).toString()
-    return (options.platformAdminSignInUrl ?? getPlatformAdminSignInUrl)(returnUrl)
-  })
+  }
+
+  const platformAdminSignInHref = computed(() => platformAdminSignIn.value
+    ? (options.platformAdminSignInUrl ?? getPlatformAdminSignInUrl)(callbackReturnUrl())
+    : '')
+
+  const provisionedUserSignInHref = computed(() => provisionedUserSignIn.value
+    ? (options.provisionedUserSignInUrl ?? getProvisionedUserSignInUrl)(callbackReturnUrl())
+    : '')
 
   async function loadAuthOptions(): Promise<void> {
     try {
@@ -189,6 +204,8 @@ export function useLoginViewModel(options: UseLoginViewModelOptions = {}): Login
     canUseTenantSignIn,
     platformAdminSignIn,
     platformAdminSignInHref,
+    provisionedUserSignIn,
+    provisionedUserSignInHref,
     username,
     password,
     tenantSlug,

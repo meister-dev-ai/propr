@@ -46,6 +46,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
         services.AddScoped<ITenantDataLifecycle, TenantDataLifecycle>();
         services.AddScoped<ITenantMachineCredentialStore, EfTenantMachineCredentialStore>();
         services.AddScoped<ExternalSignInRedemptions>();
+        services.AddScoped<InstallationOidcSignIn>();
 
         services.AddOptions<AccountLockoutOptions>()
             .Configure(options =>
@@ -85,6 +86,19 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<PlatformAdminSsoOptions>>(new PlatformAdminSsoOptionsValidator(isDevelopment));
 
+        // The identity provider for provisioned users, checked at startup like the provider for platform administrators.
+        services.AddOptions<ProvisionedUserSsoOptions>()
+            .Configure(options =>
+            {
+                options.Authority = ReadSetting(configuration, ProvisionedUserSsoOptions.AuthorityKey);
+                options.MetadataUrl = ReadSetting(configuration, ProvisionedUserSsoOptions.MetadataUrlKey);
+                options.ClientId = ReadSetting(configuration, ProvisionedUserSsoOptions.ClientIdKey);
+                options.ClientSecret = ReadSetting(configuration, ProvisionedUserSsoOptions.ClientSecretKey);
+                options.DisplayName = ReadSetting(configuration, ProvisionedUserSsoOptions.DisplayNameKey);
+            })
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<ProvisionedUserSsoOptions>>(new ProvisionedUserSsoOptionsValidator(isDevelopment));
+
         // Every request to an identity provider goes through this client: discovery, keys, token requests and the
         // user lookups of GitHub. Outside Development it uses https only, because a token request carries the client
         // secret, the code and the code verifier. An answer above the buffer limit fails the request.
@@ -102,6 +116,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
             services.AddScoped<ITenantMembershipService, TenantMembershipService>();
             services.AddScoped<ITenantMemberClientAccessService, TenantMemberClientAccessService>();
             services.AddScoped<ITenantSsoProviderService, TenantSsoProviderService>();
+            services.AddScoped<IProvisionedUserService, ProvisionedUserService>();
 
             // OIDC id_token validation resolves and caches each provider's discovery document + JWKS per
             // metadata address, so it is a singleton. The client named AuthorizationCodeFlow.HttpClientName carries
@@ -123,6 +138,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
             });
             services.AddScoped<ITenantAuthService, TenantAuthService>();
             services.AddScoped<IPlatformAdminSignInService, PlatformAdminSignInService>();
+            services.AddScoped<IProvisionedUserSignInService, ProvisionedUserSignInService>();
             services.AddScoped<IAccountLockoutService, AccountLockoutService>();
             services.AddScoped<ISessionFactory, SessionFactory>();
             services.AddScoped<SecretBackfillService>();
