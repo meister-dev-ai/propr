@@ -18,6 +18,7 @@ public sealed class ExternalIdentityRecord
     public string Subject { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public bool EmailVerified { get; set; }
+    public bool IssuerVerified { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? LastSignInAt { get; set; }
 

@@ -212,8 +212,9 @@ ProPR has two sign-in surfaces.
   endpoint behind it is `POST /api/auth/login`. An installation can add an identity provider for platform
   administrators to the same page; see
   [platform administrators and the identity provider of the installation](#platform-administrators-and-the-identity-provider-of-the-installation).
-- **Tenant users** sign in at `/tenants/<tenant-slug>/login`, which selects the enabled identity
-  providers, the allowed email domains, and whether local login is permitted at all.
+- **Tenant users** sign in at `/tenants/<tenant-slug>/login` through the identity providers that the tenant
+  enables. The tenant also sets the allowed email domains of each provider and whether local login is permitted;
+  see [tenant users and the identity providers of a tenant](#tenant-users-and-the-identity-providers-of-a-tenant).
 
 Passwords are stored as BCrypt hashes. A session issues a short-lived access token plus an httpOnly
 refresh cookie, and the browser refreshes silently. `MEISTER_JWT_SECRET` signs the access tokens and
@@ -229,11 +230,6 @@ a rolling window. The IP limit is set loose because colleagues behind one office
 
 The variables that set these four limits, with their defaults and accepted ranges, are under
 [sessions and sign-in protection](../operate/configuration.md#sessions-and-sign-in-protection).
-
-**External sign-in does not silently merge with a local password account.** A verified, allowed email
-can create a new user and tenant membership. If an account with that address already exists and has a
-local password, the sign-in is refused with `external_link_requires_confirmation` and the link must be
-made explicitly. An existing account with no local password is linked to the external identity.
 
 If nobody can sign in, or sessions end sooner than you expect, start at
 [troubleshooting](../operate/troubleshooting.md).
@@ -263,23 +259,86 @@ was removed at the provider keeps its rights until it ends. To end it at once, d
 The sign-in through the provider never links an existing account. If an account with the same email address
 has a local password, the first sign-in is refused with `external_link_requires_confirmation`. If the address
 belongs to an account without a password, for example one that a tenant identity provider created, ProPR creates
-a separate account. The account that the sign-in creates carries no email address, so a tenant identity
-provider, which finds accounts by email, cannot sign in to it.
+a separate account. The account that the sign-in creates carries no email address.
 
 The sign-in uses the authorization code flow with PKCE and a nonce. The state of a sign-in stays in an httpOnly
-cookie of the browser that started it, and ProPR refuses a callback that arrives without that cookie.
-
-ProPR sends the browser back with the access token in the URL fragment, and only to a page on one of these
-origins: the origin of `MEISTER_PUBLIC_BASE_URL`, an origin listed in `CORS_ORIGINS`, or, when
-`MEISTER_PUBLIC_BASE_URL` is not set, the origin the browser reached the API at. In Development the local
-frontend origins on ports 3000 and 5173 qualify as well. The origins that the API accepts for the Azure DevOps
-extension do not qualify.
+cookie of the browser that started it, and ProPR refuses a callback that arrives without that cookie. The page the
+sign-in returns to follows [the return address of a sign-in](#the-return-address-of-a-sign-in).
 
 Keep at least one local platform administrator account. The local sign-in still works when the provider is
 unreachable, when the license no longer grants `sso-authentication`, and when no account holds the role any
 more. If the last active platform administrator loses the role, ProPR writes a warning to its log. Its next start
 then creates the bootstrap administrator from `MEISTER_BOOTSTRAP_ADMIN_USER` and
 `MEISTER_BOOTSTRAP_ADMIN_PASSWORD`, and fails without these variables.
+
+### Tenant users and the identity providers of a tenant
+
+A tenant administrator configures the identity providers of the tenant: Microsoft Entra ID and Google over OpenID
+Connect, and GitHub over OAuth 2.0. A sign-in through one of them uses the authorization code flow with PKCE
+(`S256`), and a sign-in through an OpenID Connect provider also sends a nonce. ProPR keeps the state of the sign-in
+in an httpOnly cookie of the browser that started it, refuses a callback without that cookie, and accepts each state
+once.
+
+ProPR finds the account of a sign-in through the identity at the provider, the pair of issuer and subject. The
+email address that the provider states never selects an account, because the administrator of a tenant configures
+the provider and can make it state any address. The provider still has to state a verified address in one of its
+allowed email domains before ProPR links the identity to an account or creates one.
+
+| Sign-in through a provider of a tenant | What ProPR does |
+|---|---|
+| The identity is linked to an account through this provider. | ProPR signs the account in when the account is active and a member of the tenant. |
+| The identity is linked to an account through another provider with the same issuer. | ProPR links the identity to that account and signs it in. If the account is not a member of the tenant, it becomes one when **Auto-create users on first sign-in** is on, and ProPR refuses the sign-in otherwise. |
+| No link applies, and an account with the email address of the identity exists. | ProPR signs nobody in and offers the person the two choices described below. |
+| No link applies, and no account has the email address. | ProPR creates an account that is a member of the tenant when **Auto-create users on first sign-in** is on, and refuses the sign-in otherwise. |
+
+The issuer of an OpenID Connect provider must be the authority that the provider is configured with, and ProPR
+refuses an ID token of any other issuer. The keys that sign the token are then the keys of that authority, so the
+administrator of another tenant cannot state the subject of a person at that authority. The issuer in a token of
+Microsoft Entra ID contains the ID of the directory, also when the configured authority contains its domain, and ProPR
+accepts that issuer on the same Microsoft sign-in host. The issuer of a GitHub provider is the address of its host, so a GitHub provider
+reaches the account of another GitHub provider only on the same host. A link counts for a sign-in through another
+provider only after a sign-in through its own provider has proved the issuer and subject.
+
+When an account with the email address exists, also one with a local password, ProPR offers two choices on the
+callback page:
+
+- **Sign in to the existing account.** The person signs in to that account with its usual method, for example its
+  password or the provider of another tenant, and confirms the link on the page that follows. ProPR links the
+  sign-in to the account that is signed in at that moment. That account becomes a member of the tenant when
+  **Auto-create users on first sign-in** is on; otherwise a tenant administrator makes it a member first.
+- **Continue with a new account.** ProPR creates a separate account with a membership in the tenant, and the
+  existing account stays as it is. ProPR offers this choice when **Auto-create users on first sign-in** is on.
+
+ProPR keeps the waiting sign-in for 15 minutes in an httpOnly cookie of the browser and uses it once. ProPR does not
+link a sign-in of a tenant to the account of a platform administrator. Confirm a link only for a sign-in that you
+started yourself, because the identity provider of that tenant signs in to your account afterwards.
+
+A person who belongs to several tenants, for example a guest in several Azure DevOps organizations, keeps one
+account. ProPR links a sign-in through a provider of a further tenant with the same issuer, such as Google, to that
+account without asking. When a provider with another issuer states the address of the account, ProPR ends the first
+sign-in with the choices above, and the person confirms the link from the account they already use. When the
+provider states another address, the first sign-in creates a new account if **Auto-create users on first sign-in** is
+on, and ProPR refuses it otherwise. To keep one account in that case, a signed-in person links the sign-in of the
+tenant under **Settings → Single sign-on** before the first sign-in through it: they enter the slug of the tenant,
+choose its identity provider, sign in there, and confirm the link when ProPR shows it.
+
+Deleting a provider deletes the links made through it. The first sign-in of a member through a provider that
+replaces it is a sign-in without a link, and ProPR handles it as the table above describes. A member whose account
+has no other way to sign in then continues with a new account, which a tenant administrator gives its roles again.
+Edit a provider to change its settings.
+
+When a provider refuses a sign-in, ProPR writes the error code and the description of the provider to its log. The
+person reads a fixed message for the error code.
+
+### The return address of a sign-in
+
+The sign-in of platform administrators and the sign-in of tenant users return the access token in the URL fragment
+of a page of the user interface. ProPR sends the browser only to a page on one of these origins: the origin of
+`MEISTER_PUBLIC_BASE_URL`, an origin listed in `CORS_ORIGINS`, or, when `MEISTER_PUBLIC_BASE_URL` is not set, the
+origin the browser reached the API at. In Development the local frontend origins on ports 3000 and 5173 qualify as
+well. The origins that the API accepts for the Azure DevOps extension do not qualify. ProPR checks the page when the
+sign-in starts, where it answers `400` with `return_url_not_allowed` for a page on another origin, and again at the
+callback.
 
 ## Automation credentials
 

@@ -26,6 +26,7 @@ internal sealed class ExternalIdentityEntityTypeConfiguration : IEntityTypeConfi
         builder.Property(e => e.Subject).HasColumnName("subject").IsRequired();
         builder.Property(e => e.Email).HasColumnName("email").IsRequired();
         builder.Property(e => e.EmailVerified).HasColumnName("email_verified").IsRequired();
+        builder.Property(e => e.IssuerVerified).HasColumnName("issuer_verified").IsRequired();
         builder.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(e => e.LastSignInAt).HasColumnName("last_sign_in_at").IsRequired(false);
 

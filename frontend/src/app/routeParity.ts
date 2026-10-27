@@ -28,6 +28,7 @@ export const routeParity: RouteParityItem[] = [
   { id: 'reviews', workflowName: 'Authenticated review history' },
   { id: 'job-protocol', workflowName: 'Review diagnostics' },
   { id: 'settings', workflowName: 'Account settings' },
+  { id: 'sign-in-link', workflowName: 'Confirmation of a tenant sign-in link' },
   { id: 'users', workflowName: 'Platform admin user management' },
   { id: 'thread-memory', workflowName: 'Platform admin thread memory diagnostics' },
   { id: 'provider-settings', workflowName: 'Platform provider activation' },

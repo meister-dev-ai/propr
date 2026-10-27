@@ -185,7 +185,7 @@ Register ProPR at the provider as a confidential client that uses the authorizat
 the redirect URI starts with the address the browser reaches the API on. When the user interface runs on another
 origin than `MEISTER_PUBLIC_BASE_URL`, list that origin in `CORS_ORIGINS`, because the sign-in returns the access
 token only to the origins named under
-[platform administrators and the identity provider of the installation](../reference/security.md#platform-administrators-and-the-identity-provider-of-the-installation). ProPR sends a PKCE code challenge
+[the return address of a sign-in](../reference/security.md#the-return-address-of-a-sign-in). ProPR sends a PKCE code challenge
 (`S256`) and a nonce, and it sends the client secret in the body of the token request (`client_secret_post`).
 It requests the scopes `openid`, `profile` and `email`.
 

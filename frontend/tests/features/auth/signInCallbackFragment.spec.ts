@@ -10,6 +10,7 @@ describe('readSignInCallbackFragment', () => {
       session: { accessToken: 'at-1', expiresIn: 900, tokenType: 'Bearer' },
       error: null,
       message: null,
+      pendingLink: false,
     })
   })
 
@@ -26,6 +27,16 @@ describe('readSignInCallbackFragment', () => {
       session: null,
       error: 'invalid_state',
       message: 'Start again.',
+      pendingLink: false,
+    })
+  })
+
+  it('reads a sign-in that waits for the confirmation of its link', () => {
+    expect(readSignInCallbackFragment('#link=pending')).toEqual({
+      session: null,
+      error: null,
+      message: null,
+      pendingLink: true,
     })
   })
 

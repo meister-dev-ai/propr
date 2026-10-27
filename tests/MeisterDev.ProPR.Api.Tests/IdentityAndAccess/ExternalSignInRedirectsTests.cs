@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace MeisterDev.ProPR.Api.Tests.IdentityAndAccess;
 
-/// <summary>The origins a sign-in of a platform administrator returns its access token to.</summary>
+/// <summary>The origins a sign-in returns its access token to.</summary>
 public sealed class ExternalSignInRedirectsTests
 {
     /// <summary>
@@ -18,14 +18,14 @@ public sealed class ExternalSignInRedirectsTests
     [InlineData("https", "example.test:443", "https://example.test/login/callback")]
     [InlineData("http", "example.test:80", "http://example.test/login/callback")]
     [InlineData("https", "example.test", "https://example.test:443/login/callback")]
-    public void TryResolveAdministratorReturnUrl_AcceptsTheOriginOfTheRequestWithOrWithoutItsDefaultPort(
+    public void TryResolveUserInterfaceReturnUrl_AcceptsTheOriginOfTheRequestWithOrWithoutItsDefaultPort(
         string scheme,
         string host,
         string returnUrl)
     {
         var request = Request(scheme, host);
 
-        var resolved = ExternalSignInRedirects.TryResolveAdministratorReturnUrl(
+        var resolved = ExternalSignInRedirects.TryResolveUserInterfaceReturnUrl(
             returnUrl,
             request,
             new ConfigurationBuilder().Build(),
@@ -38,9 +38,9 @@ public sealed class ExternalSignInRedirectsTests
     [InlineData("https://example.test:8443/login/callback")]
     [InlineData("http://example.test/login/callback")]
     [InlineData("https://other.example.test/login/callback")]
-    public void TryResolveAdministratorReturnUrl_RefusesAnotherPortSchemeOrHost(string returnUrl)
+    public void TryResolveUserInterfaceReturnUrl_RefusesAnotherPortSchemeOrHost(string returnUrl)
     {
-        var resolved = ExternalSignInRedirects.TryResolveAdministratorReturnUrl(
+        var resolved = ExternalSignInRedirects.TryResolveUserInterfaceReturnUrl(
             returnUrl,
             Request("https", "example.test:443"),
             new ConfigurationBuilder().Build(),
@@ -58,11 +58,11 @@ public sealed class ExternalSignInRedirectsTests
     [InlineData("https://propr.example.test/api", "https://propr.example.test/login/callback")]
     [InlineData("https://propr.example.test:443/api", "https://propr.example.test/login/callback")]
     [InlineData("https://propr.example.test:8443", "https://propr.example.test:8443/login/callback")]
-    public void TryResolveAdministratorReturnUrl_AcceptsTheOriginOfTheConfiguredPublicBaseUrl(
+    public void TryResolveUserInterfaceReturnUrl_AcceptsTheOriginOfTheConfiguredPublicBaseUrl(
         string publicBaseUrl,
         string returnUrl)
     {
-        var resolved = ExternalSignInRedirects.TryResolveAdministratorReturnUrl(
+        var resolved = ExternalSignInRedirects.TryResolveUserInterfaceReturnUrl(
             returnUrl,
             Request("http", "propr-api.internal:8080"),
             PublicBaseUrl(publicBaseUrl),
@@ -80,9 +80,9 @@ public sealed class ExternalSignInRedirectsTests
     [InlineData("https://propr.example.test:8443/login/callback")]
     [InlineData("http://propr.example.test/login/callback")]
     [InlineData("https://other.example.test/login/callback")]
-    public void TryResolveAdministratorReturnUrl_WithAConfiguredPublicBaseUrl_RefusesEveryOtherOrigin(string returnUrl)
+    public void TryResolveUserInterfaceReturnUrl_WithAConfiguredPublicBaseUrl_RefusesEveryOtherOrigin(string returnUrl)
     {
-        var resolved = ExternalSignInRedirects.TryResolveAdministratorReturnUrl(
+        var resolved = ExternalSignInRedirects.TryResolveUserInterfaceReturnUrl(
             returnUrl,
             Request("http", "propr-api.internal:8080"),
             PublicBaseUrl("https://propr.example.test/api"),
@@ -98,9 +98,9 @@ public sealed class ExternalSignInRedirectsTests
     [Theory]
     [InlineData("https://propr.example.test/login/callback")]
     [InlineData("http://propr-api.internal:8080/login/callback")]
-    public void TryResolveAdministratorReturnUrl_WithAConfiguredPublicBaseUrlThatCarriesCredentials_RefusesItsHostAndTheOriginOfTheRequest(string returnUrl)
+    public void TryResolveUserInterfaceReturnUrl_WithAConfiguredPublicBaseUrlThatCarriesCredentials_RefusesItsHostAndTheOriginOfTheRequest(string returnUrl)
     {
-        var resolved = ExternalSignInRedirects.TryResolveAdministratorReturnUrl(
+        var resolved = ExternalSignInRedirects.TryResolveUserInterfaceReturnUrl(
             returnUrl,
             Request("http", "propr-api.internal:8080"),
             PublicBaseUrl("https://user:secret@propr.example.test/api"),

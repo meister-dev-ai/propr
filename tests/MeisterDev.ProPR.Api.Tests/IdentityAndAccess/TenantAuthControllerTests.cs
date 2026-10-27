@@ -308,7 +308,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             scopes: ["openid", "profile", "email"]);
 
         using var client = CreateNonRedirectingClient(factory);
-        const string returnUrl = "http://localhost:5173/auth/callback";
+        const string returnUrl = "http://localhost/auth/callback";
         var challengeResponse = await client.GetAsync($"/auth/external/challenge/{tenantSlug}/{providerId}?returnUrl={Uri.EscapeDataString(returnUrl)}");
 
         Assert.Equal(HttpStatusCode.Found, challengeResponse.StatusCode);
@@ -316,6 +316,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         Assert.NotNull(challengeLocation);
         var challengeQuery = QueryHelpers.ParseQuery(challengeLocation.Query);
         var state = GetSingleQueryValue(challengeQuery, "state");
+        var nonce = GetSingleQueryValue(challengeQuery, "nonce");
         var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
 
         factory.QueueExternalAuthResponse(request =>
@@ -335,7 +336,8 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                         "entra-user-return-url",
                         email,
                         true,
-                        "Return User"),
+                        "Return User",
+                        nonce: nonce),
                 });
         });
 
@@ -344,7 +346,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         Assert.Equal(HttpStatusCode.Found, callbackResponse.StatusCode);
         var location = callbackResponse.Headers.Location;
         Assert.NotNull(location);
-        Assert.Equal("http://localhost:5173", location.GetLeftPart(UriPartial.Authority));
+        Assert.Equal("http://localhost", location.GetLeftPart(UriPartial.Authority));
         Assert.Equal("/auth/callback", location.AbsolutePath);
 
         var fragment = QueryHelpers.ParseQuery("?" + location.Fragment.TrimStart('#'));
@@ -377,7 +379,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             scopes: ["openid", "profile", "email"]);
 
         using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+        var (_, state, nonce) = await StartChallengeAsync(client, tenantSlug, providerId);
         var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
 
         factory.QueueExternalAuthResponse(request =>
@@ -397,11 +399,12 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                         "entra-user-1",
                         email,
                         true,
-                        "New User"),
+                        "New User",
+                        nonce: nonce),
                 });
         });
 
-        var response = await factory.CreateClient().GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-1&state={Uri.EscapeDataString(state)}");
+        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-1&state={Uri.EscapeDataString(state)}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -447,7 +450,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             email);
 
         using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+        var (_, state, nonce) = await StartChallengeAsync(client, tenantSlug, providerId);
         var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
 
         factory.QueueExternalAuthResponse(request =>
@@ -467,7 +470,8 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                         "entra-user-1",
                         email,
                         true,
-                        username),
+                        username,
+                        nonce: nonce),
                 });
         });
 
@@ -479,71 +483,12 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         Assert.Equal(userId.ToString(), token.Subject);
     }
 
+    /// <summary>
+    ///     An account with a local password is treated as every other account: the sign-in does not link it and asks for
+    ///     the confirmation of the link from the account.
+    /// </summary>
     [Fact]
-    public async Task ExternalCallback_WithExistingUserEmailAndNoTenantMembership_AutoCreatesMembershipAndLinksIdentity()
-    {
-        factory.ResetLicensing();
-        factory.ResetExternalAuthResponses();
-
-        var tenantSlug = $"acme-{Guid.NewGuid():N}";
-        var username = $"tenant.user.{Guid.NewGuid():N}";
-        var email = $"{username}@acme.test";
-        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
-        const string clientId = "entra-client-id";
-        var providerId = await factory.SeedSsoProviderAsync(
-            tenantId,
-            "Acme Entra",
-            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
-            clientId: clientId,
-            scopes: ["openid", "profile", "email"],
-            autoCreateUsers: true);
-        var existingUserId = await factory.SeedUserAsync(username, email);
-
-        using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
-        var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
-
-        factory.QueueExternalAuthResponse(request =>
-        {
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/token", request.RequestUri?.ToString());
-            var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
-            Assert.Contains($"code={Uri.EscapeDataString("entra-code-existing-user")}", body, StringComparison.Ordinal);
-            Assert.Contains($"redirect_uri={Uri.EscapeDataString(expectedCallbackUri)}", body, StringComparison.Ordinal);
-
-            return CreateJsonResponse(
-                new
-                {
-                    id_token = CreateOidcIdToken(
-                        "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
-                        clientId,
-                        "entra-existing-user",
-                        email,
-                        true,
-                        username),
-                });
-        });
-
-        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-existing-user&state={Uri.EscapeDataString(state)}");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var responseBody = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        var token = new JwtSecurityTokenHandler().ReadJwtToken(responseBody.GetProperty("accessToken").GetString());
-        Assert.Equal(existingUserId.ToString(), token.Subject);
-
-        using var scope = factory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        Assert.True(await dbContext.TenantMemberships.AnyAsync(membership => membership.TenantId == tenantId && membership.UserId == existingUserId));
-        Assert.True(
-            await dbContext.ExternalIdentities.AnyAsync(identity =>
-                identity.TenantId == tenantId
-                && identity.SsoProviderId == providerId
-                && identity.Subject == "entra-existing-user"
-                && identity.UserId == existingUserId));
-    }
-
-    [Fact]
-    public async Task ExternalCallback_WithExistingLocalPasswordAccount_RefusesSilentLink()
+    public async Task ExternalCallback_WithExistingLocalPasswordAccount_AsksForTheConfirmationOfTheLink()
     {
         factory.ResetLicensing();
         factory.ResetExternalAuthResponses();
@@ -564,7 +509,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         await factory.SetLocalPasswordAsync(existingUserId, "S3cure-Local-Password!");
 
         using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+        var (_, state, nonce) = await StartChallengeAsync(client, tenantSlug, providerId);
 
         factory.QueueExternalAuthResponse(_ => CreateJsonResponse(
             new
@@ -575,12 +520,15 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                     "entra-foreign-subject",
                     email,
                     true,
-                    username),
+                    username,
+                    nonce: nonce),
             }));
 
         var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-local-collision&state={Uri.EscapeDataString(state)}");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("link_confirmation_required", body.GetProperty("error").GetString());
 
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
@@ -660,12 +608,12 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
     }
 
     /// <summary>
-    ///     A state that the caller wrote itself carries the right tenant, provider and callback address, but not the
+    ///     A flow that the caller wrote itself carries the right state, tenant and callback address, but not the
     ///     protection of the installation's keys. The callback refuses it before any request to the provider, which
     ///     would fail here because no provider answer is queued.
     /// </summary>
     [Fact]
-    public async Task ExternalCallback_WithAStateWithoutProtection_Returns401AndDoesNotCallProvider()
+    public async Task ExternalCallback_WithAFlowCookieWithoutProtection_Returns401AndDoesNotCallProvider()
     {
         factory.ResetLicensing();
         factory.ResetExternalAuthResponses();
@@ -678,18 +626,24 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
             clientId: "entra-client-id");
         var client = factory.CreateClient();
-        var unprotectedState = JsonSerializer.Serialize(
+        const string state = "written-by-the-caller";
+        var unprotectedFlow = JsonSerializer.Serialize(
             new
             {
+                State = state,
+                Nonce = "written-by-the-caller",
+                CodeVerifier = "written-by-the-caller",
                 TenantSlug = tenantSlug,
                 ProviderId = providerId,
                 CallbackUrl = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug),
                 FrontendReturnUrl = (string?)null,
+                Mode = 0,
                 IssuedAtUtc = DateTimeOffset.UtcNow,
-                Nonce = "written-by-the-caller",
             });
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/auth/external/callback/{tenantSlug}?code=entra-code&state={state}");
+        request.Headers.Add("Cookie", $"meisterpropr_tenant_sign_in={Uri.EscapeDataString(unprotectedFlow)}");
 
-        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code&state={Uri.EscapeDataString(unprotectedState)}");
+        var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -715,7 +669,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
             clientId: "entra-client-id");
         using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+        var (_, state, nonce) = await StartChallengeAsync(client, tenantSlug, providerId);
         factory.QueueExternalAuthResponse(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(tokenAnswer, Encoding.UTF8, "application/json"),
@@ -726,154 +680,6 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("external_identity_rejected", body.RootElement.GetProperty("error").GetString());
-    }
-
-    [Fact]
-    public async Task ExternalCallback_WithMatchingExistingEmailOutsideTenantMembership_AndAutoCreateDisabled_Returns401AndDoesNotCreateIdentity()
-    {
-        factory.ResetLicensing();
-        factory.ResetExternalAuthResponses();
-
-        var tenantSlug = $"acme-{Guid.NewGuid():N}";
-        var username = $"tenant.user.{Guid.NewGuid():N}";
-        var email = $"{username}@acme.test";
-        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
-        const string clientId = "entra-client-id";
-        var providerId = await factory.SeedSsoProviderAsync(
-            tenantId,
-            "Acme Entra",
-            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
-            clientId: clientId,
-            scopes: ["openid", "profile", "email"],
-            autoCreateUsers: false);
-        var existingUserId = await factory.SeedUserAsync(username, email);
-        var otherTenantId = await factory.SeedTenantAsync($"globex-{Guid.NewGuid():N}", "Globex Corp");
-        await factory.SeedTenantMembershipAsync(otherTenantId, existingUserId, TenantRole.TenantUser);
-
-        using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
-        var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
-
-        factory.QueueExternalAuthResponse(request =>
-        {
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/token", request.RequestUri?.ToString());
-            var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
-            Assert.Contains($"code={Uri.EscapeDataString("entra-code-3")}", body, StringComparison.Ordinal);
-            Assert.Contains($"redirect_uri={Uri.EscapeDataString(expectedCallbackUri)}", body, StringComparison.Ordinal);
-
-            return CreateJsonResponse(
-                new
-                {
-                    id_token = CreateOidcIdToken(
-                        "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
-                        clientId,
-                        "entra-user-2",
-                        email,
-                        true,
-                        username),
-                });
-        });
-
-        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-3&state={Uri.EscapeDataString(state)}");
-
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        var responseBody = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("auto_create_disabled", responseBody.GetProperty("error").GetString());
-        Assert.Equal(
-            "First-time sign-in is disabled for this provider. Ask a tenant administrator to enable sign-in for your account.",
-            responseBody.GetProperty("message").GetString());
-
-        using var scope = factory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        Assert.False(
-            await dbContext.ExternalIdentities.AnyAsync(identity =>
-                identity.TenantId == tenantId
-                && identity.SsoProviderId == providerId
-                && identity.Subject == "entra-user-2"));
-    }
-
-    [Fact]
-    public async Task ExternalCallback_WithExistingTenantMemberAndRecreatedProvider_RelinksIdentityAndReturns200()
-    {
-        factory.ResetLicensing();
-        factory.ResetExternalAuthResponses();
-
-        var tenantSlug = $"acme-{Guid.NewGuid():N}";
-        var username = $"tenant.user.{Guid.NewGuid():N}";
-        var email = $"{username}@acme.test";
-        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
-        const string clientId = "entra-client-id";
-        var originalProviderId = await factory.SeedSsoProviderAsync(
-            tenantId,
-            "Acme Entra",
-            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
-            clientId: clientId,
-            scopes: ["openid", "profile", "email"]);
-        var existingUserId = await factory.SeedUserAsync(username, email);
-        await factory.SeedTenantMembershipAsync(tenantId, existingUserId, TenantRole.TenantUser);
-        await factory.SeedExternalIdentityAsync(
-            tenantId,
-            existingUserId,
-            originalProviderId,
-            "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
-            "entra-user-relink",
-            email);
-
-        using (var deleteScope = factory.Services.CreateScope())
-        {
-            var providerService = deleteScope.ServiceProvider.GetRequiredService<ITenantSsoProviderService>();
-            var deleted = await providerService.DeleteAsync(tenantId, originalProviderId, CancellationToken.None);
-            Assert.True(deleted);
-        }
-
-        var recreatedProviderId = await factory.SeedSsoProviderAsync(
-            tenantId,
-            "Acme Entra",
-            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
-            clientId: clientId,
-            scopes: ["openid", "profile", "email"]);
-
-        using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, recreatedProviderId);
-        var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
-
-        factory.QueueExternalAuthResponse(request =>
-        {
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/token", request.RequestUri?.ToString());
-            var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
-            Assert.Contains($"code={Uri.EscapeDataString("entra-code-relink")}", body, StringComparison.Ordinal);
-            Assert.Contains($"redirect_uri={Uri.EscapeDataString(expectedCallbackUri)}", body, StringComparison.Ordinal);
-
-            return CreateJsonResponse(
-                new
-                {
-                    id_token = CreateOidcIdToken(
-                        "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
-                        clientId,
-                        "entra-user-relink",
-                        email,
-                        true,
-                        username),
-                });
-        });
-
-        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-relink&state={Uri.EscapeDataString(state)}");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        var token = new JwtSecurityTokenHandler().ReadJwtToken(body.GetProperty("accessToken").GetString());
-        Assert.Equal(existingUserId.ToString(), token.Subject);
-
-        using var scope = factory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        Assert.True(
-            await dbContext.ExternalIdentities.AnyAsync(identity =>
-                identity.TenantId == tenantId
-                && identity.SsoProviderId == recreatedProviderId
-                && identity.Subject == "entra-user-relink"
-                && identity.UserId == existingUserId));
     }
 
     [Fact]
@@ -894,7 +700,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             scopes: ["openid", "profile", "email"]);
 
         using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+        var (_, state, nonce) = await StartChallengeAsync(client, tenantSlug, providerId);
         var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
 
         factory.QueueExternalAuthResponse(request =>
@@ -914,7 +720,8 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                         "entra-user-3",
                         email,
                         true,
-                        "Intruder"),
+                        "Intruder",
+                        nonce: nonce),
                 });
         });
 
@@ -951,7 +758,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             scopes: ["read:user", "user:email"]);
 
         using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+        var (_, state, nonce) = await StartChallengeAsync(client, tenantSlug, providerId);
         var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
 
         factory.QueueExternalAuthResponse(request =>
@@ -1023,7 +830,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             scopes: ["openid", "profile", "email"]);
 
         using var client = CreateNonRedirectingClient(factory);
-        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+        var (_, state, nonce) = await StartChallengeAsync(client, tenantSlug, providerId);
         var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
 
         factory.QueueExternalAuthResponse(request =>
@@ -1044,7 +851,8 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                         null,
                         null,
                         "Entra User",
-                        email),
+                        email,
+                        nonce: nonce),
                 });
         });
 
@@ -1063,7 +871,11 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                 && identity.EmailVerified));
     }
 
-    private static async Task<(Uri Location, string State)> StartChallengeAsync(HttpClient client, string tenantSlug, Guid providerId)
+    /// <summary>
+    ///     Starts a sign-in in <paramref name="client" />, which keeps the cookie of the challenge for the callback, and
+    ///     returns the state and the nonce that the authorization request carries.
+    /// </summary>
+    private static async Task<(Uri Location, string State, string? Nonce)> StartChallengeAsync(HttpClient client, string tenantSlug, Guid providerId)
     {
         var response = await client.GetAsync($"/auth/external/challenge/{tenantSlug}/{providerId}");
         Assert.Equal(HttpStatusCode.Found, response.StatusCode);
@@ -1071,7 +883,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         var location = response.Headers.Location;
         Assert.NotNull(location);
         var query = QueryHelpers.ParseQuery(location.Query);
-        return (location, GetSingleQueryValue(query, "state"));
+        return (location, GetSingleQueryValue(query, "state"), query.TryGetValue("nonce", out var nonce) ? nonce.ToString() : null);
     }
 
     private static string BuildExpectedCallbackUri(Uri baseAddress, string tenantSlug)
@@ -1104,12 +916,18 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         bool? emailVerified,
         string? displayName,
         string? preferredUsername = null,
-        string? upn = null)
+        string? upn = null,
+        string? nonce = null)
     {
         var claims = new List<Claim>
         {
             new("sub", subject),
         };
+
+        if (nonce is not null)
+        {
+            claims.Add(new Claim("nonce", nonce));
+        }
 
         if (emailVerified.HasValue)
         {

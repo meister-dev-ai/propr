@@ -23,8 +23,8 @@ crawling, and review publication.
 
 Tenant sign-in providers are something else - they only decide how people log in to ProPR. A tenant
 can configure `EntraId`, `Google`, or `GitHub` as an identity provider over `Oidc` or `Oauth2`; see
-[sign-in and sessions](../reference/security.md#sign-in-and-sessions). Configuring one does not give
-ProPR any access to a repository.
+[tenant users and the identity providers of a tenant](../reference/security.md#tenant-users-and-the-identity-providers-of-a-tenant).
+Configuring one does not give ProPR any access to a repository.
 
 ## Support matrix
 

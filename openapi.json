@@ -26248,11 +26248,12 @@
         "tags": [
           "TenantAuth"
         ],
-        "summary": "Starts the tenant-scoped external sign-in flow for the selected provider.",
+        "summary": "Starts the tenant-scoped external sign-in flow for the selected provider. ProPR sends the browser to the provider\nwith a PKCE code challenge, and with a nonce for an OpenID Connect provider, and keeps the state of the sign-in\nin an httpOnly cookie.",
         "parameters": [
           {
             "name": "tenantSlug",
             "in": "path",
+            "description": "The tenant of the provider.",
             "required": true,
             "schema": {
               "type": "string"
@@ -26261,6 +26262,7 @@
           {
             "name": "providerId",
             "in": "path",
+            "description": "The provider to sign in with.",
             "required": true,
             "schema": {
               "type": "string",
@@ -26270,6 +26272,15 @@
           {
             "name": "returnUrl",
             "in": "query",
+            "description": "The frontend page the sign-in returns to. Its origin is the origin of `MEISTER_PUBLIC_BASE_URL`, one of\n`CORS_ORIGINS`, or without `MEISTER_PUBLIC_BASE_URL` the origin of this request. Without it, the\ncallback answers with JSON.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "`signIn`, the default, signs the person in. `link` signs nobody in and keeps the identity as a pending\n                link for the account that is signed in when the person confirms the link; it needs returnUrl.",
             "schema": {
               "type": "string"
             }
@@ -26278,6 +26289,26 @@
         "responses": {
           "302": {
             "description": "Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not Found",
@@ -26327,7 +26358,7 @@
         "tags": [
           "TenantAuth"
         ],
-        "summary": "Completes tenant-scoped external sign-in and returns the shared application session payload.",
+        "summary": "Completes tenant-scoped external sign-in and returns the shared application session payload. The callback\ncompletes a sign-in only in the browser that holds the cookie of its challenge, and accepts each state once.\nWhen an account with the email address of the identity exists and no link of the identity applies, the\ncallback signs nobody in: it keeps the identity as a pending link in an httpOnly cookie and returns to the\nfrontend with `link=pending` in the fragment.",
         "parameters": [
           {
             "name": "tenantSlug",
@@ -26383,6 +26414,358 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TenantAuthSessionDto"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Found"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/external/pending-link": {
+      "get": {
+        "tags": [
+          "TenantAuth"
+        ],
+        "summary": "Returns the tenant sign-in that waits in this browser for the confirmation of its link to an account, or for a\nnew account.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPendingLinkDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPendingLinkDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPendingLinkDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/external/pending-link/confirm": {
+      "post": {
+        "tags": [
+          "TenantAuth"
+        ],
+        "summary": "Links the tenant sign-in that waits in this browser to the account that is signed in. The account receives a\nmembership in the tenant when it has none and the provider admits new members.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSignInLinkConfirmationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSignInLinkConfirmationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSignInLinkConfirmationDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/external/pending-link/new-account": {
+      "post": {
+        "tags": [
+          "TenantAuth"
+        ],
+        "summary": "Creates a new account for the tenant sign-in that waits in this browser and signs it in. The refresh token is\nset as an httpOnly cookie.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantExternalSessionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantExternalSessionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantExternalSessionDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/external/links": {
+      "get": {
+        "tags": [
+          "TenantAuth"
+        ],
+        "summary": "Returns the sign-ins of tenants that are linked to the account that is signed in.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantSignInLinkDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantSignInLinkDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantSignInLinkDto"
+                  }
                 }
               }
             }
@@ -46429,6 +46812,28 @@
         "additionalProperties": false,
         "description": "Tenant boundary data returned by administration and tenant-auth flows."
       },
+      "TenantExternalSessionDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "The access token.",
+            "nullable": true
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "The seconds until the access token expires.",
+            "format": "int32"
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "The type of the access token, `Bearer`.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The access token of a session that a tenant sign-in started. The refresh token is set as an httpOnly cookie."
+      },
       "TenantLocalLoginRequest": {
         "type": "object",
         "properties": {
@@ -46584,6 +46989,47 @@
         "additionalProperties": false,
         "description": "Tenant membership data returned by administration flows."
       },
+      "TenantPendingLinkDto": {
+        "type": "object",
+        "properties": {
+          "tenantSlug": {
+            "type": "string",
+            "description": "The slug of the tenant whose provider confirmed the identity.",
+            "nullable": true
+          },
+          "tenantDisplayName": {
+            "type": "string",
+            "description": "The name of that tenant.",
+            "nullable": true
+          },
+          "providerDisplayName": {
+            "type": "string",
+            "description": "The name of the provider within the tenant.",
+            "nullable": true
+          },
+          "providerLabel": {
+            "type": "string",
+            "description": "The kind of the provider, such as Microsoft, Google or GitHub.",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "description": "The email address that the provider stated for the identity.",
+            "nullable": true
+          },
+          "canCreateAccount": {
+            "type": "boolean",
+            "description": "Whether ProPR can create a new account for the identity."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the pending link expires.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A tenant sign-in whose identity waits in the browser for the confirmation of its link to an account, or for a\nnew account."
+      },
       "TenantProtocolRetentionRequest": {
         "type": "object",
         "properties": {
@@ -46621,6 +47067,61 @@
         ],
         "type": "string",
         "description": "Tenant-scoped authorization role for a tenant membership."
+      },
+      "TenantSignInLinkConfirmationDto": {
+        "type": "object",
+        "properties": {
+          "tenantSlug": {
+            "type": "string",
+            "description": "The slug of the tenant of the provider.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The tenant whose sign-in was linked to the account that is signed in."
+      },
+      "TenantSignInLinkDto": {
+        "type": "object",
+        "properties": {
+          "tenantSlug": {
+            "type": "string",
+            "description": "The slug of the tenant of the provider.",
+            "nullable": true
+          },
+          "tenantDisplayName": {
+            "type": "string",
+            "description": "The name of that tenant.",
+            "nullable": true
+          },
+          "providerDisplayName": {
+            "type": "string",
+            "description": "The name of the provider within the tenant.",
+            "nullable": true
+          },
+          "providerLabel": {
+            "type": "string",
+            "description": "The kind of the provider, such as Microsoft, Google or GitHub.",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "description": "The email address that the provider stated at the last sign-in.",
+            "nullable": true
+          },
+          "linkedAt": {
+            "type": "string",
+            "description": "When the link was made.",
+            "format": "date-time"
+          },
+          "lastSignInAt": {
+            "type": "string",
+            "description": "When the account last signed in through the provider, or null.",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A sign-in through a provider of a tenant that is linked to an account."
       },
       "TenantSpendDto": {
         "type": "object",

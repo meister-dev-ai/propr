@@ -79,7 +79,7 @@ public sealed class PlatformAdminAuthController(
                 "The identity provider for platform administrators cannot be reached. Sign in with a local account or try again later.");
         }
 
-        PlatformAdminSignInCookie.Set(this.Response, challenge.ProtectedFlow, this.Request.IsHttps);
+        ExternalSignInCookie.PlatformAdminFlow.Set(this.Response, challenge.ProtectedFlow, this.Request.IsHttps);
         return ExternalSignInRedirects.RedirectTo(this.Response, providerRedirectUri);
     }
 
@@ -107,8 +107,8 @@ public sealed class PlatformAdminAuthController(
             return refusal;
         }
 
-        var protectedFlow = PlatformAdminSignInCookie.Read(this.Request);
-        PlatformAdminSignInCookie.Clear(this.Response, this.Request.IsHttps);
+        var protectedFlow = ExternalSignInCookie.PlatformAdminFlow.Read(this.Request);
+        ExternalSignInCookie.PlatformAdminFlow.Clear(this.Response, this.Request.IsHttps);
 
         var completion = await signInService!.CompleteSignInAsync(
             this.GetApplicationBaseUri(),
@@ -181,7 +181,7 @@ public sealed class PlatformAdminAuthController(
 
     private Uri? TryResolveReturnUrl(string? returnUrl)
     {
-        return ExternalSignInRedirects.TryResolveAdministratorReturnUrl(
+        return ExternalSignInRedirects.TryResolveUserInterfaceReturnUrl(
             returnUrl,
             this.Request,
             configuration,

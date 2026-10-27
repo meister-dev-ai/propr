@@ -88,6 +88,40 @@ let mockTenants = [
   },
 ]
 
+/** The tenant sign-in that waits for the confirmation of its link in the mock runtime, or null. */
+let mockPendingSignInLink: {
+  tenantSlug: string
+  tenantDisplayName: string
+  providerDisplayName: string
+  providerLabel: string
+  email: string
+  canCreateAccount: boolean
+  expiresAt: string
+} | null = null
+
+/**
+ * Returns the waiting sign-in of the mock runtime, or null once its 15 minutes have passed, as the API refuses an
+ * expired pending link.
+ */
+function currentMockPendingSignInLink() {
+  if (mockPendingSignInLink && Date.parse(mockPendingSignInLink.expiresAt) <= Date.now()) {
+    mockPendingSignInLink = null
+  }
+
+  return mockPendingSignInLink
+}
+
+/** The sign-ins of tenants that the mock runtime lists as linked to the account. */
+let mockSignInLinks: Array<{
+  tenantSlug: string
+  tenantDisplayName: string
+  providerDisplayName: string
+  providerLabel: string
+  email: string
+  linkedAt: string
+  lastSignInAt: string | null
+}> = []
+
 let mockTenantSsoProviders: Record<string, any[]> = {
   'tenant-1': [
     {
@@ -3050,7 +3084,35 @@ export const handlers = [
       return HttpResponse.json({ error: 'Provider not found.' }, { status: 404 })
     }
 
-    const returnUrl = new URL(request.url).searchParams.get('returnUrl')
+    const searchParams = new URL(request.url).searchParams
+    const returnUrl = searchParams.get('returnUrl')
+    const mode = searchParams.get('mode')
+    if (mode !== null && mode !== 'signIn' && mode !== 'link') {
+      return HttpResponse.json({ error: 'invalid_mode', message: 'mode must be signIn or link.' }, { status: 400 })
+    }
+
+    if (mode === 'link' && !returnUrl) {
+      // The API refuses a sign-in that links an account without the page it returns to.
+      return HttpResponse.json(
+        { error: 'return_url_required', message: 'A sign-in that links an account needs the page it returns to.' },
+        { status: 400 },
+      )
+    }
+
+    if (returnUrl && mode === 'link') {
+      // A sign-in that links an account signs nobody in; the sign-in waits for the confirmation of its link.
+      mockPendingSignInLink = {
+        tenantSlug: tenant.slug,
+        tenantDisplayName: tenant.displayName,
+        providerDisplayName: provider.displayName,
+        providerLabel: provider.providerKind === 'EntraId' ? 'Microsoft' : provider.providerKind,
+        email: 'tenant.sso.user@acme.test',
+        canCreateAccount: false,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      }
+      return HttpResponse.redirect(returnUrl)
+    }
+
     if (returnUrl) {
       // Refresh token goes into the cookie, never the fragment; only the access token is in the hash.
       setMockSessionCookie('sso')
@@ -3058,6 +3120,53 @@ export const handlers = [
     }
 
     return HttpResponse.redirect(`${base}/auth/external/callback/${tenant.slug}`)
+  }),
+
+  http.get(`${base}/auth/external/pending-link`, async () => {
+    await delay(120)
+    const pendingSignInLink = currentMockPendingSignInLink()
+    return pendingSignInLink
+      ? HttpResponse.json(pendingSignInLink)
+      : HttpResponse.json({ error: 'pending_link_not_found', message: 'No sign-in is waiting to be linked in this browser.' }, { status: 404 })
+  }),
+
+  http.post(`${base}/auth/external/pending-link/confirm`, async () => {
+    await delay(160)
+    const linked = currentMockPendingSignInLink()
+    if (!linked) {
+      return HttpResponse.json({ error: 'pending_link_not_found', message: 'No sign-in is waiting to be linked in this browser.' }, { status: 404 })
+    }
+
+    mockPendingSignInLink = null
+    mockSignInLinks = [
+      ...mockSignInLinks,
+      {
+        tenantSlug: linked.tenantSlug,
+        tenantDisplayName: linked.tenantDisplayName,
+        providerDisplayName: linked.providerDisplayName,
+        providerLabel: linked.providerLabel,
+        email: linked.email,
+        linkedAt: new Date().toISOString(),
+        lastSignInAt: null,
+      },
+    ]
+    return HttpResponse.json({ tenantSlug: linked.tenantSlug })
+  }),
+
+  http.post(`${base}/auth/external/pending-link/new-account`, async () => {
+    await delay(160)
+    if (!currentMockPendingSignInLink()?.canCreateAccount) {
+      return HttpResponse.json({ error: 'pending_link_not_found', message: 'No sign-in is waiting to be linked in this browser.' }, { status: 404 })
+    }
+
+    mockPendingSignInLink = null
+    setMockSessionCookie('sso')
+    return HttpResponse.json({ accessToken: mockTenantSsoAccessToken, expiresIn: 900, tokenType: 'Bearer' })
+  }),
+
+  http.get(`${base}/auth/external/links`, async () => {
+    await delay(120)
+    return HttpResponse.json(mockSignInLinks)
   }),
 
   http.get(`${base}/auth/external/callback/:tenantSlug`, async ({ params }) => {

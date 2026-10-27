@@ -21,13 +21,6 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
         return record is null ? null : MapToDomain(record);
     }
 
-    public async Task<AppUser?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken ct = default)
-    {
-        var record = await db.AppUsers
-            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, ct);
-        return record is null ? null : MapToDomain(record);
-    }
-
     public async Task<AppUser?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var record = await db.AppUsers.FindAsync([id], ct);
@@ -323,6 +316,7 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
                 Subject = externalIdentity.Subject,
                 Email = externalIdentity.Email,
                 EmailVerified = externalIdentity.EmailVerified,
+                IssuerVerified = externalIdentity.IssuerVerified,
                 CreatedAt = externalIdentity.CreatedAt,
                 LastSignInAt = externalIdentity.LastSignInAt,
             });
@@ -396,6 +390,7 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
             Subject = record.Subject,
             Email = record.Email,
             EmailVerified = record.EmailVerified,
+            IssuerVerified = record.IssuerVerified,
             CreatedAt = record.CreatedAt,
             LastSignInAt = record.LastSignInAt,
         };

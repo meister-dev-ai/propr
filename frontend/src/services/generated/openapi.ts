@@ -18348,15 +18348,31 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Starts the tenant-scoped external sign-in flow for the selected provider. */
+        /**
+         * Starts the tenant-scoped external sign-in flow for the selected provider. ProPR sends the browser to the provider
+         *     with a PKCE code challenge, and with a nonce for an OpenID Connect provider, and keeps the state of the sign-in
+         *     in an httpOnly cookie.
+         */
         get: {
             parameters: {
                 query?: {
+                    /**
+                     * @description The frontend page the sign-in returns to. Its origin is the origin of `MEISTER_PUBLIC_BASE_URL`, one of
+                     *     `CORS_ORIGINS`, or without `MEISTER_PUBLIC_BASE_URL` the origin of this request. Without it, the
+                     *     callback answers with JSON.
+                     */
                     returnUrl?: string;
+                    /**
+                     * @description `signIn`, the default, signs the person in. `link` signs nobody in and keeps the identity as a pending
+                     *                     link for the account that is signed in when the person confirms the link; it needs returnUrl.
+                     */
+                    mode?: string;
                 };
                 header?: never;
                 path: {
+                    /** @description The tenant of the provider. */
                     tenantSlug: string;
+                    /** @description The provider to sign in with. */
                     providerId: string;
                 };
                 cookie?: never;
@@ -18369,6 +18385,17 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
                 /** @description Not Found */
                 404: {
@@ -18409,7 +18436,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Completes tenant-scoped external sign-in and returns the shared application session payload. */
+        /**
+         * Completes tenant-scoped external sign-in and returns the shared application session payload. The callback
+         *     completes a sign-in only in the browser that holds the cookie of its challenge, and accepts each state once.
+         *     When an account with the email address of the identity exists and no link of the identity applies, the
+         *     callback signs nobody in: it keeps the identity as a pending link in an httpOnly cookie and returns to the
+         *     frontend with `link=pending` in the fragment.
+         */
         get: {
             parameters: {
                 query?: {
@@ -18435,6 +18468,295 @@ export interface paths {
                         "text/plain": components["schemas"]["TenantAuthSessionDto"];
                         "application/json": components["schemas"]["TenantAuthSessionDto"];
                         "text/json": components["schemas"]["TenantAuthSessionDto"];
+                    };
+                };
+                /** @description Found */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/pending-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the tenant sign-in that waits in this browser for the confirmation of its link to an account, or for a
+         *     new account.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantPendingLinkDto"];
+                        "application/json": components["schemas"]["TenantPendingLinkDto"];
+                        "text/json": components["schemas"]["TenantPendingLinkDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/pending-link/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Links the tenant sign-in that waits in this browser to the account that is signed in. The account receives a
+         *     membership in the tenant when it has none and the provider admits new members.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantSignInLinkConfirmationDto"];
+                        "application/json": components["schemas"]["TenantSignInLinkConfirmationDto"];
+                        "text/json": components["schemas"]["TenantSignInLinkConfirmationDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/pending-link/new-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creates a new account for the tenant sign-in that waits in this browser and signs it in. The refresh token is
+         *     set as an httpOnly cookie.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantExternalSessionDto"];
+                        "application/json": components["schemas"]["TenantExternalSessionDto"];
+                        "text/json": components["schemas"]["TenantExternalSessionDto"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the sign-ins of tenants that are linked to the account that is signed in. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantSignInLinkDto"][];
+                        "application/json": components["schemas"]["TenantSignInLinkDto"][];
+                        "text/json": components["schemas"]["TenantSignInLinkDto"][];
                     };
                 };
                 /** @description Unauthorized */
@@ -29276,6 +29598,18 @@ export interface components {
             budget?: components["schemas"]["TenantBudgetConfigDto"];
             reviewLimits?: components["schemas"]["TenantReviewLimitsDto"];
         };
+        /** @description The access token of a session that a tenant sign-in started. The refresh token is set as an httpOnly cookie. */
+        TenantExternalSessionDto: {
+            /** @description The access token. */
+            accessToken?: string | null;
+            /**
+             * Format: int32
+             * @description The seconds until the access token expires.
+             */
+            expiresIn?: number;
+            /** @description The type of the access token, `Bearer`. */
+            tokenType?: string | null;
+        };
         /** @description Tenant-local login request payload. */
         TenantLocalLoginRequest: {
             username?: string | null;
@@ -29335,6 +29669,29 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        /**
+         * @description A tenant sign-in whose identity waits in the browser for the confirmation of its link to an account, or for a
+         *     new account.
+         */
+        TenantPendingLinkDto: {
+            /** @description The slug of the tenant whose provider confirmed the identity. */
+            tenantSlug?: string | null;
+            /** @description The name of that tenant. */
+            tenantDisplayName?: string | null;
+            /** @description The name of the provider within the tenant. */
+            providerDisplayName?: string | null;
+            /** @description The kind of the provider, such as Microsoft, Google or GitHub. */
+            providerLabel?: string | null;
+            /** @description The email address that the provider stated for the identity. */
+            email?: string | null;
+            /** @description Whether ProPR can create a new account for the identity. */
+            canCreateAccount?: boolean;
+            /**
+             * Format: date-time
+             * @description When the pending link expires.
+             */
+            expiresAt?: string;
+        };
         /** @description The protocol retention of a tenant. */
         TenantProtocolRetentionRequest: {
             /**
@@ -29359,6 +29716,34 @@ export interface components {
          * @enum {string}
          */
         TenantRole: "tenantUser" | "tenantAdministrator";
+        /** @description The tenant whose sign-in was linked to the account that is signed in. */
+        TenantSignInLinkConfirmationDto: {
+            /** @description The slug of the tenant of the provider. */
+            tenantSlug?: string | null;
+        };
+        /** @description A sign-in through a provider of a tenant that is linked to an account. */
+        TenantSignInLinkDto: {
+            /** @description The slug of the tenant of the provider. */
+            tenantSlug?: string | null;
+            /** @description The name of that tenant. */
+            tenantDisplayName?: string | null;
+            /** @description The name of the provider within the tenant. */
+            providerDisplayName?: string | null;
+            /** @description The kind of the provider, such as Microsoft, Google or GitHub. */
+            providerLabel?: string | null;
+            /** @description The email address that the provider stated at the last sign-in. */
+            email?: string | null;
+            /**
+             * Format: date-time
+             * @description When the link was made.
+             */
+            linkedAt?: string;
+            /**
+             * Format: date-time
+             * @description When the account last signed in through the provider, or null.
+             */
+            lastSignInAt?: string | null;
+        };
         /**
          * @description Response DTO for `GET /admin/tenants/{tenantId}/budget/spend`: the tenant's aggregate USD spend for the
          *     current monthly period plus a trailing per-month trend. Because budgets are configured per client, the caps

@@ -669,6 +669,7 @@ public class TenantAdministrationApiFactory : WebApplicationFactory<Program>
     private readonly Queue<Func<HttpRequestMessage, HttpResponseMessage>> _externalAuthResponses = new();
     private readonly Lock _externalAuthResponsesLock = new();
     private readonly TestLicensingCapabilityService _licensingCapabilityService = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _discoveryIssuers = new(StringComparer.Ordinal);
     private string? _publicBaseUrl;
     private MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication.TenantMachineAuthenticationThrottle? _machineThrottle;
 
@@ -686,6 +687,15 @@ public class TenantAdministrationApiFactory : WebApplicationFactory<Program>
     public void SetPublicBaseUrl(string? publicBaseUrl)
     {
         this._publicBaseUrl = publicBaseUrl;
+    }
+
+    /// <summary>
+    ///     Makes the discovery document at <paramref name="authority" /> name <paramref name="issuer" /> as its issuer, as
+    ///     a server that signs tokens in the name of another issuer does. Without it, the document names the authority.
+    /// </summary>
+    public void SetDiscoveryIssuer(string authority, string issuer)
+    {
+        this._discoveryIssuers[authority.TrimEnd('/')] = issuer;
     }
 
     public void SetSsoCapabilityAvailability(bool isAvailable, string? message = null)
@@ -890,13 +900,15 @@ public class TenantAdministrationApiFactory : WebApplicationFactory<Program>
         string issuer,
         string subject,
         string email,
-        bool emailVerified = true)
+        bool emailVerified = true,
+        bool issuerVerified = false)
     {
         using var scope = this.Services.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         await userRepository.AddExternalIdentityAsync(
             new ExternalIdentity
             {
+                IssuerVerified = issuerVerified,
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 UserId = userId,
@@ -996,12 +1008,13 @@ public class TenantAdministrationApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IOidcTokenValidator>(_ => new OidcTokenValidator(
                 metadataAddress =>
                 {
-                    var issuer = metadataAddress.Replace("/.well-known/openid-configuration", string.Empty, StringComparison.Ordinal);
+                    var authority = metadataAddress.Replace("/.well-known/openid-configuration", string.Empty, StringComparison.Ordinal);
+                    var issuer = this._discoveryIssuers.TryGetValue(authority, out var configuredIssuer) ? configuredIssuer : authority;
                     var configuration = new OpenIdConnectConfiguration
                     {
                         Issuer = issuer,
-                        AuthorizationEndpoint = $"{issuer}/protocol/openid-connect/auth",
-                        TokenEndpoint = $"{issuer}/protocol/openid-connect/token",
+                        AuthorizationEndpoint = $"{authority}/protocol/openid-connect/auth",
+                        TokenEndpoint = $"{authority}/protocol/openid-connect/token",
                     };
                     configuration.SigningKeys.Add(OidcSigningKey);
                     return new StaticConfigurationManager<OpenIdConnectConfiguration>(configuration);

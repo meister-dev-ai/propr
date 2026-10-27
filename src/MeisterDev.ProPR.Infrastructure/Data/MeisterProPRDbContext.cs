@@ -102,6 +102,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Tenant-scoped external identity links.</summary>
     public DbSet<ExternalIdentityRecord> ExternalIdentities => this.Set<ExternalIdentityRecord>();
 
+    /// <summary>The one-time values of external sign-ins that ProPR accepted, kept until they expire.</summary>
+    public DbSet<ExternalSignInRedemptionRecord> ExternalSignInRedemptions => this.Set<ExternalSignInRedemptionRecord>();
+
     /// <summary>Tenant administration audit history.</summary>
     public DbSet<TenantAuditEntryRecord> TenantAuditEntries => this.Set<TenantAuditEntryRecord>();
 

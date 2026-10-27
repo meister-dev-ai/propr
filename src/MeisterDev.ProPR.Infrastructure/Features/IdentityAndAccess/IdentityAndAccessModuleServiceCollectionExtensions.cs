@@ -45,6 +45,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
         services.AddScoped<ITenantAdminService, TenantAdminService>();
         services.AddScoped<ITenantDataLifecycle, TenantDataLifecycle>();
         services.AddScoped<ITenantMachineCredentialStore, EfTenantMachineCredentialStore>();
+        services.AddScoped<ExternalSignInRedemptions>();
 
         services.AddOptions<AccountLockoutOptions>()
             .Configure(options =>

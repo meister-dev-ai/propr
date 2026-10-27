@@ -39,6 +39,14 @@ public sealed class ExternalIdentity
     /// <summary>Whether the external provider verified the reported email.</summary>
     public bool EmailVerified { get; set; }
 
+    /// <summary>
+    ///     Whether a sign-in proved the issuer and subject of this link. For an OpenID Connect provider, ProPR validated
+    ///     the ID token with the keys that the issuer publishes itself. For GitHub, ProPR read the identity from the host
+    ///     that the issuer names. A sign-in through another provider with the same issuer reaches the account of the link
+    ///     only when this is set.
+    /// </summary>
+    public bool IssuerVerified { get; set; }
+
     /// <summary>When the identity link was created.</summary>
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

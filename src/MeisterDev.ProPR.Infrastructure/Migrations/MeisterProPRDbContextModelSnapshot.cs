@@ -5678,6 +5678,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("issuer");
 
+                    b.Property<bool>("IssuerVerified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("issuer_verified");
+
                     b.Property<DateTimeOffset?>("LastSignInAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_sign_in_at");
@@ -5718,6 +5722,26 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_external_identities_tenant_and_provider", "(tenant_id IS NULL) = (sso_provider_id IS NULL)");
                         });
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ExternalSignInRedemptionRecord", b =>
+                {
+                    b.Property<string>("RedemptionKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("redemption_key");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.HasKey("RedemptionKey")
+                        .HasName("pk_external_sign_in_redemptions");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_external_sign_in_redemptions_expires_at");
+
+                    b.ToTable("external_sign_in_redemptions", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.InstallationEditionRecord", b =>

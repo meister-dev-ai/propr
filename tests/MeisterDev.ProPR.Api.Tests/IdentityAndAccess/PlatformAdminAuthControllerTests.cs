@@ -314,8 +314,10 @@ public sealed class PlatformAdminAuthControllerTests(PlatformAdminSsoApiFactory 
             clientId: "entra-client-id");
         using var tenantBrowser = factory.CreateBrowser();
         var challenge = await tenantBrowser.GetAsync($"/auth/external/challenge/{tenantSlug}/{providerId}");
-        var state = Single(QueryHelpers.ParseQuery(challenge.Headers.Location!.Query), "state");
-        factory.QueueExternalAuthResponse(_ => Json(new { id_token = TenantIdToken(tenantIssuer, email) }));
+        var challengeQuery = QueryHelpers.ParseQuery(challenge.Headers.Location!.Query);
+        var state = Single(challengeQuery, "state");
+        var tenantNonce = Single(challengeQuery, "nonce");
+        factory.QueueExternalAuthResponse(_ => Json(new { id_token = TenantIdToken(tenantIssuer, email, tenantNonce) }));
 
         var tenantSignIn = await tenantBrowser.GetAsync($"/auth/external/callback/{tenantSlug}?code=tenant-code&state={Uri.EscapeDataString(state)}");
 
@@ -626,12 +628,12 @@ public sealed class PlatformAdminAuthControllerTests(PlatformAdminSsoApiFactory 
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(payload) };
     }
 
-    private static string TenantIdToken(string issuer, string email)
+    private static string TenantIdToken(string issuer, string email, string nonce)
     {
         var token = new JwtSecurityToken(
             issuer,
             "entra-client-id",
-            [new("sub", $"entra-{Guid.NewGuid():N}"), new("email", email), new("email_verified", "true")],
+            [new("sub", $"entra-{Guid.NewGuid():N}"), new("email", email), new("email_verified", "true"), new("nonce", nonce)],
             notBefore: DateTime.UtcNow.AddMinutes(-5),
             expires: DateTime.UtcNow.AddMinutes(5),
             signingCredentials: TenantAdministrationApiFactory.OidcSigningCredentials);

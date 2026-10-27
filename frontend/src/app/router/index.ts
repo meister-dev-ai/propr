@@ -6,6 +6,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteLocationNormalizedGeneric, RouteLocationRaw, RouteRecordRaw } from 'vue-router'
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
+import { takePendingLinkConfirmation } from '@/features/auth/pendingSignInLink'
 
 /** The tenant pages that became sections, by the route name each kept and the section it now opens. */
 const TENANT_SECTION_ROUTE_NAMES = {
@@ -33,6 +34,12 @@ const router = createRouter({
         const { isAuthenticated, isAdmin, clientRoles, tenantRoles, isCapabilityAvailable } = useSession()
         if (!isAuthenticated.value) {
           return { name: 'login' }
+        }
+
+        // A person who chose to link a waiting tenant sign-in to an existing account signed in to that account, and
+        // confirms the link next.
+        if (takePendingLinkConfirmation()) {
+          return { name: 'sign-in-link' }
         }
 
         const hasAnyAdminRole = isAdmin.value || Object.values(clientRoles.value).some((role) => role >= RoleLevel.Administrator)
@@ -118,6 +125,13 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('@/features/settings/views/SettingsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      // The confirmation of a link between a tenant sign-in that waits in this browser and the account that is signed in.
+      path: '/settings/sign-in-link',
+      name: 'sign-in-link',
+      component: () => import('@/features/settings/views/SignInLinkConfirmationView.vue'),
       meta: { requiresAuth: true },
     },
     {

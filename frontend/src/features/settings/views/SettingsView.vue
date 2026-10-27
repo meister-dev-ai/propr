@@ -21,6 +21,15 @@
           >
             <i class="fi fi-rr-key"></i> Personal Access Tokens
           </button>
+          <button
+            v-if="showSignInLinks"
+            data-testid="settings-sign-in-links-tab"
+            class="sidebar-nav-link"
+            :class="{ active: activeTab === 'sign-ins' }"
+            @click="activeTab = 'sign-ins'"
+          >
+            <i class="fi fi-rr-link"></i> Single sign-on
+          </button>
         </div>
       </div>
     </aside>
@@ -92,17 +101,26 @@
       <div v-show="activeTab === 'pats'">
         <PatsView />
       </div>
+
+      <div v-if="showSignInLinks && activeTab === 'sign-ins'">
+        <SignInLinksPanel />
+      </div>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useSession } from '@/composables/useSession'
 import { useSettingsViewModel } from '@/features/settings/view-models/useSettingsViewModel'
 import PatsView from '@/features/pats/views/PatsView.vue'
+import SignInLinksPanel from '@/features/settings/components/SignInLinksPanel.vue'
 
 const vm = useSettingsViewModel()
-const activeTab = ref<'profile' | 'pats'>('profile')
+const { isCapabilityAvailable } = useSession()
+const activeTab = ref<'profile' | 'pats' | 'sign-ins'>('profile')
+// The sign-ins of tenants exist with single sign-on only.
+const showSignInLinks = computed(() => isCapabilityAvailable('sso-authentication'))
 </script>
 
 <style scoped>

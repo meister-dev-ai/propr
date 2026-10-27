@@ -21,6 +21,11 @@ export interface SignInCallbackFragment {
   error: string | null
   /** What the person signing in reads about a refused sign-in. */
   message: string | null
+  /**
+   * True when the sign-in waits for the confirmation of its link to an account. The API keeps the waiting sign-in in
+   * an httpOnly cookie and reports it with `link=pending`.
+   */
+  pendingLink: boolean
 }
 
 function toOptionalNumber(value: string | null): number | undefined {
@@ -44,6 +49,7 @@ export function readSignInCallbackFragment(hash: string): SignInCallbackFragment
       : null,
     error: fragment.get('error'),
     message: fragment.get('message'),
+    pendingLink: fragment.get('link') === 'pending',
   }
 }
 

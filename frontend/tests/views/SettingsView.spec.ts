@@ -8,6 +8,7 @@ import { ref } from 'vue'
 const mockChangeMyPassword = vi.fn()
 const mockRouterPush = vi.fn()
 const hasLocalPassword = ref(true)
+const ssoAvailable = ref(false)
 
 vi.mock('@/services/userSecurityService', () => ({
   changeMyPassword: mockChangeMyPassword,
@@ -33,7 +34,14 @@ vi.mock('@/composables/useSession', () => ({
     edition: ref('community'),
     capabilities: ref([]),
     setLicensingState: vi.fn(),
+    isCapabilityAvailable: (key: string) => key === 'sso-authentication' && ssoAvailable.value,
   }),
+}))
+
+vi.mock('@/services/tenantAuthService', async () => ({
+  ...(await vi.importActual<typeof import('@/services/tenantAuthService')>('@/services/tenantAuthService')),
+  listTenantSignInLinks: vi.fn(async () => []),
+  getPendingTenantSignInLink: vi.fn(async () => null),
 }))
 
 vi.mock('vue-router', () => ({
@@ -44,6 +52,24 @@ describe('SettingsView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     hasLocalPassword.value = true
+    ssoAvailable.value = false
+  })
+
+  it('offers the linked sign-ins of tenants when the licence grants single sign-on', async () => {
+    ssoAvailable.value = true
+    const { default: SettingsView } = await import('@/features/settings/views/SettingsView.vue')
+    const wrapper = mount(SettingsView)
+
+    await wrapper.get('[data-testid="settings-sign-in-links-tab"]').trigger('click')
+
+    expect(wrapper.text()).toContain('Link a sign-in of a tenant')
+  })
+
+  it('offers no single sign-on settings without the licence', async () => {
+    const { default: SettingsView } = await import('@/features/settings/views/SettingsView.vue')
+    const wrapper = mount(SettingsView)
+
+    expect(wrapper.find('[data-testid="settings-sign-in-links-tab"]').exists()).toBe(false)
   })
 
   it('renders the current username from the session token', async () => {

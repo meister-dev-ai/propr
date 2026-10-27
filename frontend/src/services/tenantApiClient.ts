@@ -50,15 +50,43 @@ export function buildTenantLocalLoginPath(tenantSlug: string): string {
   return `/auth/tenants/${encodeURIComponent(tenantSlug)}/local-login`
 }
 
-export function buildTenantExternalChallengePath(tenantSlug: string, providerId: string, returnUrl?: string): string {
+/**
+ * What a sign-in through a provider of a tenant does: `signIn` signs the person in, and `link` signs nobody in and keeps
+ * the sign-in waiting until the account that is signed in confirms its link.
+ */
+export type TenantExternalSignInMode = 'signIn' | 'link'
+
+export function buildTenantExternalChallengePath(
+  tenantSlug: string,
+  providerId: string,
+  returnUrl?: string,
+  mode: TenantExternalSignInMode = 'signIn',
+): string {
   const path = `/auth/external/challenge/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(providerId)}`
-  if (!returnUrl) {
-    return resolveTenantApiUrl(path)
+  const query = new URLSearchParams()
+  if (returnUrl) {
+    query.set('returnUrl', returnUrl)
   }
 
-  const query = new URLSearchParams({ returnUrl })
-  return resolveTenantApiUrl(`${path}?${query.toString()}`)
+  if (mode === 'link') {
+    query.set('mode', 'link')
+  }
+
+  const queryText = query.toString()
+  return resolveTenantApiUrl(queryText ? `${path}?${queryText}` : path)
 }
+
+/** The tenant sign-in that waits in this browser for the confirmation of its link, kept in an httpOnly cookie. */
+export const tenantPendingLinkPath = '/auth/external/pending-link'
+
+/** Links the waiting tenant sign-in to the account that is signed in. */
+export const tenantPendingLinkConfirmationPath = '/auth/external/pending-link/confirm'
+
+/** Creates a new account for the waiting tenant sign-in. */
+export const tenantPendingLinkNewAccountPath = '/auth/external/pending-link/new-account'
+
+/** The sign-ins of tenants that are linked to the account that is signed in. */
+export const tenantSignInLinksPath = '/auth/external/links'
 
 export function buildTenantExternalCallbackPath(tenantSlug: string): string {
   return resolveTenantApiUrl(`/auth/external/callback/${encodeURIComponent(tenantSlug)}`)

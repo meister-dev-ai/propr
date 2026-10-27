@@ -217,4 +217,24 @@ describe('tenant router scaffolding', () => {
 
     expect(router.currentRoute.value.name).toBe('access-denied')
   })
+
+  it('opens the confirmation of a waiting sign-in link once after the person signed in to the existing account', async () => {
+    isAuthenticated.value = true
+    const { rememberPendingLinkConfirmation } = await import('@/features/auth/pendingSignInLink')
+    rememberPendingLinkConfirmation()
+    const router = await importRouter()
+    const home = router.getRoutes().find((candidate) => candidate.name === 'home')
+    const redirect = home?.redirect as (() => unknown) | undefined
+
+    expect(redirect?.()).toEqual({ name: 'sign-in-link' })
+    expect(redirect?.()).toEqual({ name: 'reviews' })
+  })
+
+  it('protects the confirmation of a sign-in link with authentication', async () => {
+    const router = await importRouter()
+    const route = router.getRoutes().find((candidate) => candidate.name === 'sign-in-link')
+
+    expect(route?.path).toBe('/settings/sign-in-link')
+    expect(route?.meta.requiresAuth).toBe(true)
+  })
 })

@@ -13,9 +13,6 @@ public interface IUserRepository
     /// <summary>Returns a user by username (case-insensitive), or null.</summary>
     Task<AppUser?> GetByUsernameAsync(string username, CancellationToken ct = default);
 
-    /// <summary>Returns a user by normalized email, or null when no such user exists.</summary>
-    Task<AppUser?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken ct = default);
-
     /// <summary>Returns a user by id, or null.</summary>
     Task<AppUser?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
