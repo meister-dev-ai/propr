@@ -4,6 +4,9 @@
 import { onMounted, ref, type Ref } from 'vue'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import { useSession } from '@/composables/useSession'
+import type { components } from '@/services/generated/openapi'
+
+type PatPolicy = components['schemas']['PatPolicyResponse']
 
 export interface PatItem {
   id: string
@@ -16,11 +19,17 @@ export interface PatItem {
 
 export interface PatsService {
   list: (headers: Record<string, string>) => Promise<PatItem[]>
-  create: (headers: Record<string, string>, body: { label: string; expiresAt?: string }) => Promise<{ token: string }>
+  policy: (headers: Record<string, string>) => Promise<PatPolicy>
+  create: (headers: Record<string, string>, body: { label: string; expiresAt?: string }) => Promise<{ token: string; expiresAt?: string | null }>
   revoke: (headers: Record<string, string>, id: string) => Promise<void>
 }
 
 const defaultService: PatsService = {
+  async policy(headers) {
+    const res = await fetch(`${getActiveRuntime().apiBaseUrl}/users/me/pats/policy`, { headers })
+    if (!res.ok) throw new Error(await res.text())
+    return (await res.json()) as PatPolicy
+  },
   async list(headers) {
     const res = await fetch(`${getActiveRuntime().apiBaseUrl}/users/me/pats`, { headers })
     if (!res.ok) throw new Error(await res.text())
@@ -33,7 +42,7 @@ const defaultService: PatsService = {
       body: JSON.stringify(body),
     })
     if (!res.ok) throw new Error(await res.text())
-    return (await res.json()) as { token: string }
+    return (await res.json()) as { token: string; expiresAt?: string | null }
   },
   async revoke(headers, id) {
     await fetch(`${getActiveRuntime().apiBaseUrl}/users/me/pats/${id}`, { method: 'DELETE', headers })
@@ -48,6 +57,9 @@ export interface PatsViewModel {
   creating: Ref<boolean>
   createError: Ref<string>
   generatedToken: Ref<string>
+  generatedTokenExpiresAt: Ref<string | null>
+  maximumLifetimeDays: Ref<number | null>
+  policyError: Ref<string>
   newLabel: Ref<string>
   newExpires: Ref<string>
   revoking: Ref<string | null>
@@ -85,6 +97,9 @@ export function usePatsViewModel(options: UsePatsViewModelOptions = {}): PatsVie
   const creating = ref(false)
   const createError = ref('')
   const generatedToken = ref('')
+  const generatedTokenExpiresAt = ref<string | null>(null)
+  const maximumLifetimeDays = ref<number | null>(null)
+  const policyError = ref('')
   const newLabel = ref('')
   const newExpires = ref('')
   const revoking = ref<string | null>(null)
@@ -97,8 +112,17 @@ export function usePatsViewModel(options: UsePatsViewModelOptions = {}): PatsVie
   async function loadPats(): Promise<void> {
     loading.value = true
     loadError.value = ''
+    policyError.value = ''
     try {
-      pats.value = await service.list(authHeaders())
+      const headers = authHeaders()
+      const [tokens, policy] = await Promise.allSettled([service.list(headers), service.policy(headers)])
+      if (tokens.status === 'fulfilled') pats.value = tokens.value
+      else loadError.value = String(tokens.reason)
+      if (policy.status === 'fulfilled') maximumLifetimeDays.value = policy.value.maximumLifetimeDays ?? null
+      else {
+        maximumLifetimeDays.value = null
+        policyError.value = 'Could not load the token lifetime policy. New tokens still use the installation limit.'
+      }
     } catch (err) {
       loadError.value = String(err)
     } finally {
@@ -118,6 +142,7 @@ export function usePatsViewModel(options: UsePatsViewModelOptions = {}): PatsVie
       if (newExpires.value) body.expiresAt = new Date(newExpires.value).toISOString()
       const result = await service.create(authHeaders(), body)
       generatedToken.value = result.token
+      generatedTokenExpiresAt.value = result.expiresAt ?? null
       newLabel.value = ''
       newExpires.value = ''
       await loadPats()
@@ -140,6 +165,7 @@ export function usePatsViewModel(options: UsePatsViewModelOptions = {}): PatsVie
 
   function dismissGeneratedToken(): void {
     generatedToken.value = ''
+    generatedTokenExpiresAt.value = null
   }
 
   async function copyGeneratedToken(): Promise<void> {
@@ -160,6 +186,9 @@ export function usePatsViewModel(options: UsePatsViewModelOptions = {}): PatsVie
     creating,
     createError,
     generatedToken,
+    generatedTokenExpiresAt,
+    maximumLifetimeDays,
+    policyError,
     newLabel,
     newExpires,
     revoking,

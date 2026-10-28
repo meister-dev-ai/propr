@@ -56,6 +56,19 @@ provider or model calls. [Code Insights](architecture/code-insights.md) defines 
 | Credentials and tenant isolation | [Security](reference/security.md) |
 | Durable deployment state and backups | [Upgrades and backups](operate/upgrades-and-backups.md) |
 
+## Installation authentication
+
+The Identity and Access module owns the installation sign-in policy. Its options disable password sign-in
+and tenant identity providers across authentication and account administration endpoints. Authentication
+options expose the allowed methods to the frontend. Startup validation requires a configured, licensed
+platform administrator provider when password sign-in is disabled. Administrators create personal access tokens
+through the authenticated token management endpoints, including after SSO sign-in.
+
+The user token repository applies the configured lifetime to creation, listing and authentication. It identifies
+provisioned accounts from durable provisioning records and exempts stored platform administrator roles. Existing
+tokens use their creation time and the current policy without rewriting stored expiry dates. The token policy
+endpoint exposes the current user's limit to the account settings page.
+
 ## SCM configuration
 
 The API owns request bounds, egress checks, caller authorization and licensing guards.

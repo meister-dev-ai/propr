@@ -18,6 +18,9 @@
         <div v-if="vm.generatedToken.value" class="token-reveal">
           <p><strong>Copy this token now — it will not be shown again.</strong></p>
           <code>{{ vm.generatedToken.value }}</code>
+          <p v-if="vm.generatedTokenExpiresAt.value" data-testid="generated-token-expiry">
+            Expires: {{ vm.formatDate(vm.generatedTokenExpiresAt.value) }}
+          </p>
           <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
             <button class="btn-primary" @click="vm.copyGeneratedToken">Copy</button>
             <button class="btn-secondary" @click="vm.dismissGeneratedToken">Dismiss</button>
@@ -25,6 +28,11 @@
         </div>
 
         <form v-else class="token-create-form" @submit.prevent="vm.createToken">
+          <p v-if="vm.policyError.value" role="alert">{{ vm.policyError.value }}</p>
+          <p v-if="vm.maximumLifetimeDays.value !== null">
+            Tokens expire after at most {{ vm.maximumLifetimeDays.value }} days. Leave the date empty to use this limit,
+            or choose an earlier expiry. Later dates are reduced to the limit.
+          </p>
           <div class="token-fields-grid">
             <div class="form-field">
               <label for="pat-label">Label</label>

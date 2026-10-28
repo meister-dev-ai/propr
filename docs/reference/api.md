@@ -48,6 +48,10 @@ issued as an httpOnly cookie, not in the body. Send `Authorization: Bearer <acce
 requests. `POST /api/auth/refresh` reads that cookie and returns a new access token. It accepts a
 `refreshToken` field in the request body as a fallback for callers that cannot hold cookies.
 
+An installation that turns off the password sign-in answers `POST /api/auth/login` with `409` for every account; see
+[installation sign-in policy](#installation-sign-in-policy). Scripts on such an installation
+authenticate with a personal access token.
+
 `GET /api/auth/me` returns the caller's global role, per-client and per-tenant roles, the installation
 edition, and the state of every licensed capability.
 
@@ -63,8 +67,9 @@ curl -k -X POST https://localhost:5443/api/users/me/pats \
   -d '{"label": "ci-pipeline", "expiresAt": "2027-01-01T00:00:00Z"}'
 ```
 
-`label` is required; `expiresAt` is optional. The plaintext `token` is returned once and cannot be
-retrieved again. Send it in place of the bearer header:
+`label` is required; `expiresAt` is optional and must be in the future when supplied. An expired date returns
+`400` without creating a token. The plaintext `token` is returned once and cannot be retrieved again. Send it in
+place of the bearer header:
 
 ```bash
 curl -k https://localhost:5443/api/clients \
@@ -73,6 +78,11 @@ curl -k https://localhost:5443/api/clients \
 
 List tokens with `GET /api/users/me/pats` and revoke one with `DELETE /api/users/me/pats/<pat-id>`. What
 a PAT can do, and how it is stored, is in [automation credentials](security.md#automation-credentials).
+Administrators can sign in through SSO and create a token under **Settings → Personal Access Tokens**.
+
+`GET /api/users/me/pats/policy` returns `maximumLifetimeDays` for the authenticated user. A null value means no
+installation lifetime limit applies. Token creation and listing return the effective `expiresAt`, including the
+limit for provisioned users. If a request omits the expiry or selects a later date, ProPR uses the limit.
 
 ## Tenant machine credentials
 
@@ -125,6 +135,23 @@ curl -k -X PUT "https://localhost:5443/api/admin/tenants/<tenant-id>/provisioned
 
 The person signs in through the button on `/login`, which opens `GET /api/auth/provisioned-user/challenge` with the
 page to return to in `returnUrl`.
+
+## Installation sign-in policy
+
+These endpoints answer differently while the installation turns off the password sign-in
+(`MEISTER_LOCAL_SIGN_IN_ENABLED=false`) or the identity providers of tenants (`MEISTER_TENANT_SSO_ENABLED=false`); see
+[installation sign-in policy](../operate/configuration.md#installation-sign-in-policy).
+
+| Setting | Request | Outcome |
+|---|---|---|
+| `MEISTER_LOCAL_SIGN_IN_ENABLED=false` | `POST /api/auth/login` | ProPR answers `409` with `local_sign_in_disabled` in `code` for every account and checks no password. |
+| `MEISTER_LOCAL_SIGN_IN_ENABLED=false` | `POST /api/auth/tenants/{tenantSlug}/local-login` | ProPR answers `409` with `local_sign_in_disabled` in `error` for every account, also in a tenant that allows local login. |
+| `MEISTER_LOCAL_SIGN_IN_ENABLED=false` | `POST /api/users/me/password` | ProPR answers `409` with `local_sign_in_disabled` in `code` and keeps the password. |
+| `MEISTER_LOCAL_SIGN_IN_ENABLED=false` | `POST /api/admin/users` | ProPR answers `409` with `local_sign_in_disabled` in `code` and creates no account. |
+| `MEISTER_LOCAL_SIGN_IN_ENABLED=false` | `GET /api/auth/options` and `GET /api/auth/tenants/{tenantSlug}/providers` | ProPR lists no `password` in `availableSignInMethods` and answers `localLoginEnabled` with `false`. |
+| `MEISTER_TENANT_SSO_ENABLED=false` | `GET /api/auth/external/challenge/{tenantSlug}/{providerId}`, `GET /api/auth/external/callback/{tenantSlug}`, `GET /api/auth/external/pending-link`, `POST /api/auth/external/pending-link/confirm`, `POST /api/auth/external/pending-link/new-account` and `GET /api/auth/external/links` | ProPR answers `409` with `tenant_sso_disabled` in `error`. |
+| `MEISTER_TENANT_SSO_ENABLED=false` | `POST /api/admin/tenants/{tenantId}/sso-providers`, and `PUT /api/admin/tenants/{tenantId}/sso-providers/{providerId}` with `isEnabled` set to `true` | ProPR answers `409` with `tenant_sso_disabled` in `error` and changes no provider. Reading, disabling and deleting a provider work as before. |
+| `MEISTER_TENANT_SSO_ENABLED=false` | `GET /api/auth/options` and `GET /api/auth/tenants/{tenantSlug}/providers` | ProPR lists no `sso` in `availableSignInMethods` and answers with an empty `providers` list. |
 
 ## Platform administrator elevations
 

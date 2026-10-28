@@ -12,10 +12,12 @@ using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.UsageStatistics.Services;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
@@ -31,15 +33,34 @@ public sealed class AuthController(
     IJwtTokenService jwtTokenService,
     IAccountLockoutService accountLockoutService,
     SessionPolicy sessionPolicy,
+    IOptions<InstallationSignInOptions> signInOptions,
     ILicensingCapabilityService? licensingCapabilityService = null,
     UsageStatisticsService? usageStatisticsService = null) : ControllerBase
 {
-    /// <summary>Authenticate with username and password; returns a JWT access token and refresh token.</summary>
+    /// <summary>
+    ///     Authenticate with username and password; returns a JWT access token and refresh token. An installation that
+    ///     turns off the password sign-in answers <c>409</c> with the code <c>local_sign_in_disabled</c> for every
+    ///     account and checks no password.
+    /// </summary>
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpPost("login")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
+        if (!signInOptions.Value.LocalSignInEnabled)
+        {
+            return this.Conflict(
+                new
+                {
+                    error = LocalSignInRefusal.SignInMessage,
+                    code = LocalSignInRefusal.Code,
+                });
+        }
+
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
         {
             return this.BadRequest(new { error = "Username and password are required." });

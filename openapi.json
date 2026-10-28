@@ -3408,7 +3408,7 @@
         "tags": [
           "AdminUsers"
         ],
-        "summary": "Creates a new application user.",
+        "summary": "Creates a new application user with a password. While the installation turns off the password sign-in, ProPR\nanswers `409` with the code `local_sign_in_disabled` and creates no account.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3451,7 +3451,7 @@
         "tags": [
           "AdminUsers"
         ],
-        "summary": "Creates a new application user.",
+        "summary": "Creates a new application user with a password. While the installation turns off the password sign-in, ProPR\nanswers `409` with the code `local_sign_in_disabled` and creates no account.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4793,7 +4793,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Authenticate with username and password; returns a JWT access token and refresh token.",
+        "summary": "Authenticate with username and password; returns a JWT access token and refresh token. An installation that\nturns off the password sign-in answers `409` with the code `local_sign_in_disabled` for every\naccount and checks no password.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4816,6 +4816,66 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -4920,7 +4980,7 @@
         "tags": [
           "AuthOptions"
         ],
-        "summary": "Returns public sign-in options and edition-aware capability messaging.",
+        "summary": "Returns public sign-in options and edition-aware capability messaging. `availableSignInMethods` contains\n`password` while the installation offers the password sign-in, and `sso` while the license grants\nsingle sign-on and the installation offers the identity providers of tenants.",
         "responses": {
           "200": {
             "description": "OK",
@@ -26870,7 +26930,7 @@
         "tags": [
           "TenantAuth"
         ],
-        "summary": "Returns the visible login options for one tenant sign-in route.",
+        "summary": "Returns the visible login options for one tenant sign-in route. `localLoginEnabled` is\nfalse while the installation turns off the password sign-in, whatever the tenant allows, and\n`providers` is empty while the installation turns off the identity providers of tenants.",
         "parameters": [
           {
             "name": "tenantSlug",
@@ -26930,7 +26990,7 @@
         "tags": [
           "TenantAuth"
         ],
-        "summary": "Signs a tenant user in with local credentials when tenant policy allows it.",
+        "summary": "Signs a tenant user in with local credentials when tenant policy allows it. While the installation turns off\nthe password sign-in, ProPR answers `409` with `local_sign_in_disabled` for every account, whatever\nthe tenant allows, and checks no password.",
         "parameters": [
           {
             "name": "tenantSlug",
@@ -27003,6 +27063,26 @@
           },
           "401": {
             "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "text/plain": {
                 "schema": {
@@ -32320,8 +32400,9 @@
         "tags": [
           "UserPats"
         ],
-        "summary": "Generates a new PAT for the current user. Returns the plaintext token once.",
+        "summary": "Creates a token with the earlier of the requested expiry and the current user's lifetime limit.",
         "requestBody": {
+          "description": "The token label and optional expiry. An omitted expiry uses the user's lifetime limit.",
           "content": {
             "application/json": {
               "schema": {
@@ -32342,7 +32423,13 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "The token and its effective expiry. The plaintext token is returned once."
+          },
+          "400": {
+            "description": "The label is missing or the requested expiry is not in the future."
+          },
+          "401": {
+            "description": "The request is not authenticated."
           }
         }
       },
@@ -32350,10 +32437,46 @@
         "tags": [
           "UserPats"
         ],
-        "summary": "Lists PATs for the current user (hashes are never returned).",
+        "summary": "Lists active tokens for the current user with their effective expiry and without their hashes.",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "The active tokens, including any installation lifetime limit in their expiry."
+          },
+          "401": {
+            "description": "The request is not authenticated."
+          }
+        }
+      }
+    },
+    "/users/me/pats/policy": {
+      "get": {
+        "tags": [
+          "UserPats"
+        ],
+        "summary": "Returns the maximum lifetime of tokens created by the current user.",
+        "responses": {
+          "200": {
+            "description": "The lifetime limit, or null when no limit applies to the user.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatPolicyResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatPolicyResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatPolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The request is not authenticated."
           }
         }
       }
@@ -32451,6 +32574,26 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The installation turns off the password sign-in, so ProPR changes no password.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -32507,6 +32650,26 @@
           },
           "401": {
             "description": "Authentication is missing, invalid, or the current password is incorrect.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The installation turns off the password sign-in, so ProPR changes no password.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -33942,7 +34105,7 @@
             "items": {
               "type": "string"
             },
-            "description": "The sign-in methods the installation offers.",
+            "description": "The sign-in methods the installation offers: `password` while the installation offers the password sign-in,\nand `sso` while the license grants single sign-on and the installation offers the identity providers of\ntenants.",
             "nullable": true
           },
           "capabilities": {
@@ -39705,6 +39868,19 @@
         },
         "additionalProperties": false,
         "description": "A closed range assigned to the generation pass, independent of its tool reads."
+      },
+      "PatPolicyResponse": {
+        "type": "object",
+        "properties": {
+          "maximumLifetimeDays": {
+            "type": "integer",
+            "description": "The maximum number of days after creation, or null when no limit applies.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The maximum token lifetime that applies to the authenticated user."
       },
       "PatchAdminCrawlConfigRequest": {
         "type": "object",

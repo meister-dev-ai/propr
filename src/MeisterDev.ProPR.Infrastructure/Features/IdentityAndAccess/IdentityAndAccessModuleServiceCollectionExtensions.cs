@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Application.Features.TenantData;
+using System.Globalization;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Features.IdentityAndAccess.Authentication.Ports;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Authentication.Persistence;
@@ -98,6 +99,43 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
             })
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<ProvisionedUserSsoOptions>>(new ProvisionedUserSsoOptionsValidator(isDevelopment));
+
+        services.AddOptions<ProvisionedUserPatOptions>()
+            .Configure(options =>
+            {
+                var setting = configuration[ProvisionedUserPatOptions.MaximumDaysKey];
+                if (setting is null)
+                {
+                    return;
+                }
+
+                if (!int.TryParse(setting, NumberStyles.Integer, CultureInfo.InvariantCulture, out var maximumDays))
+                {
+                    throw new OptionsValidationException(
+                        Microsoft.Extensions.Options.Options.DefaultName,
+                        typeof(ProvisionedUserPatOptions),
+                        [$"{ProvisionedUserPatOptions.MaximumDaysKey} must be a whole number from 1 to 3650, or unset for no limit."]);
+                }
+
+                options.MaximumDays = maximumDays;
+            })
+            .Validate(
+                options => options.MaximumDays is null or >= 1 and <= 3650,
+                $"{ProvisionedUserPatOptions.MaximumDaysKey} must be a whole number from 1 to 3650, or unset for no limit.")
+            .ValidateOnStart();
+
+        // The sign-ins that the installation turns off, checked at startup like the identity providers. A value that is
+        // not true or false stops the start; an unset value keeps the sign-in on.
+        services.AddOptions<InstallationSignInOptions>()
+            .Configure(options =>
+            {
+                options.LocalSignInEnabled =
+                    InstallationSignInOptionsValidator.ReadSwitch(configuration, InstallationSignInOptions.LocalSignInEnabledKey) ?? true;
+                options.TenantSsoEnabled =
+                    InstallationSignInOptionsValidator.ReadSwitch(configuration, InstallationSignInOptions.TenantSsoEnabledKey) ?? true;
+            })
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<InstallationSignInOptions>>(new InstallationSignInOptionsValidator(configuration));
 
         // Every request to an identity provider goes through this client: discovery, keys, token requests and the
         // user lookups of GitHub. Outside Development it uses https only, because a token request carries the client

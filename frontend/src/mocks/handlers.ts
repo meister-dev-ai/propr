@@ -4534,6 +4534,8 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
+  http.get(`${base}/users/me/pats/policy`, () => HttpResponse.json({ maximumLifetimeDays: null })),
+
   http.get(`${base}/users/me/pats`, async () => {
     await delay(200)
     return HttpResponse.json([

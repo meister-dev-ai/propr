@@ -78,6 +78,11 @@ internal static class RowByRowRevocations
 
     private sealed class Pats(MeisterProPRDbContext database, UserPatRepository repository) : IUserPatRepository
     {
+        public Task<int?> GetMaximumLifetimeDaysAsync(Guid userId, CancellationToken ct = default)
+        {
+            return repository.GetMaximumLifetimeDaysAsync(userId, ct);
+        }
+
         public Task AddAsync(UserPat pat, CancellationToken ct = default)
         {
             return repository.AddAsync(pat, ct);

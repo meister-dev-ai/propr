@@ -7,19 +7,27 @@ using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Api.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 
-/// <summary>Administrative CRUD endpoints for tenant-owned SSO providers.</summary>
+/// <summary>
+///     Administrative CRUD endpoints for tenant-owned SSO providers. While the installation turns off the identity
+///     providers of tenants, ProPR answers <c>409</c> with the code <c>tenant_sso_disabled</c> to the creation of a
+///     provider and to every change that leaves a provider enabled. Reading, disabling and deleting a provider work as
+///     before.
+/// </summary>
 [ApiController]
 [Route("admin/tenants/{tenantId:guid}/sso-providers")]
 [TenantData(TenantDataAccess.Metadata)]
@@ -27,6 +35,7 @@ public sealed class TenantSsoProvidersController(
     ITenantAdminService tenantAdminService,
     ITenantSsoProviderService tenantSsoProviderService,
     ILogger<TenantSsoProvidersController> logger,
+    IOptions<InstallationSignInOptions> signInOptions,
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private async Task<IActionResult?> RequireTenantSsoCapabilityAsync(CancellationToken ct)
@@ -37,6 +46,19 @@ public sealed class TenantSsoProvidersController(
             ct);
 
         return capability is null ? null : new PremiumFeatureUnavailableResult(capability);
+    }
+
+    // The providers stay stored while the installation turns them off, so a provider that a request would leave enabled
+    // would sign people in as soon as the installation turns the providers on again.
+    private IActionResult? RefuseEnabledProviderWhileTurnedOff(Guid tenantId)
+    {
+        if (signInOptions.Value.TenantSsoEnabled)
+        {
+            return null;
+        }
+
+        logger.LogWarning("TenantSsoProviderChangeRefused TenantId={TenantId} Reason={Reason}", tenantId, TenantSsoRefusal.Code);
+        return this.Conflict(new { error = TenantSsoRefusal.Code, message = TenantSsoRefusal.ProviderMessage });
     }
 
     /// <summary>Lists tenant-owned SSO providers for one tenant administrator view.</summary>
@@ -126,6 +148,11 @@ public sealed class TenantSsoProvidersController(
             return auth;
         }
 
+        if (this.RefuseEnabledProviderWhileTurnedOff(tenantId) is { } refusal)
+        {
+            return refusal;
+        }
+
         var capability = await this.RequireTenantSsoCapabilityAsync(ct);
         if (capability is not null)
         {
@@ -194,6 +221,12 @@ public sealed class TenantSsoProvidersController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        // Disabling a provider and changing a disabled one stay possible, so a tenant administrator can still clean up.
+        if (request.IsEnabled && this.RefuseEnabledProviderWhileTurnedOff(tenantId) is { } refusal)
+        {
+            return refusal;
         }
 
         var capability = await this.RequireTenantSsoCapabilityAsync(ct);

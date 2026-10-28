@@ -7,7 +7,11 @@ namespace MeisterDev.ProPR.Application.Features.Licensing.Dtos;
 
 /// <summary>Public authentication bootstrap information for the current installation edition.</summary>
 /// <param name="Edition">The edition of the installation.</param>
-/// <param name="AvailableSignInMethods">The sign-in methods the installation offers.</param>
+/// <param name="AvailableSignInMethods">
+///     The sign-in methods the installation offers: <c>password</c> while the installation offers the password sign-in,
+///     and <c>sso</c> while the license grants single sign-on and the installation offers the identity providers of
+///     tenants.
+/// </param>
 /// <param name="Capabilities">The licensed capabilities and their state.</param>
 /// <param name="PublicBaseUrl">The public base URL of the API.</param>
 /// <param name="PlatformAdminSignIn">

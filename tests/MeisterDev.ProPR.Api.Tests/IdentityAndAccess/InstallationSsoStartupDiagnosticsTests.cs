@@ -78,14 +78,79 @@ public sealed class InstallationSsoStartupDiagnosticsTests
         Assert.Empty(logger.Entries);
     }
 
-    private static ServiceProvider Services(bool platformAdmin, bool provisionedUser, bool licensed)
+    [Fact]
+    public async Task ReportAsync_WithoutThePasswordSignInAndWithoutTheLicense_RefusesTheStart()
+    {
+        var logger = new ListLogger();
+        var services = Services(platformAdmin: true, provisionedUser: true, licensed: false, localSignIn: false);
+
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => InstallationSsoStartupDiagnostics.ReportAsync(services, logger));
+
+        Assert.Contains(InstallationSignInOptions.LocalSignInEnabledKey, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(PlatformAdminSsoOptions.AuthorityKey, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(PremiumCapabilityKey.SsoAuthentication, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReportAsync_WithoutThePasswordSignInWhenTheLicenseCannotBeRead_RefusesTheStart()
+    {
+        var logger = new ListLogger();
+        var services = Services(platformAdmin: true, provisionedUser: false, licensed: true, localSignIn: false, licenseReadable: false);
+
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => InstallationSsoStartupDiagnostics.ReportAsync(services, logger));
+
+        Assert.Contains(InstallationSignInOptions.LocalSignInEnabledKey, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(PremiumCapabilityKey.SsoAuthentication, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReportAsync_WithThePasswordSignInWhenTheLicenseCannotBeRead_OnlyWarns()
+    {
+        var logger = new ListLogger();
+
+        await InstallationSsoStartupDiagnostics.ReportAsync(
+            Services(platformAdmin: true, provisionedUser: false, licensed: true, licenseReadable: false),
+            logger);
+
+        Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
+    }
+
+    [Fact]
+    public async Task ReportAsync_WithoutThePasswordSignInAndWithTheLicense_ReportsTheProviderForPlatformAdministratorsInUse()
+    {
+        var logger = new ListLogger();
+
+        await InstallationSsoStartupDiagnostics.ReportAsync(
+            Services(platformAdmin: true, provisionedUser: false, licensed: true, localSignIn: false),
+            logger);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.Contains(StaffAuthority, entry.Message, StringComparison.Ordinal);
+    }
+
+    private static ServiceProvider Services(
+        bool platformAdmin,
+        bool provisionedUser,
+        bool licensed,
+        bool localSignIn = true,
+        bool licenseReadable = true)
     {
         var licensing = Substitute.For<ILicensingCapabilityService>();
-        licensing.IsEnabledAsync(PremiumCapabilityKey.SsoAuthentication, Arg.Any<CancellationToken>())
-            .Returns(ValueTask.FromResult(licensed));
+        if (licenseReadable)
+        {
+            licensing.IsEnabledAsync(PremiumCapabilityKey.SsoAuthentication, Arg.Any<CancellationToken>())
+                .Returns(ValueTask.FromResult(licensed));
+        }
+        else
+        {
+            licensing.IsEnabledAsync(PremiumCapabilityKey.SsoAuthentication, Arg.Any<CancellationToken>())
+                .Returns<ValueTask<bool>>(_ => throw new InvalidOperationException("The license store is unavailable."));
+        }
 
         var services = new ServiceCollection();
         services.AddSingleton(licensing);
+        services.AddSingleton(Options.Create(new InstallationSignInOptions { LocalSignInEnabled = localSignIn }));
         services.AddSingleton(
             Options.Create(
                 platformAdmin

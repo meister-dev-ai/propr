@@ -6,6 +6,7 @@ import { onMounted, ref, type Ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { TenantApiError } from '@/services/tenantApiClient'
 import { getAuthOptions } from '@/services/authOptionsService'
+import { turnsOffTenantSignIn } from '@/features/auth/installationSignIns'
 import {
   getTenantLoginOptions,
   TenantPremiumFeatureUnavailableError,
@@ -19,6 +20,8 @@ export interface TenantLoginViewModel {
   loading: Ref<boolean>
   loadError: Ref<string>
   ssoCapabilityMessage: Ref<string>
+  /** Whether the installation turns off the sign-in through the identity providers of tenants. */
+  tenantSignInTurnedOff: Ref<boolean>
   loadOptions: () => Promise<void>
 }
 
@@ -44,6 +47,7 @@ export function useTenantLoginViewModel(options: UseTenantLoginViewModelOptions 
   const loading = ref(false)
   const loadError = ref('')
   const ssoCapabilityMessage = ref('')
+  const tenantSignInTurnedOff = ref(false)
 
   async function loadOptions(): Promise<void> {
     loading.value = true
@@ -54,8 +58,10 @@ export function useTenantLoginViewModel(options: UseTenantLoginViewModelOptions 
       ssoCapabilityMessage.value = authOptions.capabilities.find(
         (capability) => capability.key === 'sso-authentication',
       )?.message ?? ''
+      tenantSignInTurnedOff.value = turnsOffTenantSignIn(authOptions)
     } catch {
       ssoCapabilityMessage.value = ''
+      tenantSignInTurnedOff.value = false
     }
 
     try {
@@ -84,6 +90,7 @@ export function useTenantLoginViewModel(options: UseTenantLoginViewModelOptions 
     loading,
     loadError,
     ssoCapabilityMessage,
+    tenantSignInTurnedOff,
     loadOptions,
   }
 }

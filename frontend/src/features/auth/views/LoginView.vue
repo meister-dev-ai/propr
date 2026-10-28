@@ -17,7 +17,7 @@
         <p v-if="vm.ssoCapabilityMessage.value" class="login-auth-submessage">{{ vm.ssoCapabilityMessage.value }}</p>
       </div>
       <p v-else-if="vm.authOptionsError.value" class="error login-auth-error">{{ vm.authOptionsError.value }}</p>
-      <form @submit.prevent="vm.submitLogin" class="login-form">
+      <form v-if="vm.passwordSignInAvailable.value" @submit.prevent="vm.submitLogin" class="login-form">
         <div v-if="vm.validationError.value" class="error">{{ vm.validationError.value }}</div>
         <div v-if="vm.authError.value" class="error">{{ vm.authError.value }}</div>
         <label for="username">Username</label>

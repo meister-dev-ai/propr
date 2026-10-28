@@ -13,7 +13,11 @@
         </div>
       </div>
 
-      <p class="tenant-login-copy">
+      <p v-if="vm.tenantSignInTurnedOff.value" class="tenant-login-copy" data-testid="tenant-sign-in-turned-off">
+        This installation does not offer the sign-in through the identity providers of tenants. Sign in on the platform
+        sign-in page.
+      </p>
+      <p v-else class="tenant-login-copy">
         Use your organization's configured single sign-on provider to continue.
       </p>
 
@@ -25,6 +29,7 @@
       <div v-else-if="vm.loadError.value" class="error">{{ vm.loadError.value }}</div>
       <template v-else>
         <TenantLoginProviders
+          v-if="!vm.tenantSignInTurnedOff.value"
           :tenant-slug="vm.tenantSlug"
           :providers="vm.loginOptions.value?.providers ?? []"
         />

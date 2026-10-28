@@ -16,11 +16,13 @@ function makeService(): PatsService & {
   list: ReturnType<typeof vi.fn>
   create: ReturnType<typeof vi.fn>
   revoke: ReturnType<typeof vi.fn>
+  policy: ReturnType<typeof vi.fn>
 } {
   return {
     list: vi.fn(async () => []),
     create: vi.fn(async () => ({ token: 'pat-generated' })),
     revoke: vi.fn(async () => undefined),
+    policy: vi.fn(async () => ({ maximumLifetimeDays: null })),
   }
 }
 
@@ -29,7 +31,7 @@ const samplePats: PatItem[] = [
   { id: '2', label: 'Local', createdAt: '2026-02-01T00:00:00Z', lastUsedAt: '2026-02-15T00:00:00Z', expiresAt: '2027-01-01T00:00:00Z', isRevoked: false },
 ]
 
-describe('usePatsViewModel (FR-007, FR-008, FR-012)', () => {
+describe('usePatsViewModel', () => {
   beforeEach(() => {
     getAccessTokenMock.mockReset()
     getAccessTokenMock.mockReturnValue('token-abc')
@@ -45,6 +47,48 @@ describe('usePatsViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.pats.value).toEqual(samplePats)
     expect(vm.loading.value).toBe(false)
     expect(vm.loadError.value).toBe('')
+  })
+
+  it('loads the token lifetime policy for the current user', async () => {
+    const service = makeService()
+    service.policy.mockResolvedValueOnce({ maximumLifetimeDays: 90 })
+    const vm = usePatsViewModel({ service, autoLoad: false })
+
+    await vm.loadPats()
+
+    expect(service.policy).toHaveBeenCalledWith({ Authorization: 'Bearer token-abc' })
+    expect(vm.maximumLifetimeDays.value).toBe(90)
+  })
+
+  it('keeps existing tokens available for revocation when their lifetime policy cannot be loaded', async () => {
+    const service = makeService()
+    service.list.mockResolvedValueOnce(samplePats)
+    service.policy.mockRejectedValueOnce(new Error('Policy unavailable'))
+    const vm = usePatsViewModel({ service, autoLoad: false })
+
+    await vm.loadPats()
+
+    expect(vm.pats.value).toEqual(samplePats)
+    expect(vm.loadError.value).toBe('')
+    await vm.revokeToken('1')
+    expect(service.revoke).toHaveBeenCalledWith({ Authorization: 'Bearer token-abc' }, '1')
+    expect(vm.pats.value.map(pat => pat.id)).toEqual(['2'])
+  })
+
+  it('shows the expiry applied by the API when it differs from the requested date', async () => {
+    const service = makeService()
+    const appliedExpiry = '2027-01-25T12:00:00Z'
+    service.create.mockResolvedValueOnce({ token: 'pat-new', expiresAt: appliedExpiry })
+    const vm = usePatsViewModel({ service, autoLoad: false })
+    vm.newLabel.value = 'Browser extension'
+    vm.newExpires.value = '2027-12-31T12:00'
+
+    await vm.createToken()
+
+    expect(vm.generatedToken.value).toBe('pat-new')
+    expect(vm.generatedTokenExpiresAt.value).toBe(appliedExpiry)
+    vm.dismissGeneratedToken()
+    expect(vm.generatedTokenExpiresAt.value).toBeNull()
   })
 
   it('loadPats omits Authorization header when no access token is present', async () => {

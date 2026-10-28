@@ -2633,7 +2633,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Creates a new application user. */
+        /**
+         * Creates a new application user with a password. While the installation turns off the password sign-in, ProPR
+         *     answers `409` with the code `local_sign_in_disabled` and creates no account.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2691,7 +2694,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Creates a new application user. */
+        /**
+         * Creates a new application user with a password. While the installation turns off the password sign-in, ProPR
+         *     answers `409` with the code `local_sign_in_disabled` and creates no account.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3756,7 +3762,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Authenticate with username and password; returns a JWT access token and refresh token. */
+        /**
+         * Authenticate with username and password; returns a JWT access token and refresh token. An installation that
+         *     turns off the password sign-in answers `409` with the code `local_sign_in_disabled` for every
+         *     account and checks no password.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3778,6 +3788,39 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -3917,7 +3960,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns public sign-in options and edition-aware capability messaging. */
+        /**
+         * Returns public sign-in options and edition-aware capability messaging. `availableSignInMethods` contains
+         *     `password` while the installation offers the password sign-in, and `sso` while the license grants
+         *     single sign-on and the installation offers the identity providers of tenants.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -18765,7 +18812,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the visible login options for one tenant sign-in route. */
+        /**
+         * Returns the visible login options for one tenant sign-in route. `localLoginEnabled` is
+         *     false while the installation turns off the password sign-in, whatever the tenant allows, and
+         *     `providers` is empty while the installation turns off the identity providers of tenants.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -18818,7 +18869,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Signs a tenant user in with local credentials when tenant policy allows it. */
+        /**
+         * Signs a tenant user in with local credentials when tenant policy allows it. While the installation turns off
+         *     the password sign-in, ProPR answers `409` with `local_sign_in_disabled` for every account, whatever
+         *     the tenant allows, and checks no password.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -18860,6 +18915,17 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -22374,7 +22440,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Lists PATs for the current user (hashes are never returned). */
+        /** Lists active tokens for the current user with their effective expiry and without their hashes. */
         get: {
             parameters: {
                 query?: never;
@@ -22384,8 +22450,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
+                /** @description The active tokens, including any installation lifetime limit in their expiry. */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request is not authenticated. */
+                401: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -22394,7 +22467,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Generates a new PAT for the current user. Returns the plaintext token once. */
+        /** Creates a token with the earlier of the requested expiry and the current user's lifetime limit. */
         post: {
             parameters: {
                 query?: never;
@@ -22402,6 +22475,7 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
+            /** @description The token label and optional expiry. An omitted expiry uses the user's lifetime limit. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["CreatePatRequest"];
@@ -22410,8 +22484,22 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
+                /** @description The token and its effective expiry. The plaintext token is returned once. */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The label is missing or the requested expiry is not in the future. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request is not authenticated. */
+                401: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -22419,6 +22507,51 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/pats/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the maximum lifetime of tokens created by the current user. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The lifetime limit, or null when no limit applies to the user. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PatPolicyResponse"];
+                        "application/json": components["schemas"]["PatPolicyResponse"];
+                        "text/json": components["schemas"]["PatPolicyResponse"];
+                    };
+                };
+                /** @description The request is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -22516,6 +22649,17 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description The installation turns off the password sign-in, so ProPR changes no password. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -22570,6 +22714,17 @@ export interface paths {
                 };
                 /** @description Authentication is missing, invalid, or the current password is incorrect. */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation turns off the password sign-in, so ProPR changes no password. */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -23301,7 +23456,11 @@ export interface components {
         /** @description Public authentication bootstrap information for the current installation edition. */
         AuthOptionsDto: {
             edition?: components["schemas"]["InstallationEdition"];
-            /** @description The sign-in methods the installation offers. */
+            /**
+             * @description The sign-in methods the installation offers: `password` while the installation offers the password sign-in,
+             *     and `sso` while the license grants single sign-on and the installation offers the identity providers of
+             *     tenants.
+             */
             availableSignInMethods?: string[] | null;
             /** @description The licensed capabilities and their state. */
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
@@ -26230,6 +26389,14 @@ export interface components {
             /** Format: int32 */
             end?: number;
             side?: string | null;
+        };
+        /** @description The maximum token lifetime that applies to the authenticated user. */
+        PatPolicyResponse: {
+            /**
+             * Format: int32
+             * @description The maximum number of days after creation, or null when no limit applies.
+             */
+            maximumLifetimeDays?: number | null;
         };
         /**
          * @description Request body for patching an admin-managed crawl configuration.

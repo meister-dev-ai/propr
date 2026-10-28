@@ -2,9 +2,12 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Api.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
@@ -16,7 +19,8 @@ namespace MeisterDev.ProPR.Api.Controllers;
 public sealed class UserSecurityController(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,
-    IPasswordHashService passwordHashService) : ControllerBase
+    IPasswordHashService passwordHashService,
+    IOptions<InstallationSignInOptions> signInOptions) : ControllerBase
 {
     /// <summary>Changes the current user's password and revokes all refresh tokens.</summary>
     /// <param name="request">Current and new password payload.</param>
@@ -24,18 +28,26 @@ public sealed class UserSecurityController(
     /// <response code="204">Password changed successfully.</response>
     /// <response code="400">The request is invalid or the new password does not meet policy.</response>
     /// <response code="401">Authentication is missing, invalid, or the current password is incorrect.</response>
+    /// <response code="409">The installation turns off the password sign-in, so ProPR changes no password.</response>
     [EnableRateLimiting("auth")]
     [HttpPost("password")]
     [HttpPost("/users/me/password")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
         if (auth is not null)
         {
             return auth;
+        }
+
+        // A password serves only the password sign-in, so ProPR sets none while the installation turns that sign-in off.
+        if (!signInOptions.Value.LocalSignInEnabled)
+        {
+            return this.Conflict(new { error = LocalSignInRefusal.PasswordChangeMessage, code = LocalSignInRefusal.Code });
         }
 
         var userId = AuthHelpers.GetUserId(this.HttpContext);

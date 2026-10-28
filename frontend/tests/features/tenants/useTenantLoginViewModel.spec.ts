@@ -3,6 +3,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuthOptions } from '@/services/authOptionsService'
+import { normalizeCapability } from '@/services/licensingShared'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { tenantSlug: 'acme' } }),
@@ -35,16 +36,16 @@ vi.mock('@/services/authOptionsService', () => ({
 
 import { useTenantLoginViewModel } from '@/features/tenants/view-models/useTenantLoginViewModel'
 
-// Test double: only key/message are read by the VM, so the capability shape is
-// intentionally reduced and cast to the full AuthOptions type.
 const fakeAuthOptions = (capabilityMessage: string | null): AuthOptions => ({
   edition: 'commercial' as const,
   availableSignInMethods: ['sso'],
   capabilities: capabilityMessage === null
     ? []
-    : [{ key: 'sso-authentication', message: capabilityMessage }],
+    : [normalizeCapability({ key: 'sso-authentication', message: capabilityMessage })],
   publicBaseUrl: null,
-} as AuthOptions)
+  platformAdminSignIn: null,
+  provisionedUserSignIn: null,
+})
 
 describe('useTenantLoginViewModel (FR-007, FR-008, FR-012)', () => {
   beforeEach(() => {
@@ -107,6 +108,43 @@ describe('useTenantLoginViewModel (FR-007, FR-008, FR-012)', () => {
 
     expect(vm.ssoCapabilityMessage.value).toBe('')
     expect(vm.loginOptions.value).toEqual(tenantLoginOptions)
+  })
+
+  it('reports that the installation turns off the sign-in through the identity providers of tenants', async () => {
+    const authOptionsService = vi.fn(async () => ({
+      ...fakeAuthOptions(null),
+      edition: 'commercial' as const,
+      availableSignInMethods: ['password'],
+      capabilities: [normalizeCapability({ key: 'sso-authentication', isAvailable: true, message: null })],
+    }) satisfies AuthOptions)
+    const vm = useTenantLoginViewModel({
+      tenantLoginOptionsService: vi.fn(async () => ({ tenantSlug: 'acme', localLoginEnabled: true, providers: [] })),
+      authOptionsService,
+      autoLoad: false,
+    })
+
+    await vm.loadOptions()
+
+    expect(vm.tenantSignInTurnedOff.value).toBe(true)
+  })
+
+  it('does not report a turned off sign-in when the license does not grant single sign-on', async () => {
+    const authOptionsService = vi.fn(async () => ({
+      ...fakeAuthOptions(null),
+      edition: 'community' as const,
+      availableSignInMethods: ['password'],
+      capabilities: [normalizeCapability({ key: 'sso-authentication', isAvailable: false, message: 'A commercial license is required.' })],
+    }) satisfies AuthOptions)
+    const vm = useTenantLoginViewModel({
+      tenantLoginOptionsService: vi.fn(async () => ({ tenantSlug: 'acme', localLoginEnabled: true, providers: [] })),
+      authOptionsService,
+      autoLoad: false,
+    })
+
+    await vm.loadOptions()
+
+    expect(vm.tenantSignInTurnedOff.value).toBe(false)
+    expect(vm.ssoCapabilityMessage.value).toBe('A commercial license is required.')
   })
 
   it('maps a 404 TenantApiError to a friendly loadError', async () => {

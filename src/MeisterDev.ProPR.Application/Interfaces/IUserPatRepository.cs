@@ -8,8 +8,11 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 /// <summary>Persistence interface for user-generated PATs.</summary>
 public interface IUserPatRepository
 {
-    /// <summary>Persists a new PAT.</summary>
+    /// <summary>Persists a new PAT and applies the owner's lifetime limit to its expiry.</summary>
     Task AddAsync(UserPat pat, CancellationToken ct = default);
+
+    /// <summary>Returns the owner's maximum token lifetime in days, or null when no limit applies.</summary>
+    Task<int?> GetMaximumLifetimeDaysAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>Returns an active (non-revoked, non-expired) PAT by BCrypt-verifiable hash, or null.</summary>
     Task<UserPat?> GetActiveByRawTokenAsync(string rawToken, CancellationToken ct = default);

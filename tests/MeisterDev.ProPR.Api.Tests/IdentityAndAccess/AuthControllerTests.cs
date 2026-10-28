@@ -3,9 +3,11 @@
 
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 
@@ -115,7 +117,8 @@ public sealed class AuthControllerTests
             hasher,
             jwt,
             Substitute.For<IAccountLockoutService>(),
-            Policy)
+            Policy,
+            Options.Create(new InstallationSignInOptions()))
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

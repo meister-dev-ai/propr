@@ -13,7 +13,8 @@ namespace MeisterDev.ProPR.Api.Features.IdentityAndAccess;
 ///     Writes at startup whether people can sign in through the identity providers that the installation configures: the
 ///     provider for platform administrators and the provider for provisioned users. A provider that the license does not
 ///     cover is ignored, and the log of the start is where an operator finds the reason the sign-in page does not offer
-///     it.
+///     it. An installation that turns off the password sign-in does not start without a licensed provider for platform
+///     administrators, because no administrator could sign in to it.
 /// </summary>
 public static partial class InstallationSsoStartupDiagnostics
 {
@@ -21,11 +22,18 @@ public static partial class InstallationSsoStartupDiagnostics
     /// <param name="services">A service scope of the started host.</param>
     /// <param name="logger">The logger the diagnostics are written to.</param>
     /// <param name="ct">Cancellation token for the operation.</param>
+    /// <exception cref="OptionsValidationException">
+    ///     The installation turns off the password sign-in, and the license does not grant single sign-on or could not be
+    ///     read. The host logs the message, which contains the names of the variables, and ends the start.
+    /// </exception>
     public static async Task ReportAsync(IServiceProvider services, ILogger logger, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(logger);
 
+        // Reading the settings runs their validator, which refuses an installation without the password sign-in that
+        // configures no provider for platform administrators.
+        var signIns = services.GetRequiredService<IOptions<InstallationSignInOptions>>().Value;
         var platformAdmin = services.GetRequiredService<IOptions<PlatformAdminSsoOptions>>().Value;
         var provisionedUser = services.GetRequiredService<IOptions<ProvisionedUserSsoOptions>>().Value;
         if (!platformAdmin.IsConfigured && !provisionedUser.IsConfigured)
@@ -39,14 +47,34 @@ public static partial class InstallationSsoStartupDiagnostics
         {
             isLicensed = licensing is not null && await licensing.IsEnabledAsync(PremiumCapabilityKey.SsoAuthentication, ct);
         }
-        // The diagnostics must not stop a start that would otherwise succeed. A license that cannot be read here is read
-        // again at every sign-in.
+        // A license that cannot be read here is read again at every sign-in, so the diagnostics do not stop the start for
+        // it. An installation without the password sign-in is the exception, because its administrators sign in only
+        // through the licensed provider.
 #pragma warning disable CA1031
         catch (Exception exception)
 #pragma warning restore CA1031
         {
             LogLicenseUnreadable(logger, exception);
+            if (!signIns.LocalSignInEnabled)
+            {
+                throw RefuseStart(
+                    $"{InstallationSignInOptions.LocalSignInEnabledKey} is false, and the license of this installation could "
+                    + $"not be read at startup. ProPR cannot tell whether the license grants {PremiumCapabilityKey.SsoAuthentication}, "
+                    + $"which the identity provider for platform administrators ({PlatformAdminSsoOptions.AuthorityKey}) needs; "
+                    + "without it, no administrator could sign in. Correct the license, or set "
+                    + $"{InstallationSignInOptions.LocalSignInEnabledKey} to true.");
+            }
+
             return;
+        }
+
+        if (!signIns.LocalSignInEnabled && !isLicensed)
+        {
+            throw RefuseStart(
+                $"{InstallationSignInOptions.LocalSignInEnabledKey} is false, and the license of this installation does not "
+                + $"grant {PremiumCapabilityKey.SsoAuthentication}. Without it, ProPR ignores the identity provider for platform "
+                + $"administrators ({PlatformAdminSsoOptions.AuthorityKey}), so no administrator could sign in. Activate a "
+                + $"license that grants single sign-on, or set {InstallationSignInOptions.LocalSignInEnabledKey} to true.");
         }
 
         // The validation at startup refuses an authority with credentials, a query or a fragment, so the addresses are
@@ -74,6 +102,13 @@ public static partial class InstallationSsoStartupDiagnostics
                 LogProvisionedUserProviderIgnored(logger, ProvisionedUserSsoOptions.AuthorityKey, PremiumCapabilityKey.SsoAuthentication);
             }
         }
+    }
+
+    // The host logs an OptionsValidationException as a fatal error and ends the start with exit code 1, as for a setting
+    // that its validator refuses.
+    private static OptionsValidationException RefuseStart(string failure)
+    {
+        return new OptionsValidationException(Options.DefaultName, typeof(InstallationSignInOptions), [failure]);
     }
 
     [LoggerMessage(

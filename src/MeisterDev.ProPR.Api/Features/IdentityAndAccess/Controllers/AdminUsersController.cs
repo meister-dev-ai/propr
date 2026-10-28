@@ -4,10 +4,13 @@
 using MeisterDev.Ai.Providers.Diagnostics;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Api.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
@@ -21,7 +24,8 @@ public sealed class AdminUsersController(
     IRefreshTokenRepository refreshTokenRepository,
     IUserPatRepository userPatRepository,
     IPasswordHashService passwordHashService,
-    IUserAccountAuditLog auditLog) : ControllerBase
+    IUserAccountAuditLog auditLog,
+    IOptions<InstallationSignInOptions> signInOptions) : ControllerBase
 {
     /// <summary>Returns all users.</summary>
     [HttpGet("identity/users")]
@@ -38,7 +42,10 @@ public sealed class AdminUsersController(
         return this.Ok(users.Select(MapToResponse));
     }
 
-    /// <summary>Creates a new application user.</summary>
+    /// <summary>
+    ///     Creates a new application user with a password. While the installation turns off the password sign-in, ProPR
+    ///     answers <c>409</c> with the code <c>local_sign_in_disabled</c> and creates no account.
+    /// </summary>
     [HttpPost("identity/users")]
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request, CancellationToken ct)
@@ -47,6 +54,12 @@ public sealed class AdminUsersController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        // The password of the account would serve only the password sign-in.
+        if (!signInOptions.Value.LocalSignInEnabled)
+        {
+            return this.Conflict(new { error = LocalSignInRefusal.AccountCreationMessage, code = LocalSignInRefusal.Code });
         }
 
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))

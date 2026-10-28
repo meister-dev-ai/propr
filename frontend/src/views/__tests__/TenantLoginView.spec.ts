@@ -126,6 +126,31 @@ describe('TenantLoginView', () => {
     expect(wrapper.find('[data-testid="tenant-local-username"]').exists()).toBe(false)
   })
 
+  it('states that the installation turns off the identity providers of tenants in place of the providers', async () => {
+    getAuthOptionsMock.mockResolvedValue({
+      edition: 'commercial',
+      availableSignInMethods: ['password'],
+      capabilities: [
+        {
+          key: 'sso-authentication',
+          isAvailable: true,
+          message: null,
+        },
+      ],
+    })
+    getTenantLoginOptionsMock.mockResolvedValue({
+      tenantSlug: 'acme',
+      localLoginEnabled: true,
+      providers: [],
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="tenant-sign-in-turned-off"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('No external providers are enabled for this tenant.')
+  })
+
   it('shows no provider links when tenant login options omit external providers', async () => {
     getTenantLoginOptionsMock.mockResolvedValue({
       tenantSlug: 'acme',

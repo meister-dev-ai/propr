@@ -766,7 +766,8 @@ public static class ProPRHost
                     licensingIdentity);
 
                 // Writes whether the identity providers of the installation are in use, and the reason when the license
-                // does not cover them.
+                // does not cover them. Without the password sign-in and without a licensed provider for platform
+                // administrators, it ends the start.
                 await InstallationSsoStartupDiagnostics.ReportAsync(
                     licensingIdentityScope.ServiceProvider,
                     licensingIdentityScope.ServiceProvider.GetRequiredService<ILogger<Program>>());

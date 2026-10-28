@@ -25,10 +25,15 @@ public sealed class AuthOptionsController(
     IConfiguration configuration,
     IOptions<PlatformAdminSsoOptions> platformAdminSsoOptions,
     IOptions<ProvisionedUserSsoOptions> provisionedUserSsoOptions,
+    IOptions<InstallationSignInOptions> signInOptions,
     ILicensingCapabilityService? licensingCapabilityService = null)
     : ControllerBase
 {
-    /// <summary>Returns public sign-in options and edition-aware capability messaging.</summary>
+    /// <summary>
+    ///     Returns public sign-in options and edition-aware capability messaging. <c>availableSignInMethods</c> contains
+    ///     <c>password</c> while the installation offers the password sign-in, and <c>sso</c> while the license grants
+    ///     single sign-on and the installation offers the identity providers of tenants.
+    /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(AuthOptionsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAuthOptions(CancellationToken ct = default)
@@ -39,7 +44,7 @@ public sealed class AuthOptionsController(
 
         if (licensingCapabilityService is null)
         {
-            return this.Ok(new AuthOptionsDto(InstallationEdition.Community, ["password"], [], publicBaseUrl));
+            return this.Ok(new AuthOptionsDto(InstallationEdition.Community, this.OfferedSignInMethods(["password"]), [], publicBaseUrl));
         }
 
         var options = await licensingCapabilityService.GetAuthOptionsAsync(ct);
@@ -55,6 +60,7 @@ public sealed class AuthOptionsController(
         return this.Ok(
             options with
             {
+                AvailableSignInMethods = this.OfferedSignInMethods(options.AvailableSignInMethods),
                 PublicBaseUrl = publicBaseUrl,
                 PlatformAdminSignIn = isLicensed && platformAdmin.IsConfigured
                     ? new PlatformAdminSignInOptionDto(platformAdmin.EffectiveDisplayName)
@@ -63,5 +69,20 @@ public sealed class AuthOptionsController(
                     ? new ProvisionedUserSignInOptionDto(provisionedUser.EffectiveDisplayName)
                     : null,
             });
+    }
+
+    // The license decides which sign-in methods exist, and the installation can turn off the password sign-in and the
+    // identity providers of tenants. The identity providers of the installation have fields of their own.
+    private List<string> OfferedSignInMethods(IEnumerable<string> licensedMethods)
+    {
+        var signIns = signInOptions.Value;
+        return licensedMethods
+            .Where(method => method switch
+            {
+                "password" => signIns.LocalSignInEnabled,
+                "sso" => signIns.TenantSsoEnabled,
+                _ => true,
+            })
+            .ToList();
     }
 }

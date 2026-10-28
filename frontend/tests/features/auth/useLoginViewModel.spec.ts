@@ -114,6 +114,49 @@ describe('useLoginViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.canUseTenantSignIn.value).toBe(true)
   })
 
+  it('offers no password form and points to single sign-on when the installation turns off the password sign-in', async () => {
+    const authOptions = {
+      edition: 'commercial' as const,
+      availableSignInMethods: [],
+      capabilities: [{ key: 'sso-authentication', isAvailable: true }],
+      publicBaseUrl: null,
+      platformAdminSignIn: { displayName: 'Meister DEV staff' },
+      provisionedUserSignIn: null,
+    } as unknown as AuthOptions
+    const vm = useLoginViewModel({
+      loginService: vi.fn(),
+      authOptionsService: vi.fn(async () => authOptions),
+      autoLoadAuthOptions: false,
+    })
+
+    expect(vm.passwordSignInAvailable.value).toBe(true)
+    await vm.loadAuthOptions()
+
+    expect(vm.passwordSignInAvailable.value).toBe(false)
+    expect(vm.signInMessage.value).toBe('This installation signs people in through single sign-on only.')
+  })
+
+  it('mentions single sign-on beside the password sign-in when only the identity providers of the installation are offered', async () => {
+    const authOptions = {
+      edition: 'commercial' as const,
+      availableSignInMethods: ['password'],
+      capabilities: [{ key: 'sso-authentication', isAvailable: true }],
+      publicBaseUrl: null,
+      platformAdminSignIn: { displayName: 'Meister DEV staff' },
+      provisionedUserSignIn: null,
+    } as unknown as AuthOptions
+    const vm = useLoginViewModel({
+      loginService: vi.fn(),
+      authOptionsService: vi.fn(async () => authOptions),
+      autoLoadAuthOptions: false,
+    })
+
+    await vm.loadAuthOptions()
+
+    expect(vm.passwordSignInAvailable.value).toBe(true)
+    expect(vm.signInMessage.value).toBe('Password and single sign-on are available for this installation.')
+  })
+
   it('surfaces authOptionsError when auth options fail to load', async () => {
     const authOptionsService = vi.fn(async () => { throw new Error('boom') })
     const loginService = vi.fn()

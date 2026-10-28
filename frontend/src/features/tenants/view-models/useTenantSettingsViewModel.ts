@@ -9,6 +9,7 @@ import { ApiRequestError } from '@/services/userSecurityService'
 import { useNotification } from '@/composables/useNotification'
 import { useSession } from '@/composables/useSession'
 import { getAuthOptions } from '@/services/authOptionsService'
+import { turnsOffTenantSignIn } from '@/features/auth/installationSignIns'
 import { getTenantExternalCallbackUrl, TenantPremiumFeatureUnavailableError } from '@/services/tenantAuthService'
 import { getTenant, type TenantDto } from '@/services/tenantAdminService'
 import {
@@ -92,10 +93,14 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
   const providerError = ref('')
   const ssoUnavailableOverrideMessage = ref('')
   const publicBaseUrl = ref<string | null>(null)
+  const tenantSignInTurnedOff = ref(false)
 
   const ssoCapability = computed(() => getCapability('sso-authentication'))
   const isTenantEditable = computed(() => tenant.value?.isEditable !== false)
-  const isTenantSsoAvailable = computed(() => isTenantEditable.value && !ssoUnavailableOverrideMessage.value && ssoCapability.value?.isAvailable !== false)
+  const isTenantSsoAvailable = computed(() => isTenantEditable.value
+    && !ssoUnavailableOverrideMessage.value
+    && ssoCapability.value?.isAvailable !== false
+    && !tenantSignInTurnedOff.value)
   const ssoUnavailableMessage = computed(() => {
     if (!isTenantEditable.value) {
       return 'The System tenant is managed internally and cannot be changed.'
@@ -103,6 +108,10 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
 
     if (isTenantSsoAvailable.value) {
       return ''
+    }
+
+    if (tenantSignInTurnedOff.value) {
+      return 'This installation does not allow identity providers of tenants. Use the platform sign-in page.'
     }
 
     return ssoUnavailableOverrideMessage.value || ssoCapability.value?.message || 'A commercial license is required to use single sign-on, including in self-hosted deployments.'
@@ -135,6 +144,7 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
 
       tenant.value = loadedTenant
       publicBaseUrl.value = authOptions?.publicBaseUrl ?? null
+      tenantSignInTurnedOff.value = turnsOffTenantSignIn(authOptions)
       return true
     } catch (err) {
       if (err instanceof UnauthorizedError) {

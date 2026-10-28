@@ -12,9 +12,11 @@ using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
@@ -31,6 +33,7 @@ public sealed class TenantAuthController(
     ILogger<TenantAuthController> logger,
     IConfiguration configuration,
     IHostEnvironment environment,
+    IOptions<InstallationSignInOptions> signInOptions,
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private const string ReturnUrlNotAllowed = "return_url_not_allowed";
@@ -46,13 +49,25 @@ public sealed class TenantAuthController(
             ct);
     }
 
-    private async Task<IActionResult?> RequireTenantSsoCapabilityAsync(CancellationToken ct)
+    // A sign-in through an identity provider of a tenant needs the installation to offer these providers and the license
+    // to grant single sign-on. The refusal of the installation comes first, because the operator decided it.
+    private async Task<IActionResult?> RequireTenantSsoAsync(CancellationToken ct)
     {
+        if (!signInOptions.Value.TenantSsoEnabled)
+        {
+            logger.LogWarning("TenantExternalSignInRejected Reason={Reason}", TenantSsoRefusal.Code);
+            return this.Conflict(new { error = TenantSsoRefusal.Code, message = TenantSsoRefusal.SignInMessage });
+        }
+
         var capability = await this.GetUnavailableTenantSsoCapabilityAsync(ct);
         return capability is null ? null : new PremiumFeatureUnavailableResult(capability);
     }
 
-    /// <summary>Returns the visible login options for one tenant sign-in route.</summary>
+    /// <summary>
+    ///     Returns the visible login options for one tenant sign-in route. <c>localLoginEnabled</c> is
+    ///     <see langword="false" /> while the installation turns off the password sign-in, whatever the tenant allows, and
+    ///     <c>providers</c> is empty while the installation turns off the identity providers of tenants.
+    /// </summary>
     [HttpGet("tenants/{tenantSlug}/providers")]
     [ProducesResponseType(typeof(TenantLoginOptionsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -64,6 +79,16 @@ public sealed class TenantAuthController(
             return this.NotFound();
         }
 
+        if (!signInOptions.Value.LocalSignInEnabled)
+        {
+            options = options with { LocalLoginEnabled = false };
+        }
+
+        if (!signInOptions.Value.TenantSsoEnabled)
+        {
+            return this.Ok(options with { Providers = [] });
+        }
+
         var unavailableCapability = await this.GetUnavailableTenantSsoCapabilityAsync(ct);
         if (unavailableCapability is not null)
         {
@@ -73,17 +98,31 @@ public sealed class TenantAuthController(
         return this.Ok(options);
     }
 
-    /// <summary>Signs a tenant user in with local credentials when tenant policy allows it.</summary>
+    /// <summary>
+    ///     Signs a tenant user in with local credentials when tenant policy allows it. While the installation turns off
+    ///     the password sign-in, ProPR answers <c>409</c> with <c>local_sign_in_disabled</c> for every account, whatever
+    ///     the tenant allows, and checks no password.
+    /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("tenants/{tenantSlug}/local-login")]
     [ProducesResponseType(typeof(TenantAuthSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> LocalLogin(
         string tenantSlug,
         [FromBody] TenantLocalLoginRequest request,
         CancellationToken ct)
     {
+        if (!signInOptions.Value.LocalSignInEnabled)
+        {
+            logger.LogWarning(
+                "TenantLocalLoginRejected TenantSlug={TenantSlug} Reason={Reason}",
+                tenantSlug.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t"),
+                LocalSignInRefusal.Code);
+            return this.Conflict(new { error = LocalSignInRefusal.Code, message = LocalSignInRefusal.SignInMessage });
+        }
+
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
         {
             return this.BadRequest(new { error = "Username and password are required." });
@@ -136,7 +175,7 @@ public sealed class TenantAuthController(
         [FromQuery(Name = "mode")] string? mode,
         CancellationToken ct)
     {
-        var capability = await this.RequireTenantSsoCapabilityAsync(ct);
+        var capability = await this.RequireTenantSsoAsync(ct);
         if (capability is not null)
         {
             return capability;
@@ -207,7 +246,7 @@ public sealed class TenantAuthController(
         string? errorDescription,
         CancellationToken ct)
     {
-        var capability = await this.RequireTenantSsoCapabilityAsync(ct);
+        var capability = await this.RequireTenantSsoAsync(ct);
         if (capability is not null)
         {
             return capability;
@@ -299,7 +338,7 @@ public sealed class TenantAuthController(
     [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GetPendingLink(CancellationToken ct)
     {
-        var capability = await this.RequireTenantSsoCapabilityAsync(ct);
+        var capability = await this.RequireTenantSsoAsync(ct);
         if (capability is not null)
         {
             return capability;
@@ -324,7 +363,7 @@ public sealed class TenantAuthController(
     [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ConfirmPendingLink(CancellationToken ct)
     {
-        var capability = await this.RequireTenantSsoCapabilityAsync(ct);
+        var capability = await this.RequireTenantSsoAsync(ct);
         if (capability is not null)
         {
             return capability;
@@ -361,7 +400,7 @@ public sealed class TenantAuthController(
     [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateAccountForPendingLink(CancellationToken ct)
     {
-        var capability = await this.RequireTenantSsoCapabilityAsync(ct);
+        var capability = await this.RequireTenantSsoAsync(ct);
         if (capability is not null)
         {
             return capability;
@@ -388,7 +427,7 @@ public sealed class TenantAuthController(
     [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ListSignInLinks(CancellationToken ct)
     {
-        var capability = await this.RequireTenantSsoCapabilityAsync(ct);
+        var capability = await this.RequireTenantSsoAsync(ct);
         if (capability is not null)
         {
             return capability;

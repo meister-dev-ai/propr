@@ -15,6 +15,7 @@ import {
   type ProvisionedUserSignIn,
 } from '@/services/authOptionsService'
 import { useSession } from '@/composables/useSession'
+import { offersPasswordSignIn } from '@/features/auth/installationSignIns'
 
 type LoginEndpoint = (payload: { username: string; password: string }) => Promise<{ accessToken: string }>
 
@@ -44,6 +45,8 @@ export interface LoginViewModel {
   authOptions: Ref<AuthOptions | null>
   authOptionsError: Ref<string>
   signInMessage: ComputedRef<string>
+  /** Whether the page shows the password form: before the sign-in options load, and while they list the password sign-in. */
+  passwordSignInAvailable: ComputedRef<boolean>
   ssoCapabilityMessage: ComputedRef<string>
   canUseTenantSignIn: ComputedRef<boolean>
   /** The identity provider for platform administrators, or null when the installation offers none. */
@@ -102,11 +105,23 @@ export function useLoginViewModel(options: UseLoginViewModelOptions = {}): Login
   const authError = ref('')
   const tenantValidationError = ref('')
 
+  const passwordSignInAvailable = computed(() => offersPasswordSignIn(authOptions.value))
+
   const signInMessage = computed(() => {
-    if (!authOptions.value) return 'Sign in with your username and password.'
-    return authOptions.value.availableSignInMethods.includes('sso')
-      ? 'Password and single sign-on are available for this installation.'
-      : 'Password sign-in is available for this installation.'
+    const options = authOptions.value
+    if (!options) return 'Sign in with your username and password.'
+    const offersSingleSignOn = options.availableSignInMethods.includes('sso')
+      || Boolean(options.platformAdminSignIn)
+      || Boolean(options.provisionedUserSignIn)
+    if (passwordSignInAvailable.value) {
+      return offersSingleSignOn
+        ? 'Password and single sign-on are available for this installation.'
+        : 'Password sign-in is available for this installation.'
+    }
+
+    return offersSingleSignOn
+      ? 'This installation signs people in through single sign-on only.'
+      : 'This installation offers no sign-in at the moment. Contact the operator of the installation.'
   })
 
   const ssoCapabilityMessage = computed(() =>
@@ -200,6 +215,7 @@ export function useLoginViewModel(options: UseLoginViewModelOptions = {}): Login
     authOptions,
     authOptionsError,
     signInMessage,
+    passwordSignInAvailable,
     ssoCapabilityMessage,
     canUseTenantSignIn,
     platformAdminSignIn,

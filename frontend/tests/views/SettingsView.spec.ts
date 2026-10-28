@@ -2,13 +2,18 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 
 const mockChangeMyPassword = vi.fn()
 const mockRouterPush = vi.fn()
 const hasLocalPassword = ref(true)
 const ssoAvailable = ref(false)
+let authOptions: unknown = null
+
+vi.mock('@/services/authOptionsService', () => ({
+  getAuthOptions: vi.fn(async () => authOptions),
+}))
 
 vi.mock('@/services/userSecurityService', () => ({
   changeMyPassword: mockChangeMyPassword,
@@ -53,6 +58,38 @@ describe('SettingsView', () => {
     vi.clearAllMocks()
     hasLocalPassword.value = true
     ssoAvailable.value = false
+    authOptions = null
+  })
+
+  it('offers no password form when the installation does not offer the password sign-in', async () => {
+    authOptions = {
+      edition: 'commercial',
+      availableSignInMethods: ['sso'],
+      capabilities: [{ key: 'sso-authentication', isAvailable: true }],
+      publicBaseUrl: null,
+    }
+    const { default: SettingsView } = await import('@/features/settings/views/SettingsView.vue')
+    const wrapper = mount(SettingsView)
+    await flushPromises()
+
+    expect(wrapper.find('input[name="currentPassword"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="settings-password-sign-in-turned-off"]').exists()).toBe(true)
+  })
+
+  it('offers no linked sign-ins of tenants when the installation turns them off', async () => {
+    ssoAvailable.value = true
+    authOptions = {
+      edition: 'commercial',
+      availableSignInMethods: ['password'],
+      capabilities: [{ key: 'sso-authentication', isAvailable: true }],
+      publicBaseUrl: null,
+    }
+    const { default: SettingsView } = await import('@/features/settings/views/SettingsView.vue')
+    const wrapper = mount(SettingsView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="settings-sign-in-links-tab"]').exists()).toBe(false)
+    expect(wrapper.find('input[name="currentPassword"]').exists()).toBe(true)
   })
 
   it('offers the linked sign-ins of tenants when the licence grants single sign-on', async () => {

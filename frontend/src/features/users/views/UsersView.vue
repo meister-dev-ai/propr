@@ -19,8 +19,13 @@
     <main class="page-main-content">
       <h2 class="view-title">Users</h2>
 
+    <p v-if="passwordSignInOffered === false" class="muted-hint" data-testid="users-password-sign-in-turned-off">
+      This installation does not offer the password sign-in, so ProPR does not create accounts with a password. People
+      sign in through the identity providers of the installation.
+    </p>
+
     <!-- Create user form -->
-    <div v-if="showCreate" class="section-card">
+    <div v-if="showCreate && passwordSignInOffered" class="section-card">
       <div class="section-card-header">
         <h3>Create user</h3>
       </div>
@@ -60,7 +65,7 @@
           <span class="chip chip-muted">{{ users.length }} user{{ users.length === 1 ? '' : 's' }}</span>
         </div>
         <div class="section-card-header-actions">
-          <button class="btn-primary" @click="showCreate = !showCreate">
+          <button v-if="passwordSignInOffered" class="btn-primary" @click="showCreate = !showCreate">
             <i :class="showCreate ? 'fi fi-rr-cross-small' : 'fi fi-rr-add'"></i>
             {{ showCreate ? 'Cancel' : 'New User' }}
           </button>
@@ -227,6 +232,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useSession } from '@/composables/useSession'
 import { useNotification } from '@/composables/useNotification'
 import { API_BASE_URL } from '@/services/apiBase'
+import { getAuthOptions } from '@/services/authOptionsService'
+import { offersPasswordSignIn } from '@/features/auth/installationSignIns'
 
 interface UserItem {
   id: string
@@ -277,7 +284,8 @@ function isLastActiveAdmin(user: UserItem): boolean {
   return user.isActive && user.globalRole === 'Admin' && activeAdminCount.value === 1
 }
 
-// Create user state
+// Create user state. The API creates accounts with a password only while the installation offers the password sign-in.
+const passwordSignInOffered = ref<boolean | null>(null)
 const showCreate = ref(false)
 const newUsername = ref('')
 const newPassword = ref('')
@@ -487,9 +495,14 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
+async function loadSignInOptions() {
+  passwordSignInOffered.value = offersPasswordSignIn(await getAuthOptions().catch(() => null))
+}
+
 onMounted(() => {
   loadUsers()
   loadClients()
+  loadSignInOptions()
 })
 </script>
 

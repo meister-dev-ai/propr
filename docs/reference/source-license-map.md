@@ -212,6 +212,8 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/ExternalSignInRedirects.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/InstallationSignInController.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/InstallationSsoStartupDiagnostics.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/LocalSignInRefusal.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/TenantSsoRefusal.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Validators/CreateTenantMembershipRequestValidator.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Validators/CreateTenantRequestValidator.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Validators/CreateTenantSsoProviderRequestValidator.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -403,6 +405,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Application/Interfaces/ITenantSsoProviderService.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Interfaces/IThreadMemoryKeywordSweeper.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Interfaces/IUserRepository.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Application/Options/InstallationSignInOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Options/InstallationSsoProviderOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Options/PlatformAdminSsoOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Options/ProvisionedUserSsoOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -674,6 +677,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/Auth/OidcTokenValidator.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/Auth/ProtectedSignInState.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/IdentityAndAccessModuleServiceCollectionExtensions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/InstallationSignInOptionsValidator.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/InstallationSsoProviderValidation.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/Persistence/ExternalAccountNames.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/Persistence/PlatformAdminSignInService.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |

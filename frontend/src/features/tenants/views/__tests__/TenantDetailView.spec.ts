@@ -254,6 +254,28 @@ describe('TenantDetailView', () => {
     expect(notifyMock).toHaveBeenCalledWith('Tenant provider updated.')
   })
 
+  it('hides provider management and states the reason when the installation does not allow identity providers of tenants', async () => {
+    getAuthOptionsMock.mockResolvedValue({
+      edition: 'commercial',
+      availableSignInMethods: ['password'],
+      capabilities: [
+        {
+          key: 'sso-authentication',
+          isAvailable: true,
+          message: null,
+        },
+      ],
+      publicBaseUrl: 'https://propr.example.test/api',
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(listTenantSsoProvidersMock).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="tenant-nav-sso"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('This installation does not allow identity providers of tenants.')
+  })
+
   it('keeps tenant policy editing available while hiding provider management when SSO is unavailable', async () => {
     ssoCapabilityRef.value = {
       isAvailable: false,

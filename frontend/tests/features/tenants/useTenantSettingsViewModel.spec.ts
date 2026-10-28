@@ -117,6 +117,28 @@ describe('useTenantSettingsViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.ssoUnavailableMessage.value).toBe('SSO requires a commercial license.')
   })
 
+  it('hides the providers and states the reason when the installation does not allow identity providers of tenants', async () => {
+    const service = {
+      getTenant: vi.fn(async () => sampleTenant),
+      getAuthOptions: vi.fn(async () => ({
+        edition: 'commercial',
+        availableSignInMethods: ['password'],
+        capabilities: [{ key: 'sso-authentication', isAvailable: true }],
+        publicBaseUrl: null,
+      })),
+      listTenantSsoProviders: vi.fn(async () => [sampleProvider]),
+    }
+    const vm = useTenantSettingsViewModel({ tenantSettingsService: service as unknown as Partial<TenantSettingsService>, autoLoad: false })
+
+    await vm.loadSettings()
+
+    expect(vm.isTenantSsoAvailable.value).toBe(false)
+    expect(service.listTenantSsoProviders).not.toHaveBeenCalled()
+    expect(vm.ssoUnavailableMessage.value).toBe(
+      'This installation does not allow identity providers of tenants. Use the platform sign-in page.',
+    )
+  })
+
   it('surfaces system tenant as SSO unavailable', async () => {
     const service = {
       getTenant: vi.fn(async () => ({ ...sampleTenant, isEditable: false })),

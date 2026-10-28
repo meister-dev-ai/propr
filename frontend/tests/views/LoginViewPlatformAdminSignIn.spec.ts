@@ -79,6 +79,25 @@ describe('LoginView with the identity providers of the installation', () => {
     )
   })
 
+  it('shows the identity providers without the local form when the installation does not offer the password sign-in', async () => {
+    getAuthOptionsMock.mockResolvedValue({
+      edition: 'commercial',
+      availableSignInMethods: [],
+      capabilities: [],
+      publicBaseUrl: null,
+      platformAdminSignIn: { displayName: 'Meister DEV staff' },
+      provisionedUserSignIn: { displayName: 'Meister DEV' },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find('#username').exists()).toBe(false)
+    expect(wrapper.find('#password').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="platform-admin-sign-in-link"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="provisioned-user-sign-in-link"]').exists()).toBe(true)
+  })
+
   it('shows the local form alone when the installation offers no identity provider', async () => {
     getAuthOptionsMock.mockResolvedValue({
       edition: 'commercial',

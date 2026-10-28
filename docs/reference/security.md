@@ -212,9 +212,13 @@ ProPR has three sign-ins.
   endpoint behind it is `POST /api/auth/login`. An installation can add an identity provider for platform
   administrators to the same page; see
   [platform administrators and the identity provider of the installation](#platform-administrators-and-the-identity-provider-of-the-installation).
+  An installation can also turn the local form off; see
+  [installation sign-in policy](#installation-sign-in-policy).
 - **Tenant users** sign in at `/tenants/<tenant-slug>/login` through the identity providers that the tenant
   enables. The tenant also sets the allowed email domains of each provider and whether local login is permitted;
   see [tenant users and the identity providers of a tenant](#tenant-users-and-the-identity-providers-of-a-tenant).
+  An installation can turn the identity providers of tenants off; see
+  [installation sign-in policy](#installation-sign-in-policy).
 - **Provisioned users** sign in at `/login` through the identity provider of a hosting platform that runs ProPR for
   its customers. The platform creates their accounts and memberships through the administration API; see
   [provisioned users and the identity provider of a hosting platform](#provisioned-users-and-the-identity-provider-of-a-hosting-platform).
@@ -273,7 +277,9 @@ Keep at least one local platform administrator account. The local sign-in still 
 unreachable, when the license no longer grants `sso-authentication`, and when no account holds the role any
 more. If the last active platform administrator loses the role, ProPR writes a warning to its log. Its next start
 then creates the bootstrap administrator from `MEISTER_BOOTSTRAP_ADMIN_USER` and
-`MEISTER_BOOTSTRAP_ADMIN_PASSWORD`, and fails without these variables.
+`MEISTER_BOOTSTRAP_ADMIN_PASSWORD`, and fails without these variables. An installation that turns off the password
+sign-in has no such fallback, and its administrators sign in through the provider only; see
+[installation sign-in policy](#installation-sign-in-policy).
 
 ### Tenant users and the identity providers of a tenant
 
@@ -364,6 +370,25 @@ The sign-in uses the same flow as the sign-in of platform administrators: the au
 nonce, and a state that stays in an httpOnly cookie of the browser and that ProPR accepts once. The page the sign-in
 returns to follows [the return address of a sign-in](#the-return-address-of-a-sign-in).
 
+### Installation sign-in policy
+
+An installation that signs people in only through its own identity providers turns off the password sign-in with
+`MEISTER_LOCAL_SIGN_IN_ENABLED=false` and the identity providers of tenants with `MEISTER_TENANT_SSO_ENABLED=false`.
+The variables and the order of the switch are described under
+[installation sign-in policy](../operate/configuration.md#installation-sign-in-policy).
+
+| Setting | What ProPR refuses | What keeps working |
+|---|---|---|
+| `MEISTER_LOCAL_SIGN_IN_ENABLED=false` | ProPR refuses the password sign-in at `/login` and the local sign-in of every tenant, also of a tenant that allows local login, and checks no password. It changes no password and creates no account with a password. | Personal access tokens keep working. The bootstrap administrator keeps its password, which works again once the password sign-in is on. |
+| `MEISTER_TENANT_SSO_ENABLED=false` | ProPR offers no identity provider of a tenant and refuses the sign-ins through these providers, also a sign-in that waits for the confirmation of its link. It refuses to create a provider or to save one as enabled. | ProPR keeps the providers, and tenant administrators can disable and delete them. The enabled providers sign people in again once the setting is on. |
+
+A session that started before the change runs until it ends.
+
+Without the password sign-in, platform administrators sign in through the identity provider for platform
+administrators only. ProPR refuses to start without that provider and without a license that grants
+`sso-authentication`, because no administrator could sign in. Personal access tokens continue to authenticate API
+calls. Administrators can create them under **Settings → Personal Access Tokens** after signing in through SSO.
+
 ### The return address of a sign-in
 
 A sign-in through an identity provider returns the access token in the URL fragment of a page of the user
@@ -376,7 +401,13 @@ with `return_url_not_allowed` for a page on another origin, and again at the cal
 ## Automation credentials
 
 Scripts and CI authenticate with a personal access token in the `X-User-Pat` header instead of a JWT.
-A PAT carries exactly the permissions of the user it belongs to. Tokens are stored hashed.
+A PAT carries exactly the permissions of the user it belongs to. Tokens are stored hashed. Administrators can create
+PATs under Settings after signing in through SSO.
+
+`MEISTER_PROVISIONED_USER_PAT_MAX_DAYS` can limit the lifetime of customer tokens from their creation time.
+Authentication applies the limit to existing tokens as well as new ones. Platform administrator tokens and tokens
+of accounts that were not provisioned are exempt. See
+[personal access tokens of provisioned users](../operate/configuration.md#personal-access-tokens-of-provisioned-users).
 
 An external application can use a tenant machine credential in the `X-Tenant-Machine-Token` header for client
 lookup, review listing and result retrieval, review submission by coordinates, and client-scoped SCM and

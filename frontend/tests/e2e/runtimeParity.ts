@@ -296,6 +296,15 @@ export async function installLiveRuntimeApiStubs(page: Page, testInfo: TestInfo)
   })
 
   await page.route('**/api/users/me/pats/*', async (route) => {
+    if (route.request().url().endsWith('/policy')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ maximumLifetimeDays: null }),
+      })
+      return
+    }
+
     await route.fulfill({ status: 204, body: '' })
   })
 }

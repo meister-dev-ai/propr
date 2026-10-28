@@ -25,7 +25,7 @@ the rest.
 
 | Capability | Key | Without it |
 |---|---|---|
-| Single sign-on | `sso-authentication` | Tenant users and platform administrators sign in with local accounts only. ProPR ignores the identity providers configured for platform administrators and for provisioned users, so provisioned users cannot sign in |
+| Single sign-on | `sso-authentication` | Tenant users and platform administrators sign in with local accounts only. ProPR ignores the identity providers configured for platform administrators and for provisioned users, so provisioned users cannot sign in. An installation that turns off the password sign-in does not start |
 | Parallel review execution | `parallel-review-execution` | One review at a time, one file at a time, however many replicas run |
 | Distributed review execution | `distributed-execution` | No runner can enroll or lease; reviews run in the control plane |
 | Multiple SCM providers | `multiple-scm-providers` | One SCM provider connection per client |

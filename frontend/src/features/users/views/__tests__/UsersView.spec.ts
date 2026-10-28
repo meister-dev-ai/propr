@@ -78,6 +78,45 @@ describe('UsersView enable/disable actions', () => {
     installFetch()
   })
 
+  it('offers no new account with a password when the installation does not offer the password sign-in', async () => {
+    const fetchMock = global.fetch as unknown as Mock
+    const answer = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation((url: string, opts?: RequestInit) =>
+      url.endsWith('/auth/options')
+        ? Promise.resolve(mockRes({ edition: 'commercial', availableSignInMethods: ['sso'], capabilities: [] }))
+        : answer(url, opts))
+
+    const wrapper = await mountView()
+
+    expect(findButton(wrapper, 'New User')).toBeUndefined()
+    expect(wrapper.find('[data-testid="users-password-sign-in-turned-off"]').exists()).toBe(true)
+  })
+
+  it('offers a new account while the installation offers the password sign-in', async () => {
+    const wrapper = await mountView()
+
+    expect(findButton(wrapper, 'New User')).toBeTruthy()
+    expect(wrapper.find('[data-testid="users-password-sign-in-turned-off"]').exists()).toBe(false)
+  })
+
+  it('waits for the sign-in options before offering password-based account creation', async () => {
+    const fetchMock = global.fetch as unknown as Mock
+    const answer = fetchMock.getMockImplementation()!
+    let resolveOptions!: (response: ReturnType<typeof mockRes>) => void
+    const pendingOptions = new Promise<ReturnType<typeof mockRes>>(resolve => { resolveOptions = resolve })
+    fetchMock.mockImplementation((url: string, opts?: RequestInit) =>
+      url.endsWith('/auth/options') ? pendingOptions : answer(url, opts))
+    const wrapper = await mountView()
+
+    expect(findButton(wrapper, 'New User')).toBeUndefined()
+    expect(wrapper.find('[data-testid="users-password-sign-in-turned-off"]').exists()).toBe(false)
+    resolveOptions(mockRes({ availableSignInMethods: ['password'] }))
+    await flushPromises()
+
+    expect(findButton(wrapper, 'New User')).toBeTruthy()
+    wrapper.unmount()
+  })
+
   it('renders a Disable button on active rows and a Re-enable button on disabled rows', async () => {
     const wrapper = await mountView()
 

@@ -2,19 +2,24 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Security;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
 
 /// <summary>EF Core implementation of <see cref="IUserPatRepository" />.</summary>
-public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatRepository
+public sealed class UserPatRepository(MeisterProPRDbContext db, IOptions<ProvisionedUserPatOptions>? lifetimeOptions = null) : IUserPatRepository
 {
     public async Task AddAsync(UserPat pat, CancellationToken ct = default)
     {
+        var maximumDays = await this.GetMaximumLifetimeDaysAsync(pat.UserId, ct);
+        pat.ExpiresAt = EffectiveExpiry(pat.CreatedAt, pat.ExpiresAt, maximumDays);
         db.UserPats.Add(
             new UserPatRecord
             {
@@ -29,6 +34,20 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
                 IsRevoked = pat.IsRevoked,
             });
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<int?> GetMaximumLifetimeDaysAsync(Guid userId, CancellationToken ct = default)
+    {
+        var maximumDays = lifetimeOptions?.Value.MaximumDays;
+        if (maximumDays is null)
+        {
+            return null;
+        }
+
+        var applies = await db.ProvisionedUsers.AnyAsync(
+            user => user.UserId == userId && user.User != null && user.User.GlobalRole != AppUserRole.Admin,
+            ct);
+        return applies ? maximumDays : null;
     }
 
     public async Task<UserPat?> GetActiveByRawTokenAsync(string rawToken, CancellationToken ct = default)
@@ -60,11 +79,31 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
             return null;
         }
 
+        var maximumDays = await this.GetMaximumLifetimeDaysAsync(record.UserId, ct);
+        var expiresAt = EffectiveExpiry(record.CreatedAt, record.ExpiresAt, maximumDays);
+        if (expiresAt <= now)
+        {
+            return null;
+        }
+
         record.LastUsedAt = now;
         record.TokenLookupHash = lookupHash; // idempotent on the fast path; backfills on the legacy path
         await db.SaveChangesAsync(ct);
 
-        return MapToDomain(record);
+        var token = MapToDomain(record);
+        token.ExpiresAt = expiresAt;
+        return token;
+    }
+
+    private static DateTimeOffset? EffectiveExpiry(DateTimeOffset createdAt, DateTimeOffset? expiresAt, int? maximumDays)
+    {
+        if (maximumDays is null)
+        {
+            return expiresAt;
+        }
+
+        var maximumExpiry = createdAt.AddDays(maximumDays.Value);
+        return expiresAt is null || expiresAt > maximumExpiry ? maximumExpiry : expiresAt;
     }
 
     private static UserPat MapToDomain(UserPatRecord record)
@@ -86,8 +125,11 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
     public async Task<IReadOnlyList<UserPat>> ListForUserAsync(Guid userId, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
+        var maximumDays = await this.GetMaximumLifetimeDaysAsync(userId, ct);
+        var earliestCreation = maximumDays.HasValue ? now.AddDays(-maximumDays.Value) : (DateTimeOffset?)null;
         var records = await db.UserPats
             .Where(p => p.UserId == userId && !p.IsRevoked && (p.ExpiresAt == null || p.ExpiresAt > now))
+            .Where(p => earliestCreation == null || p.CreatedAt > earliestCreation)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
 
@@ -97,7 +139,7 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
                 UserId = p.UserId,
                 TokenHash = string.Empty, // never expose
                 Label = p.Label,
-                ExpiresAt = p.ExpiresAt,
+                ExpiresAt = EffectiveExpiry(p.CreatedAt, p.ExpiresAt, maximumDays),
                 CreatedAt = p.CreatedAt,
                 LastUsedAt = p.LastUsedAt,
                 IsRevoked = p.IsRevoked,

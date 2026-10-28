@@ -39,7 +39,7 @@
         <div class="settings-page-header">
           <h2 class="view-title">Profile & Password</h2>
           <p class="settings-description">
-            <template v-if="vm.hasLocalPassword.value">
+            <template v-if="canChangePassword">
               Change the password for
               <strong>{{ vm.usernameLabel.value }}</strong>.
             </template>
@@ -55,13 +55,14 @@
           <div class="section-card-header settings-card-header">
             <div>
               <h3>Password</h3>
-              <p v-if="vm.hasLocalPassword.value" class="settings-subtitle">Changing your password revokes refresh tokens. Personal access tokens remain valid.</p>
+              <p v-if="canChangePassword" class="settings-subtitle">Changing your password revokes refresh tokens. Personal access tokens remain valid.</p>
+              <p v-else-if="vm.hasLocalPassword.value" class="settings-subtitle" data-testid="settings-password-sign-in-turned-off">This installation does not offer the password sign-in, so the password of this account cannot be changed.</p>
               <p v-else class="settings-subtitle">This account signs in through single sign-on and does not have a local password to change here.</p>
             </div>
             <span class="chip chip-muted">{{ vm.usernameLabel.value }}</span>
           </div>
 
-          <div v-if="vm.hasLocalPassword.value" class="section-card-body">
+          <div v-if="canChangePassword" class="section-card-body">
             <form class="settings-form" @submit.prevent="vm.changePassword">
               <div class="settings-form-grid">
                 <div class="form-field">
@@ -110,17 +111,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useSession } from '@/composables/useSession'
 import { useSettingsViewModel } from '@/features/settings/view-models/useSettingsViewModel'
+import { offersPasswordSignIn, turnsOffTenantSignIn } from '@/features/auth/installationSignIns'
+import { getAuthOptions, type AuthOptions } from '@/services/authOptionsService'
 import PatsView from '@/features/pats/views/PatsView.vue'
 import SignInLinksPanel from '@/features/settings/components/SignInLinksPanel.vue'
 
 const vm = useSettingsViewModel()
 const { isCapabilityAvailable } = useSession()
 const activeTab = ref<'profile' | 'pats' | 'sign-ins'>('profile')
-// The sign-ins of tenants exist with single sign-on only.
-const showSignInLinks = computed(() => isCapabilityAvailable('sso-authentication'))
+const signInOptions = ref<AuthOptions | null>(null)
+// A password serves only the password sign-in, so the form appears only while the installation offers it.
+const canChangePassword = computed(() => vm.hasLocalPassword.value && offersPasswordSignIn(signInOptions.value))
+// The sign-ins of tenants exist with single sign-on only, and only while the installation offers them.
+const showSignInLinks = computed(() => isCapabilityAvailable('sso-authentication') && !turnsOffTenantSignIn(signInOptions.value))
+
+onMounted(async () => {
+  signInOptions.value = await getAuthOptions().catch(() => null)
+})
 </script>
 
 <style scoped>

@@ -15,7 +15,7 @@ A wrong value behaves in one of three ways:
 | Set it to something unparsable - a word where a number belongs, or a blank value | Silently ignored; the default is used. |
 | Set it to a parsable value outside the accepted range | **Startup fails** for most settings, with a message naming the setting and its bounds. |
 
-Six groups depart from that:
+The following settings depart from that:
 
 - `MEISTER_SESSION_IDLE_MINUTES` and `MEISTER_SESSION_ABSOLUTE_HOURS` fail startup on anything that is
   not a positive integer. They do not fall back to their default.
@@ -25,8 +25,12 @@ Six groups depart from that:
 - The `MEISTER_PROVISIONED_USER_SSO_*` variables fail startup on any value outside the accepted ones, and when one
   of them is set without `MEISTER_PROVISIONED_USER_SSO_AUTHORITY`. See
   [single sign-on for provisioned users](#single-sign-on-for-provisioned-users).
+- `MEISTER_LOCAL_SIGN_IN_ENABLED` and `MEISTER_TENANT_SSO_ENABLED` accept `true` or `false` without regard to case
+  or surrounding whitespace. Unset, blank, or whitespace-only values use the default `true`; other unparsable
+  values fail startup. See [installation sign-in policy](#installation-sign-in-policy).
 - `MEISTER_PLATFORM_ADMIN_ELEVATION_MAX_MINUTES` fails startup on anything that is not a whole number from 1 to
   1440. It does not fall back to its default.
+- `MEISTER_PROVISIONED_USER_PAT_MAX_DAYS` fails startup unless it is unset or a whole number from 1 to 3650.
 - A value under the minimum of an interval marked "clamped" is silently raised to that minimum.
 - **Most `AI_*` review-tuning settings are not range-checked.** An out-of-range value is used as
   given. Their listed ranges describe supported operation. The two
@@ -229,6 +233,77 @@ and the metadata URL are the same as under
 ProPR records every provisioned user under the authority without a trailing slash. After a change of
 `MEISTER_PROVISIONED_USER_SSO_AUTHORITY`, the users that the platform provisioned under the former authority no longer
 sign in, and the platform provisions them again.
+
+### Personal access tokens of provisioned users
+
+`MEISTER_PROVISIONED_USER_PAT_MAX_DAYS` limits the lifetime of personal access tokens owned by provisioned users.
+Leave it unset to impose no installation limit, or set a whole number from 1 to 3650. Hosted cells can set it to `90`.
+Platform administrators and accounts that were not provisioned are exempt.
+
+ProPR assigns new tokens the earlier of the requested expiry and their creation time plus the limit. An omitted
+expiry uses the limit. Existing tokens also expire at their creation time plus the configured limit, even when
+they were issued without an expiry. An earlier stored expiry still applies. Token listing and authentication use
+the same effective expiry. The Personal Access Tokens page shows the applicable limit and the resulting expiry.
+
+The setting takes effect after a restart. Lowering it can invalidate existing customer tokens immediately.
+Increasing or removing it can make an existing token usable again if its stored expiry and revocation state allow
+it. Revoke a token to end its access independently of future setting changes.
+
+## Installation sign-in policy
+
+An installation that signs people in only through its own identity providers turns off the password sign-in and the
+identity providers of tenants. A cell of a hosting platform, whose people sign in through the providers for platform
+administrators and for provisioned users, sets both variables to `false`.
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_LOCAL_SIGN_IN_ENABLED` | Whether people sign in with a user name and a password, at `/login` and at the local sign-in of a tenant | `true` | `true`, `false` | no |
+| `MEISTER_TENANT_SSO_ENABLED` | Whether the members of a tenant sign in through the identity providers that the tenant configures | `true` | `true`, `false` | no |
+
+With `MEISTER_LOCAL_SIGN_IN_ENABLED=false`, ProPR refuses the password sign-in of every account, also in a tenant
+that allows local login. The sign-in page shows no password form. ProPR changes no password and creates no account
+with a password. Personal access tokens keep working, so scripts and a hosting platform call the API with the
+`X-User-Pat` header as before. ProPR still creates the bootstrap administrator from `MEISTER_BOOTSTRAP_ADMIN_USER`
+and `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` when no active platform administrator exists. The password of that account
+works again once the variable is `true`.
+
+Without the password sign-in, platform administrators sign in only through the
+[identity provider for platform administrators](#single-sign-on-for-platform-administrators). ProPR therefore refuses
+to start when `MEISTER_PLATFORM_ADMIN_SSO_AUTHORITY` is not set, when the license does not grant
+`sso-authentication`, and when the license cannot be read at startup. The error message contains the names of the
+variables. If the license stops granting `sso-authentication` while ProPR runs, platform administrators cannot sign
+in, and the next start fails until a license grants it again or the variable is `true`.
+
+With `MEISTER_TENANT_SSO_ENABLED=false`, ProPR offers no identity provider of a tenant and refuses the sign-ins
+through these providers. A tenant administrator cannot create a provider or save one as enabled, and can still
+disable and delete providers. ProPR keeps the providers and offers the enabled ones again once the variable is `true`.
+
+A session that started before either change runs until it ends.
+
+### Switching to installation identity providers
+
+An installation keeps a way for administrators to sign in when it turns the sign-ins off in this order:
+
+1. Start a new installation with `MEISTER_LOCAL_SIGN_IN_ENABLED=true` so ProPR applies its migrations and creates
+   the bootstrap administrator. License activation requires the administration API; `--verify-license` verifies a
+   document without activating it.
+2. Configure the identity provider for platform administrators, and for a hosting platform the
+   [identity provider for provisioned users](#single-sign-on-for-provisioned-users). Activate a license that grants
+   `sso-authentication`. After the restart, the log of the start contains the message that platform administrators
+   can sign in through the provider.
+3. Sign in through the provider with an account that holds the required role. ProPR gives the account platform
+   administrator rights.
+4. If scripts or a hosting platform need API access, create their tokens under
+   **Settings → Personal Access Tokens**. Tokens that exist keep working. An SSO administrator's tokens are revoked
+   when that account signs in without the required administrator role; use a dedicated account for automation.
+5. Set `MEISTER_TENANT_SSO_ENABLED=false`, so the members of tenants sign in through the identity providers of the
+   installation only.
+6. Set `MEISTER_LOCAL_SIGN_IN_ENABLED=false` and restart. If the start fails, the error message contains the name of
+   the variable to correct. With `MEISTER_LOCAL_SIGN_IN_ENABLED=true`, the installation starts as before.
+7. Open `/login`. The page shows the buttons of the identity providers and no password form.
+
+To use the password sign-in again, for example while the identity provider is unreachable, set
+`MEISTER_LOCAL_SIGN_IN_ENABLED=true` and restart. The bootstrap administrator then signs in with its password.
 
 ## Review workers
 
