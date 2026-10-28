@@ -361,7 +361,7 @@ public sealed class ProvisionedUserService(
         dbContext.ProvisionedUsers.Add(record);
         await dbContext.SaveChangesAsync(ct);
 
-        auditLog.ProvisionedUserCreated(actorUserId ?? Guid.Empty, account.Id, account.Username, issuer, subject);
+        auditLog.ProvisionedUserCreated(actorUserId ?? Guid.Empty, account.Id, issuer);
         return new ProvisioningResult<ProvisionedUserDto>(ProvisioningOutcome.Created, ToDto(record, account));
     }
 

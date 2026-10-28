@@ -67,9 +67,9 @@ public interface IUserAccountAuditLog
 
     /// <summary>
     ///     Records that a hosting platform provisioned the account of a person at the identity provider for provisioned
-    ///     users. The issuer and the subject name the person at the provider.
+    ///     users. The actor and internal account identifiers correlate the event without including the username or subject.
     /// </summary>
-    void ProvisionedUserCreated(Guid actorUserId, Guid userId, string username, string issuer, string subject);
+    void ProvisionedUserCreated(Guid actorUserId, Guid userId, string issuer);
 
     /// <summary>Records that ProPR disabled a provisioned account because the hosting platform removed its last membership.</summary>
     void ProvisionedUserDisabledWithoutMembership(Guid actorUserId, Guid userId, string username);

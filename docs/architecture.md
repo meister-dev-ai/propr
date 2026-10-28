@@ -64,6 +64,11 @@ options expose the allowed methods to the frontend. Startup validation requires 
 platform administrator provider when password sign-in is disabled. Administrators create personal access tokens
 through the authenticated token management endpoints, including after SSO sign-in.
 
+Provisioning emits a `user.provisioned` application audit event with the acting user ID, the internal account ID
+and the configured issuer. The provisioning audit interface accepts these identifiers without the email-derived
+username or the external identity subject. Identity and Access keeps those identity values in its account and
+provisioning records.
+
 The user token repository applies the configured lifetime to creation, listing and authentication. It identifies
 provisioned accounts from durable provisioning records and exempts stored platform administrator roles. Existing
 tokens use their creation time and the current policy without rewriting stored expiry dates. The token policy

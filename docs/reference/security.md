@@ -559,9 +559,11 @@ that sign-in is written as `user.platform_admin_granted` or `user.platform_admin
 
 A sign-in through the identity provider for provisioned users is written as `user.signed_in` with the method
 `provisioned_identity_provider`, and a refused one as a blocked `user.signed_in` with its reason. The provisioning of a
-user is written as `user.provisioned`. When ProPR disables or enables a provisioned account for its memberships, it
-writes `user.disabled` with the reason `no_membership` or `user.reenabled` with the reason `membership`. The changes of
-memberships and client access are in the audit history of the tenant.
+user is written as `user.provisioned` with the acting user ID, the internal account ID and the configured issuer.
+This provisioning event excludes the email-derived username and the external identity subject. When ProPR disables
+or enables a provisioned account for its memberships, it writes `user.disabled` with the reason `no_membership` or
+`user.reenabled` with the reason `membership`. The changes of memberships and client access are in the audit history
+of the tenant.
 
 The audit history of a tenant also records the elevations of platform administrators and every content read
 under them; see [platform administrator access to tenant content](#platform-administrator-access-to-tenant-content).

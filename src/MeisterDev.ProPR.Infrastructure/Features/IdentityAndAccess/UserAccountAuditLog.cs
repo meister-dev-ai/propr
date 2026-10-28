@@ -143,16 +143,14 @@ public sealed class UserAccountAuditLog(ILogger<UserAccountAuditLog> logger) : I
             reason);
     }
 
-    public void ProvisionedUserCreated(Guid actorUserId, Guid userId, string username, string issuer, string subject)
+    public void ProvisionedUserCreated(Guid actorUserId, Guid userId, string issuer)
     {
         logger.LogInformation(
-            "{AuditEvent} actor={ActorUserId} target={TargetUserId} username={TargetUsername} issuer={Issuer} subject={Subject}",
+            "{AuditEvent} actor={ActorUserId} target={TargetUserId} issuer={Issuer}",
             "user.provisioned",
             actorUserId,
             userId,
-            username,
-            issuer,
-            subject);
+            issuer);
     }
 
     public void ProvisionedUserDisabledWithoutMembership(Guid actorUserId, Guid userId, string username)

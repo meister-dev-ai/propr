@@ -59,9 +59,7 @@ public sealed class ProvisionedUsersApiTests(ProvisionedUserApiFactory factory) 
         factory.AuditLog.Received(1).ProvisionedUserCreated(
             Arg.Any<Guid>(),
             account.Id,
-            account.Username,
-            ProvisionedUserApiFactory.Authority,
-            subject);
+            ProvisionedUserApiFactory.Authority);
     }
 
     [Fact]

@@ -563,6 +563,9 @@ public partial class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_RepositoryPassedTheBoundWhileItWasFetched_RefusesItAndPostsTheReason()
     {
+        const string privateFailureDetail = "fetch failed in /private/workspace using credential=private-token";
+        const string expectedReason = "Review not started: the repository reached 4,096 MB while it was fetched and "
+                                      + "exceeds the limit of 2,048 MB. Raise the limit to review this repository.";
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
             CreateDeps();
 
@@ -580,7 +583,7 @@ public partial class ReviewOrchestrationServiceTests
                     new ReviewWorkspaceFailure(
                         "fetch",
                         "repository_over_size_limit",
-                        "The repository is larger than the client allows.",
+                        privateFailureDetail,
                         Retryable: false,
                         FallbackApplied: false,
                         new ReviewRepositorySizeBreach(4_096, 2_048))));
@@ -595,13 +598,12 @@ public partial class ReviewOrchestrationServiceTests
 
         await jobs.Received(1).SetAdmissionRefusedAsync(
             job.Id,
-            Arg.Is<string>(reason => reason.Contains("4,096 MB", StringComparison.Ordinal)
-                                     && reason.Contains("2,048 MB", StringComparison.Ordinal)),
+            expectedReason,
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
         await notice.Received(1).PostAsync(
             Arg.Is<ReviewJob>(refused => refused.Id == job.Id),
-            Arg.Is<string>(reason => reason.Contains("4,096 MB", StringComparison.Ordinal)),
+            expectedReason,
             Arg.Any<IReadOnlyList<PrCommentThread>?>(),
             Arg.Any<CancellationToken>());
 
