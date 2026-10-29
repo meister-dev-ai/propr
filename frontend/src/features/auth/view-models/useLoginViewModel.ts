@@ -49,6 +49,9 @@ export interface LoginViewModel {
   passwordSignInAvailable: ComputedRef<boolean>
   ssoCapabilityMessage: ComputedRef<string>
   canUseTenantSignIn: ComputedRef<boolean>
+  /** Whether customers can sign in through the hosting platform or a tenant. */
+  hasCustomerSignIn: ComputedRef<boolean>
+  showStaffSignIn: Ref<boolean>
   /** The identity provider for platform administrators, or null when the installation offers none. */
   platformAdminSignIn: ComputedRef<PlatformAdminSignIn | null>
   /** The address that starts the sign-in through that provider; empty without a provider. */
@@ -100,6 +103,7 @@ export function useLoginViewModel(options: UseLoginViewModelOptions = {}): Login
   const password = ref('')
   const tenantSlug = ref('')
   const showTenantSlugPrompt = ref(false)
+  const showStaffSignIn = ref(false)
   const loading = ref(false)
   const validationError = ref('')
   const authError = ref('')
@@ -110,6 +114,7 @@ export function useLoginViewModel(options: UseLoginViewModelOptions = {}): Login
   const signInMessage = computed(() => {
     const options = authOptions.value
     if (!options) return 'Sign in with your username and password.'
+    if (options.provisionedUserSignIn) return 'Sign in with your customer account to open your reviews.'
     const offersSingleSignOn = options.availableSignInMethods.includes('sso')
       || Boolean(options.platformAdminSignIn)
       || Boolean(options.provisionedUserSignIn)
@@ -132,6 +137,7 @@ export function useLoginViewModel(options: UseLoginViewModelOptions = {}): Login
 
   const platformAdminSignIn = computed(() => authOptions.value?.platformAdminSignIn ?? null)
   const provisionedUserSignIn = computed(() => authOptions.value?.provisionedUserSignIn ?? null)
+  const hasCustomerSignIn = computed(() => Boolean(provisionedUserSignIn.value) || canUseTenantSignIn.value)
 
   // Both providers return the browser to the callback page of this frontend, as an absolute address on its origin.
   function callbackReturnUrl(): string {
@@ -218,6 +224,8 @@ export function useLoginViewModel(options: UseLoginViewModelOptions = {}): Login
     passwordSignInAvailable,
     ssoCapabilityMessage,
     canUseTenantSignIn,
+    hasCustomerSignIn,
+    showStaffSignIn,
     platformAdminSignIn,
     platformAdminSignInHref,
     provisionedUserSignIn,

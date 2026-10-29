@@ -69,6 +69,10 @@ and the configured issuer. The provisioning audit interface accepts these identi
 username or the external identity subject. Identity and Access keeps those identity values in its account and
 provisioning records.
 
+The login view uses the customer and administrator providers in the authentication options to distinguish their
+actions. It presents customer or tenant sign-in first and reveals the administrator provider through **Staff access**.
+An administrator provider remains directly available when the installation offers no customer or tenant sign-in.
+
 The user token repository applies the configured lifetime to creation, listing and authentication. It identifies
 provisioned accounts from durable provisioning records and exempts stored platform administrator roles. Existing
 tokens use their creation time and the current policy without rewriting stored expiry dates. The token policy

@@ -223,6 +223,11 @@ ProPR has three sign-ins.
   its customers. The platform creates their accounts and memberships through the administration API; see
   [provisioned users and the identity provider of a hosting platform](#provisioned-users-and-the-identity-provider-of-a-hosting-platform).
 
+The login page presents the hosting platform's customer provider first, or tenant sign-in when no customer provider
+is configured. **Staff access** reveals the platform administrator provider when customer or tenant sign-in is
+available. An installation with no customer or tenant sign-in shows its administrator provider directly. The
+password form follows the installation sign-in policy.
+
 Passwords are stored as BCrypt hashes. A session issues a short-lived access token plus an httpOnly
 refresh cookie, and the browser refreshes silently. `MEISTER_JWT_SECRET` signs the access tokens and
 has a minimum length; rotating it invalidates every token already issued.

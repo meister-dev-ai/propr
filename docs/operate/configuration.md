@@ -300,7 +300,9 @@ An installation keeps a way for administrators to sign in when it turns the sign
    installation only.
 6. Set `MEISTER_LOCAL_SIGN_IN_ENABLED=false` and restart. If the start fails, the error message contains the name of
    the variable to correct. With `MEISTER_LOCAL_SIGN_IN_ENABLED=true`, the installation starts as before.
-7. Open `/login`. The page shows the buttons of the identity providers and no password form.
+7. Open `/login`. The customer provider is the primary sign-in, and **Staff access** opens the administrator
+   provider. An installation without a customer provider shows the administrator provider directly. The password
+   form is hidden.
 
 To use the password sign-in again, for example while the identity provider is unreachable, set
 `MEISTER_LOCAL_SIGN_IN_ENABLED=true` and restart. The bootstrap administrator then signs in with its password.
