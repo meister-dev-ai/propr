@@ -12,7 +12,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Testcontainers.PostgreSql" Version="4.11.0"/>
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0"/>
         <!-- Pinned to override a vulnerable transitive, as the other test projects do. -->
         <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1"/>

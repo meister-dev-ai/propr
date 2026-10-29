@@ -29,6 +29,9 @@
         <PackageReference Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)"/>
         <PackageReference Include="Microsoft.TeamFoundationServer.Client" Version="20.269.0-preview"/>
         <PackageReference Include="Microsoft.VisualStudio.Services.Client" Version="20.269.0-preview"/>
+        <!-- Override System.Security.Cryptography.Pkcs 9.0.10 of the Azure DevOps client packages, which has the
+             denial of service vulnerabilities CVE-2026-84008 and CVE-2026-70162. -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14"/>
         <!-- Pin OIDC discovery / JWKS validation types (JwtSecurityTokenHandler, ConfigurationManager,
              OpenIdConnectConfigurationRetriever) that were previously only present transitively. -->
         <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="7.7.1"/>

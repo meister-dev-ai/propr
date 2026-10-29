@@ -24,7 +24,7 @@
         <PackageReference Include="Microsoft.TeamFoundationServer.Client" Version="20.269.0-preview"/>
         <PackageReference Include="Microsoft.VisualStudio.Services.Client" Version="20.269.0-preview"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.7"/>
-        <PackageReference Include="Testcontainers.PostgreSql" Version="4.11.0"/>
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="Xunit.SkippableFact" Version="1.4.13"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">

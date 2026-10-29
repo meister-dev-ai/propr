@@ -16,6 +16,9 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0"/>
         <PackageReference Include="Microsoft.TeamFoundationServer.Client" Version="20.269.0-preview"/>
         <PackageReference Include="Microsoft.VisualStudio.Services.Client" Version="20.269.0-preview"/>
+        <!-- Override System.Security.Cryptography.Pkcs 9.0.10 of the Azure DevOps client packages, which has the
+             denial of service vulnerabilities CVE-2026-84008 and CVE-2026-70162. -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1"/>
         <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0"/>
         <PackageReference Include="SharpToken" Version="2.0.6"/>
