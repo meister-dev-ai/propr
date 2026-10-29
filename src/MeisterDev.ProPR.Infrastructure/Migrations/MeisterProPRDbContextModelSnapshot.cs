@@ -2854,6 +2854,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
+                    b.Property<int>("CompletionReason")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("completion_reason");
+
                     b.Property<int>("ConsecutiveReclaimCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -7060,6 +7066,14 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("local_login_enabled");
+
+                    b.Property<int?>("MaxConcurrentReviews")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_concurrent_reviews");
+
+                    b.Property<int?>("MaxReviewDurationSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_review_duration_seconds");
 
                     b.Property<decimal?>("MonthlyBudgetHardCapUsd")
                         .HasPrecision(18, 6)

@@ -316,6 +316,12 @@ public sealed class ReviewJob
     public ReviewJobFailureReason FailureReason { get; private set; }
 
     /// <summary>
+    ///     Why this job completed before it had reviewed everything in scope, or
+    ///     <see cref="ReviewJobCompletionReason.None" />. Set from the result each time the job completes.
+    /// </summary>
+    public ReviewJobCompletionReason CompletionReason { get; private set; }
+
+    /// <summary>
     ///     Error message if the job failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
@@ -511,12 +517,17 @@ public sealed class ReviewJob
     ///     Finalizes the review result onto the job and denormalizes its summary into
     ///     <see cref="ResultSummary" />. The single seam both repository implementations use, so the stored
     ///     summary stays consistent across first runs, restarts, and resumes (all re-finalize through here).
+    ///     The completion reason is taken from the result as well, so a job that is restarted and then reviews
+    ///     everything no longer carries the reason of the earlier run.
     /// </summary>
     /// <param name="result">The completed review result.</param>
     public void ApplyResult(ReviewResult result)
     {
         this.Result = result;
         this.ResultSummary = result.Summary;
+        this.CompletionReason = result.TimeLimitReached
+            ? ReviewJobCompletionReason.TimeLimitReached
+            : ReviewJobCompletionReason.None;
     }
 
     /// <summary>Increments the token aggregates. Called after each protocol pass completes.</summary>

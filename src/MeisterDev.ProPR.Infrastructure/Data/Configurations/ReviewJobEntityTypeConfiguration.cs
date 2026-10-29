@@ -189,6 +189,12 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasDefaultValue(ReviewJobFailureReason.Unspecified)
             .IsRequired();
 
+        builder.Property(j => j.CompletionReason)
+            .HasColumnName("completion_reason")
+            .HasConversion<int>()
+            .HasDefaultValue(ReviewJobCompletionReason.None)
+            .IsRequired();
+
         builder.Property(j => j.RetryCount)
             .HasColumnName("retry_count")
             .HasDefaultValue(0)

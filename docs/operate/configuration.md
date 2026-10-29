@@ -321,6 +321,10 @@ reviews than this setting, the license limit applies - see [editions](../referen
 setting and `AI_MAX_FILE_REVIEW_CONCURRENCY` combine into peak load:
 [review workers](deploy.md#review-workers).
 
+A platform administrator can also limit the concurrent reviews of one tenant. That limit counts the reviews of the
+tenant on every instance and runner, and it applies together with this setting and the license limit - see
+[tenant review limits](../concepts/reviews.md#tenant-review-limits).
+
 ## The runner host
 
 Read by the runner container, not by the control plane. The runner exposes a health endpoint and
@@ -501,6 +505,10 @@ failed, and comments it had already posted stay on the pull request.
 `REVIEW_LEASE_PUBLICATION_TIMEOUT_MINUTES` does not prevent this; it governs how long a job may sit in
 publication before a sweep treats it as stuck. Set the cap well above how long a review of your largest
 pull requests takes.
+
+A platform administrator can set a shorter maximum review duration for one tenant. A review that reaches it starts
+no further files and ends as completed, with a summary of the files it has reviewed - see
+[tenant review limits](../concepts/reviews.md#tenant-review-limits).
 
 ## Review workspace
 

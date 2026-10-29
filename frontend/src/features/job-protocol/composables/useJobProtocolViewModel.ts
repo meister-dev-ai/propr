@@ -16,6 +16,7 @@ import {
     formatBudgetBlockMessage,
     formatBudgetSoftCapMessage,
 } from './budgetBlock'
+import { formatTimeLimitMessage } from './completionReason'
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 import { formatTriageDecision } from './formatTriageDecision'
@@ -375,6 +376,9 @@ export function useJobProtocolViewModel() {
 
     const budgetSoftCapMessage = computed<string | null>(() =>
         formatBudgetSoftCapMessage(jobStatus.value, jobDetail.value?.budgetStatus ?? null))
+
+    const timeLimitMessage = computed<string | null>(() =>
+        formatTimeLimitMessage(jobStatus.value, jobDetail.value?.completionReason ?? null))
 
     async function restart() {
         const jobId = route.params.id as string
@@ -2046,6 +2050,7 @@ export function useJobProtocolViewModel() {
                     budgetStatus: detail.budgetStatus ?? null,
                     admissionRefusalReason: detail.admissionRefusalReason ?? null,
                     heldUntil: detail.heldUntil ?? null,
+                    completionReason: detail.completionReason ?? null,
                 }
             }
             if (!activePassId.value && normalizedProtocols.length > 0 && normalizedProtocols[0].id) {
@@ -2443,6 +2448,7 @@ export function useJobProtocolViewModel() {
         isBudgetBlocked,
         budgetBlockMessage,
         budgetSoftCapMessage,
+        timeLimitMessage,
         admissionState,
         admissionMessage,
         restarting,

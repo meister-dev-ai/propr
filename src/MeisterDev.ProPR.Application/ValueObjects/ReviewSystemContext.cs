@@ -323,6 +323,13 @@ public sealed class ReviewSystemContext
     public int? MaxStructuralParseBytes { get; set; }
 
     /// <summary>
+    ///     The maximum review duration of this review's tenant, or null when the tenant sets none. The scan starts
+    ///     no further files or pull-request-wide passes once it is reached. Every pass of the execution shares the
+    ///     one instance, so a copy for a pass records into the same limit.
+    /// </summary>
+    public ReviewTimeLimit? TimeLimit { get; set; }
+
+    /// <summary>
     ///     Resolves whether this job captures reasoning, falling back to the installation switch when nothing has
     ///     stated a policy for the job.
     /// </summary>

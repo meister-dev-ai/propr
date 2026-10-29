@@ -35,6 +35,7 @@ vi.mock('vue-router', async () => {
 
 vi.mock('@/services/tenantAdminService', () => ({
   getTenant: getTenantMock,
+  updateTenantReviewLimits: vi.fn(),
 }))
 
 vi.mock('@/services/authOptionsService', () => ({
@@ -58,6 +59,7 @@ vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     getCapability: () => ssoCapabilityRef.value,
     isCapabilityAvailable: () => true,
+    isAdmin: ref(false),
   }),
 }))
 
@@ -143,6 +145,27 @@ describe('TenantDetailView', () => {
 
     await openSection(wrapper, 'sso')
     expect(wrapper.text()).toContain('Acme Entra')
+  })
+
+  it('opens the review limits of the tenant from the sidebar', async () => {
+    getTenantMock.mockResolvedValue({
+      id: 'tenant-1',
+      slug: 'acme',
+      displayName: 'Acme Corp',
+      isActive: true,
+      localLoginEnabled: true,
+      isEditable: true,
+      createdAt: '2026-04-24T12:00:00Z',
+      updatedAt: '2026-04-24T12:00:00Z',
+      reviewExecutionLimits: { maxConcurrentReviews: 1, maxReviewDurationSeconds: 3600 },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+    await openSection(wrapper, 'review-limits')
+
+    expect(wrapper.get('[data-testid="tenant-max-concurrent-reviews-readout"]').text()).toBe('1 review at a time')
+    expect(wrapper.get('[data-testid="tenant-max-review-duration-readout"]').text()).toBe('1 hour')
   })
 
   it('shows the stable tenant redirect URI for provider registration', async () => {

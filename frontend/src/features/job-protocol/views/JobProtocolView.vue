@@ -82,6 +82,19 @@
             </div>
         </div>
 
+        <div
+            v-if="vm.timeLimitMessage"
+            class="budget-banner budget-banner--soft-capped"
+            data-testid="time-limit-banner"
+        >
+            <span class="budget-banner-icon">◷</span>
+            <div class="budget-banner-body">
+                <strong>Time limit reached</strong>
+                <p class="budget-banner-message">{{ vm.timeLimitMessage }}</p>
+                <p v-if="vm.filesReviewedLabel" class="budget-banner-progress">{{ vm.filesReviewedLabel }} files reviewed.</p>
+            </div>
+        </div>
+
         <p v-if="vm.loading" class="loading">Loading…</p>
         <ElevationRequiredNotice
             v-else-if="vm.elevationRequired"

@@ -154,7 +154,8 @@ public sealed class RunnerJobManifestResolverTests
         IReviewJobExecutionStore? executionStore = null,
         ITenantReasoningCapturePolicyProvider? reasoningCapturePolicies = null,
         IClientScmConnectionRepository? scmConnections = null,
-        IReviewFileResultStore? resultStore = null, IFindingTypeVocabularyProvider? findingVocabulary = null)
+        IReviewFileResultStore? resultStore = null, IFindingTypeVocabularyProvider? findingVocabulary = null,
+        IReviewTimeLimitReader? timeLimits = null)
     {
         return new RunnerJobManifestResolver(
             this._clients,
@@ -172,7 +173,8 @@ public sealed class RunnerJobManifestResolverTests
             executionStore: executionStore,
             reasoningCapturePolicies: reasoningCapturePolicies,
             scmConnections: scmConnections,
-            resultStore: resultStore, findingTypeVocabularyProvider: findingVocabulary);
+            resultStore: resultStore, findingTypeVocabularyProvider: findingVocabulary,
+            timeLimits: timeLimits);
     }
 
     [Fact]
@@ -699,6 +701,33 @@ public sealed class RunnerJobManifestResolverTests
         Assert.Equal(262_144, manifest.Behaviour!.MaxFileSizeBytes);
         Assert.Equal(131_072, manifest.Behaviour.MaxStructuralParseBytes);
         Assert.Equal(RunnerContractVersion.Current, manifest.ContractVersion);
+    }
+
+    // A runner has no database to read the tenant's maximum review duration from, so the manifest carries it,
+    // with the time left that the store measured for this execution.
+    [Fact]
+    public async Task TheManifest_CarriesTheTenantsMaximumReviewDurationAndTheTimeLeft()
+    {
+        var job = JobWithRevision();
+        var timeLimits = Substitute.For<IReviewTimeLimitReader>();
+        timeLimits.ReadAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(new ReviewTimeLimitReading(1800, TimeSpan.FromSeconds(1750)));
+
+        var manifest = (await this.CreateResolver(timeLimits: timeLimits).ResolveAsync(RequestFor(job))).Manifest!;
+
+        Assert.Equal(new RunnerReviewTimeLimit(1800, 1750), manifest.TimeLimit);
+    }
+
+    [Fact]
+    public async Task TheManifest_CarriesNoTimeLimit_WhenTheTenantSetsNone()
+    {
+        var job = JobWithRevision();
+        var timeLimits = Substitute.For<IReviewTimeLimitReader>();
+        timeLimits.ReadAsync(job.Id, Arg.Any<CancellationToken>()).Returns((ReviewTimeLimitReading?)null);
+
+        var manifest = (await this.CreateResolver(timeLimits: timeLimits).ResolveAsync(RequestFor(job))).Manifest!;
+
+        Assert.Null(manifest.TimeLimit);
     }
 
     [Fact]

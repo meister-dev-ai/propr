@@ -7,6 +7,7 @@ using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -302,7 +303,8 @@ public sealed class TenantAdminService(
             policy.UnresolvedProviderEntries,
             tenant.ReasoningCapturePolicy,
             new TenantBudgetConfigDto(tenant.MonthlyBudgetSoftCapUsd, tenant.MonthlyBudgetHardCapUsd),
-            new TenantReviewLimitsDto(tenant.AiMaxFileSizeBytes, tenant.AiMaxStructuralParseBytes));
+            new TenantReviewLimitsDto(tenant.AiMaxFileSizeBytes, tenant.AiMaxStructuralParseBytes),
+            new TenantReviewExecutionLimits(tenant.MaxConcurrentReviews, tenant.MaxReviewDurationSeconds));
     }
 
     private static string FormatCap(decimal? capUsd) =>

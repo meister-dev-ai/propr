@@ -29,6 +29,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Providers.GitLab.DependencyInject
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -120,6 +121,10 @@ public static class ReviewingModuleServiceCollectionExtensions
             services.AddScoped<ICustomerReviewHistoryReader, EfCustomerReviewHistoryReader>();
             services.AddScoped<IThreadPassJobRepository, EfThreadPassJobRepository>();
             services.AddScoped<IReviewSpendAccumulator, ReviewSpendAccumulator>();
+
+            // The maximum review duration of a tenant is measured against the database clock, which stamped the
+            // start of processing, so the reader exists only where there is a database.
+            services.AddScoped<IReviewTimeLimitReader, ReviewTimeLimitReader>();
 
             // Search keywords on resolution memories, extracted from text the memory already carries. The
             // extractor runs as a memory is stored; the sweeper exists only for memories written before it did,

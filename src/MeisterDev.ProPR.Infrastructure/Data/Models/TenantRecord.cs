@@ -64,6 +64,18 @@ public sealed class TenantRecord
     /// </summary>
     public int? AiMaxStructuralParseBytes { get; set; }
 
+    /// <summary>
+    ///     How many review jobs of this tenant may be processing at once, in process and on runners together, or
+    ///     null for no limit of the tenant's own. A claim admits a job only below this number.
+    /// </summary>
+    public int? MaxConcurrentReviews { get; set; }
+
+    /// <summary>
+    ///     How many seconds after the start of processing a review of this tenant starts no further files and
+    ///     completes with what it has reviewed, or null for no limit of the tenant's own.
+    /// </summary>
+    public int? MaxReviewDurationSeconds { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

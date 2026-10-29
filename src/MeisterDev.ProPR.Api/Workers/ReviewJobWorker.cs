@@ -364,9 +364,17 @@ public sealed partial class ReviewJobWorker(
                         break;
                     }
 
+                    if (capped.Outcome == ReviewJobCappedClaimOutcome.TenantAtCapacity)
+                    {
+                        LogTenantAtConcurrencyCap(logger, job.Id, capped.TenantId, capped.Cap);
+                    }
+
                     lease = capped.Lease;
                 }
 
+                // No lease means that another host claimed the job first or that the job's tenant runs as many
+                // reviews as its own cap allows. The job stays pending in both cases, and the jobs of other
+                // tenants in this window are still claimed.
                 if (lease is null)
                 {
                     continue;
@@ -848,4 +856,11 @@ public sealed partial class ReviewJobWorker(
         Message = "The installation has reached its ceiling of {Cap} concurrent reviews and the store reported "
                   + "no executing count. Further reviews stay pending until a running one finishes")]
     private static partial void LogConcurrencyCeilingReachedWithoutCount(ILogger logger, int cap);
+
+    // Debug, because a tenant at its cap stays there for as long as its running reviews take, and every cycle
+    // that meets one of its pending jobs would otherwise write a line.
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Review job {JobId} stays pending: tenant {TenantId} is at its cap of {Cap} concurrent reviews")]
+    private static partial void LogTenantAtConcurrencyCap(ILogger logger, Guid jobId, Guid? tenantId, int? cap);
 }

@@ -118,6 +118,54 @@ public sealed class RunnerFindingsIntakeTests
         Assert.Equal(["src/huge.cs"], published.ContextSkippedFilePaths);
     }
 
+    // A remote review that ended at the tenant's maximum review duration crosses the wire with that outcome, so
+    // ProPR names the files it left out in the summary and records on the job why it ended, as for an in-process
+    // review.
+    [Fact]
+    public async Task ATimeLimitedRemoteReview_ReachesPublicationWithItsTimeLimit()
+    {
+        ReviewResult? published = null;
+        this._publisher.PublishAsync(JobId, Arg.Do<ReviewResult>(result => published = result), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var source = new ReviewResult("Summary", [Comment("src/reviewed.cs")])
+        {
+            TimeLimitReached = true,
+            TimeLimitSeconds = 1200,
+            TimeLimitSkippedFilePaths = ["src/late.cs", "src/later.cs"],
+        };
+        var wireOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var annotations = JsonSerializer.Deserialize<RunnerResultAnnotations>(
+            JsonSerializer.Serialize(RunnerResultAnnotations.FromResult(source), wireOptions), wireOptions);
+
+        await this.CreateIntake().SubmitAsync(Call, Chunk() with { Annotations = annotations });
+
+        Assert.NotNull(published);
+        Assert.True(published!.TimeLimitReached);
+        Assert.Equal(1200, published.TimeLimitSeconds);
+        Assert.Equal(["src/late.cs", "src/later.cs"], published.TimeLimitSkippedFilePaths);
+        Assert.False(published.TimeLimitSkippedPrWidePasses);
+    }
+
+    // A runner from before the time limit sends no such fields, and its review publishes without one.
+    [Fact]
+    public async Task AnAnnotationsPayloadWithoutTheTimeLimit_PublishesWithoutOne()
+    {
+        var json = """
+                   {"carriedForwardFilePaths":[],"carriedForwardCandidatesSkipped":0,"contextDegradedFilePaths":[],
+                    "contextSkippedFilePaths":[],"budgetSoftCapped":false,"budgetSoftCapThresholdUsd":null,
+                    "budgetSoftCapSpentUsd":null,"budgetSoftCapSkippedFilePaths":[]}
+                   """;
+        ReviewResult? published = null;
+        this._publisher.PublishAsync(JobId, Arg.Do<ReviewResult>(result => published = result), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var annotations = JsonSerializer.Deserialize<RunnerResultAnnotations>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        await this.CreateIntake().SubmitAsync(Call, Chunk() with { Annotations = annotations });
+
+        Assert.False(published!.TimeLimitReached);
+        Assert.Empty(published.TimeLimitSkippedFilePaths);
+    }
+
     // The executor only sees the wind-down verdict, because the figures live in the budget scope the control
     // plane holds, where the completions were priced. Published without them, the job never gets its budget
     // block, and the paid resume that block gates re-bills the whole review.

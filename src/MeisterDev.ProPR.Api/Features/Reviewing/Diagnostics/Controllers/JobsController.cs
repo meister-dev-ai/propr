@@ -360,7 +360,8 @@ public sealed class JobsController(
                 withheld ? null : job.ResultSummary,
                 job.AdmissionRefusalReason,
                 job.HeldUntil,
-                withheld));
+                withheld,
+                job.CompletionReason));
     }
 
     /// <summary>Returns the summary, comments, and available impact, likelihood and confidence assessments for a completed job.</summary>
@@ -677,7 +678,8 @@ public sealed class JobsController(
     /// <summary>Detailed response for a single job, including the per-tier token breakdown.</summary>
     /// <remarks>
     ///     For a platform administrator without access to the content of the client, the error message and the summary
-    ///     are withheld and <c>ContentWithheld</c> is true.
+    ///     are withheld and <c>ContentWithheld</c> is true. <c>CompletionReason</c> is <c>timeLimitReached</c> for a
+    ///     completed review that ended at the maximum review duration of its tenant.
     /// </remarks>
     public sealed record JobDetailResponse(
         Guid Id,
@@ -701,7 +703,8 @@ public sealed class JobsController(
         string? ResultSummary = null,
         string? AdmissionRefusalReason = null,
         DateTimeOffset? HeldUntil = null,
-        bool ContentWithheld = false);
+        bool ContentWithheld = false,
+        ReviewJobCompletionReason CompletionReason = ReviewJobCompletionReason.None);
 
     /// <summary>Response for the job result endpoint, combining status metadata with the review result.</summary>
     public sealed record ReviewJobResultDto(

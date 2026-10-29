@@ -26,6 +26,16 @@ export interface TenantReviewLimitsUpdate {
   maxStructuralParseBytes: number | null
 }
 
+/**
+ * How many review jobs of a tenant may be processing at once and how many seconds one review may run. A null value
+ * means the tenant sets no such limit. Platform administrators set both with `PUT .../review-limits`, which stores
+ * them as a whole, so a value sent as null clears that limit.
+ */
+export interface TenantReviewExecutionLimits {
+  maxConcurrentReviews: number | null
+  maxReviewDurationSeconds: number | null
+}
+
 /** A tenant's monthly USD caps; a null cap means no tenant-level limit. */
 export interface TenantBudgetConfig {
   monthlySoftCapUsd?: number | null
@@ -67,6 +77,8 @@ export interface TenantDto {
   budget?: TenantBudgetConfig
   /** Per-file byte limits for this tenant's reviews; an absent value leaves the installation value in force. */
   reviewLimits?: TenantReviewLimits
+  /** The tenant's cap on concurrent reviews and its maximum review duration, readable by everyone who reads the tenant. */
+  reviewExecutionLimits?: TenantReviewExecutionLimits | null
 }
 
 export interface CreateTenantRequest {
@@ -138,5 +150,17 @@ export async function updateTenant(tenantId: string, request: UpdateTenantReques
     method: 'PATCH',
     requireAuth: true,
     body: JSON.stringify(request),
+  })
+}
+
+/** Stores both review limits of a tenant and returns the stored values. Platform administrators only. */
+export async function updateTenantReviewLimits(
+  tenantId: string,
+  limits: TenantReviewExecutionLimits,
+): Promise<TenantReviewExecutionLimits> {
+  return tenantApiRequest<TenantReviewExecutionLimits>(`${buildTenantPath(tenantId)}/review-limits`, {
+    method: 'PUT',
+    requireAuth: true,
+    body: JSON.stringify(limits),
   })
 }

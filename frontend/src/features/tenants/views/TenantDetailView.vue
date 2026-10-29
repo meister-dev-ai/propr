@@ -84,6 +84,10 @@
         <TenantClientsSection :tenant-id="vm.tenantId" />
       </div>
 
+      <div v-if="activeSection === 'review-limits'">
+        <TenantReviewLimitsSection :tenant-id="vm.tenantId" />
+      </div>
+
       <template v-if="isEditable">
         <div v-if="activeSection === 'connections'">
           <TenantAiConnectionsSection :tenant-id="vm.tenantId" />
@@ -149,6 +153,7 @@ import TenantMembersSection from '@/features/tenants/components/TenantMembersSec
 import TenantModelCatalogSection from '@/features/tenants/components/TenantModelCatalogSection.vue'
 import TenantProviderAllowListSection from '@/features/tenants/components/TenantProviderAllowListSection.vue'
 import TenantReasoningCaptureSection from '@/features/tenants/components/TenantReasoningCaptureSection.vue'
+import TenantReviewLimitsSection from '@/features/tenants/components/TenantReviewLimitsSection.vue'
 import TenantSpendSection from '@/features/tenants/components/TenantSpendSection.vue'
 import TenantSsoSection from '@/features/tenants/components/TenantSsoSection.vue'
 import { useTenantSettingsViewModel } from '@/features/tenants/view-models/useTenantSettingsViewModel'
@@ -156,6 +161,7 @@ import { useTenantSettingsViewModel } from '@/features/tenants/view-models/useTe
 type TenantSection =
   | 'overview'
   | 'clients'
+  | 'review-limits'
   | 'connections'
   | 'logical-models'
   | 'pricing'
@@ -200,6 +206,9 @@ const groups = computed<SidebarGroup[]>(() => [
     entries: [
       { section: 'overview', label: 'Overview', icon: 'fi-rr-building' },
       { section: 'clients', label: 'Clients', icon: 'fi-rr-users' },
+      // Offered for every tenant, the System tenant included: its clients run reviews as well, and the limits
+      // are stored on the tenant record apart from the policy the System tenant does not let anyone change.
+      { section: 'review-limits', label: 'Review limits', icon: 'fi-rr-stopwatch' },
     ],
   },
   {

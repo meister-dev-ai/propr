@@ -137,7 +137,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
         // and before synthesis — and their candidates are threaded into synthesis so they flow through the shared
         // verify -> gate -> publish path alongside the synthesized cross-cutting findings. When the per-increment
         // soft cap has tripped, this is further scanning work, so it is skipped along with the remaining files and
-        // the job goes straight to synthesis of what was reviewed.
+        // the job goes straight to synthesis of what was reviewed. The passes check the tenant's maximum review
+        // duration themselves, before each entry.
         IReadOnlyList<CandidateReviewFinding> prWideCandidates = budgetSoftCap.SoftCapped
             ? []
             : await this.RunPrWideScopePassesAsync(job, pr, baseContext, ct);
@@ -198,8 +199,24 @@ internal sealed partial class FileByFileReviewOrchestrator(
             MaxSeedFilesPerInvestigation: 5);
 
         var collected = new List<CandidateReviewFinding>();
-        foreach (var (pass, ordinal) in prWidePasses)
+        for (var index = 0; index < prWidePasses.Count; index++)
         {
+            var (pass, ordinal) = prWidePasses[index];
+
+            // Each entry is further scanning work, so none starts once the tenant's maximum review duration has
+            // passed. Candidates an earlier entry produced still go to synthesis. Only a skipped publishing entry
+            // is recorded, because a shadow entry contributes nothing the summary would miss.
+            if (baseContext.TimeLimit is { } timeLimit && timeLimit.IsReached())
+            {
+                if (prWidePasses.Skip(index).Any(entry => !entry.pass.Shadow))
+                {
+                    timeLimit.RecordSkippedPrWidePasses();
+                }
+
+                LogPrWideScopePassesSkippedAtTimeLimit(logger, job.Id, timeLimit.MaxReviewDurationSeconds);
+                break;
+            }
+
             IResolvedAiChatRuntime runtime;
             ReviewReasoningEffort effort;
             try
@@ -269,8 +286,12 @@ internal sealed partial class FileByFileReviewOrchestrator(
     {
         // The quality filter runs only on findings that the evidence judge did not decide.
         var fileFindingsJudged = fileReviewer.VerifiesFindings && !baseContext.SkippedSteps.Contains(FileByFileReviewStepIds.LocalVerification);
-        return await this.GetSynthesisExecutor()
+        var result = await this.GetSynthesisExecutor()
             .SynthesizeAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct, fileFindingsJudged);
+
+        // A scan the tenant's maximum review duration cut short carries the files and passes it left out, so the
+        // summary can name them and the job can record why it ended early.
+        return baseContext.TimeLimit?.ApplyTo(result) ?? result;
     }
 
     private async Task RecordReviewProfileSelectedEventAsync(

@@ -86,6 +86,8 @@ export interface JobDetail {
     admissionRefusalReason?: string | null
     /** When the review-admission hold expires and the job may start by itself. */
     heldUntil?: string | null
+    /** Why a completed review ended before it had reviewed everything in scope. */
+    completionReason?: components['schemas']['ReviewJobCompletionReason'] | null
 }
 
 export interface CommentRelevanceEventDetails {

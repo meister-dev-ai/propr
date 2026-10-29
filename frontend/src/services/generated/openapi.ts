@@ -21504,6 +21504,158 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/review-limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the review limits of the tenant. A null value means that the tenant sets no such limit. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The limits of the tenant. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantReviewExecutionLimits"];
+                        "application/json": components["schemas"]["TenantReviewExecutionLimits"];
+                        "text/json": components["schemas"]["TenantReviewExecutionLimits"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        /**
+         * Stores both review limits of the tenant. A null value clears that limit, so a request that leaves out a
+         *     value clears it as well. Sending the stored values again changes nothing. A new cap on concurrent reviews
+         *     applies to the next claim and stops no review that is running. A new maximum review duration applies to
+         *     reviews that start their scan after the change.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["TenantReviewLimitsRequest"];
+                    "text/json": components["schemas"]["TenantReviewLimitsRequest"];
+                    "application/*+json": components["schemas"]["TenantReviewLimitsRequest"];
+                };
+            };
+            responses: {
+                /** @description The limits were stored; the answer contains the stored values. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantReviewExecutionLimits"];
+                        "application/json": components["schemas"]["TenantReviewExecutionLimits"];
+                        "text/json": components["schemas"]["TenantReviewExecutionLimits"];
+                    };
+                };
+                /** @description `maxConcurrentReviews` is below 1, or `maxReviewDurationSeconds` is outside 60 to 86400. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants": {
         parameters: {
             query?: never;
@@ -25779,6 +25931,7 @@ export interface components {
             /** Format: date-time */
             heldUntil?: string | null;
             contentWithheld?: boolean;
+            completionReason?: components["schemas"]["ReviewJobCompletionReason"];
         };
         /** @description Single job item in the list response. */
         JobListItem: {
@@ -28226,6 +28379,13 @@ export interface components {
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
         };
+        /**
+         * @description Why a completed review job ended before it had reviewed everything in scope. A completed job keeps its
+         *     summary and its findings, and this value records the reason, which a reader would otherwise have to find in
+         *     the summary text.
+         * @enum {string}
+         */
+        ReviewJobCompletionReason: "none" | "timeLimitReached";
         /** @description Carries protocol data for a single review job execution attempt. */
         ReviewJobProtocolDto: {
             /**
@@ -29301,6 +29461,7 @@ export interface components {
             parallelReviewExecutionLicensed?: boolean | null;
             /** Format: int32 */
             attemptNumber?: number;
+            timeLimit?: components["schemas"]["RunnerReviewTimeLimit"];
         };
         /** @description A knowledge question. */
         RunnerKnowledgeRequest: {
@@ -29671,7 +29832,8 @@ export interface components {
         };
         /**
          * @description Everything a review result says about itself beyond its summary and findings: what was carried
-         *     forward, what was degraded or skipped for context, and whether the budget cut the scan short.
+         *     forward, what was degraded or skipped for context, and whether the budget or the tenant's maximum review
+         *     duration cut the scan short.
          *
          *     A submission that carried only summary and comments dropped all of it. The clearest case is the
          *         budget label, whose absence made a soft-capped remote review indistinguishable from a complete
@@ -29705,6 +29867,17 @@ export interface components {
             budgetSoftCapSkippedFilePaths?: string[] | null;
             /** @description Generated findings retained as evidence without allowing SCM publication. */
             withheldFindings?: components["schemas"]["WithheldReviewFinding"][] | null;
+            /** @description Whether the scan ended at the maximum review duration of the tenant. */
+            timeLimitReached?: boolean;
+            /**
+             * Format: int32
+             * @description The maximum review duration of the tenant, when the scan ended at it.
+             */
+            timeLimitSeconds?: number | null;
+            /** @description Files not reviewed because the maximum review duration was reached first. */
+            timeLimitSkippedFilePaths?: string[] | null;
+            /** @description Whether the pull-request-wide passes did not run because the time was up. */
+            timeLimitSkippedPrWidePasses?: boolean;
         };
         /**
          * @description The per-client decisions that change what a review does rather than which model runs it.
@@ -29842,6 +30015,24 @@ export interface components {
             authorName?: string | null;
             /** @description What they wrote. */
             content?: string | null;
+        };
+        /**
+         * @description The maximum review duration of a job's tenant, as it applies to one leased execution. The time left is
+         *     carried, not the deadline, so the executor counts it on its own clock from the moment it receives the
+         *     manifest, and a clock that differs from the control plane's does not move the deadline.
+         */
+        RunnerReviewTimeLimit: {
+            /**
+             * Format: int32
+             * @description The maximum review duration of the tenant, which ProPR writes into the summary of a review that ended at it.
+             */
+            maxReviewDurationSeconds?: number;
+            /**
+             * Format: double
+             * @description The seconds left until the deadline when the control plane issued the manifest. Zero or negative when the
+             *     deadline had already passed.
+             */
+            remainingSeconds?: number;
         };
         /** @description What one relayed completion cost. */
         RunnerSpendRecord: {
@@ -30355,6 +30546,7 @@ export interface components {
             reasoningCapturePolicy?: components["schemas"]["ReasoningCapturePolicy"];
             budget?: components["schemas"]["TenantBudgetConfigDto"];
             reviewLimits?: components["schemas"]["TenantReviewLimitsDto"];
+            reviewExecutionLimits?: components["schemas"]["TenantReviewExecutionLimits"];
         };
         /** @description The access token of a session that a tenant sign-in started. The refresh token is set as an httpOnly cookie. */
         TenantExternalSessionDto: {
@@ -30459,6 +30651,25 @@ export interface components {
             days?: number | null;
         };
         /**
+         * @description The limits a tenant sets on how its reviews run: how many of its review jobs may be processing at once, and
+         *     how long one review may run. A null value means that the tenant sets no limit of its own, and the limits of
+         *     the installation apply alone.
+         */
+        TenantReviewExecutionLimits: {
+            /**
+             * Format: int32
+             * @description How many review jobs of the tenant may be processing at once, in process or on a runner, or null. Thread
+             *     passes and mention replies are not counted.
+             */
+            maxConcurrentReviews?: number | null;
+            /**
+             * Format: int32
+             * @description How many seconds after the start of processing a review stops starting further files and completes with
+             *     what it has reviewed, or null.
+             */
+            maxReviewDurationSeconds?: number | null;
+        };
+        /**
          * @description A tenant's per-file byte limits for reviews. Both values are optional; a null value leaves the
          *     installation value in force. They bound what one file may contribute to a review, so they protect the
          *     host that runs it.
@@ -30468,6 +30679,21 @@ export interface components {
             maxFileSizeBytes?: number | null;
             /** Format: int32 */
             maxStructuralParseBytes?: number | null;
+        };
+        /** @description The limits on how the reviews of a tenant run. A null value clears that limit. */
+        TenantReviewLimitsRequest: {
+            /**
+             * Format: int32
+             * @description How many review jobs of the tenant may be processing at once, in process and on runners together, at least
+             *     1, or null for no limit of the tenant.
+             */
+            maxConcurrentReviews?: number | null;
+            /**
+             * Format: int32
+             * @description How many seconds after the start of processing a review of the tenant ends with what it has reviewed, from 60
+             *     to 86400, or null for no limit of the tenant.
+             */
+            maxReviewDurationSeconds?: number | null;
         };
         /**
          * @description Tenant-scoped authorization role for a tenant membership.

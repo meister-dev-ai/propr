@@ -73,4 +73,10 @@ internal sealed partial class FileByFileReviewOrchestrator
         Level = LogLevel.Warning,
         Message = "Skipping PR-wide-scope pass entry #{Ordinal} for job {JobId}: configured model {ConfiguredModelId} could not be resolved")]
     private static partial void LogPrWideScopePassModelUnresolved(ILogger logger, Guid jobId, Guid configuredModelId, int ordinal, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message =
+            "Skipping the remaining PR-wide-scope pass entries for job {JobId}: the tenant's maximum review duration of {MaxReviewDurationSeconds} seconds was reached")]
+    private static partial void LogPrWideScopePassesSkippedAtTimeLimit(ILogger logger, Guid jobId, int maxReviewDurationSeconds);
 }

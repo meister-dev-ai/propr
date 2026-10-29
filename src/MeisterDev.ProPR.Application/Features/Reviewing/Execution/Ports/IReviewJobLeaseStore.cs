@@ -19,6 +19,11 @@ public interface IReviewJobLeaseStore
     /// <summary>
     ///     Reads up to <paramref name="limit" /> jobs eligible to be claimed, oldest first. Candidates only:
     ///     another party may claim any of them before the caller does, which the claim itself resolves.
+    ///     <para>
+    ///         The jobs of a tenant that already has as many reviews processing as its cap allows are left out, so
+    ///         a full tenant's backlog does not fill the window and hide the jobs of other tenants behind it. The
+    ///         claim enforces the cap; leaving the jobs out here only keeps the window useful.
+    ///     </para>
     /// </summary>
     /// <param name="limit">Maximum number of candidates to return. Bounds the work one poll cycle can do.</param>
     /// <param name="submittedAfter">
@@ -35,6 +40,12 @@ public interface IReviewJobLeaseStore
     ///     Attempts to claim a specific job, stamping owner, a fresh generation, and an expiry in the same
     ///     conditional update that moves the status. Returns the granted lease, or null when someone else
     ///     won the job or it is no longer claimable. Losing is a clean no-op, not an error.
+    ///     <para>
+    ///         When the tenant of the job sets a cap on concurrent reviews, the claim is granted only while fewer
+    ///         review jobs of that tenant are executing, and returns null otherwise. The count and the claim are
+    ///         taken under an admission of the tenant, as <see cref="TryClaimWithinProcessingCapAsync" /> takes
+    ///         them for the installation.
+    ///     </para>
     /// </summary>
     /// <param name="jobId">The job to claim.</param>
     /// <param name="owner">Identity to stamp as the holder.</param>
@@ -56,6 +67,11 @@ public interface IReviewJobLeaseStore
     ///         An at-capacity refusal carries the cap and the executing count the store observed inside the
     ///         admission, so the caller can report both numbers. The count is absent when the claimant never
     ///         reached the admission.
+    ///     </para>
+    ///     <para>
+    ///         When the tenant of the job sets a cap on concurrent reviews, the claim is also admitted under that
+    ///         cap, and a full tenant is refused with <see cref="ReviewJobCappedClaimOutcome.TenantAtCapacity" />.
+    ///         That refusal leaves the rest of the queue claimable.
     ///     </para>
     /// </summary>
     /// <param name="jobId">The job to claim.</param>

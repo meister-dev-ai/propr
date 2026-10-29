@@ -55,6 +55,8 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
         // every client's oldest job comes before any client's second-oldest. A client that queues two
         // hundred pull requests therefore takes one slot per round rather than the whole pool.
         // A job of an inactive client, or of a client of an inactive tenant, waits until both are active again.
+        // A job of a tenant that already has as many reviews processing as its cap allows waits as well, and is not
+        // offered in place of another tenant's job. The claim counts again under the tenant's lock and decides.
         var ids = await dbContext.Database
             .SqlQueryRaw<Guid>(
                 """
@@ -68,6 +70,11 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
                     WHERE j.status = 'Pending'
                       AND c.is_active
                       AND t.is_active
+                      AND (t.max_concurrent_reviews IS NULL
+                           OR (SELECT count(*)
+                               FROM review_jobs p
+                               JOIN clients pc ON pc.id = p.client_id
+                               WHERE p.status = 'Processing' AND pc.tenant_id = t.id) < t.max_concurrent_reviews)
                       AND ({4} OR c.tenant_id = {0})
                       AND (cardinality({1}::uuid[]) = 0 OR j.client_id = ANY({1}::uuid[]))
                       AND (

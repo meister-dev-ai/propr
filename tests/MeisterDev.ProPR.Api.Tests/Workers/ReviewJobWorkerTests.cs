@@ -1395,6 +1395,52 @@ public class ReviewJobWorkerTests
         }
     }
 
+    // A tenant at its own cap keeps its job pending and nothing more. The scan goes on to the next candidate,
+    // which belongs to another tenant, so one full tenant does not hold up the queue behind it.
+    [Fact]
+    public async Task Worker_ClaimsTheNextCandidate_WhenTheCappedClaimReportsTheTenantAtItsCap()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var ofFullTenant = CreateJob(3501);
+        var ofOtherTenant = CreateJob(3502);
+        var leaseStore = CreateLeaseStore(ofFullTenant, ofOtherTenant);
+        leaseStore.TryClaimWithinProcessingCapAsync(ofFullTenant.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(ReviewJobCappedClaim.TenantAtCapacity(Guid.NewGuid(), 1, 1));
+
+        var started = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processor = Substitute.For<IReviewJobProcessor>();
+        processor.ProcessAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                started.TrySetResult(call.Arg<ReviewJob>().Id);
+                return Task.CompletedTask;
+            });
+
+        var worker = new ReviewJobWorker(
+            CreateScopeFactoryFor(repo, leaseStore, processor, CountCeilingOf(4)),
+            CreateWorkerOptions(maxConcurrentReviewJobs: 4),
+            CreateLeaseOptions(),
+            CreateMetrics(),
+            CreateCancellationRegistry(),
+            TimeProvider.System,
+            Substitute.For<ILogger<ReviewJobWorker>>());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = worker.StartAsync(cts.Token);
+
+        try
+        {
+            Assert.Equal(ofOtherTenant.Id, await started.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+        }
+        finally
+        {
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        await processor.DidNotReceive().ProcessAsync(Arg.Is<ReviewJob>(job => job.Id == ofFullTenant.Id), Arg.Any<CancellationToken>());
+    }
+
     private static ILicenseLimitResolver CountCeilingOf(long cap)
     {
         var limits = Substitute.For<ILicenseLimitResolver>();

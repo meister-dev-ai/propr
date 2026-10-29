@@ -17,6 +17,7 @@ Do not edit it manually.
 | `frontend/src/composables/useLicensing.ts` | Elastic License 2.0 | License key functionality | Marked in-source with the license key functionality notice. It runs in every edition; the Elastic License 2.0 restriction on circumventing license key functionality applies to it. |
 | `frontend/src/composables/usePlatformAdminElevations.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/composables/useSession.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/auth/installationSignIns.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/auth/pendingSignInLink.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/auth/signInCallbackFragment.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/auth/view-models/useLoginCallbackViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -95,8 +96,10 @@ Do not edit it manually.
 | `frontend/src/features/elevations/components/__tests__/StartElevationDialog.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/elevations/views/ElevationsView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/elevations/views/__tests__/ElevationsView.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/job-protocol/composables/__tests__/completionReason.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/job-protocol/composables/__tests__/useJobProtocolViewModel.admission.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/job-protocol/composables/budgetBlock.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/job-protocol/composables/completionReason.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/job-protocol/composables/useJobProtocolViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/job-protocol/types.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/job-protocol/views/JobProtocolView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -133,6 +136,7 @@ Do not edit it manually.
 | `frontend/src/features/tenants/components/TenantProviderAllowListSection.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/TenantProviderList.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/TenantReasoningCaptureSection.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/components/TenantReviewLimitsSection.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/TenantSpendSection.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/TenantSsoProviderForm.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/TenantSsoSection.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -143,11 +147,13 @@ Do not edit it manually.
 | `frontend/src/features/tenants/components/__tests__/TenantModelCatalogSection.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/__tests__/TenantProviderAllowListSection.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/__tests__/TenantReasoningCaptureSection.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/components/__tests__/TenantReviewLimitsSection.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/__tests__/TenantSpendSection.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/components/__tests__/tenantSectionShell.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/__tests__/useTenantBudgetCaps.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/__tests__/useTenantBudgetOverview.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/__tests__/useTenantBudgetSpend.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/view-models/__tests__/useTenantReviewLimits.spec.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/useTenantBudgetCaps.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/useTenantBudgetOverview.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/useTenantBudgetSpend.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -155,6 +161,7 @@ Do not edit it manually.
 | `frontend/src/features/tenants/view-models/useTenantDirectoryViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/useTenantLoginViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/useTenantMembersViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/view-models/useTenantReviewLimits.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/view-models/useTenantSettingsViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/views/TenantDetailView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `frontend/src/features/tenants/views/TenantDirectoryView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -206,6 +213,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantAuthController.cs` | Elastic License 2.0 | Mixed file with commercial capability implementation | Marked in-source and contains shared behavior alongside commercial-only functionality. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantMemberClientAccessController.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantMembershipsController.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantReviewLimitsController.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantSsoProvidersController.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantsController.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/ExternalSignInCookie.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -336,6 +344,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/ReviewJobCappedClaim.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/ReviewJobLeaseRenewal.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/ReviewJobReclaim.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/ReviewTimeLimit.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/RunnerCallAuthorization.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/RunnerIngestModels.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/RunnerJobManifestResolution.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -345,8 +354,10 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/RunnerSubmissionModels.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/RunnerToolResult.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/RunnerWorkspaceModels.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Models/TenantReviewExecutionLimits.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IReviewJobExecutionStore.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IReviewJobLeaseStore.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IReviewTimeLimitReader.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IRunnerAiRelay.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IRunnerCallAuthorizer.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IRunnerFindingsIntake.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -365,6 +376,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IRunnerToolProxy.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IRunnerWorkloadReader.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/IRunnerWorkspaceServer.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Ports/ITenantReviewExecutionLimitsStore.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Services/ProxyReviewContextTools.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Services/ReviewJobLeaseHeartbeat.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Features/Reviewing/Execution/Services/RunnerAiRelay.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -408,6 +420,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Application/Options/InstallationSignInOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Options/InstallationSsoProviderOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Options/PlatformAdminSsoOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Application/Options/ProvisionedUserPatOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Options/ProvisionedUserSsoOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Options/ReviewLeaseOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Application/Options/RunnerFleetOptions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -598,6 +611,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Domain/Enums/CodeInsightPublicationState.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Domain/Enums/CodeInsightQualityCharacteristic.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Domain/Enums/CodeInsightRejectionReason.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Domain/Enums/ReviewJobCompletionReason.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Domain/Enums/ReviewJobFailureReason.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Domain/Enums/RunnerState.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Domain/Events/ReviewFindingsProducedEvent.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -652,6 +666,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Infrastructure/Data/Models/LogicalModelRecord.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Data/Models/PlatformAdminElevationRecord.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Data/Models/ProvisionedUserRecord.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Infrastructure/Data/TenantReviewCapQueries.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/DependencyInjection/InfrastructureServiceExtensions.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Budgeting/BudgetCapsProvider.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Budgeting/BudgetEventPublisher.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -726,6 +741,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/DirectorySizeProbe.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/ReviewJobExecutionStoreAdapter.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/ReviewJobLeaseStore.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/ReviewTimeLimitReader.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/RunnerIngestLedger.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/RunnerIngestWriter.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/RunnerJobReasoningCapturePolicy.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
@@ -733,6 +749,7 @@ Do not edit it manually.
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/RunnerRegistry.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/RunnerRelayAdapters.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/RunnerWorkloadReader.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Persistence/TenantReviewExecutionLimitsStore.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Services/RunnerFleetMonitor.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Services/RunnerFleetOptionsValidator.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterDev.ProPR.Infrastructure/Features/Reviewing/Execution/Services/RunnerJobDispatchPreparer.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |

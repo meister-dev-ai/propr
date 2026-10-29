@@ -159,25 +159,23 @@ internal sealed class FileReviewDispatchPlanner(
                         "Skipped file {FilePath} in job {JobId}: per-increment budget soft cap reached",
                         file.Path,
                         job.Id);
-                    var skippedContext = executionContext.CloneForPass();
-                    skippedContext.ModelEvidenceScope = ModelReviewCapture.Scope(job, file, skippedContext);
-                    var skippedProof = skippedContext.ModelEvidenceScope with
-                    {
-                        InventoryComplete = false,
-                        Passes = [ModelReviewCapture.Pass(skippedContext, 1, DateTimeOffset.UtcNow, ModelGenerationDisposition.Skipped, [])],
-                    };
-                    // An analytics-only skip must not create an incomplete ordinary review checkpoint.
-                    try
-                    {
-                        await jobRepository.RecordModelManifestAsync(
-                            job.Id, job.RetryCount + 1,
-                            manifest with { PullRequestPasses = [skippedProof] }, ct);
-                    }
-                    catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
-                    {
-                        logger.LogWarning("Skipped model opportunity retention unavailable for job {JobId}: {FailureType}", job.Id, exception.GetType().Name);
-                    }
+                    await RecordSkippedOpportunityAsync(file);
+                    return;
+                }
 
+                // The maximum review duration of the tenant ends the scan the same way. Once the deadline has
+                // passed, queued files are not started and files in flight finish, so the review concludes with a
+                // synthesis over the files it reviewed.
+                var timeLimit = executionContext.TimeLimit;
+                if (timeLimit is not null && timeLimit.IsReached())
+                {
+                    timeLimit.RecordSkippedFile(file.Path);
+                    logger.LogInformation(
+                        "Skipped file {FilePath} in job {JobId}: the tenant's maximum review duration of {MaxReviewDurationSeconds} seconds was reached",
+                        file.Path,
+                        job.Id,
+                        timeLimit.MaxReviewDurationSeconds);
+                    await RecordSkippedOpportunityAsync(file);
                     return;
                 }
 
@@ -209,6 +207,29 @@ internal sealed class FileReviewDispatchPlanner(
             finally
             {
                 semaphore.Release();
+            }
+        }
+
+        // Records the model opportunity of a file the scan did not start, so the analytics count it as skipped.
+        async Task RecordSkippedOpportunityAsync(ChangedFile file)
+        {
+            var skippedContext = executionContext.CloneForPass();
+            skippedContext.ModelEvidenceScope = ModelReviewCapture.Scope(job, file, skippedContext);
+            var skippedProof = skippedContext.ModelEvidenceScope with
+            {
+                InventoryComplete = false,
+                Passes = [ModelReviewCapture.Pass(skippedContext, 1, DateTimeOffset.UtcNow, ModelGenerationDisposition.Skipped, [])],
+            };
+            // An analytics-only skip must not create an incomplete ordinary review checkpoint.
+            try
+            {
+                await jobRepository.RecordModelManifestAsync(
+                    job.Id, job.RetryCount + 1,
+                    manifest with { PullRequestPasses = [skippedProof] }, ct);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                logger.LogWarning("Skipped model opportunity retention unavailable for job {JobId}: {FailureType}", job.Id, exception.GetType().Name);
             }
         }
 

@@ -23,15 +23,22 @@ public enum ReviewJobCappedClaimOutcome
 
     /// <summary>The job was claimed and the lease is carried on the result.</summary>
     Granted = 2,
+
+    /// <summary>
+    ///     The tenant of this job already has as many reviews processing as its own cap allows. The job stays
+    ///     pending, and the jobs of other tenants can still be claimed.
+    /// </summary>
+    TenantAtCapacity = 3,
 }
 
 /// <summary>
-///     The result of a claim that is granted only while the installation is below its concurrency cap.
-///     A refusal names which of the two reasons applied, because a caller scanning a queue has to react
-///     differently to each: at the cap it stops, whereas a job someone else took only costs it that candidate.
+///     The result of a claim that is granted only while the installation is below its concurrency cap and the
+///     tenant of the job is below its own. A refusal records which reason applied, because a caller scanning a queue
+///     has to react differently to each: at the installation's cap it stops, whereas a full tenant or a job someone
+///     else took only costs it that candidate.
 ///     <para>
 ///         An at-capacity refusal carries the cap it was measured against and the count the store observed, so
-///         a caller can report both numbers.
+///         a caller can report both numbers. A refusal for a full tenant carries the tenant as well.
 ///     </para>
 ///     <para>
 ///         Only the factory methods below construct instances, so no caller can build one whose payload
@@ -54,16 +61,23 @@ public sealed record ReviewJobCappedClaim
     public ReviewJobLease? Lease { get; private init; }
 
     /// <summary>
-    ///     The cap the claim was measured against. Present only when the outcome is
-    ///     <see cref="ReviewJobCappedClaimOutcome.AtCapacity" />.
+    ///     The cap the claim was measured against: the installation's for
+    ///     <see cref="ReviewJobCappedClaimOutcome.AtCapacity" />, the tenant's for
+    ///     <see cref="ReviewJobCappedClaimOutcome.TenantAtCapacity" />. Absent for the other outcomes.
     /// </summary>
     public int? Cap { get; private init; }
 
     /// <summary>
-    ///     How many jobs the store counted as executing inside the admission. Null when the claimant never
-    ///     reached the admission and therefore counted nothing.
+    ///     How many jobs the store counted as executing, across the installation or within the tenant, matching
+    ///     <see cref="Cap" />. Null when the claimant never reached the admission and therefore counted nothing.
     /// </summary>
     public int? ProcessingCount { get; private init; }
+
+    /// <summary>
+    ///     The tenant whose cap refused the claim. Present only when the outcome is
+    ///     <see cref="ReviewJobCappedClaimOutcome.TenantAtCapacity" />.
+    /// </summary>
+    public Guid? TenantId { get; private init; }
 
     /// <summary>This job is no longer claimable, but the cap left room for another one.</summary>
     public static ReviewJobCappedClaim NotClaimable { get; } =
@@ -80,6 +94,24 @@ public sealed record ReviewJobCappedClaim
         return new ReviewJobCappedClaim
         {
             Outcome = ReviewJobCappedClaimOutcome.AtCapacity,
+            Cap = cap,
+            ProcessingCount = processingCount,
+        };
+    }
+
+    /// <summary>The tenant of the job is at its own cap, so this job stays pending.</summary>
+    /// <param name="tenantId">The tenant.</param>
+    /// <param name="cap">How many review jobs of the tenant may execute at once.</param>
+    /// <param name="processingCount">
+    ///     How many review jobs of the tenant the store observed as executing, or null when the claimant did not
+    ///     reach the admission that counts them.
+    /// </param>
+    public static ReviewJobCappedClaim TenantAtCapacity(Guid tenantId, int cap, int? processingCount = null)
+    {
+        return new ReviewJobCappedClaim
+        {
+            Outcome = ReviewJobCappedClaimOutcome.TenantAtCapacity,
+            TenantId = tenantId,
             Cap = cap,
             ProcessingCount = processingCount,
         };

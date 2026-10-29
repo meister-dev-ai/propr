@@ -25,8 +25,11 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.IdentityAndAccess;
 [Collection("PostgresIntegration4")]
 public sealed class TenantPendingLinkTransactionTests(PostgresContainerFixture fixture)
 {
-    private const string Migration = "AddExternalSignInRedemptionsAndVerifiedIssuers";
     private const string Issuer = "https://accounts.google.com";
+
+    // The services under test read the tenant record, so the database carries every migration. A database stopped at
+    // an older migration lacks the columns that later migrations added to the tables these services read.
+    private static readonly string Migration = LatestMigration();
 
     private readonly SecretProtectionCodec _codec = new(new EphemeralDataProtectionProvider());
 
@@ -195,6 +198,13 @@ public sealed class TenantPendingLinkTransactionTests(PostgresContainerFixture f
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         return (int)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static string LatestMigration()
+    {
+        // Listing the migrations reads the assembly and opens no connection.
+        using var context = CreateContext("Host=localhost");
+        return context.Database.GetMigrations().Last();
     }
 
     private static MeisterProPRDbContext CreateContext(string connectionString)

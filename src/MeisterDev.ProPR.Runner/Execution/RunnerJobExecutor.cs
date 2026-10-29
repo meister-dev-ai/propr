@@ -69,6 +69,10 @@ public sealed partial class RunnerJobExecutor(
     {
         ArgumentNullException.ThrowIfNull(manifest);
 
+        // Counted from here, the moment the manifest arrived, because the manifest carries the time that was left
+        // when the control plane issued it. The workspace fetch below already counts against the deadline.
+        var timeLimit = StartTimeLimit(manifest, timeProvider);
+
         using var http = httpClients.CreateClient(ExecutionHttpClientName);
 
         // Everything this job says goes to the replica that granted its lease, when the manifest names
@@ -96,7 +100,7 @@ public sealed partial class RunnerJobExecutor(
             var pullRequest = await RunnerReviewSubject.BuildPullRequestAsync(manifest, workspace, ct);
             LogReviewing(logger, manifest.JobId, pullRequest.ChangedFiles.Count);
 
-            var result = await this.RunPipelineAsync(manifest, job, pullRequest, workspace, http, spool, ct);
+            var result = await this.RunPipelineAsync(manifest, job, pullRequest, workspace, http, spool, timeLimit, ct);
 
             // The spool goes first, and the order matters. Submitting findings publishes the
             // review and moves the job to a terminal state, and ingest refuses a job that is no longer
@@ -125,6 +129,7 @@ public sealed partial class RunnerJobExecutor(
         IReviewRepositoryWorkspace workspace,
         HttpClient http,
         JobSpool spool,
+        ReviewTimeLimit? timeLimit,
         CancellationToken ct)
     {
         var recorder = new SpoolingProtocolRecorder(spool, timeProvider);
@@ -151,6 +156,10 @@ public sealed partial class RunnerJobExecutor(
             budgetSignal);
 
         var context = this.BuildContext(manifest, job, pullRequest, workspace, http, recorder, defaultClient);
+
+        // The tenant's maximum review duration, which the planner checks before each file as the in-process
+        // review does. Null when the tenant sets none or the control plane predates the field.
+        context.TimeLimit = timeLimit;
 
         var memory = new ProxyThreadMemoryService(
             http,
@@ -222,6 +231,20 @@ public sealed partial class RunnerJobExecutor(
         }
 
         await recorder.SetCompletedAsync(protocolId, "Completed", 0, 0, 0, 0, null, ct);
+    }
+
+    /// <summary>
+    ///     Starts counting the tenant's maximum review duration that the manifest carries, on this host's clock, or
+    ///     returns null when the manifest carries none: the tenant sets no duration, or the control plane predates
+    ///     the field.
+    /// </summary>
+    internal static ReviewTimeLimit? StartTimeLimit(RunnerJobManifest manifest, TimeProvider clock)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+
+        return manifest.TimeLimit is { } limit
+            ? new ReviewTimeLimit(limit.MaxReviewDurationSeconds, TimeSpan.FromSeconds(limit.RemainingSeconds), clock)
+            : null;
     }
 
     /// <summary>

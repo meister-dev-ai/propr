@@ -7,11 +7,13 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
 
@@ -39,8 +41,12 @@ public static class OfflineReviewingServiceCollectionExtensions
 
         services.TryAddSingleton<InMemoryReviewJobRepository>();
         services.TryAddSingleton<IJobRepository>(sp => sp.GetRequiredService<InMemoryReviewJobRepository>());
-        // Claiming without a database. Registered ahead of the Postgres-backed store, which is also TryAdd.
-        services.TryAddScoped<IReviewJobLeaseStore, InMemoryReviewJobLeaseStore>();
+        // Claiming without a database. Registered ahead of the Postgres-backed store, which is also TryAdd. The
+        // store is given no tenant lookups: the harness has no tenants, and a host without a database cannot read
+        // them, so it claims without a tenant's cap on concurrent reviews.
+        services.TryAddScoped<IReviewJobLeaseStore>(sp => new InMemoryReviewJobLeaseStore(
+            sp.GetRequiredService<InMemoryReviewJobRepository>(),
+            sp.GetRequiredService<IOptions<ReviewLeaseOptions>>()));
         // Same reason and same ordering: the harness has no database, and the worker asks for a fleet
         // monitor on every cycle. Registered ahead of the Postgres-backed one, which is also TryAdd.
         services.TryAddScoped<IRunnerFleetMonitor, OfflineRunnerFleetMonitor>();

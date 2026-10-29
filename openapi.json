@@ -30903,6 +30903,245 @@
         }
       }
     },
+    "/admin/tenants/{tenantId}/review-limits": {
+      "get": {
+        "tags": [
+          "TenantReviewLimits"
+        ],
+        "summary": "Returns the review limits of the tenant. A null value means that the tenant sets no such limit.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The limits of the tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantReviewExecutionLimits"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantReviewExecutionLimits"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantReviewExecutionLimits"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tenant does not exist.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "TenantReviewLimits"
+        ],
+        "summary": "Stores both review limits of the tenant. A null value clears that limit, so a request that leaves out a\nvalue clears it as well. Sending the stored values again changes nothing. A new cap on concurrent reviews\napplies to the next claim and stops no review that is running. A new maximum review duration applies to\nreviews that start their scan after the change.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantReviewLimitsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantReviewLimitsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantReviewLimitsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The limits were stored; the answer contains the stored values.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantReviewExecutionLimits"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantReviewExecutionLimits"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantReviewExecutionLimits"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`maxConcurrentReviews` is below 1, or `maxReviewDurationSeconds` is outside 60 to 86400.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tenant does not exist.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/tenants": {
       "get": {
         "tags": [
@@ -38592,6 +38831,9 @@
           },
           "contentWithheld": {
             "type": "boolean"
+          },
+          "completionReason": {
+            "$ref": "#/components/schemas/ReviewJobCompletionReason"
           }
         },
         "additionalProperties": false,
@@ -43831,6 +44073,14 @@
         "additionalProperties": false,
         "description": "Response returned when a review job is accepted or a duplicate is found."
       },
+      "ReviewJobCompletionReason": {
+        "enum": [
+          "none",
+          "timeLimitReached"
+        ],
+        "type": "string",
+        "description": "Why a completed review job ended before it had reviewed everything in scope. A completed job keeps its\nsummary and its findings, and this value records the reason, which a reader would otherwise have to find in\nthe summary text."
+      },
       "ReviewJobProtocolDto": {
         "type": "object",
         "properties": {
@@ -46106,6 +46356,9 @@
           "attemptNumber": {
             "type": "integer",
             "format": "int32"
+          },
+          "timeLimit": {
+            "$ref": "#/components/schemas/RunnerReviewTimeLimit"
           }
         },
         "additionalProperties": false,
@@ -46780,10 +47033,32 @@
             },
             "description": "Generated findings retained as evidence without allowing SCM publication.",
             "nullable": true
+          },
+          "timeLimitReached": {
+            "type": "boolean",
+            "description": "Whether the scan ended at the maximum review duration of the tenant."
+          },
+          "timeLimitSeconds": {
+            "type": "integer",
+            "description": "The maximum review duration of the tenant, when the scan ended at it.",
+            "format": "int32",
+            "nullable": true
+          },
+          "timeLimitSkippedFilePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files not reviewed because the maximum review duration was reached first.",
+            "nullable": true
+          },
+          "timeLimitSkippedPrWidePasses": {
+            "type": "boolean",
+            "description": "Whether the pull-request-wide passes did not run because the time was up."
           }
         },
         "additionalProperties": false,
-        "description": "Everything a review result says about itself beyond its summary and findings: what was carried\nforward, what was degraded or skipped for context, and whether the budget cut the scan short.\n\nA submission that carried only summary and comments dropped all of it. The clearest case is the\n    budget label, whose absence made a soft-capped remote review indistinguishable from a complete\n    one everywhere the label is read."
+        "description": "Everything a review result says about itself beyond its summary and findings: what was carried\nforward, what was degraded or skipped for context, and whether the budget or the tenant's maximum review\nduration cut the scan short.\n\nA submission that carried only summary and comments dropped all of it. The clearest case is the\n    budget label, whose absence made a soft-capped remote review indistinguishable from a complete\n    one everywhere the label is read."
       },
       "RunnerReviewBehaviour": {
         "type": "object",
@@ -47008,6 +47283,23 @@
         },
         "additionalProperties": false,
         "description": "One comment in a thread."
+      },
+      "RunnerReviewTimeLimit": {
+        "type": "object",
+        "properties": {
+          "maxReviewDurationSeconds": {
+            "type": "integer",
+            "description": "The maximum review duration of the tenant, which ProPR writes into the summary of a review that ended at it.",
+            "format": "int32"
+          },
+          "remainingSeconds": {
+            "type": "number",
+            "description": "The seconds left until the deadline when the control plane issued the manifest. Zero or negative when the\ndeadline had already passed.",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "description": "The maximum review duration of a job's tenant, as it applies to one leased execution. The time left is\ncarried, not the deadline, so the executor counts it on its own clock from the moment it receives the\nmanifest, and a clock that differs from the control plane's does not move the deadline."
       },
       "RunnerSpendRecord": {
         "type": "object",
@@ -47897,6 +48189,9 @@
           },
           "reviewLimits": {
             "$ref": "#/components/schemas/TenantReviewLimitsDto"
+          },
+          "reviewExecutionLimits": {
+            "$ref": "#/components/schemas/TenantReviewExecutionLimits"
           }
         },
         "additionalProperties": false,
@@ -48133,6 +48428,25 @@
         "additionalProperties": false,
         "description": "The protocol retention of a tenant."
       },
+      "TenantReviewExecutionLimits": {
+        "type": "object",
+        "properties": {
+          "maxConcurrentReviews": {
+            "type": "integer",
+            "description": "How many review jobs of the tenant may be processing at once, in process or on a runner, or null. Thread\npasses and mention replies are not counted.",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxReviewDurationSeconds": {
+            "type": "integer",
+            "description": "How many seconds after the start of processing a review stops starting further files and completes with\nwhat it has reviewed, or null.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The limits a tenant sets on how its reviews run: how many of its review jobs may be processing at once, and\nhow long one review may run. A null value means that the tenant sets no limit of its own, and the limits of\nthe installation apply alone."
+      },
       "TenantReviewLimitsDto": {
         "type": "object",
         "properties": {
@@ -48149,6 +48463,25 @@
         },
         "additionalProperties": false,
         "description": "A tenant's per-file byte limits for reviews. Both values are optional; a null value leaves the\ninstallation value in force. They bound what one file may contribute to a review, so they protect the\nhost that runs it."
+      },
+      "TenantReviewLimitsRequest": {
+        "type": "object",
+        "properties": {
+          "maxConcurrentReviews": {
+            "type": "integer",
+            "description": "How many review jobs of the tenant may be processing at once, in process and on runners together, at least\n1, or null for no limit of the tenant.",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxReviewDurationSeconds": {
+            "type": "integer",
+            "description": "How many seconds after the start of processing a review of the tenant ends with what it has reviewed, from 60\nto 86400, or null for no limit of the tenant.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The limits on how the reviews of a tenant run. A null value clears that limit."
       },
       "TenantRole": {
         "enum": [
@@ -49528,6 +49861,9 @@
     },
     {
       "name": "TenantModelCatalog"
+    },
+    {
+      "name": "TenantReviewLimits"
     },
     {
       "name": "TenantSsoProviders"

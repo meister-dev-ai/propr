@@ -204,6 +204,31 @@ public sealed class RunnerLeaseOfferServiceTests
             second.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
+    // A tenant at its own cap concerns that tenant's job only. The offer goes on to the next candidate instead
+    // of answering with the installation's ceiling, which is not full.
+    [Fact]
+    public async Task ACandidateWhoseTenantIsAtItsCap_IsSkippedAndTheNextCandidateIsLeased()
+    {
+        var runner = this.EnrolledRunner();
+        var executionStore = Substitute.For<IReviewJobExecutionStore>();
+        executionStore.CountProcessingJobsAsync(Arg.Any<CancellationToken>()).Returns(1);
+        var ofFullTenant = MakeJob();
+        var next = MakeJob();
+        this.WithCandidates(runner, ofFullTenant, next);
+        this.GrantClaimFor(next, runner);
+        this._leases.TryClaimWithinProcessingCapAsync(ofFullTenant.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(ReviewJobCappedClaim.TenantAtCapacity(TenantId, 1, 1));
+        this.PreparationSucceedsFor(next);
+        this.ManifestResolves();
+
+        var offer = await this.CreateService(limits: LicensedCeilingOf(10), executionStore: executionStore)
+            .OfferAsync(new RunnerLeaseRequest(runner.Id, 1, RunnerContractVersion.Current));
+
+        Assert.True(offer.Granted);
+        Assert.Equal(next.Id, offer.Manifest!.JobId);
+        await this._preparer.DidNotReceive().PrepareAsync(ofFullTenant, Arg.Any<ReviewJobLease>(), Arg.Any<CancellationToken>());
+    }
+
     // A refusal under a licensed ceiling must not state that no license is in force, and one under the
     // community value must not attribute the number to a license. The resolution's source decides which is
     // stated.

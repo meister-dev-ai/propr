@@ -288,6 +288,8 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Output language | Per client | The language the review writes in - see [Output language](#output-language) |
 | Linked work items and issues | Per client | Pulls the work items or issues linked to the pull request into the review context, so the change is judged against its intended direction. On by default |
 | Exclusion rules | Per repository | Glob patterns read from the repository - see [configuring ProPR from your repository](repository-configuration.md) |
+| Concurrent reviews | Per tenant | How many reviews of the tenant run at the same time. A platform administrator sets it - see [tenant review limits](#tenant-review-limits) |
+| Maximum review duration | Per tenant | How long one review of the tenant runs before it ends with the files it has reviewed. A platform administrator sets it - see [tenant review limits](#tenant-review-limits) |
 | Minimum classification to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review, and the published summary reports how many were held back. Order, high to low: error, warning, suggestion, info |
 | Auto-resolve severities | Per client | Comments of the chosen severities are posted and then immediately resolved with a note. Azure DevOps, GitHub and GitLab; on Forgejo the setting is a no-op |
 | Do not post findings outside the changed lines | Per client | Keeps findings in pre-existing code away from the diff out of the pull request. They stay visible in the ProPR review. Off by default - see [findings outside your changes](#findings-outside-your-changes) |
@@ -370,6 +372,33 @@ Every review measures the repository as it stands at that moment, and ProPR stor
 Making a repository smaller leaves the pull request head as it was, so ProPR starts a review refused on this
 bound again from a restart or from a raised bound. Setting these bounds needs no licence: they protect the
 installation.
+
+### Tenant review limits
+
+A platform administrator sets two limits on the reviews of a tenant, in the **Review limits** section of the tenant
+or through the [API](../reference/api.md#tenant-review-limits). Tenant administrators see both values in that section
+and cannot change them.
+
+**Concurrent reviews.** ProPR runs at most this many review jobs of the tenant at the same time. Reviews that run in
+process and reviews leased to runners count together. Thread passes and answers to `@propr` mentions are not counted.
+A review beyond the limit stays in the queue and starts when a running review of the tenant finishes, and the reviews
+of other tenants start as usual in the meantime. The limits of the installation apply as well: the licensed number
+of concurrent reviews, and `WORKER_MAX_CONCURRENT_REVIEW_JOBS` on each instance. A new limit applies to the next
+review that starts. Reviews that are running when the limit changes continue.
+
+**Maximum review duration.** The time counts from the moment the review starts processing. Once it has passed, the
+review starts no further file and no pull-request-wide pass. Files that are being reviewed at that moment are
+finished. The review then writes its summary over the files it reviewed and publishes the findings it has. ProPR adds
+a note to the summary that the review ended at the tenant's time limit, followed by the files it did not review. The
+job ends as completed, and ProPR records the reason `timeLimitReached` on the job and shows it on the review record. A
+review on a runner ends at the same deadline, because the lease carries the time that is left. A runner of an earlier
+release does not read it and reviews every file.
+
+`REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES` is a separate ceiling for the whole installation. A review that runs past
+that ceiling is stopped and fails, as described under
+[review job leases](../operate/configuration.md#review-job-leases). Set the maximum review duration of a tenant well
+below that ceiling. The files in progress at the deadline and the summary take further time, and a review that
+reaches the ceiling during that time fails.
 
 ### Output language
 

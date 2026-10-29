@@ -49,6 +49,10 @@ internal sealed class ReviewSynthesisExecutor(
 {
     private const int MaxRecordedMessageChars = 280;
 
+    /// <summary>The summary of a review that reached the tenant's maximum review duration before it reviewed a file.</summary>
+    internal const string NothingReviewedBeforeTheTimeLimitSummary =
+        "The review reached its time limit before it reviewed any file, so it reports no findings.";
+
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
 
     // Default deduplicator used whenever the client has not opted into multi-pass union: the existing
@@ -105,6 +109,29 @@ internal sealed class ReviewSynthesisExecutor(
             .Where(comment => !comment.OriginPassShadow)
             .Select(NormalizeCommentAnchor)
             .ToList();
+
+        // The tenant's maximum review duration can pass before the first file starts, when the preparation of the
+        // review took that long. There is then nothing to synthesize, and a synthesis call would be one more model
+        // call after the deadline. The review completes with a summary of its own, so it is published and recorded
+        // as ended at the time limit, not dropped as an empty review.
+        if (baseContext.TimeLimit is { CutTheScan: true }
+            && perFileSummaries.Count == 0
+            && allComments.Count == 0
+            && (prWideCandidateFindings?.Count ?? 0) == 0)
+        {
+            logger.LogInformation("Skipped synthesis for job {JobId}: the tenant's maximum review duration passed before any file was reviewed", job.Id);
+            return new ReviewResult(NothingReviewedBeforeTheTimeLimitSummary, [])
+            {
+                WithheldFindings = fileWithheldFindings,
+                CarriedForwardCandidatesSkipped = carriedForwardCandidatesSkipped,
+                ContextDegradedFilePaths = contextDegradedFilePaths,
+                ContextSkippedFilePaths = contextSkippedFilePaths,
+                BudgetSoftCapped = budgetSoftCap.SoftCapped,
+                BudgetSoftCapThresholdUsd = budgetSoftCap.ThresholdUsd,
+                BudgetSoftCapSpentUsd = budgetSoftCap.SpentUsd,
+                BudgetSoftCapSkippedFilePaths = budgetSoftCap.SkippedFilePaths,
+            };
+        }
 
         var synthesisRuntime = await this.ResolveSynthesisRuntimeAsync(job, baseContext, effectiveClient, ct);
 

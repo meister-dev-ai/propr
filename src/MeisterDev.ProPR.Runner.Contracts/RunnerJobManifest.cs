@@ -61,6 +61,11 @@ namespace MeisterDev.ProPR.Runner.Contracts;
 ///     high the configured concurrency is. This is the same clamp the in-process planner applies. Null from an
 ///     older control plane reads as licensed, which is how the review behaved before the field existed.
 /// </param>
+/// <param name="TimeLimit">
+///     The maximum review duration of the job's tenant and the time left of it when the manifest was issued, or
+///     null when the tenant sets none. The executor starts no further files once the time is up, as the
+///     in-process review does, and completes with what it has reviewed.
+/// </param>
 public sealed record RunnerJobManifest(
     int ContractVersion,
     Guid JobId,
@@ -79,7 +84,22 @@ public sealed record RunnerJobManifest(
     IReadOnlyList<RunnerLinkedItem>? LinkedItems = null,
     string? ServedBy = null,
     bool? ParallelReviewExecutionLicensed = null,
-    int AttemptNumber = 1);
+    int AttemptNumber = 1,
+    RunnerReviewTimeLimit? TimeLimit = null);
+
+/// <summary>
+///     The maximum review duration of a job's tenant, as it applies to one leased execution. The time left is
+///     carried, not the deadline, so the executor counts it on its own clock from the moment it receives the
+///     manifest, and a clock that differs from the control plane's does not move the deadline.
+/// </summary>
+/// <param name="MaxReviewDurationSeconds">
+///     The maximum review duration of the tenant, which ProPR writes into the summary of a review that ended at it.
+/// </param>
+/// <param name="RemainingSeconds">
+///     The seconds left until the deadline when the control plane issued the manifest. Zero or negative when the
+///     deadline had already passed.
+/// </param>
+public sealed record RunnerReviewTimeLimit(int MaxReviewDurationSeconds, double RemainingSeconds);
 
 /// <summary>
 ///     One work item linked to the review, reduced to the provider-neutral summary the prompt is built

@@ -4,6 +4,7 @@
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -16,20 +17,50 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 ///     Claiming and liveness for the offline evaluation path, which runs reviews in one process against the
 ///     in-memory job store. There is no second claimant to race, so a lock around the same state transition
 ///     the database performs conditionally is enough to keep the semantics identical from the caller's side.
+///     <para>
+///         The cap a tenant sets on concurrent reviews applies here as it does in the database, when the host
+///         registers a client registry and a store of tenant limits. The offline harness registers neither and
+///         claims without a tenant cap.
+///     </para>
 /// </summary>
 public sealed class InMemoryReviewJobLeaseStore(
     InMemoryReviewJobRepository jobs,
-    IOptions<ReviewLeaseOptions> leaseOptions) : IReviewJobLeaseStore
+    IOptions<ReviewLeaseOptions> leaseOptions,
+    IClientRegistry? clients = null,
+    ITenantReviewExecutionLimitsStore? tenantLimits = null) : IReviewJobLeaseStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<ReviewJob>> GetClaimCandidatesAsync(
+    public async Task<IReadOnlyList<ReviewJob>> GetClaimCandidatesAsync(
         int limit,
         DateTimeOffset? submittedAfter = null,
         CancellationToken ct = default)
     {
-        return jobs.GetClaimCandidatesAsync(limit, submittedAfter, ct);
+        if (clients is null || tenantLimits is null || limit < 1)
+        {
+            return await jobs.GetClaimCandidatesAsync(limit, submittedAfter, ct);
+        }
+
+        // The jobs of a full tenant are dropped before the window is cut, as the database query does, so a full
+        // tenant's backlog cannot take every place in the window.
+        var tenants = new TenantLookup(clients, tenantLimits);
+        var pending = await jobs.GetClaimCandidatesAsync(int.MaxValue, submittedAfter, ct);
+        var candidates = new List<ReviewJob>(Math.Min(limit, pending.Count));
+        foreach (var job in pending)
+        {
+            if (candidates.Count == limit)
+            {
+                break;
+            }
+
+            if (await this.FindTenantAtCapacityAsync(job.ClientId, tenants, ct) is null)
+            {
+                candidates.Add(job);
+            }
+        }
+
+        return candidates;
     }
 
     /// <inheritdoc />
@@ -44,6 +75,11 @@ public sealed class InMemoryReviewJobLeaseStore(
         await this._gate.WaitAsync(ct);
         try
         {
+            if (await this.FindTenantAtCapacityAsync(jobId, ct) is not null)
+            {
+                return null;
+            }
+
             return this.ClaimHeld(jobId, owner, leaseDuration);
         }
         finally
@@ -68,6 +104,11 @@ public sealed class InMemoryReviewJobLeaseStore(
         await this._gate.WaitAsync(ct);
         try
         {
+            if (await this.FindTenantAtCapacityAsync(jobId, ct) is { } tenantRefusal)
+            {
+                return tenantRefusal;
+            }
+
             var processing = await jobs.CountProcessingJobsAsync(ct);
             if (processing >= cap)
             {
@@ -267,6 +308,41 @@ public sealed class InMemoryReviewJobLeaseStore(
     }
 
     /// <summary>
+    ///     The refusal for a job whose tenant already has as many reviews processing as its cap allows, or null
+    ///     when the tenant has room, sets no cap, or cannot be read. The caller holds the gate, so the count and the
+    ///     claim that follows it cannot interleave with another claim.
+    /// </summary>
+    private async Task<ReviewJobCappedClaim?> FindTenantAtCapacityAsync(Guid jobId, CancellationToken ct)
+    {
+        if (clients is null || tenantLimits is null || jobs.GetById(jobId) is not { } job)
+        {
+            return null;
+        }
+
+        return await this.FindTenantAtCapacityAsync(job.ClientId, new TenantLookup(clients, tenantLimits), ct);
+    }
+
+    private async Task<ReviewJobCappedClaim?> FindTenantAtCapacityAsync(Guid clientId, TenantLookup tenants, CancellationToken ct)
+    {
+        if (await tenants.TenantOfAsync(clientId, ct) is not { } tenantId
+            || await tenants.CapOfAsync(tenantId, ct) is not { } cap)
+        {
+            return null;
+        }
+
+        var processing = 0;
+        foreach (var running in await jobs.GetProcessingJobsAsync(ct))
+        {
+            if (await tenants.TenantOfAsync(running.ClientId, ct) == tenantId)
+            {
+                processing++;
+            }
+        }
+
+        return processing >= cap ? ReviewJobCappedClaim.TenantAtCapacity(tenantId, cap, processing) : null;
+    }
+
+    /// <summary>
     ///     The state transition a claim performs. The caller holds the gate, so both claim paths make the
     ///     same transition and neither can interleave with the other.
     /// </summary>
@@ -320,5 +396,37 @@ public sealed class InMemoryReviewJobLeaseStore(
                && job.Status == JobStatus.Processing
                && job.LeaseGeneration == lease.Generation
                && string.Equals(job.LeaseOwner, lease.Owner, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     Reads the tenant of each client and the cap of each tenant once per operation, because a scan of the
+    ///     pending and processing jobs asks for the same few clients many times.
+    /// </summary>
+    private sealed class TenantLookup(IClientRegistry clients, ITenantReviewExecutionLimitsStore limits)
+    {
+        private readonly Dictionary<Guid, int?> _capByTenant = [];
+        private readonly Dictionary<Guid, Guid?> _tenantByClient = [];
+
+        public async Task<Guid?> TenantOfAsync(Guid clientId, CancellationToken ct)
+        {
+            if (!this._tenantByClient.TryGetValue(clientId, out var tenantId))
+            {
+                tenantId = await clients.GetTenantIdAsync(clientId, ct);
+                this._tenantByClient[clientId] = tenantId;
+            }
+
+            return tenantId;
+        }
+
+        public async Task<int?> CapOfAsync(Guid tenantId, CancellationToken ct)
+        {
+            if (!this._capByTenant.TryGetValue(tenantId, out var cap))
+            {
+                cap = (await limits.GetAsync(tenantId, ct))?.MaxConcurrentReviews;
+                this._capByTenant[tenantId] = cap;
+            }
+
+            return cap;
+        }
     }
 }

@@ -167,6 +167,7 @@ made mid-review from altering a review already in progress.
 | `linkedItems` | The work items linked to the review, discovered and bounded at dispatch |
 | `servedBy` | The granting replica's advertised base URL, when the operator sets one; every job-scoped call goes there |
 | `parallelReviewExecutionLicensed` | Whether files may fan out in parallel, resolved at dispatch |
+| `timeLimit` | The maximum review duration of the tenant and the seconds left of it when the manifest was issued, when the tenant sets one |
 
 ### Secret handling
 
@@ -223,6 +224,14 @@ original options remain unchanged.
 
 `budgetHeadroomUsd` lets the runner stop before another call would exceed its captured estimate. The AI relay
 enforces the current hard cap for every completion.
+
+`timeLimit` contains `maxReviewDurationSeconds` and `remainingSeconds`. The runner counts `remainingSeconds` on its
+own clock from the moment it receives the manifest, so a clock that differs from the control plane's does not move
+the deadline. Once the time is up, the runner starts no further files and submits the findings of the files it has
+reviewed. The annotations of the final submission carry `timeLimitReached`, `timeLimitSeconds`,
+`timeLimitSkippedFilePaths` and `timeLimitSkippedPrWidePasses`. The control plane writes the summary note from them
+and records the completion reason of the job. A runner of an earlier release ignores `timeLimit` and reviews every
+file.
 
 ### Lease-scoped state
 

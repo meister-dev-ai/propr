@@ -71,4 +71,23 @@ public sealed record ReviewResult(
     ///     review summary so a budget-shortened review is never silently presented as a full one.
     /// </summary>
     public IReadOnlyList<string> BudgetSoftCapSkippedFilePaths { get; init; } = [];
+
+    /// <summary>
+    ///     True when the review reached the maximum review duration of its tenant before its scan was done. The
+    ///     review started no further files or pull-request-wide passes from that point and completed with a
+    ///     synthesis over the files it had reviewed.
+    /// </summary>
+    public bool TimeLimitReached { get; init; }
+
+    /// <summary>The maximum review duration of the tenant in seconds, when <see cref="TimeLimitReached" /> is true.</summary>
+    public int? TimeLimitSeconds { get; init; }
+
+    /// <summary>
+    ///     File paths not reviewed because the maximum review duration was reached first. ProPR lists them in the
+    ///     review summary, so a shortened review is not taken for a complete one.
+    /// </summary>
+    public IReadOnlyList<string> TimeLimitSkippedFilePaths { get; init; } = [];
+
+    /// <summary>True when the pull-request-wide passes did not run because the maximum review duration was reached first.</summary>
+    public bool TimeLimitSkippedPrWidePasses { get; init; }
 }

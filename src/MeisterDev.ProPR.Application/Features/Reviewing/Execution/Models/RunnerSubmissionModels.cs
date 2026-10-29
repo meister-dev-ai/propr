@@ -27,7 +27,8 @@ public sealed record RunnerFindingsChunk(
 
 /// <summary>
 ///     Everything a review result says about itself beyond its summary and findings: what was carried
-///     forward, what was degraded or skipped for context, and whether the budget cut the scan short.
+///     forward, what was degraded or skipped for context, and whether the budget or the tenant's maximum review
+///     duration cut the scan short.
 ///     <para>
 ///         A submission that carried only summary and comments dropped all of it. The clearest case is the
 ///         budget label, whose absence made a soft-capped remote review indistinguishable from a complete
@@ -43,6 +44,10 @@ public sealed record RunnerFindingsChunk(
 /// <param name="BudgetSoftCapSpentUsd">The spend that reached it, when the executor knew the figure.</param>
 /// <param name="BudgetSoftCapSkippedFilePaths">Files not scanned because the cap was reached first.</param>
 /// <param name="WithheldFindings">Generated findings retained as evidence without allowing SCM publication.</param>
+/// <param name="TimeLimitReached">Whether the scan ended at the maximum review duration of the tenant.</param>
+/// <param name="TimeLimitSeconds">The maximum review duration of the tenant, when the scan ended at it.</param>
+/// <param name="TimeLimitSkippedFilePaths">Files not reviewed because the maximum review duration was reached first.</param>
+/// <param name="TimeLimitSkippedPrWidePasses">Whether the pull-request-wide passes did not run because the time was up.</param>
 public sealed record RunnerResultAnnotations(
     IReadOnlyList<string> CarriedForwardFilePaths,
     int CarriedForwardCandidatesSkipped,
@@ -52,7 +57,11 @@ public sealed record RunnerResultAnnotations(
     decimal? BudgetSoftCapThresholdUsd,
     decimal? BudgetSoftCapSpentUsd,
     IReadOnlyList<string> BudgetSoftCapSkippedFilePaths,
-    IReadOnlyList<WithheldReviewFinding>? WithheldFindings = null)
+    IReadOnlyList<WithheldReviewFinding>? WithheldFindings = null,
+    bool TimeLimitReached = false,
+    int? TimeLimitSeconds = null,
+    IReadOnlyList<string>? TimeLimitSkippedFilePaths = null,
+    bool TimeLimitSkippedPrWidePasses = false)
 {
     /// <summary>Maps internal review annotations to the optional runner submission fields.</summary>
     /// <param name="result">The review result produced by the execution strategy.</param>
@@ -63,7 +72,8 @@ public sealed record RunnerResultAnnotations(
         return new RunnerResultAnnotations(
             result.CarriedForwardFilePaths, result.CarriedForwardCandidatesSkipped,
             result.ContextDegradedFilePaths, result.ContextSkippedFilePaths, result.BudgetSoftCapped,
-            result.BudgetSoftCapThresholdUsd, result.BudgetSoftCapSpentUsd, result.BudgetSoftCapSkippedFilePaths, result.WithheldFindings);
+            result.BudgetSoftCapThresholdUsd, result.BudgetSoftCapSpentUsd, result.BudgetSoftCapSkippedFilePaths, result.WithheldFindings,
+            result.TimeLimitReached, result.TimeLimitSeconds, result.TimeLimitSkippedFilePaths, result.TimeLimitSkippedPrWidePasses);
     }
 }
 

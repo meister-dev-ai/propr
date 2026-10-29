@@ -106,6 +106,10 @@ internal sealed class RunnerSubmissionAssembly(string submissionId, int chunkCou
                     BudgetSoftCapSpentUsd = annotations.BudgetSoftCapSpentUsd,
                     BudgetSoftCapSkippedFilePaths = annotations.BudgetSoftCapSkippedFilePaths,
                     WithheldFindings = annotations.WithheldFindings ?? [],
+                    TimeLimitReached = annotations.TimeLimitReached,
+                    TimeLimitSeconds = annotations.TimeLimitSeconds,
+                    TimeLimitSkippedFilePaths = annotations.TimeLimitSkippedFilePaths ?? [],
+                    TimeLimitSkippedPrWidePasses = annotations.TimeLimitSkippedPrWidePasses,
                 };
         }
     }

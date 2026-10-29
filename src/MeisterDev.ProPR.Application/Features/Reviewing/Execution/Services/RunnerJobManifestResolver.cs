@@ -50,7 +50,8 @@ public sealed partial class RunnerJobManifestResolver(
     ITenantReasoningCapturePolicyProvider? reasoningCapturePolicies = null,
     IReviewFileResultStore? resultStore = null,
     IClientScmConnectionRepository? scmConnections = null,
-    MeisterDev.ProPR.CodeInsights.Contracts.IFindingTypeVocabularyProvider? findingTypeVocabularyProvider = null) : IRunnerJobManifestResolver
+    MeisterDev.ProPR.CodeInsights.Contracts.IFindingTypeVocabularyProvider? findingTypeVocabularyProvider = null,
+    IReviewTimeLimitReader? timeLimits = null) : IRunnerJobManifestResolver
 {
     /// <inheritdoc />
     public async Task<RunnerJobManifestResolution> ResolveAsync(
@@ -226,7 +227,12 @@ public sealed partial class RunnerJobManifestResolver(
                 // in-process planner treats a null licensing service.
                 ParallelReviewExecutionLicensed: licensing is null
                                                  || await licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, ct),
-                AttemptNumber: job.RetryCount + 1);
+                AttemptNumber: job.RetryCount + 1,
+
+                // Read last, after everything else this manifest needed, so the time left is as close as it can be
+                // to the moment the runner receives it. The deadline itself counts from the claim, so the
+                // preparation of the workspace is already counted against it.
+                TimeLimit: await this.ResolveTimeLimitAsync(job.Id, ct));
 
             if (resultStore is not null)
             {
@@ -559,5 +565,17 @@ public sealed partial class RunnerJobManifestResolver(
             : (await reasoningCapturePolicies.GetForClientAsync(clientId, ct)).AsOverride();
 
         return stated ?? reviewOptions?.CaptureReasoningInProtocol;
+    }
+
+    // The tenant's maximum review duration and the time left of it, read from the same store the in-process
+    // review reads, so a runner ends a review at the same deadline. A host without the store sends none.
+    private async Task<RunnerReviewTimeLimit?> ResolveTimeLimitAsync(Guid jobId, CancellationToken ct)
+    {
+        if (timeLimits is null || await timeLimits.ReadAsync(jobId, ct) is not { } reading)
+        {
+            return null;
+        }
+
+        return new RunnerReviewTimeLimit(reading.MaxReviewDurationSeconds, reading.Remaining.TotalSeconds);
     }
 }

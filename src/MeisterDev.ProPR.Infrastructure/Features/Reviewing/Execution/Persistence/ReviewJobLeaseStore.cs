@@ -41,6 +41,9 @@ public sealed class ReviewJobLeaseStore(
     /// </remarks>
     private static readonly TimeSpan ProtocolCleanupTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>The advisory lock that admits one claimant at a time to the installation-wide cap.</summary>
+    private const string InstallationAdmissionLockKey = "propr:quota:concurrent-reviews";
+
     /// <inheritdoc />
     public Task<IReadOnlyList<ReviewJob>> GetClaimCandidatesAsync(
         int limit,
@@ -59,6 +62,96 @@ public sealed class ReviewJobLeaseStore(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
 
+        var claim = await this.ClaimAsync(jobId, owner, leaseDuration, installationCap: null, ct).ConfigureAwait(false);
+        return claim.Lease;
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewJobCappedClaim> TryClaimWithinProcessingCapAsync(
+        Guid jobId,
+        string owner,
+        TimeSpan leaseDuration,
+        int cap,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        ArgumentOutOfRangeException.ThrowIfLessThan(cap, 1);
+
+        return await this.ClaimAsync(jobId, owner, leaseDuration, cap, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Claims a job within the installation-wide cap, when one is given, and within the cap of the job's
+    ///     tenant, when the tenant sets one. A claim that neither cap applies to is the single unconditional
+    ///     statement, so a tenant without a cap adds no locking to its claims.
+    /// </summary>
+    private async Task<ReviewJobCappedClaim> ClaimAsync(
+        Guid jobId,
+        string owner,
+        TimeSpan leaseDuration,
+        int? installationCap,
+        CancellationToken ct)
+    {
+        var tenant = await this.ReadTenantCapAsync(jobId, ct).ConfigureAwait(false);
+        if (tenant is { Cap: { } tenantCap } && tenant.ProcessingCount >= tenantCap)
+        {
+            // Refused without the admission below, which saves a full tenant the lock on every candidate. The count
+            // was read without the tenant's lock, so a review that finished after the read can make this refusal
+            // unnecessary, and the job waits one more tick. A count that is too low grants nothing here, because a
+            // job is granted only inside the admission, which counts again.
+            return ReviewJobCappedClaim.TenantAtCapacity(tenant.TenantId, tenantCap, tenant.ProcessingCount);
+        }
+
+        if (installationCap is null && tenant?.Cap is null)
+        {
+            return await this.ClaimUncappedAsync(jobId, owner, leaseDuration, ct).ConfigureAwait(false);
+        }
+
+        return await this.ClaimWithinCapsAsync(
+            jobId,
+            owner,
+            leaseDuration,
+            installationCap,
+            tenant is { Cap: not null } ? tenant : null,
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Reads the tenant of the job, the tenant's cap on concurrent reviews, and how many review jobs of the
+    ///     tenant are processing. The count is read only for a tenant with a cap. Null when the job does not exist.
+    /// </summary>
+    private async Task<TenantCapRow?> ReadTenantCapAsync(Guid jobId, CancellationToken ct)
+    {
+        var rows = await dbContext.Database
+            .SqlQueryRaw<TenantCapRow>(
+                """
+                SELECT c.tenant_id AS "TenantId",
+                       t.max_concurrent_reviews AS "Cap",
+                       CASE WHEN t.max_concurrent_reviews IS NULL THEN 0
+                            ELSE (SELECT count(*)::int
+                                  FROM review_jobs p
+                                  JOIN clients pc ON pc.id = p.client_id
+                                  WHERE p.status = 'Processing' AND pc.tenant_id = c.tenant_id)
+                       END AS "ProcessingCount"
+                FROM review_jobs j
+                JOIN clients c ON c.id = j.client_id
+                JOIN tenants t ON t.id = c.tenant_id
+                WHERE j.id = {0}
+                """,
+                jobId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows.Count == 0 ? null : rows[0];
+    }
+
+    /// <summary>The claim without any cap: one conditional statement and a read of what it stamped.</summary>
+    private async Task<ReviewJobCappedClaim> ClaimUncappedAsync(
+        Guid jobId,
+        string owner,
+        TimeSpan leaseDuration,
+        CancellationToken ct)
+    {
         // One statement does all of it: the status move, the owner stamp, the generation bump, and the
         // expiry. The inner SELECT re-checks eligibility under a row lock and SKIP LOCKED turns a
         // concurrent claimant into a clean miss instead of a wait. Expiry comes from the database clock so
@@ -80,64 +173,81 @@ public sealed class ReviewJobLeaseStore(
             )
             """,
             [jobId, owner, leaseDuration.TotalSeconds],
-            ct);
+            ct).ConfigureAwait(false);
 
         if (claimed == 0)
         {
-            return null;
+            return ReviewJobCappedClaim.NotClaimable;
         }
 
         // Read back what the claim just stamped. Only an expiry-driven reclaim could change these, and a
         // lease granted microseconds ago cannot already have expired.
-        var granted = await dbContext.ReviewJobs
-            .AsNoTracking()
-            .Where(j => j.Id == jobId)
-            .Select(j => new { j.LeaseGeneration, j.LeaseExpiresAt })
-            .SingleOrDefaultAsync(ct);
-
+        var granted = await this.ReadGrantedLeaseAsync(jobId, ct).ConfigureAwait(false);
         if (granted?.LeaseExpiresAt is null)
         {
-            return null;
+            return ReviewJobCappedClaim.NotClaimable;
         }
 
         await this.ObserveConcurrentReviewPeakAsync().ConfigureAwait(false);
 
-        return new ReviewJobLease(jobId, owner, granted.LeaseGeneration, granted.LeaseExpiresAt.Value);
+        return ReviewJobCappedClaim.Granted(new ReviewJobLease(jobId, owner, granted.LeaseGeneration, granted.LeaseExpiresAt.Value));
     }
 
-    /// <inheritdoc />
-    public async Task<ReviewJobCappedClaim> TryClaimWithinProcessingCapAsync(
+    /// <summary>
+    ///     The claim under the installation-wide cap, the tenant's cap, or both. Each cap is admitted under an
+    ///     advisory lock of its own, and the claim counts inside both admissions.
+    /// </summary>
+    private async Task<ReviewJobCappedClaim> ClaimWithinCapsAsync(
         Guid jobId,
         string owner,
         TimeSpan leaseDuration,
-        int cap,
-        CancellationToken ct = default)
+        int? installationCap,
+        TenantCapRow? tenant,
+        CancellationToken ct)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
-        ArgumentOutOfRangeException.ThrowIfLessThan(cap, 1);
-
         await using var transaction = await dbContext.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
 
         int claimed;
+        var waitingForTenant = false;
+        var waitingForInstallation = false;
         try
         {
-            // Bounds how long this claimant waits for the lock below. A claimant that stalls while holding it
+            // Bounds how long this claimant waits for the locks below. A claimant that stalls while holding one
             // would otherwise block every other one indefinitely, and each of those waits occupies a pooled
             // connection for as long as it lasts. SET LOCAL applies to this transaction only.
             await dbContext.Database.ExecuteSqlRawAsync(
                 "SET LOCAL lock_timeout = '5s'",
                 ct).ConfigureAwait(false);
 
-            // The advisory lock is what makes the capacity condition below mean anything. The subquery reads
-            // the transaction's snapshot, so two claimants of two different rows both count the state from
-            // before either of them wrote, and both pass a cap they jointly exceed. Row locking does not
-            // help: it arbitrates claims of the same row, and these are different rows. The lock is held for
-            // the transaction, so it is released when the transaction ends, by commit or by rollback.
-            await PostgresAdvisoryLocks.AcquireTransactionAsync(dbContext, "propr:quota:concurrent-reviews", ct).ConfigureAwait(false);
+            // The advisory locks are what make the capacity conditions below mean anything. Each statement under
+            // READ COMMITTED reads a snapshot taken when it starts, so two claimants of two different rows that
+            // counted without a lock would both count the state from before either of them wrote, and both pass
+            // a cap they jointly exceed. Row locking does not help: it arbitrates claims of the same row, and
+            // these are different rows. A claimant that holds the lock counts in a statement that starts after
+            // the previous holder committed, so the count includes that holder's claim. The locks are held for
+            // the transaction, so they are released when the transaction ends, by commit or by rollback.
+            //
+            // The tenant's lock is taken first and the installation's second, by every claimant, so two
+            // claimants never wait for each other in opposite order. A claimant whose tenant is full is turned
+            // away before it queues for the installation-wide lock.
+            if (tenant is not null)
+            {
+                waitingForTenant = true;
+                await PostgresAdvisoryLocks.AcquireTransactionAsync(dbContext, TenantAdmissionLockKey(tenant.TenantId), ct)
+                    .ConfigureAwait(false);
+                waitingForTenant = false;
+            }
 
-            // The claim itself is the unbounded one, with the capacity condition added. Everything it stamps
-            // is stamped identically, so a job claimed under a cap is indistinguishable afterwards from one
-            // claimed without.
+            if (installationCap is not null)
+            {
+                waitingForInstallation = true;
+                await PostgresAdvisoryLocks.AcquireTransactionAsync(dbContext, InstallationAdmissionLockKey, ct).ConfigureAwait(false);
+                waitingForInstallation = false;
+            }
+
+            // The claim itself is the unbounded one, with the capacity conditions added. A condition whose flag
+            // is false holds trivially. Everything the claim stamps is stamped identically, so a job claimed
+            // under a cap is indistinguishable afterwards from one claimed without.
             claimed = await dbContext.Database.ExecuteSqlRawAsync(
                 """
                 UPDATE review_jobs
@@ -153,42 +263,79 @@ public sealed class ReviewJobLeaseStore(
                     WHERE id = {0} AND status = 'Pending'
                     FOR UPDATE SKIP LOCKED
                 )
-                  AND (SELECT count(*) FROM review_jobs WHERE status = 'Processing') < {3}
+                  AND (NOT {3} OR (SELECT count(*) FROM review_jobs WHERE status = 'Processing') < {4})
+                  AND (NOT {5} OR (SELECT count(*)
+                                   FROM review_jobs p
+                                   JOIN clients pc ON pc.id = p.client_id
+                                   WHERE p.status = 'Processing' AND pc.tenant_id = {6}) < {7})
                 """,
-                [jobId, owner, leaseDuration.TotalSeconds, cap],
+                [
+                    jobId,
+                    owner,
+                    leaseDuration.TotalSeconds,
+                    installationCap is not null,
+                    installationCap ?? 0,
+                    tenant is not null,
+                    tenant?.TenantId ?? Guid.Empty,
+                    tenant?.Cap ?? 0,
+                ],
                 ct).ConfigureAwait(false);
         }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+        // Only a timeout on one of the two admission locks is a statement about capacity. A timeout of the claim
+        // statement itself, for example behind a table lock that a migration holds, propagates as the error it is.
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable &&
+                                           (waitingForTenant || waitingForInstallation))
         {
-            // Reported as capacity rather than as an unclaimable job, because the caller must stop scanning
-            // this tick: the next candidate would contend for the same lock straight away and wait again. No
-            // executing count is carried, because this claimant never entered the admission that counts them.
+            // A timeout on the installation-wide lock is reported as capacity rather than as an unclaimable job,
+            // because the caller must stop scanning this tick: the next candidate would contend for the same lock
+            // straight away and wait again. A timeout on the tenant's lock concerns this tenant only, so the
+            // caller goes on with the jobs of other tenants. No executing count is carried, because this
+            // claimant never entered the admission that counts them.
             await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
-            return ReviewJobCappedClaim.AtCapacity(cap);
+            return waitingForTenant
+                ? ReviewJobCappedClaim.TenantAtCapacity(tenant!.TenantId, tenant.Cap!.Value)
+                : ReviewJobCappedClaim.AtCapacity(installationCap!.Value);
         }
 
         if (claimed == 0)
         {
-            // Which of the two refusals this is decides whether the caller's queue scan has anything left to
-            // try, so it is read here, inside the same transaction, rather than left to a later query that
-            // would see a different state. The count is carried on the refusal so the caller can report the
-            // number it was measured against.
-            var processing = await dbContext.ReviewJobs
-                .CountAsync(j => j.Status == JobStatus.Processing, ct)
-                .ConfigureAwait(false);
-            await transaction.CommitAsync(ct).ConfigureAwait(false);
+            // Which refusal this is decides whether the caller's queue scan has anything left to try, so it is
+            // read here, inside the same transaction, rather than left to a later query that would see a
+            // different state. The installation-wide cap is checked first, because a full installation ends
+            // the scan and a full tenant only skips the jobs of that tenant. The count is carried on the refusal
+            // so the caller can report the number it was measured against.
+            if (installationCap is { } cap)
+            {
+                var processing = await dbContext.ReviewJobs
+                    .CountAsync(j => j.Status == JobStatus.Processing, ct)
+                    .ConfigureAwait(false);
+                if (processing >= cap)
+                {
+                    await transaction.CommitAsync(ct).ConfigureAwait(false);
+                    return ReviewJobCappedClaim.AtCapacity(cap, processing);
+                }
+            }
 
-            return processing >= cap
-                ? ReviewJobCappedClaim.AtCapacity(cap, processing)
-                : ReviewJobCappedClaim.NotClaimable;
+            if (tenant is { Cap: { } tenantCap })
+            {
+                var tenantProcessing = await dbContext.ReviewJobs
+                    .CountAsync(
+                        j => j.Status == JobStatus.Processing
+                             && dbContext.Clients.Any(client => client.Id == j.ClientId && client.TenantId == tenant.TenantId),
+                        ct)
+                    .ConfigureAwait(false);
+                if (tenantProcessing >= tenantCap)
+                {
+                    await transaction.CommitAsync(ct).ConfigureAwait(false);
+                    return ReviewJobCappedClaim.TenantAtCapacity(tenant.TenantId, tenantCap, tenantProcessing);
+                }
+            }
+
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+            return ReviewJobCappedClaim.NotClaimable;
         }
 
-        var granted = await dbContext.ReviewJobs
-            .AsNoTracking()
-            .Where(j => j.Id == jobId)
-            .Select(j => new { j.LeaseGeneration, j.LeaseExpiresAt })
-            .SingleOrDefaultAsync(ct)
-            .ConfigureAwait(false);
+        var granted = await this.ReadGrantedLeaseAsync(jobId, ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
 
         if (granted?.LeaseExpiresAt is null)
@@ -200,6 +347,20 @@ public sealed class ReviewJobLeaseStore(
 
         return ReviewJobCappedClaim.Granted(new ReviewJobLease(jobId, owner, granted.LeaseGeneration, granted.LeaseExpiresAt.Value));
     }
+
+    private async Task<GrantedLease?> ReadGrantedLeaseAsync(Guid jobId, CancellationToken ct)
+    {
+        return await dbContext.ReviewJobs
+            .AsNoTracking()
+            .Where(j => j.Id == jobId)
+            .Select(j => new GrantedLease(j.LeaseGeneration, j.LeaseExpiresAt))
+            .SingleOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>The advisory lock that admits one claimant at a time to the reviews of one tenant.</summary>
+    private static string TenantAdmissionLockKey(Guid tenantId) =>
+        $"propr:quota:tenant-concurrent-reviews:{tenantId:N}";
 
     /// <summary>
     ///     Records how many reviews are executing now against the current UTC day, after the claim that raised
@@ -729,4 +890,10 @@ public sealed class ReviewJobLeaseStore(
             .SingleAsync(ct);
         return now;
     }
+
+    /// <summary>The tenant of a job, the tenant's cap on concurrent reviews, and its processing review jobs.</summary>
+    private sealed record TenantCapRow(Guid TenantId, int? Cap, int ProcessingCount);
+
+    /// <summary>What a claim stamped, read back after it.</summary>
+    private sealed record GrantedLease(int LeaseGeneration, DateTimeOffset? LeaseExpiresAt);
 }

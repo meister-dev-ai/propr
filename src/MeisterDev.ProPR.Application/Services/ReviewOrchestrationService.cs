@@ -72,7 +72,8 @@ public sealed partial class ReviewOrchestrationService(
     IReviewAdmissionNotice? admissionNotice = null,
     IExecutionScopeAccessor? executionScopeAccessor = null,
     IExecutionAdmission? executionAdmission = null,
-    IFindingTypeVocabularyProvider? findingTypeVocabularyProvider = null) : IReviewJobProcessor, IReviewResultPublisher
+    IFindingTypeVocabularyProvider? findingTypeVocabularyProvider = null,
+    IReviewTimeLimitReader? timeLimits = null) : IReviewJobProcessor, IReviewResultPublisher
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -1484,6 +1485,14 @@ public sealed partial class ReviewOrchestrationService(
     {
         try
         {
+            // Read here, at the start of the scan, and not when the job was claimed: the store measures the time
+            // left against the start of processing it stamped, so the preparation before this point is already
+            // counted against the tenant's maximum review duration.
+            if (timeLimits is not null)
+            {
+                systemContext.TimeLimit = ReviewTimeLimit.Start(await timeLimits.ReadAsync(job.Id, ct));
+            }
+
             return await fileByFileReviewOrchestrator.ReviewAsync(job, pr, systemContext, ct, chatClient);
         }
         finally

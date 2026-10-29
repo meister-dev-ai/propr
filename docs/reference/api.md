@@ -189,6 +189,34 @@ a tenant, the newest entry first, to its tenant administrators and to platform a
 elevation carries its `elevationId`; the event types of elevations are `elevation.started`, `elevation.ended`,
 `elevation.expired` and `elevation.content_read`. The endpoint requires the `multi-tenancy` capability.
 
+## Tenant review limits
+
+A platform administrator limits how the reviews of a tenant run. `GET /api/admin/tenants/{tenantId}/review-limits`
+returns the two limits, and `PUT` on the same path stores them. Both answer `200` with the stored values:
+
+```json
+{ "maxConcurrentReviews": 2, "maxReviewDurationSeconds": 1800 }
+```
+
+| Field | Accepted values | Effect |
+|---|---|---|
+| `maxConcurrentReviews` | `1` or more, or `null` | ProPR runs at most this many review jobs of the tenant at the same time, in process and on runners together. |
+| `maxReviewDurationSeconds` | `60` to `86400`, or `null` | A review of the tenant starts no further files after this time and completes with the files it has reviewed. |
+
+`PUT` stores both fields, so a field that is `null` or left out clears that limit. Sending the stored values again
+changes nothing. ProPR answers `400` with the field in `errors` when a value is outside its range, `404` for an
+unknown tenant, `401` without credentials and `403` when the caller is not a platform administrator. A change is
+recorded in the audit history of the tenant as `tenant.review_limits.updated`. Members of the tenant read the limits
+as `reviewExecutionLimits` in `GET /api/admin/tenants/{tenantId}`. How the limits act on reviews is described under
+[tenant review limits](../concepts/reviews.md#tenant-review-limits).
+
+```bash
+curl -k -X PUT "https://localhost:5443/api/admin/tenants/<tenant-id>/review-limits" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Pat: <token>" \
+  -d '{"maxConcurrentReviews": 2, "maxReviewDurationSeconds": 1800}'
+```
+
 ## Repository review targets
 
 All paths below start with `/api/clients/{clientId}/review-targets`. The client requires the crawl
@@ -784,6 +812,10 @@ stored memory record and requires `ClientAdministrator`.
 `GET /api/jobs/{id}/protocol` returns one review's protocol passes and events. Each event carries an
 `eventCategory` you can filter on. Pass `includeEvents=false` for an overview that keeps the event
 rows and metadata but omits their bodies, which is much cheaper on large reviews.
+
+`GET /api/jobs/{id}` returns the detail of one review job. Its `completionReason` is `timeLimitReached` for a
+completed review that ended at the maximum review duration of its tenant, and `none` otherwise - see
+[tenant review limits](#tenant-review-limits).
 
 Diagnostics are scoped to a single review; there is no cross-review trace query.
 

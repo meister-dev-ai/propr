@@ -635,6 +635,16 @@ public sealed class AdoCommentPoster(
             }
         }
 
+        if (result.TimeLimitReached)
+        {
+            sb.Append($"\n\n{ContextBudgetSummarySections.FormatTimeLimitNote(result)}\n\n");
+            foreach (var path in result.TimeLimitSkippedFilePaths)
+            {
+                var renderedPath = AdoFindingCommentRenderer.RenderText(path.ReplaceLineEndings(" "));
+                sb.Append($"- {renderedPath}\n");
+            }
+        }
+
         if (result.ContextDegradedFilePaths.Count > 0)
         {
             sb.Append(

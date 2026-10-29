@@ -210,13 +210,19 @@ public sealed partial class RunnerLeaseOfferService(
                         ceiling.Describe(capped.ProcessingCount));
                 }
 
+                if (capped.Outcome == ReviewJobCappedClaimOutcome.TenantAtCapacity)
+                {
+                    LogTenantAtConcurrencyCap(logger, job.Id, runner.Id, capped.TenantId, capped.Cap);
+                }
+
                 lease = capped.Lease;
             }
 
             if (lease is null)
             {
-                // Another owner claimed the job between the read and the claim. That is the normal outcome
-                // under load rather than an error, so the next candidate is tried.
+                // Another owner claimed the job between the read and the claim, or the job's tenant reached its
+                // own cap on concurrent reviews in the meantime. Both are normal outcomes under load, not errors,
+                // so the next candidate is tried.
                 continue;
             }
 
@@ -391,4 +397,10 @@ public sealed partial class RunnerLeaseOfferService(
         Guid runnerId,
         int cap,
         int? processingCount);
+
+    [LoggerMessage(
+        EventId = 5410,
+        Level = LogLevel.Debug,
+        Message = "Review job {JobId} was not leased to runner {RunnerId}: tenant {TenantId} is at its cap of {Cap} concurrent reviews")]
+    private static partial void LogTenantAtConcurrencyCap(ILogger logger, Guid jobId, Guid runnerId, Guid? tenantId, int? cap);
 }

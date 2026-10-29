@@ -73,6 +73,14 @@ internal sealed class TenantEntityTypeConfiguration : IEntityTypeConfiguration<T
             .HasColumnName("ai_max_structural_parse_bytes")
             .IsRequired(false);
 
+        builder.Property(t => t.MaxConcurrentReviews)
+            .HasColumnName("max_concurrent_reviews")
+            .IsRequired(false);
+
+        builder.Property(t => t.MaxReviewDurationSeconds)
+            .HasColumnName("max_review_duration_seconds")
+            .IsRequired(false);
+
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at").IsRequired();
 

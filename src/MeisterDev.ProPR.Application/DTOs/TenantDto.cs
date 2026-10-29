@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.Enums;
 
 namespace MeisterDev.ProPR.Application.DTOs;
@@ -40,6 +41,11 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// </param>
 /// <param name="Budget">The tenant's monthly USD budget caps. Null caps mean no tenant-level limit.</param>
 /// <param name="ReviewLimits">The tenant's per-file byte limits. Null values leave the installation values in force.</param>
+/// <param name="ReviewExecutionLimits">
+///     How many review jobs of the tenant may be processing at once and how long one review may run. Null values
+///     mean no limit of the tenant. Platform administrators set them through
+///     <c>PUT /admin/tenants/{tenantId}/review-limits</c>, and everyone who may read the tenant reads them here.
+/// </param>
 public sealed record TenantDto(
     Guid Id,
     string Slug,
@@ -55,7 +61,8 @@ public sealed record TenantDto(
     IReadOnlyList<string>? UnresolvedAiProviderKinds = null,
     ReasoningCapturePolicy ReasoningCapturePolicy = ReasoningCapturePolicy.InstallationDefault,
     TenantBudgetConfigDto? Budget = null,
-    TenantReviewLimitsDto? ReviewLimits = null);
+    TenantReviewLimitsDto? ReviewLimits = null,
+    TenantReviewExecutionLimits? ReviewExecutionLimits = null);
 
 /// <summary>
 ///     A tenant's per-file byte limits for reviews. Both values are optional; a null value leaves the

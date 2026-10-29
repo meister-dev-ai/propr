@@ -80,6 +80,30 @@ public sealed class FileByFilePrWideScopeExecutionTests
         Assert.Equal(FindingConfidence.Unknown, Assert.IsType<FindingRiskAssessment>(prWideComment.RiskAssessment).Confidence);
     }
 
+    // A pr_wide entry is further scanning work, so none starts once the tenant's maximum review duration has passed.
+    // The result records that a publishing entry did not run; a shadow entry publishes nothing and is not recorded.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReviewAsync_AfterTheTenantsTimeLimit_RunsNoPrWideEntry(bool shadow)
+    {
+        var generator = Substitute.For<IPrWideCandidateGenerator>();
+        var fixture = BuildFixture(generator, ResolverForAnyModel());
+        var context = ContextWith(
+            fixture.ChatClient,
+            fixture.ReviewTools,
+            new ReviewPassSpec(Guid.NewGuid(), Scope: ReviewPassScope.PrWide, Shadow: shadow));
+        context.TimeLimit = new ReviewTimeLimit(900, TimeSpan.Zero);
+
+        var result = await fixture.Sut.ReviewAsync(fixture.Job, fixture.Pr, context, CancellationToken.None);
+
+        await generator.DidNotReceiveWithAnyArgs().GenerateCandidatesAsync(
+            default!, default!, default!, default!, default!, default, default, default, default);
+        Assert.True(result.TimeLimitReached);
+        Assert.Equal(900, result.TimeLimitSeconds);
+        Assert.Equal(!shadow, result.TimeLimitSkippedPrWidePasses);
+    }
+
     [Fact]
     public async Task ReviewAsync_WithAnchoredEvidenceBackedPrWideFinding_PublishesInlineCommentAtAnchor()
     {

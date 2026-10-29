@@ -486,6 +486,33 @@ public class AdoCommentPosterTests
         }
     }
 
+    // ProPR writes the tenant's maximum review duration and the files the review did not reach into the Azure
+    // DevOps summary, as it does for the plain-markdown providers.
+    [Fact]
+    public async Task PostResolvedThreadsAsync_StatesTheTimeLimitAndTheFilesNotReviewedInTheSummary()
+    {
+        var messages = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            messages.Add(message);
+            return Task.FromResult(CreatedThread(messages.Count, message));
+        };
+        var result = new ReviewResult("The review covered the service layer.", [])
+        {
+            TimeLimitReached = true,
+            TimeLimitSeconds = 900,
+            TimeLimitSkippedFilePaths = ["src/NotReached.cs"],
+        };
+
+        await PostAsync(result, factory);
+
+        var summary = Assert.Single(messages, message => message.StartsWith(SummaryPrefix, StringComparison.Ordinal));
+        Assert.Contains("Time limit reached", summary);
+        Assert.Contains("tenant's time limit of 15 minutes", summary);
+        Assert.Contains("1 file was not reviewed", summary);
+        Assert.Contains("src/NotReached.cs", summary);
+    }
+
     [Theory]
     [InlineData(FindingBadgeStyle.ShieldsIo)]
     [InlineData(FindingBadgeStyle.Plain)]
