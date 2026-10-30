@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -29,7 +30,15 @@ internal sealed class GitHubReviewWorkspaceRemoteResolver(GitHubConnectionVerifi
             $"github:{context.Connection.Id:D}:{context.Connection.AuthenticationKind}",
             true,
             request.Repository.OwnerOrNamespace,
-            $"AUTHORIZATION: Bearer {await context.GetAccessTokenAsync(ct)}");
+            $"AUTHORIZATION: Basic {BuildBasicCredentials(await context.GetAccessTokenAsync(ct))}");
+    }
+
+    // The Git endpoint of GitHub takes a token as the password of Basic authentication and refuses an installation
+    // token in a Bearer header with "invalid credentials", for public repositories as well. GitHub documents the user
+    // name x-access-token for installation tokens, and a personal access token is accepted with any user name.
+    private static string BuildBasicCredentials(string token)
+    {
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes($"x-access-token:{token}"));
     }
 
     private static IReadOnlyList<string> BuildFetchRefSpecs(int pullRequestNumber, string sourceBranch, string targetBranch)
