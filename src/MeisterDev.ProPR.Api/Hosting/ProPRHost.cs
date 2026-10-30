@@ -697,6 +697,25 @@ public static class ProPRHost
                 return;
             }
 
+            // Applies the pending migrations of this image and ends without starting the host, its workers or the rest
+            // of the startup maintenance. A deploy runs it against a copy of the live database, so a migration that
+            // fails on the data of the installation stops the deploy before the running release or its database change.
+            if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
+            {
+                if (!hasDatabaseConnectionString)
+                {
+                    Log.Error("--migrate needs the connection string of the database in DB_CONNECTION_STRING.");
+                    Environment.ExitCode = 1;
+                    return;
+                }
+
+                using var scope = app.Services.CreateScope();
+                await StartupDatabaseMigrations.ApplyAsync(
+                    scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>(),
+                    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(StartupDatabaseMigrations)));
+                return;
+            }
+
             // Prints the identifier this installation reports itself under, so it can be read from a shell without the
             // admin UI. The identifier is created on this read when the installation has none yet.
             //

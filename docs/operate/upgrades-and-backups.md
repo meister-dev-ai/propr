@@ -7,6 +7,17 @@ How to roll forward to a new release, and what has to be in a backup for a resto
 Pending database migrations are applied automatically the first time a new image starts, for both the API
 and ProCursor. There is no downgrade path, so snapshot the databases before rolling forward.
 
+`--migrate` applies the pending migrations of an API image and ends. It starts neither the API nor its workers and
+runs no other startup maintenance, so a deploy can check the migrations of a new image against a copy of the
+database before the rollout:
+
+```bash
+DB_CONNECTION_STRING='<connection string of the copy>' dotnet MeisterDev.ProPR.Api.dll --migrate
+```
+
+The command exits with 0 when every migration is applied, and with 1 when a migration fails or
+`DB_CONNECTION_STRING` is missing.
+
 Review jobs left mid-flight by a crash or a restart are reset to pending on the next start and picked up
 again.
 
