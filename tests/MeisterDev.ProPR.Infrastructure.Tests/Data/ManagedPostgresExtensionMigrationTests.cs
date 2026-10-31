@@ -5,8 +5,6 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.ProCursor.Persistence;
 using MeisterDev.ProPR.TestSupport;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using FactAttribute = Xunit.SkippableFactAttribute;
 
@@ -37,18 +35,21 @@ public sealed class ManagedPostgresExtensionMigrationTests(PostgresContainerFixt
         });
     }
 
-    // MigrateAsync of this context first builds its model snapshot, which fails for ProCursorIndexJob.Status under
-    // EF Core 10, so the test runs the SQL script of the migrations as the owner.
+    // The options are the ones of the ProCursor service, which keeps its migration history in a table of its own.
     [Fact]
-    public async Task ProCursorMigrationScriptRunsWhenTheServerRefusesCreateExtensionAndVectorExists()
+    public async Task ProCursorDatabaseMigratesWhenTheServerRefusesCreateExtensionAndVectorExists()
     {
         fixture.SkipIfUnavailable();
         await this.WithManagedDatabaseAsync(async connectionString =>
         {
             await using var db = new ProCursorOperationalDbContext(
                 new DbContextOptionsBuilder<ProCursorOperationalDbContext>()
-                    .UseNpgsql(connectionString, options => options.UseVector()).Options);
-            await ExecuteAsync(connectionString, db.GetService<IMigrator>().GenerateScript());
+                    .UseNpgsql(
+                        connectionString,
+                        options => options.UseVector().MigrationsHistoryTable("__EFMigrationsHistory_ProCursor"))
+                    .Options);
+            Assert.False(db.Database.HasPendingModelChanges());
+            await db.Database.MigrateAsync();
             Assert.Empty(await db.Database.GetPendingMigrationsAsync());
         });
     }
