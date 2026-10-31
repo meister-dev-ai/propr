@@ -15,8 +15,20 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterDatabase()
-                .Annotation("Npgsql:PostgresExtension:vector", ",,");
+            // Azure Database for PostgreSQL refuses CREATE EXTENSION for vector to every role outside azure_pg_admin,
+            // also with IF NOT EXISTS and when the extension exists, and an administrator creates the extension on such
+            // a server beforehand. The statement therefore runs only when the database lacks the extension. The
+            // migration does not set the extension annotation, from which Npgsql generates CREATE EXTENSION IF NOT EXISTS.
+            migrationBuilder.Sql(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+                        CREATE EXTENSION vector;
+                    END IF;
+                END
+                $$;
+                """);
 
             migrationBuilder.AddColumn<string>(
                 name: "last_seen_status",
