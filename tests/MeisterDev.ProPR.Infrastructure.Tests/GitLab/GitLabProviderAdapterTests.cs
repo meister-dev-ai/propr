@@ -72,6 +72,43 @@ public sealed class GitLabDiscoveryServiceTests
         Assert.Equal(["acme", "acme/platform", "meister-dev"], scopes);
     }
 
+    // A connection is verified before it is activated, so the verification reads the inactive connection by its ID and
+    // checks its stored token with the requests of the scope listing.
+    [Fact]
+    public async Task VerifyConnectionAsync_InactiveConnection_ChecksItsStoredCredentials()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var connection = new ClientScmConnectionCredentialDto(
+            Guid.NewGuid(), clientId, ScmProvider.GitLab, host.HostBaseUrl, ScmAuthenticationKind.PersonalAccessToken, "GitLab",
+            "glpat-inactive", false);
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetConnectionForVerificationAsync(clientId, connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+        var requests = new List<(string Uri, string? Credential)>();
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+        {
+            requests.Add((request.RequestUri!.AbsoluteUri, request.Headers.TryGetValues("PRIVATE-TOKEN", out var token) ? token.Single() : null));
+            return request.RequestUri.AbsoluteUri switch
+            {
+                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
+                "https://gitlab.example.com/api/v4/groups?per_page=100&page=1&min_access_level=10" =>
+                    GitLabTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+        var sut = new GitLabDiscoveryService(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.VerifyConnectionAsync(new ConnectionDiscoveryContext(clientId, connection.Id, host));
+
+        Assert.Contains(requests, call => call.Uri == "https://gitlab.example.com/api/v4/user");
+        Assert.Contains(requests, call => call.Uri == "https://gitlab.example.com/api/v4/groups?per_page=100&page=1&min_access_level=10");
+        Assert.All(requests, call => Assert.Equal("glpat-inactive", call.Credential));
+        await connectionRepository.DidNotReceiveWithAnyArgs().GetOperationalConnectionByIdAsync(default, default);
+        await connectionRepository.DidNotReceiveWithAnyArgs().GetOperationalConnectionAsync(default, default!);
+    }
+
     [Fact]
     public async Task ListRepositoriesAsync_GroupScope_ReturnsNormalizedRepositoryReferences()
     {

@@ -51,21 +51,15 @@ public sealed class ProviderConnectionConfigurationService(IScmProviderRegistry 
     public async Task VerifyAsync(ClientScmConnectionDto connection, CancellationToken ct = default)
     {
         var sourcePolicy = registry.GetReviewSourcePolicy(connection.ProviderFamily);
-        if (sourcePolicy.RequiresOrganizationScope)
+        if (sourcePolicy.RequiresOrganizationScope &&
+            !(await scopes.GetByConnectionIdAsync(connection.ClientId, connection.Id, ct)).Any(scope => scope.IsEnabled))
         {
-            var enabledScope = (await scopes.GetByConnectionIdAsync(connection.ClientId, connection.Id, ct)).FirstOrDefault(scope => scope.IsEnabled);
-            if (enabledScope is null)
-            {
-                throw new InvalidOperationException(sourcePolicy.MissingVerificationScopeMessage);
-            }
+            throw new InvalidOperationException(sourcePolicy.MissingVerificationScopeMessage);
+        }
 
-            await registry.GetProviderAdminDiscoveryService(connection.ProviderFamily).ListProjectOptionsAsync(connection.ClientId, enabledScope.Id, ct);
-        }
-        else
-        {
-            await registry.GetRepositoryDiscoveryProvider(connection.ProviderFamily).ListScopesAsync(
-                connection.ClientId, new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl), ct);
-        }
+        await registry.GetRepositoryDiscoveryProvider(connection.ProviderFamily).VerifyConnectionAsync(
+            new ConnectionDiscoveryContext(connection.ClientId, connection.Id, new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl)),
+            ct);
 
         registry.GetReviewerIdentityService(connection.ProviderFamily);
     }

@@ -27,8 +27,10 @@ public sealed class ProviderConnectionConfigurationServiceTests
         registry.DidNotReceive().IsRegistered(Arg.Any<ScmProvider>());
     }
 
+    // The verification names the connection by its ID, so the provider checks that connection and not another active
+    // connection on the same host, and it can check the connection before it is activated.
     [Fact]
-    public async Task HostVerificationUsesDiscoveryWithoutReadingSavedScopes()
+    public async Task VerificationChecksTheConnectionByIdWithoutReadingSavedScopes()
     {
         var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
         var scopes = Substitute.For<IClientScmScopeRepository>();
@@ -38,10 +40,33 @@ public sealed class ProviderConnectionConfigurationServiceTests
         registry.GetRepositoryDiscoveryProvider(ScmProvider.GitHub).Returns(discovery);
         var connection = Connection(ScmAuthenticationKind.PersonalAccessToken);
         await new ProviderConnectionConfigurationService(registry, scopes).VerifyAsync(connection);
-        await discovery.Received(1).ListScopesAsync(
-            connection.ClientId, new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl), Arg.Any<CancellationToken>());
+        await discovery.Received(1).VerifyConnectionAsync(Context(connection), Arg.Any<CancellationToken>());
+        await discovery.DidNotReceiveWithAnyArgs().ListScopesAsync(default, default!, default);
         await scopes.DidNotReceiveWithAnyArgs().GetByConnectionIdAsync(default, default);
         registry.Received(1).GetReviewerIdentityService(connection.ProviderFamily);
+    }
+
+    [Fact]
+    public async Task OrganizationVerificationChecksTheConnectionByIdOnceAScopeIsEnabled()
+    {
+        var registry = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+        var scopes = Substitute.For<IClientScmScopeRepository>();
+        var policy = Substitute.For<IReviewSourcePolicy>();
+        policy.RequiresOrganizationScope.Returns(true);
+        registry.GetReviewSourcePolicy(ScmProvider.GitHub).Returns(policy);
+        var discovery = Substitute.For<IRepositoryDiscoveryProvider>();
+        registry.GetRepositoryDiscoveryProvider(ScmProvider.GitHub).Returns(discovery);
+        var connection = Connection(ScmAuthenticationKind.PersonalAccessToken);
+        scopes.GetByConnectionIdAsync(connection.ClientId, connection.Id, Arg.Any<CancellationToken>()).Returns(
+            new[]
+            {
+                new ClientScmScopeDto(
+                    Guid.NewGuid(), connection.ClientId, connection.Id, "organization", "org", "https://github.example/org", "Org",
+                    "unknown", true, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
+            });
+        await new ProviderConnectionConfigurationService(registry, scopes).VerifyAsync(connection);
+        await discovery.Received(1).VerifyConnectionAsync(Context(connection), Arg.Any<CancellationToken>());
+        registry.DidNotReceiveWithAnyArgs().GetProviderAdminDiscoveryService(default);
     }
 
     [Fact]
@@ -58,7 +83,7 @@ public sealed class ProviderConnectionConfigurationServiceTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             new ProviderConnectionConfigurationService(registry, scopes).VerifyAsync(connection));
         Assert.Equal("Add an enabled organization scope before verifying Azure DevOps provider connections.", error.Message);
-        registry.DidNotReceiveWithAnyArgs().GetProviderAdminDiscoveryService(default);
+        registry.DidNotReceiveWithAnyArgs().GetRepositoryDiscoveryProvider(default);
     }
 
     [Theory]
@@ -75,6 +100,9 @@ public sealed class ProviderConnectionConfigurationServiceTests
         Assert.Equal(kind == ScmAuthenticationKind.AppInstallation ? 12L : null, result.PersistedAppId);
         Assert.Equal(kind == ScmAuthenticationKind.AppInstallation ? 34L : null, result.PersistedInstallationId);
     }
+
+    private static ConnectionDiscoveryContext Context(ClientScmConnectionDto connection) =>
+        new(connection.ClientId, connection.Id, new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl));
 
     private static ClientScmConnectionDto Connection(ScmAuthenticationKind kind) =>
         new(

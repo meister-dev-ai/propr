@@ -50,6 +50,14 @@ public sealed class NoOpClientScmConnectionRepository : IClientScmConnectionRepo
         return Task.FromResult<ClientScmConnectionCredentialDto?>(null);
     }
 
+    public Task<ClientScmConnectionCredentialDto?> GetConnectionForVerificationAsync(
+        Guid clientId,
+        Guid connectionId,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<ClientScmConnectionCredentialDto?>(null);
+    }
+
     public Task<ClientScmConnectionDto?> AddAsync(
         Guid clientId,
         ScmProvider providerFamily,

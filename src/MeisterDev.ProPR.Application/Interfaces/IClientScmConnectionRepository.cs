@@ -38,6 +38,20 @@ public interface IClientScmConnectionRepository
         Guid connectionId,
         CancellationToken ct = default);
 
+    /// <summary>
+    ///     Returns one provider connection plus decrypted secret material for the given client connection, also when the
+    ///     connection is inactive.
+    /// </summary>
+    /// <remarks>
+    ///     Only the verification of a connection reads it this way, because a connection is verified before it is
+    ///     activated. Operational reads use <see cref="GetOperationalConnectionByIdAsync" />, which skips an inactive
+    ///     connection.
+    /// </remarks>
+    Task<ClientScmConnectionCredentialDto?> GetConnectionForVerificationAsync(
+        Guid clientId,
+        Guid connectionId,
+        CancellationToken ct = default);
+
     /// <summary>Adds a provider connection for the given client.</summary>
     Task<ClientScmConnectionDto?> AddAsync(
         Guid clientId,

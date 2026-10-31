@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Persistence;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
@@ -388,6 +389,38 @@ public sealed class AdoDiscoveryServiceTests
         await globalCredential.DidNotReceiveWithAnyArgs().GetTokenAsync(default, default);
     }
 
+    // A connection is verified before it is activated. The operational lookup finds no credentials for an inactive
+    // connection, and on dev.azure.com the connection factory then falls back to the installation credential. The
+    // verification reads the stored personal access token of the inactive connection and never asks the installation
+    // credential, while discovery for operational use keeps refusing the inactive connection. The factory caches a
+    // connection by address and by a hash of the secret, so it returns the verified connection again only for the
+    // stored token.
+    [Fact]
+    public async Task VerifyConnection_InactiveConnectionUsesItsStoredCredentials()
+    {
+        await using var db = CreateContext();
+        var clientId = await SeedClientAsync(db);
+        var repository = new ClientScmConnectionRepository(db, CreateCodec());
+        var connection = await repository.AddAsync(
+            clientId, ScmProvider.AzureDevOps, "https://dev.azure.com", ScmAuthenticationKind.PersonalAccessToken,
+            null, null, "Services PAT", "synthetic-pat", false);
+        var scopeId = await SeedAzureOrganizationScopeAsync(db, clientId, connection!.Id, "https://dev.azure.com/org");
+        var globalCredential = Substitute.For<TokenCredential>();
+        var factory = new VssConnectionFactory(globalCredential);
+        var service = new SavedPatDiscoveryService(factory, repository, new ClientScmScopeRepository(db));
+
+        await service.VerifyConnectionAsync(
+            new ConnectionDiscoveryContext(clientId, connection.Id, new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com")));
+
+        Assert.Equal(1, service.RemoteCalls);
+        Assert.Same(
+            await factory.GetConnectionAsync("https://dev.azure.com/org", AdoConnectionCredentials.ForPersonalAccessToken("synthetic-pat")),
+            service.LastConnection);
+        await globalCredential.DidNotReceiveWithAnyArgs().GetTokenAsync(default, default);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListProjectOptionsAsync(clientId, scopeId, default, connection.Id));
+        Assert.Equal(1, service.RemoteCalls);
+    }
+
     private sealed class SavedPatDiscoveryService(
         VssConnectionFactory factory,
         IClientScmConnectionRepository connections,
@@ -395,10 +428,13 @@ public sealed class AdoDiscoveryServiceTests
     {
         public int RemoteCalls { get; private set; }
 
+        public VssConnection? LastConnection { get; private set; }
+
         protected internal override Task<IReadOnlyList<TeamProjectReference>> GetProjectsAsync(VssConnection connection, CancellationToken ct)
         {
             Assert.Equal("https://dev.azure.com/org", connection.Uri.ToString().TrimEnd('/'));
             Assert.IsType<Microsoft.VisualStudio.Services.Common.VssBasicCredential>(connection.Credentials.Federated);
+            this.LastConnection = connection;
             this.RemoteCalls++;
             return Task.FromResult<IReadOnlyList<TeamProjectReference>>([new() { Id = Guid.NewGuid(), Name = "Saved PAT project" }]);
         }

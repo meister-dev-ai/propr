@@ -43,6 +43,12 @@ internal sealed class GitLabDiscoveryService(
             .Select(scope => new ConnectionDiscoveryScope(scope, scope)).ToList();
     }
 
+    public async Task VerifyConnectionAsync(ConnectionDiscoveryContext context, CancellationToken ct = default)
+    {
+        var native = await connectionVerifier.VerifyStoredCredentialsAsync(context, ct).ConfigureAwait(false);
+        await this.ListScopesCoreAsync(native, context.Host, ct).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<ConnectionDiscoverySource>> ListSourcesAsync(
         ConnectionDiscoveryContext context, string scopeKey, string? projectId, ProCursorSourceKind sourceKind, CancellationToken ct = default)
     {

@@ -1431,6 +1431,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
         public ProviderConnectionsApiFactory()
         {
             this._providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps).Returns(this.AzureDiscovery);
+            this._providerRegistry.GetRepositoryDiscoveryProvider(ScmProvider.AzureDevOps).Returns(this.AzureRepositoryDiscovery);
             this._providerRegistry.GetReviewerIdentityService(ScmProvider.AzureDevOps).Returns(Substitute.For<IReviewerIdentityService>());
             this.AzureDiscovery.ListProjectOptionsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<IReadOnlyList<ScmDiscoveryProjectOption>>([]));
@@ -1459,6 +1460,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
 
         public Guid ClientId { get; } = Guid.NewGuid();
         public IProviderAdminDiscoveryService AzureDiscovery { get; } = Substitute.For<IProviderAdminDiscoveryService>();
+        public IRepositoryDiscoveryProvider AzureRepositoryDiscovery { get; } = Substitute.For<IRepositoryDiscoveryProvider>();
         public Guid OtherClientId { get; } = Guid.NewGuid();
         public Guid MachineTenantId { get; } = Guid.NewGuid();
         public Guid OtherMachineTenantId { get; } = Guid.NewGuid();
@@ -1513,6 +1515,9 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
             this._repositoryDiscoveryProvider
                 .ListScopesAsync(Arg.Any<Guid>(), Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
                 .Returns(Task.FromException<IReadOnlyList<string>>(new InvalidOperationException(message)));
+            this._repositoryDiscoveryProvider
+                .VerifyConnectionAsync(Arg.Any<ConnectionDiscoveryContext>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromException(new InvalidOperationException(message)));
         }
 
         public void SetDiscoveryScopes(params string[] scopePaths)
@@ -1520,6 +1525,9 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
             this._repositoryDiscoveryProvider
                 .ListScopesAsync(Arg.Any<Guid>(), Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<IReadOnlyList<string>>(scopePaths));
+            this._repositoryDiscoveryProvider
+                .VerifyConnectionAsync(Arg.Any<ConnectionDiscoveryContext>(), Arg.Any<CancellationToken>())
+                .Returns(Task.CompletedTask);
         }
 
         public async Task<ClientScmConnectionDto> CreateConnectionAsync(

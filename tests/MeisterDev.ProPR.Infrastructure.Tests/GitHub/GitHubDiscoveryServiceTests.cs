@@ -42,6 +42,42 @@ public sealed class GitHubDiscoveryServiceTests
         Assert.Equal(["acme", "meister-dev", "platform"], scopes);
     }
 
+    // A connection is verified before it is activated, so the verification reads the inactive connection by its ID and
+    // checks its stored token with the requests of the scope listing.
+    [Fact]
+    public async Task VerifyConnectionAsync_InactiveConnection_ChecksItsStoredCredentials()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connection = new ClientScmConnectionCredentialDto(
+            Guid.NewGuid(), clientId, ScmProvider.GitHub, host.HostBaseUrl, ScmAuthenticationKind.PersonalAccessToken, "GitHub",
+            "ghp_inactive", false);
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetConnectionForVerificationAsync(clientId, connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+        var requests = new List<(string Uri, string? Credential)>();
+        var httpClientFactory = CreateHttpClientFactory(request =>
+        {
+            requests.Add((request.RequestUri!.AbsoluteUri, request.Headers.Authorization?.ToString()));
+            return request.RequestUri.AbsoluteUri switch
+            {
+                "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+                "https://api.github.com/user/orgs?per_page=100&page=1" => CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+        var sut = new GitHubDiscoveryService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.VerifyConnectionAsync(new ConnectionDiscoveryContext(clientId, connection.Id, host));
+
+        Assert.Contains(requests, call => call.Uri == "https://api.github.com/user");
+        Assert.Contains(requests, call => call.Uri == "https://api.github.com/user/orgs?per_page=100&page=1");
+        Assert.All(requests, call => Assert.Equal("Bearer ghp_inactive", call.Credential));
+        await connectionRepository.DidNotReceiveWithAnyArgs().GetOperationalConnectionByIdAsync(default, default);
+        await connectionRepository.DidNotReceiveWithAnyArgs().GetOperationalConnectionAsync(default, default!);
+    }
+
     [Fact]
     public async Task ListRepositoriesAsync_PersonalScope_ReturnsNormalizedRepositoryReferences()
     {

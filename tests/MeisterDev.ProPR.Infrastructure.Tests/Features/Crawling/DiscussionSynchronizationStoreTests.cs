@@ -666,9 +666,11 @@ public sealed class DiscussionSynchronizationStoreTests(PostgresContainerFixture
                 LocalScmPolicies.Registry.GetSourceIdentityPolicy(target.Provider)).Value;
             var sourceId = DiscussionSynchronizationState.Identity(
                 target.ClientId, Guid.Empty, target.Provider, scope, "", target.RepositoryId, target.PullRequestId);
+            // With a timeout, pg_terminate_backend returns once the session has ended and released the advisory lock.
+            // Without one it returns after sending the signal, and the next acquisition can still find the lock held.
             await using var terminate = new NpgsqlCommand(
                 """
-                SELECT pg_terminate_backend(pid) FROM pg_locks
+                SELECT pg_terminate_backend(pid, 5000) FROM pg_locks
                 WHERE locktype='advisory' AND granted AND objsubid=1
                   AND classid=((hashtextextended(@key,0)>>32)&4294967295)::oid
                   AND objid=(hashtextextended(@key,0)&4294967295)::oid

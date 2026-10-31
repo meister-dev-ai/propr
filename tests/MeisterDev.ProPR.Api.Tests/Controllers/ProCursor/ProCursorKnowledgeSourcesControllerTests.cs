@@ -1473,6 +1473,11 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
             {
                 return adoDiscoveryService.ListCrawlFilterOptionsAsync(clientId, scopeId, projectId, ct, connectionId);
             }
+
+            public Task VerifyConnectionAsync(ConnectionDiscoveryContext context, CancellationToken ct = default)
+            {
+                return adoDiscoveryService.VerifyConnectionAsync(context, ct);
+            }
         }
     }
 }

@@ -78,6 +78,12 @@ internal sealed class AdoRepositoryDiscoveryProvider(
             .Select(scope => new ConnectionDiscoveryScope(scope.ScopePath, scope.DisplayName, scope.Id)).ToList();
     }
 
+    public Task VerifyConnectionAsync(ConnectionDiscoveryContext context, CancellationToken ct = default)
+    {
+        EnsureAzureDevOps(context.Host);
+        return discoveryService.VerifyConnectionAsync(context, ct);
+    }
+
     public async Task<IReadOnlyList<ConnectionDiscoverySource>> ListSourcesAsync(
         ConnectionDiscoveryContext context, string scopeKey, string? projectId, ProCursorSourceKind sourceKind, CancellationToken ct = default)
     {

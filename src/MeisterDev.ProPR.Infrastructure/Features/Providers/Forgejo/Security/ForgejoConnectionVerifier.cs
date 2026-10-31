@@ -17,12 +17,26 @@ internal sealed class ForgejoConnectionVerifier(
     IClientScmConnectionRepository connectionRepository,
     IHttpClientFactory httpClientFactory)
 {
-    public async Task<ForgejoConnectionContext> VerifyAsync(ConnectionDiscoveryContext context, CancellationToken ct = default)
+    public Task<ForgejoConnectionContext> VerifyAsync(ConnectionDiscoveryContext context, CancellationToken ct = default) =>
+        this.VerifySelectedAsync(context, false, ct);
+
+    /// <summary>Verifies the stored credentials of the selected connection, also while the connection is inactive.</summary>
+    /// <remarks>
+    ///     Only the verification of a connection calls this, because a connection is verified before it is activated.
+    ///     Operational callers use <see cref="VerifyAsync(ConnectionDiscoveryContext, CancellationToken)" />, which refuses
+    ///     an inactive connection.
+    /// </remarks>
+    public Task<ForgejoConnectionContext> VerifyStoredCredentialsAsync(ConnectionDiscoveryContext context, CancellationToken ct = default) =>
+        this.VerifySelectedAsync(context, true, ct);
+
+    private async Task<ForgejoConnectionContext> VerifySelectedAsync(ConnectionDiscoveryContext context, bool includeInactive, CancellationToken ct)
     {
         EnsureForgejo(context.Host);
-        var connection = await connectionRepository.GetOperationalConnectionByIdAsync(context.ClientId, context.ConnectionId, ct).ConfigureAwait(false);
-        if (connection is null || !connection.IsActive || connection.Id != context.ConnectionId || connection.ClientId != context.ClientId ||
-            connection.ProviderFamily != context.Host.Provider ||
+        var connection = includeInactive
+            ? await connectionRepository.GetConnectionForVerificationAsync(context.ClientId, context.ConnectionId, ct).ConfigureAwait(false)
+            : await connectionRepository.GetOperationalConnectionByIdAsync(context.ClientId, context.ConnectionId, ct).ConfigureAwait(false);
+        if (connection is null || (!connection.IsActive && !includeInactive) || connection.Id != context.ConnectionId ||
+            connection.ClientId != context.ClientId || connection.ProviderFamily != context.Host.Provider ||
             !string.Equals(
                 new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl).HostBaseUrl,
                 context.Host.HostBaseUrl, StringComparison.OrdinalIgnoreCase))

@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -97,7 +98,7 @@ public sealed class AzureServicesPatConnectionTests
         var missingScope = await missingScopeResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("failed", missingScope.GetProperty("verificationStatus").GetString());
         Assert.Contains("enabled organization scope", missingScope.GetProperty("lastVerificationError").GetString());
-        await factory.AzureDiscovery.DidNotReceiveWithAnyArgs().ListProjectOptionsAsync(default, default, default);
+        await factory.AzureRepositoryDiscovery.DidNotReceiveWithAnyArgs().VerifyConnectionAsync(default!, default);
 
         var scope = await factory.CreateScopeAsync(connectionId, scopePath: organizationUrl);
         using var editedResponse = await client.PatchAsJsonAsync($"{path}/{connectionId}", new { displayName = "Edited Services PAT" });
@@ -109,7 +110,9 @@ public sealed class AzureServicesPatConnectionTests
         Assert.Equal(HttpStatusCode.OK, verifiedResponse.StatusCode);
         var verified = await verifiedResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("verified", verified.GetProperty("verificationStatus").GetString());
-        await factory.AzureDiscovery.Received(1).ListProjectOptionsAsync(factory.ClientId, scope.Id, Arg.Any<CancellationToken>());
+        await factory.AzureRepositoryDiscovery.Received(1).VerifyConnectionAsync(
+            Arg.Is<ConnectionDiscoveryContext>(context => context.ClientId == factory.ClientId && context.ConnectionId == connectionId),
+            Arg.Any<CancellationToken>());
 
         using var foreignCreate = await client.PostAsJsonAsync(
             $"/clients/{factory.OtherClientId}/provider-connections", new

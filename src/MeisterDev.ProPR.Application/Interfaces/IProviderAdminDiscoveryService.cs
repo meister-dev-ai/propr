@@ -32,6 +32,12 @@ public interface IProviderAdminDiscoveryService
     Task<GuidedSourceSelection> ResolveGuidedSourceAsync(
         Guid clientId, Guid scopeId, string projectId,
         ProCursorSourceKind sourceKind, CanonicalSourceReferenceDto? reference, CancellationToken ct = default, Guid? connectionId = null);
+
+    /// <summary>
+    ///     Lists the projects of the first enabled organization scope of the selected connection with the stored
+    ///     credentials of that connection, also while the connection is inactive.
+    /// </summary>
+    Task VerifyConnectionAsync(ConnectionDiscoveryContext context, CancellationToken ct = default);
 }
 
 /// <summary>Saved scope and project coordinates returned by a discovery capability.</summary>

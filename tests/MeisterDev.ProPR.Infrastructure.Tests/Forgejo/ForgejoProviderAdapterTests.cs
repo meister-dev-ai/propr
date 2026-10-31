@@ -71,6 +71,42 @@ public sealed class ForgejoDiscoveryServiceTests
         Assert.Equal(["acme", "acme-platform", "meister-dev"], scopes);
     }
 
+    // A connection is verified before it is activated, so the verification reads the inactive connection by its ID and
+    // checks its stored token with the requests of the scope listing.
+    [Fact]
+    public async Task VerifyConnectionAsync_InactiveConnection_ChecksItsStoredCredentials()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var connection = new ClientScmConnectionCredentialDto(
+            Guid.NewGuid(), clientId, ScmProvider.Forgejo, host.HostBaseUrl, ScmAuthenticationKind.PersonalAccessToken, "Forgejo",
+            "forgejo-inactive", false);
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetConnectionForVerificationAsync(clientId, connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+        var requests = new List<(string Uri, string? Credential)>();
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
+        {
+            requests.Add((request.RequestUri!.AbsoluteUri, request.Headers.Authorization?.ToString()));
+            return request.RequestUri.AbsoluteUri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/user/orgs?limit=100" => ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+        var sut = new ForgejoDiscoveryService(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.VerifyConnectionAsync(new ConnectionDiscoveryContext(clientId, connection.Id, host));
+
+        Assert.Contains(requests, call => call.Uri == "https://codeberg.example.com/api/v1/user");
+        Assert.Contains(requests, call => call.Uri == "https://codeberg.example.com/api/v1/user/orgs?limit=100");
+        Assert.All(requests, call => Assert.Equal("token forgejo-inactive", call.Credential));
+        await connectionRepository.DidNotReceiveWithAnyArgs().GetOperationalConnectionByIdAsync(default, default);
+        await connectionRepository.DidNotReceiveWithAnyArgs().GetOperationalConnectionAsync(default, default!);
+    }
+
     [Fact]
     public async Task ListRepositoriesAsync_OrganizationScope_ReturnsNormalizedRepositoryReferences()
     {

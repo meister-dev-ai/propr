@@ -25,6 +25,12 @@ public interface IRepositoryDiscoveryProvider
     /// <summary>Lists scopes using only the selected operational connection.</summary>
     Task<IReadOnlyList<ConnectionDiscoveryScope>> ListScopesAsync(ConnectionDiscoveryContext context, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Checks the stored credentials of the selected connection against the provider, also while the connection is
+    ///     inactive, so a connection can be verified before it is activated.
+    /// </summary>
+    Task VerifyConnectionAsync(ConnectionDiscoveryContext context, CancellationToken ct = default);
+
     /// <summary>Lists native sources and their persistent coordinates using the selected connection.</summary>
     Task<IReadOnlyList<ConnectionDiscoverySource>> ListSourcesAsync(
         ConnectionDiscoveryContext context, string scopeKey, string? projectId, ProCursorSourceKind sourceKind,

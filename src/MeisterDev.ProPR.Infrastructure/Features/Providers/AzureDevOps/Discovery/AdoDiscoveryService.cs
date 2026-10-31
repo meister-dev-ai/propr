@@ -104,6 +104,36 @@ public class AdoDiscoveryService(
             .AsReadOnly();
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    ///     The operational lookups find no credentials for an inactive connection, and on <c>dev.azure.com</c> the
+    ///     connection factory then falls back to the installation credential, which would verify the identity of the
+    ///     installation in place of the connection. The verification therefore reads the connection with its stored
+    ///     credentials and fails when they cannot be used.
+    /// </remarks>
+    public async Task VerifyConnectionAsync(ConnectionDiscoveryContext context, CancellationToken ct = default)
+    {
+        var selected = await connectionRepository.GetConnectionForVerificationAsync(context.ClientId, context.ConnectionId, ct)
+            .ConfigureAwait(false);
+        if (selected is null || selected.Id != context.ConnectionId || selected.ClientId != context.ClientId ||
+            selected.ProviderFamily != this.Provider || context.Host.Provider != this.Provider ||
+            !string.Equals(
+                new ProviderHostRef(this.Provider, selected.HostBaseUrl).HostBaseUrl,
+                context.Host.HostBaseUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The selected connection is not available for this client and host.");
+        }
+
+        var scope = (await scopeRepository.GetByConnectionIdAsync(context.ClientId, context.ConnectionId, ct).ConfigureAwait(false))
+                    .FirstOrDefault(candidate => candidate.IsEnabled &&
+                                                 candidate.ScopeType.Equals("organization", StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException(new AdoReviewSourcePolicy().MissingVerificationScopeMessage);
+        var credentials = AdoProviderAdapterHelpers.ToAdoCredentials(selected)
+                          ?? throw new InvalidOperationException("The Azure DevOps connection stores no credentials that this host can use.");
+        var connection = await connectionFactory.GetConnectionAsync(scope.ScopePath, credentials, ct).ConfigureAwait(false);
+        await this.GetProjectsAsync(connection, ct).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<ScmDiscoverySourceOption>> ListSourceOptionsAsync(
         Guid clientId,
         Guid scopeId,

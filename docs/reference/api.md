@@ -350,7 +350,7 @@ Secrets are write-only.
 | `POST /` | Supply `providerFamily`, `authenticationKind`, `hostBaseUrl`, display name, secret and mode-specific identifiers. | ProPR stores a protected provider connection. Creation does not verify provider access. |
 | `PATCH /{connectionId}` | Supply changed connection fields. | ProPR updates the owned connection. See the platform page for credential replacement requirements. |
 | `POST /{connectionId}/scopes` | Supply `scopeType`, `externalScopeId`, `scopePath`, `displayName` and `isEnabled`. | ProPR saves the provider scope. Azure DevOps uses an organization or collection URL. |
-| `POST /{connectionId}/verify` | Azure DevOps requires an enabled organization scope. | ProPR verifies provider access separately from caller authorization. |
+| `POST /{connectionId}/verify` | Azure DevOps requires an enabled organization scope. | ProPR verifies provider access with the stored credentials of this connection, also while the connection is inactive. The check is separate from caller authorization. |
 | `GET /{connectionId}/reviewer-identities/resolve` | Supply `search`. | ProPR resolves provider users. |
 | `PUT /{connectionId}/reviewer-identity` | Supply `externalUserId`, `login`, `displayName` and `isBot`. | ProPR saves the reviewer identity. |
 

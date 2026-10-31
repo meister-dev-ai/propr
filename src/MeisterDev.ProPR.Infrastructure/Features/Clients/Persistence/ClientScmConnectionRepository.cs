@@ -158,10 +158,23 @@ public sealed class ClientScmConnectionRepository(
         return record is null ? null : this.ToCredentialDto(record);
     }
 
-    public async Task<ClientScmConnectionCredentialDto?> GetOperationalConnectionByIdAsync(
+    public Task<ClientScmConnectionCredentialDto?> GetOperationalConnectionByIdAsync(
         Guid clientId,
         Guid connectionId,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        this.GetConnectionWithSecretAsync(clientId, connectionId, true, ct);
+
+    public Task<ClientScmConnectionCredentialDto?> GetConnectionForVerificationAsync(
+        Guid clientId,
+        Guid connectionId,
+        CancellationToken ct = default) =>
+        this.GetConnectionWithSecretAsync(clientId, connectionId, false, ct);
+
+    private async Task<ClientScmConnectionCredentialDto?> GetConnectionWithSecretAsync(
+        Guid clientId,
+        Guid connectionId,
+        bool activeOnly,
+        CancellationToken ct)
     {
         var record = await this.WithReadDbAsync(
             db => db.ClientScmConnections
@@ -170,7 +183,7 @@ public sealed class ClientScmConnectionRepository(
                     connection =>
                         connection.ClientId == clientId
                         && connection.Id == connectionId
-                        && connection.IsActive,
+                        && (connection.IsActive || !activeOnly),
                     ct),
             ct);
 
