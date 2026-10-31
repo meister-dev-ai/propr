@@ -20,6 +20,42 @@ if [ -z "$STAGED_FORMAT_FILES" ] && [ -z "$STAGED_BACKEND_FILES" ] && [ -z "$STA
     exit 0
 fi
 
+# The backend check builds and tests the whole solution and the frontend check type-checks and tests the whole
+# frontend, so the result of each depends on the staged tree and not on the staged diff. A commit whose staged tree
+# passed one of these checks in an earlier commit skips that check: the squash of a reviewed branch has the tree of
+# the branch head, whose commit ran it. The format check reads only the staged files and always runs. The record
+# lives in the git directory, is shared by the worktrees of the clone and keeps its last 500 entries. An entry counts
+# for seven days, because the checks also read ignored files such as build outputs and installed packages, which the
+# tree does not hold.
+VERIFIED_TREES="$(git rev-parse --path-format=absolute --git-common-dir)/pre-commit-verified-trees"
+TREE=$(git write-tree)
+NOW=$(date +%s)
+
+# verified CHECK: whether the staged tree passed CHECK in a commit of the last seven days.
+verified() {
+    [ -f "$VERIFIED_TREES" ] &&
+        awk -v tree="$TREE" -v check="$1" -v since=$((NOW - 604800)) \
+            '$1 == tree && $2 == check && $3 >= since { found = 1 } END { exit !found }' "$VERIFIED_TREES"
+}
+
+if [ -n "$STAGED_BACKEND_FILES" ] && verified backend; then
+    echo "pre-commit: the staged tree passed the backend build and tests in an earlier commit; they do not run again."
+    STAGED_BACKEND_FILES=
+fi
+
+if [ -n "$STAGED_FRONTEND_FILES" ] && verified frontend; then
+    echo "pre-commit: the staged tree passed the frontend type-check and tests in an earlier commit; they do not run again."
+    STAGED_FRONTEND_FILES=
+fi
+
+# The build and the tests read the working tree, so a passed check vouches for the staged tree only when the working
+# tree holds nothing beyond the index: no unstaged change and no untracked file.
+if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+    RECORD_TREE=yes
+else
+    RECORD_TREE=no
+fi
+
 # MSBuild otherwise keeps its worker nodes alive after the build. Repeated hook runs then leave dozens of idle
 # nodes behind, and together they fill the memory of the machine.
 export MSBUILDDISABLENODEREUSE=1
@@ -84,6 +120,15 @@ fi
 
 if [ -n "$STAGED_FRONTEND_FILES" ]; then
     report "frontend type-check and tests" "$FRONTEND_PID" "$CHECK_DIR/frontend.log"
+fi
+
+if [ "$CHECK_FAILED" -eq 0 ] && [ "$RECORD_TREE" = yes ]; then
+    {
+        cat "$VERIFIED_TREES" 2>/dev/null || true
+        if [ -n "$STAGED_BACKEND_FILES" ]; then printf '%s backend %s\n' "$TREE" "$NOW"; fi
+        if [ -n "$STAGED_FRONTEND_FILES" ]; then printf '%s frontend %s\n' "$TREE" "$NOW"; fi
+    } | tail -n 500 > "$CHECK_DIR/verified-trees"
+    mv "$CHECK_DIR/verified-trees" "$VERIFIED_TREES"
 fi
 
 exit "$CHECK_FAILED"

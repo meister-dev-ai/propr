@@ -14,7 +14,13 @@ class PreCommitTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name)
+        # Git sets GIT_DIR and GIT_INDEX_FILE for a hook. Inherited by these tests, the variables would point every
+        # git command at the repository that runs the tests, not at the temporary one.
+        self.env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
         self.git("init", "-q")
+        # The hook, the stubs and the command log live in the repository directory but are no part of its content.
+        (self.repo / ".git" / "info").mkdir(exist_ok=True)
+        (self.repo / ".git" / "info" / "exclude").write_text("/pre-commit\n/tools/\n/commands.log\n/started/\n")
 
         hook = self.repo / "pre-commit"
         shutil.copyfile(HOOK, hook)
@@ -26,7 +32,6 @@ class PreCommitTests(unittest.TestCase):
             self.stub(name, "")
 
         self.log = self.repo / "commands.log"
-        self.env = os.environ.copy()
         self.env["PATH"] = f"{self.tools}:{self.env['PATH']}"
         self.env["HOOK_LOG"] = str(self.log)
 
@@ -40,7 +45,7 @@ class PreCommitTests(unittest.TestCase):
         executable.chmod(0o755)
 
     def git(self, *args):
-        return subprocess.run(["git", *args], cwd=self.repo, check=True, capture_output=True, text=True)
+        return subprocess.run(["git", *args], cwd=self.repo, env=self.env, check=True, capture_output=True, text=True)
 
     def stage(self, *paths):
         for path in paths:
@@ -60,6 +65,13 @@ class PreCommitTests(unittest.TestCase):
 
     def commands(self):
         return self.log.read_text().splitlines() if self.log.exists() else []
+
+    def commit(self, message):
+        self.git("-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false",
+                 "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", message)
+
+    def ran(self, prefix):
+        return any(command.startswith(prefix) for command in self.commands())
 
     def test_backend_and_frontend_changes_run_every_check(self):
         self.stage("src/Feature.cs", "frontend/src/feature.ts")
@@ -138,6 +150,89 @@ class PreCommitTests(unittest.TestCase):
 
         self.assertNotEqual(0, result.returncode)
         self.assertIn("FAILED -- format check", result.stdout)
+
+    def test_a_tree_that_passed_skips_its_checks_in_a_later_commit(self):
+        self.stage("src/Feature.cs", "frontend/src/feature.ts")
+        self.assertEqual(0, self.run_hook().returncode)
+        self.commit("feature")
+        # A squash has the tree of the branch head on another parent; an unborn branch is the simplest other parent.
+        self.git("checkout", "-q", "--orphan", "squash")
+        self.log.unlink()
+
+        result = self.run_hook()
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(["python3 scripts/format_changed.py --staged"], self.commands())
+        self.assertIn("passed the backend build and tests in an earlier commit", result.stdout)
+        self.assertIn("passed the frontend type-check and tests in an earlier commit", result.stdout)
+
+    def test_a_check_that_did_not_run_on_the_tree_runs_in_a_later_commit(self):
+        self.stage("src/Feature.cs")
+        self.commit("backend")
+        self.stage("frontend/src/feature.ts")
+        self.assertEqual(0, self.run_hook().returncode)
+        self.commit("frontend")
+        self.git("checkout", "-q", "--orphan", "squash")
+        self.log.unlink()
+
+        self.run_hook()
+
+        self.assertTrue(self.ran("dotnet test "))
+        self.assertFalse(self.ran("npm "))
+
+    def test_an_entry_older_than_seven_days_runs_the_check_again(self):
+        self.stage("src/Feature.cs")
+        self.assertEqual(0, self.run_hook().returncode)
+        record = self.repo / ".git" / "pre-commit-verified-trees"
+        tree, check, _ = record.read_text().split()
+        record.write_text(f"{tree} {check} 0\n")
+        self.log.unlink()
+
+        self.run_hook()
+
+        self.assertTrue(self.ran("dotnet test "))
+
+    def test_a_changed_tree_runs_the_checks_again(self):
+        self.stage("src/Feature.cs")
+        self.assertEqual(0, self.run_hook().returncode)
+        self.log.unlink()
+        (self.repo / "src" / "Feature.cs").write_text("changed\n")
+        self.git("add", "src/Feature.cs")
+
+        self.run_hook()
+
+        self.assertTrue(any(command.startswith("dotnet test ") for command in self.commands()))
+
+    def test_a_failed_check_leaves_the_tree_unrecorded(self):
+        self.stage("src/Feature.cs")
+        self.stub("dotnet", '[ "$1" = test ] && exit 1\nexit 0')
+        self.assertNotEqual(0, self.run_hook().returncode)
+        self.stub("dotnet", "")
+        self.log.unlink()
+
+        self.run_hook()
+
+        self.assertTrue(any(command.startswith("dotnet test ") for command in self.commands()))
+
+    def test_an_unstaged_change_leaves_the_tree_unrecorded(self):
+        self.stage("src/Feature.cs")
+        (self.repo / "src" / "Feature.cs").write_text("unstaged\n")
+        self.assertEqual(0, self.run_hook().returncode)
+        self.log.unlink()
+
+        self.run_hook()
+
+        self.assertTrue(any(command.startswith("dotnet test ") for command in self.commands()))
+
+    def test_an_untracked_file_leaves_the_tree_unrecorded(self):
+        self.stage("src/Feature.cs")
+        (self.repo / "src" / "Draft.cs").write_text("draft\n")
+        self.assertEqual(0, self.run_hook().returncode)
+        self.log.unlink()
+
+        self.run_hook()
+
+        self.assertTrue(any(command.startswith("dotnet test ") for command in self.commands()))
 
     def test_checks_run_at_the_same_time(self):
         self.stage("src/Feature.cs", "frontend/src/feature.ts")
