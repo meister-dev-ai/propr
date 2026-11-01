@@ -258,6 +258,45 @@ public sealed partial class ClientProviderConnectionsController(
         return this.Ok(await providerOperationalStatusService.GetForClientAsync(clientId, ct));
     }
 
+    /// <summary>Lists whether each provider family is enabled for this installation, so a client offers only those.</summary>
+    /// <remarks>
+    ///     A connection of a disabled provider family is refused with 409, so a caller that sets up connections for a
+    ///     client reads this list first. The list holds every supported provider family.
+    /// </remarks>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">The activation status of every provider family.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks required client access.</response>
+    /// <response code="404">Client not found.</response>
+    /// <response code="503">Provider activation services are unavailable.</response>
+    [HttpGet("provider-families")]
+    [ProducesResponseType(typeof(IReadOnlyList<ProviderActivationStatusDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> GetProviderFamilies(Guid clientId, CancellationToken ct = default)
+    {
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        if (!await clientAdminService.ExistsAsync(clientId, ct))
+        {
+            return this.NotFound();
+        }
+
+        if (providerActivationService is null)
+        {
+            return this.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        return this.Ok(await providerActivationService.ListAsync(ct));
+    }
+
     /// <summary>Lists recent provider-connection operational audit entries for a client.</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="take">Maximum number of entries to return.</param>

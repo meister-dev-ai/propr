@@ -4,11 +4,13 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Clients.Models;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Clients.Support;
 
@@ -17,14 +19,15 @@ public sealed class ProviderActivationService(
     MeisterProPRDbContext dbContext,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory,
     IServiceProvider serviceProvider,
-    IProviderReadinessProfileCatalog readinessProfileCatalog) : IProviderActivationService
+    IProviderReadinessProfileCatalog readinessProfileCatalog,
+    IOptions<ProviderActivationOptions>? options = null) : IProviderActivationService
 {
     public async Task<IReadOnlyList<ProviderActivationStatusDto>> ListAsync(CancellationToken ct = default)
     {
         var records = await this.EnsureDefaultsAsync(ct, false);
 
         return Enum.GetValues<ScmProvider>()
-            .Select(provider => this.BuildStatus(GetExistingOrDefaultRecord(records, provider)))
+            .Select(provider => this.BuildStatus(this.GetExistingOrDefaultRecord(records, provider)))
             .ToList()
             .AsReadOnly();
     }
@@ -132,12 +135,16 @@ public sealed class ProviderActivationService(
             record.UpdatedAt);
     }
 
-    private static bool GetDefaultEnabled(ScmProvider provider)
+    // A provider family without a stored activation takes the default of the installation setting, or the built-in
+    // default without the setting.
+    private bool GetDefaultEnabled(ScmProvider provider)
     {
-        return provider is ScmProvider.AzureDevOps or ScmProvider.GitLab;
+        return options?.Value.DefaultEnabled is { } enabled
+            ? enabled.Contains(provider)
+            : provider is ScmProvider.AzureDevOps or ScmProvider.GitLab;
     }
 
-    private static ProviderActivationRecord GetExistingOrDefaultRecord(
+    private ProviderActivationRecord GetExistingOrDefaultRecord(
         IReadOnlyDictionary<ScmProvider, ProviderActivationRecord> records,
         ScmProvider provider)
     {
@@ -146,7 +153,7 @@ public sealed class ProviderActivationService(
             : CreateDefaultRecord(provider);
     }
 
-    private static ProviderActivationRecord CreateDefaultRecord(ScmProvider provider)
+    private ProviderActivationRecord CreateDefaultRecord(ScmProvider provider)
     {
         return new ProviderActivationRecord
         {

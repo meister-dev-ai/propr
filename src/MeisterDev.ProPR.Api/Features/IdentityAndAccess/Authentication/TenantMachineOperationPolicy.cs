@@ -42,6 +42,7 @@ public static class TenantMachineOperationPolicy
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.GetProviderConnections)),
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.GetProviderConnection)),
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.GetProviderOperationalStatus)),
+            Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.GetProviderFamilies)),
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.GetProviderConnectionAuditTrail)),
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.CreateProviderConnection)),
             Action<ClientProviderConnectionsController>(nameof(ClientProviderConnectionsController.PatchProviderConnection)),

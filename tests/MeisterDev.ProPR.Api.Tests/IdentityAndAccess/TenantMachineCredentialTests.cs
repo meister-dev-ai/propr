@@ -115,6 +115,8 @@ public sealed class TenantMachineCredentialTests
     [InlineData("ClientReviewTargets", "GetOpenReviews", true)]
     [InlineData("ClientReviewTargets", "GetOverview", true)]
     [InlineData("ClientReviewTargets", "ChangeAutomation", true)]
+    [InlineData("ClientProviderConnections", "GetProviderFamilies", true)]
+    [InlineData("AdminProviders", "ListProviders", false)]
     [InlineData("AdminCrawlConfigs", "CreateCrawlConfiguration", false)]
     [InlineData("Clients", "PatchClient", false)]
     [InlineData("Jobs", "GetJobProtocol", false)]
@@ -134,6 +136,7 @@ public sealed class TenantMachineCredentialTests
     [InlineData("ClientAiConnections", "SelectAiPurposes")]
     [InlineData("ClientLogicalModels", "ListEffective")]
     [InlineData("ClientLogicalModels", "ListPurposeRoles")]
+    [InlineData("ClientProviderConnections", "GetProviderFamilies")]
     public async Task EndpointAuthorization_RechecksOwnershipAfterClientMoves(string controller, string action)
     {
         await using var db = CreateDb();

@@ -345,6 +345,11 @@ All paths below start with `/api/clients/{clientId}/provider-connections`.
 Provider and authentication fields depend on the [support matrix](../platforms/index.md#support-matrix).
 Secrets are write-only.
 
+`GET /api/clients/{clientId}/provider-families` returns the activation of every provider family of the
+installation, with `providerFamily` and `isEnabled`, to a caller with client access and to a tenant machine caller
+that owns the client. ProPR refuses a new connection of a disabled provider family with 409, so a service that
+creates connections for a client offers only the enabled families.
+
 | Operation | Input | Outcome |
 |---|---|---|
 | `POST /` | Supply `providerFamily`, `authenticationKind`, `hostBaseUrl`, display name, secret and mode-specific identifiers. | ProPR stores a protected provider connection. Creation does not verify provider access. |

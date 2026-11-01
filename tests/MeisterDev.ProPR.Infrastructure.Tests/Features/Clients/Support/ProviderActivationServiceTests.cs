@@ -3,13 +3,16 @@
 
 using MeisterDev.ProPR.Application.Features.Clients.Support;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
+using MeisterDev.ProPR.Infrastructure.Features.Clients;
 using MeisterDev.ProPR.Infrastructure.Features.Clients.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Clients.Support;
@@ -58,6 +61,69 @@ public sealed class ProviderActivationServiceTests
         var results = await Task.WhenAll(tasks);
 
         Assert.All(results, Assert.True);
+    }
+
+    // The installation setting replaces the built-in default of the provider families without a stored activation,
+    // and an activation that an administrator stored still decides.
+    [Fact]
+    public async Task TheInstallationSettingDecidesForProviderFamiliesWithoutAStoredActivation()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"ProviderActivationDefaults-{Guid.NewGuid():N}", new InMemoryDatabaseRoot())
+            .Options;
+        await using var db = new MeisterProPRDbContext(options);
+        db.ProviderActivations.Add(new ProviderActivationRecord { Provider = ScmProvider.Forgejo, IsEnabled = true, UpdatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var services = new ServiceCollection();
+        services.AddSingleton<IScmProviderRegistry, TestScmProviderRegistry>();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var sut = new ProviderActivationService(
+            db,
+            new PooledDbContextFactory<MeisterProPRDbContext>(options),
+            serviceProvider,
+            new StaticProviderReadinessProfileCatalog(MeisterDev.ProPR.TestSupport.LocalScmPolicies.ConfigurationPolicies),
+            Microsoft.Extensions.Options.Options.Create(
+                new ProviderActivationOptions { DefaultEnabled = new HashSet<ScmProvider> { ScmProvider.AzureDevOps, ScmProvider.GitHub } }));
+
+        var enabled = await sut.GetEnabledProvidersAsync(CancellationToken.None);
+
+        Assert.Equal(
+            new HashSet<ScmProvider> { ScmProvider.AzureDevOps, ScmProvider.GitHub, ScmProvider.Forgejo },
+            enabled.ToHashSet());
+    }
+
+    [Theory]
+    [InlineData("azureDevOps, GitHub", new[] { ScmProvider.AzureDevOps, ScmProvider.GitHub })]
+    [InlineData("  ", null)]
+    public void TheInstallationSettingIsReadWithoutRegardToCase(string setting, ScmProvider[]? expected)
+    {
+        using var provider = ClientsModule(setting);
+
+        var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProviderActivationOptions>>().Value;
+
+        Assert.Equal(expected?.ToHashSet(), options.DefaultEnabled?.ToHashSet());
+    }
+
+    [Theory]
+    [InlineData("github,bitbucket")]
+    [InlineData("1")]
+    [InlineData(" , ,")]
+    public void AnUnknownOrMissingProviderFamilyInTheInstallationSettingStopsTheStart(string setting)
+    {
+        using var provider = ClientsModule(setting);
+
+        var failure = Assert.Throws<Microsoft.Extensions.Options.OptionsValidationException>(() =>
+            provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProviderActivationOptions>>().Value);
+        Assert.Contains(ProviderActivationOptions.DefaultEnabledKey, failure.Message);
+    }
+
+    private static ServiceProvider ClientsModule(string setting)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [ProviderActivationOptions.DefaultEnabledKey] = setting })
+            .Build();
+        return new ServiceCollection().AddLogging()
+            .AddClientsModule(configuration).BuildServiceProvider();
     }
 
     private sealed class TestScmProviderRegistry : IScmProviderRegistry

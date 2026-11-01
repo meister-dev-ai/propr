@@ -75,6 +75,14 @@ Providers**. While a family is disabled, creating a provider connection or a web
 it is refused with `The selected provider family is currently disabled by system administration.`, and
 inbound webhook deliveries for it are rejected.
 
+`MEISTER_DEFAULT_ENABLED_PROVIDERS` replaces this default with a comma-separated list of provider families,
+for example `azureDevOps,github`. The list applies to every family that a platform administrator has not
+switched yet; once an administrator changes a switch, ProPR stores the state of every family, and the list no
+longer applies. A name outside `azureDevOps`, `github`, `gitLab` and `forgejo`, or a value that names no family,
+stops the start.
+`GET /api/clients/{clientId}/provider-families` returns the activation of every family to a caller with
+client access.
+
 ## Readiness labels
 
 Once a connection verifies and has at least one enabled scope, ProPR labels it **Workflow Complete**

@@ -5,6 +5,7 @@ using MeisterDev.Ai.Providers.Catalog;
 using MeisterDev.ProPR.Application.Features.Clients.Services;
 using MeisterDev.ProPR.Application.Features.Clients.Support;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.AI;
@@ -25,6 +26,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Providers.Common.DependencyInject
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Clients;
 
@@ -43,6 +45,48 @@ public static class ClientsModuleServiceCollectionExtensions
     {
         services.AddScmProviderLocalDeclarations();
         services.TryAddScoped<IProviderConnectionConfigurationService, ProviderConnectionConfigurationService>();
+        // The provider families enabled until an administrator changes their activation. A name outside the supported
+        // families stops the start, so a typing error does not leave a provider family disabled unnoticed.
+        services.AddOptions<ProviderActivationOptions>()
+            .Configure(options =>
+            {
+                var setting = configuration[ProviderActivationOptions.DefaultEnabledKey];
+                if (string.IsNullOrWhiteSpace(setting))
+                {
+                    return;
+                }
+
+                var enabled = new HashSet<ScmProvider>();
+                foreach (var name in setting.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!char.IsLetter(name[0]) || !Enum.TryParse<ScmProvider>(name, true, out var provider) ||
+                        !Enum.IsDefined(provider))
+                    {
+                        throw new OptionsValidationException(
+                            Microsoft.Extensions.Options.Options.DefaultName,
+                            typeof(ProviderActivationOptions),
+                            [
+                                $"{ProviderActivationOptions.DefaultEnabledKey} names the unknown provider family '{name}'. Use azureDevOps, github, gitLab or forgejo, separated by commas."
+                            ]);
+                    }
+
+                    enabled.Add(provider);
+                }
+
+                // A value of commas only names no provider family and would disable every family without notice.
+                if (enabled.Count == 0)
+                {
+                    throw new OptionsValidationException(
+                        Microsoft.Extensions.Options.Options.DefaultName,
+                        typeof(ProviderActivationOptions),
+                        [
+                            $"{ProviderActivationOptions.DefaultEnabledKey} names no provider family. Use azureDevOps, github, gitLab or forgejo, separated by commas, or leave it unset."
+                        ]);
+                }
+
+                options.DefaultEnabled = enabled;
+            })
+            .ValidateOnStart();
 
         if (configuration.HasDatabaseConnectionString())
         {

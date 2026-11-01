@@ -31,6 +31,9 @@ The following settings depart from that:
 - `MEISTER_PLATFORM_ADMIN_ELEVATION_MAX_MINUTES` fails startup on anything that is not a whole number from 1 to
   1440. It does not fall back to its default.
 - `MEISTER_PROVISIONED_USER_PAT_MAX_DAYS` fails startup unless it is unset or a whole number from 1 to 3650.
+- `MEISTER_DEFAULT_ENABLED_PROVIDERS` fails startup when it names a provider family other than `azureDevOps`,
+  `github`, `gitLab` or `forgejo`, or when a set value names no family. See
+  [enabling a provider family](../platforms/index.md#enabling-a-provider-family).
 - A value under the minimum of an interval marked "clamped" is silently raised to that minimum.
 - **Most `AI_*` review-tuning settings are not range-checked.** An out-of-range value is used as
   given. Their listed ranges describe supported operation. The two

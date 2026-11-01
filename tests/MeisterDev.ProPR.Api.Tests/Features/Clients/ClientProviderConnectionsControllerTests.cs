@@ -41,6 +41,41 @@ namespace MeisterDev.ProPR.Api.Tests.Features.Clients;
 public sealed class ClientProviderConnectionsControllerTests(ClientProviderConnectionsControllerTests.ProviderConnectionsApiFactory factory)
     : IClassFixture<ClientProviderConnectionsControllerTests.ProviderConnectionsApiFactory>
 {
+    // An installation enables Azure DevOps and GitLab until an administrator changes the activation, and a client reads
+    // the activation of every provider family before it offers a connection.
+    [Fact]
+    public async Task GetProviderFamilies_ClientUser_ReturnsTheActivationOfEveryProviderFamily()
+    {
+        await factory.ResetProviderStateAsync(true);
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.ClientId}/provider-families");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var enabled = body.EnumerateArray().ToDictionary(
+            item => item.GetProperty("providerFamily").GetString()!,
+            item => item.GetProperty("isEnabled").GetBoolean());
+        Assert.Equal(
+            new Dictionary<string, bool> { ["azureDevOps"] = true, ["github"] = false, ["gitLab"] = true, ["forgejo"] = false },
+            enabled);
+    }
+
+    [Fact]
+    public async Task GetProviderFamilies_UnknownClient_Returns404()
+    {
+        await factory.ResetProviderStateAsync();
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{Guid.NewGuid()}/provider-families");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     [Fact]
     public async Task GetProviderConnections_ClientUserForAssignedClient_Returns200WithConnections()
     {
