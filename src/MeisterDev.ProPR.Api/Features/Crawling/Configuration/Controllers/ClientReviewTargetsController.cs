@@ -645,9 +645,13 @@ public sealed class ClientReviewTargetsController(
         }
     }
 
-    /// <summary>Creates an inactive review target for one repository.</summary>
+    /// <summary>Creates a review target for one repository with crawling off.</summary>
+    /// <remarks>
+    ///     A created or restored target takes the requested lifecycle in the same write, so a caller that saves a repository
+    ///     with reviews disabled needs no second request. An existing target keeps its lifecycle.
+    /// </remarks>
     /// <param name="clientId">Owning client identifier.</param>
-    /// <param name="request">Verified connection, repository coordinates, and optional destination branch patterns.</param>
+    /// <param name="request">Verified connection, repository coordinates, optional destination branch patterns and optional lifecycle.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">The identical target already exists.</response>
     /// <response code="201">The target was created.</response>
@@ -687,6 +691,15 @@ public sealed class ClientReviewTargetsController(
                         targetBranchPatterns = new[] { "Enter up to 100 unique destination branch patterns of 1 to 512 characters without control characters." }
                     }
                 });
+        }
+
+        ReviewTargetLifecycle? lifecycle = request.Lifecycle switch
+        {
+            null or "enabled" => ReviewTargetLifecycle.Enabled, "disabled" => ReviewTargetLifecycle.Disabled, _ => null
+        };
+        if (lifecycle is null)
+        {
+            return this.BadRequest(new { errors = new { lifecycle = new[] { "Select enabled or disabled as the lifecycle of the repository." } } });
         }
 
         var project = request.ProviderProjectKey?.Trim();
@@ -816,7 +829,7 @@ public sealed class ClientReviewTargetsController(
                     return this.Conflict(new { error = "Confirm restoration of the removed repository.", removedTarget = target });
                 }
 
-                if (!await configurations.RestoreReviewTargetAsync(existing[0], clientId, policy!.Patterns, ct))
+                if (!await configurations.RestoreReviewTargetAsync(existing[0], clientId, policy!.Patterns, ct, lifecycle.Value))
                 {
                     return this.Conflict(new { error = "The removed repository changed. Reload and retry." });
                 }
@@ -835,7 +848,7 @@ public sealed class ClientReviewTargetsController(
         {
             var created = await configurations.AddReviewTargetAsync(
                 clientId, connection.ProviderFamily, scope!, selected.ProviderProjectKey,
-                selected.RepositoryId, selected.RepositoryName, ct, policy!.Patterns.Count == 0 ? null : policy.Patterns);
+                selected.RepositoryId, selected.RepositoryName, ct, policy!.Patterns.Count == 0 ? null : policy.Patterns, lifecycle.Value);
             return this.StatusCode(StatusCodes.Status201Created, ToTarget(created));
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
@@ -1065,7 +1078,10 @@ public sealed class ClientReviewTargetsController(
         string.Equals(left?.TrimEnd('/'), right?.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>Repository coordinates for a client review target.</summary>
+/// <summary>
+///     Repository coordinates for a client review target, and the lifecycle of a created or restored target: <c>enabled</c>
+///     when omitted, or <c>disabled</c>.
+/// </summary>
 public sealed record CreateClientReviewTargetRequest(
     Guid ConnectionId,
     string ProviderProjectKey,
@@ -1074,7 +1090,8 @@ public sealed record CreateClientReviewTargetRequest(
     string? ProviderScopePath = null,
     IReadOnlyList<string>? TargetBranchPatterns = null,
     bool RestoreRemovedTarget = false,
-    string? ExpectedRemovedRevision = null);
+    string? ExpectedRemovedRevision = null,
+    string? Lifecycle = null);
 
 /// <summary>A conditional saved repository lifecycle transition.</summary>
 public sealed record ChangeClientReviewTargetLifecycleRequest(string ExpectedRevision, string Lifecycle, string? ConfirmationName = null);

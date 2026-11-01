@@ -8862,7 +8862,11 @@ export interface paths {
             };
         };
         put?: never;
-        /** Creates an inactive review target for one repository. */
+        /**
+         * Creates a review target for one repository with crawling off.
+         * @description A created or restored target takes the requested lifecycle in the same write, so a caller that saves a repository
+         *     with reviews disabled needs no second request. An existing target keeps its lifecycle.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -8873,7 +8877,7 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            /** @description Verified connection, repository coordinates, and optional destination branch patterns. */
+            /** @description Verified connection, repository coordinates, optional destination branch patterns and optional lifecycle. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["CreateClientReviewTargetRequest"];
@@ -25557,7 +25561,10 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
         };
-        /** @description Repository coordinates for a client review target. */
+        /**
+         * @description Repository coordinates for a client review target, and the lifecycle of a created or restored target: `enabled`
+         *     when omitted, or `disabled`.
+         */
         CreateClientReviewTargetRequest: {
             /** Format: uuid */
             connectionId?: string;
@@ -25568,6 +25575,7 @@ export interface components {
             targetBranchPatterns?: string[] | null;
             restoreRemovedTarget?: boolean;
             expectedRemovedRevision?: string | null;
+            lifecycle?: string | null;
         };
         /** @description Request to declare that a client answers mentions on repositories in one project. */
         CreateMentionConfigRequest: {

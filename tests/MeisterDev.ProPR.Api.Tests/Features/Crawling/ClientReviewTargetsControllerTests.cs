@@ -358,6 +358,19 @@ public sealed class ClientReviewTargetsControllerTests
         providers.DidNotReceiveWithAnyArgs().GetRepositoryDiscoveryProvider(default);
     }
 
+    // Creation saves a repository enabled or disabled; a removed repository returns only through restoration.
+    [Theory]
+    [InlineData("removed")]
+    [InlineData("Disabled")]
+    public async Task CreateTarget_OtherLifecyclesAreRefusedWithoutWrite(string lifecycle)
+    {
+        this.StubConnection();
+        configurations.GetByClientAsync(clientId, Arg.Any<CancellationToken>()).Returns([]);
+        Assert.IsType<BadRequestObjectResult>(await this.CreateController().CreateTarget(clientId, Request() with { Lifecycle = lifecycle }));
+        await configurations.DidNotReceiveWithAnyArgs().AddReviewTargetAsync(default, default, default!, default!, default!, default!);
+        await configurations.DidNotReceiveWithAnyArgs().RestoreReviewTargetAsync(default!, default, default!);
+    }
+
     [Fact]
     public async Task CreateTarget_NewPolicyCannotOverwriteAnExistingTarget()
     {

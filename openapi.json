@@ -12576,7 +12576,8 @@
         "tags": [
           "ClientReviewTargets"
         ],
-        "summary": "Creates an inactive review target for one repository.",
+        "summary": "Creates a review target for one repository with crawling off.",
+        "description": "A created or restored target takes the requested lifecycle in the same write, so a caller that saves a repository\nwith reviews disabled needs no second request. An existing target keeps its lifecycle.",
         "parameters": [
           {
             "name": "clientId",
@@ -12590,7 +12591,7 @@
           }
         ],
         "requestBody": {
-          "description": "Verified connection, repository coordinates, and optional destination branch patterns.",
+          "description": "Verified connection, repository coordinates, optional destination branch patterns and optional lifecycle.",
           "content": {
             "application/json": {
               "schema": {
@@ -37990,10 +37991,14 @@
           "expectedRemovedRevision": {
             "type": "string",
             "nullable": true
+          },
+          "lifecycle": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Repository coordinates for a client review target."
+        "description": "Repository coordinates for a client review target, and the lifecycle of a created or restored target: `enabled`\nwhen omitted, or `disabled`."
       },
       "CreateMentionConfigRequest": {
         "type": "object",

@@ -1051,6 +1051,76 @@ public sealed class ClientReviewTargetsPostgresTests(PostgresContainerFixture fi
     }
 
     [Fact]
+    public async Task CreateTarget_SavesNewAndRestoredTargetsWithTheRequestedLifecycle()
+    {
+        fixture.SkipIfUnavailable();
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>().UseNpgsql(fixture.ConnectionString, o => o.UseVector()).Options;
+        await using var context = new MeisterProPRDbContext(options);
+        var clientId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
+        context.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId, TenantId = TenantCatalog.SystemTenantId, DisplayName = "Repository lifecycle test", IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        await context.SaveChangesAsync();
+        try
+        {
+            var repository = new CrawlConfigurationRepository(context);
+            var connections = Substitute.For<IClientScmConnectionRepository>();
+            connections.GetByIdAsync(clientId, connectionId, Arg.Any<CancellationToken>()).Returns(
+                new ClientScmConnectionDto(
+                    connectionId, clientId, ScmProvider.GitHub, "https://github.example.test", ScmAuthenticationKind.PersonalAccessToken,
+                    "Test", true, "verified", DateTimeOffset.UtcNow, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+            var discovery = Substitute.For<IRepositoryDiscoveryProvider>();
+            discovery.ListRepositoriesAsync(clientId, Arg.Any<ProviderHostRef>(), "owner", Arg.Any<CancellationToken>())
+                .Returns(call =>
+                    Task.FromResult<IReadOnlyList<RepositoryRef>>([new RepositoryRef(call.ArgAt<ProviderHostRef>(1), "repo", "owner", "owner/repo")]));
+            var providers = MeisterDev.ProPR.TestSupport.LocalScmPolicies.CreateRuntimeSubstitute();
+            providers.GetReviewSourcePolicy(Arg.Any<ScmProvider>()).Returns(call => ReviewSourcePolicies.Get(call.Arg<ScmProvider>()));
+            providers.GetRepositoryDiscoveryProvider(ScmProvider.GitHub).Returns(discovery);
+            var http = new DefaultHttpContext();
+            http.Items["IsAdmin"] = true;
+            var controller = new ClientReviewTargetsController(repository, connections, providerRegistry: providers)
+            {
+                ControllerContext = new ControllerContext { HttpContext = http },
+            };
+            var request = new CreateClientReviewTargetRequest(connectionId, "owner", "repo", "repo", Lifecycle: "disabled");
+
+            var created = Assert.IsType<ObjectResult>(await controller.CreateTarget(clientId, request));
+            Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+            var target = Assert.IsType<ClientReviewTargetResponse>(created.Value);
+            Assert.Equal(("disabled", false), (target.Lifecycle, target.IsActive));
+
+            // Creating an existing target again leaves its lifecycle unchanged.
+            var repeated = Assert.IsType<OkObjectResult>(await controller.CreateTarget(clientId, request with { Lifecycle = null }));
+            Assert.Equal("disabled", Assert.IsType<ClientReviewTargetResponse>(repeated.Value).Lifecycle);
+
+            var saved = (await repository.GetReviewTargetPolicySnapshotAsync(target.Id, clientId))!;
+            Assert.True(await repository.ChangeReviewTargetLifecycleAsync(target.Id, clientId, saved.ReviewTargetRevision, ReviewTargetLifecycle.Removed));
+            var removed = (await repository.GetReviewTargetPolicySnapshotAsync(target.Id, clientId))!;
+            var restored = Assert.IsType<OkObjectResult>(
+                await controller.CreateTarget(
+                    clientId,
+                    request with
+                    {
+                        RestoreRemovedTarget = true,
+                        ExpectedRemovedRevision = removed.ReviewTargetRevision.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    }));
+            var restoredTarget = Assert.IsType<ClientReviewTargetResponse>(restored.Value);
+            Assert.Equal((target.Id, "disabled", false), (restoredTarget.Id, restoredTarget.Lifecycle, restoredTarget.IsActive));
+            Assert.Equal(
+                ReviewTargetLifecycle.Disabled,
+                (await context.CrawlConfigurations.AsNoTracking().SingleAsync(config => config.Id == target.Id)).ReviewTargetLifecycle);
+        }
+        finally
+        {
+            await context.Clients.Where(client => client.Id == clientId).ExecuteDeleteAsync();
+        }
+    }
+
+    [Fact]
     public async Task CreateTarget_ConcurrentRetriesAndDistinctRepositoriesPreserveLegacyIdentity()
     {
         fixture.SkipIfUnavailable();

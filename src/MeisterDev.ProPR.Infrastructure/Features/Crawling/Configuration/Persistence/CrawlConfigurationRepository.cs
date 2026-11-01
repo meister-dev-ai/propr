@@ -142,9 +142,14 @@ public sealed class CrawlConfigurationRepository(
 
     /// <inheritdoc />
     public async Task<bool> RestoreReviewTargetAsync(
-        CrawlConfigurationDto expectedTarget, Guid clientId, IReadOnlyList<string> targetBranchPatterns, CancellationToken ct = default)
+        CrawlConfigurationDto expectedTarget,
+        Guid clientId,
+        IReadOnlyList<string> targetBranchPatterns,
+        CancellationToken ct = default,
+        ReviewTargetLifecycle lifecycle = ReviewTargetLifecycle.Enabled)
     {
-        if (expectedTarget.RepoFilters is not { Count: 1 } || expectedTarget.RepoFilters[0].CanonicalSourceRef is null)
+        if (expectedTarget.RepoFilters is not { Count: 1 } || expectedTarget.RepoFilters[0].CanonicalSourceRef is null ||
+            lifecycle is not (ReviewTargetLifecycle.Enabled or ReviewTargetLifecycle.Disabled))
         {
             return false;
         }
@@ -158,7 +163,7 @@ public sealed class CrawlConfigurationRepository(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var count = await this.RestorationCandidateQuery(expectedTarget, clientId)
             .ExecuteUpdateAsync(
-                set => set.SetProperty(c => c.ReviewTargetLifecycle, ReviewTargetLifecycle.Enabled)
+                set => set.SetProperty(c => c.ReviewTargetLifecycle, lifecycle)
                     .SetProperty(c => c.IsActive, false).SetProperty(c => c.ReviewTargetRevision, c => c.ReviewTargetRevision + 1), ct).ConfigureAwait(false);
         if (count != 1)
         {
@@ -272,8 +277,14 @@ public sealed class CrawlConfigurationRepository(
         string repositoryId,
         string repositoryName,
         CancellationToken ct = default,
-        IReadOnlyList<string>? targetBranchPatterns = null)
+        IReadOnlyList<string>? targetBranchPatterns = null,
+        ReviewTargetLifecycle lifecycle = ReviewTargetLifecycle.Enabled)
     {
+        if (lifecycle is not (ReviewTargetLifecycle.Enabled or ReviewTargetLifecycle.Disabled))
+        {
+            throw new ArgumentOutOfRangeException(nameof(lifecycle), lifecycle, "A new review target is enabled or disabled.");
+        }
+
         var policy = DestinationBranchPolicy.Create(targetBranchPatterns ?? []);
         var record = new CrawlConfigurationRecord
         {
@@ -285,6 +296,7 @@ public sealed class CrawlConfigurationRepository(
             RepositoryId = repositoryId,
             CrawlIntervalSeconds = 60,
             IsActive = false,
+            ReviewTargetLifecycle = lifecycle,
             CreatedAt = DateTimeOffset.UtcNow,
             RepoFilters =
             [

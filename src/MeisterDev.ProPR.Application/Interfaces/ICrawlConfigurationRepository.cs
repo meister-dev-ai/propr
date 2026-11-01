@@ -33,9 +33,13 @@ public interface ICrawlConfigurationRepository
         Guid targetId, Guid clientId, long expectedRevision, ReviewTargetLifecycle lifecycle, CancellationToken ct = default);
 
     /// <summary>Restores a removed target and its destination policy atomically, leaving crawling off.</summary>
-    /// <remarks>Requires an exact-one canonical expected filter, valid destination patterns and matching owned removed identity and revision. Invalid patterns are rejected before admission or database writes. Invalid, foreign, stale, or changed identity returns false. Success preserves the target identifier, increments its revision and replaces the policy under admission serialization.</remarks>
+    /// <remarks>Requires an exact-one canonical expected filter, valid destination patterns, a lifecycle of enabled or disabled and matching owned removed identity and revision. Invalid patterns and lifecycles are rejected before admission or database writes. Invalid, foreign, stale, or changed identity returns false. Success preserves the target identifier, sets the lifecycle, increments its revision and replaces the policy under admission serialization.</remarks>
     Task<bool> RestoreReviewTargetAsync(
-        CrawlConfigurationDto expectedTarget, Guid clientId, IReadOnlyList<string> targetBranchPatterns, CancellationToken ct = default);
+        CrawlConfigurationDto expectedTarget,
+        Guid clientId,
+        IReadOnlyList<string> targetBranchPatterns,
+        CancellationToken ct = default,
+        ReviewTargetLifecycle lifecycle = ReviewTargetLifecycle.Enabled);
 
     /// <summary>Adds a new crawl configuration for the given client.</summary>
     Task<CrawlConfigurationDto> AddAsync(
@@ -48,7 +52,8 @@ public interface ICrawlConfigurationRepository
         CancellationToken ct = default,
         float? reviewTemperature = null);
 
-    /// <summary>Creates an inactive repository-scoped configuration and its canonical filter in one save.</summary>
+    /// <summary>Creates a repository-scoped configuration with crawling off and its canonical filter in one save.</summary>
+    /// <remarks>The target is saved with <paramref name="lifecycle" />, which must be enabled or disabled.</remarks>
     Task<CrawlConfigurationDto> AddReviewTargetAsync(
         Guid clientId,
         ScmProvider provider,
@@ -57,7 +62,8 @@ public interface ICrawlConfigurationRepository
         string repositoryId,
         string repositoryName,
         CancellationToken ct = default,
-        IReadOnlyList<string>? targetBranchPatterns = null);
+        IReadOnlyList<string>? targetBranchPatterns = null,
+        ReviewTargetLifecycle lifecycle = ReviewTargetLifecycle.Enabled);
 
     /// <summary>Atomically replaces only a canonical repository target's policy when its authorized identity and stored patterns match.</summary>
     Task<bool> UpdateReviewTargetPolicyAsync(

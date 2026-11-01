@@ -158,6 +158,30 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
     }
 
     [Fact]
+    public async Task AddReviewTargetAsync_SavesTheRequestedLifecycle()
+    {
+        var created = await this._repo.AddReviewTargetAsync(
+            this._clientId, ScmProvider.GitHub, "https://github.example.test", "owner", "12345", "repo",
+            lifecycle: ReviewTargetLifecycle.Disabled);
+
+        Assert.Equal(ReviewTargetLifecycle.Disabled, created.ReviewTargetLifecycle);
+        var stored = await this._dbContext.CrawlConfigurations.AsNoTracking().SingleAsync(config => config.Id == created.Id);
+        Assert.Equal(ReviewTargetLifecycle.Disabled, stored.ReviewTargetLifecycle);
+        Assert.False(stored.IsActive);
+    }
+
+    // A removed target exists only after a lifecycle change, so creation refuses that state without a write.
+    [Fact]
+    public async Task AddReviewTargetAsync_RefusesTheRemovedLifecycleWithoutSaving()
+    {
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => this._repo.AddReviewTargetAsync(
+            this._clientId, ScmProvider.GitHub, "https://github.example.test", "owner", "12345", "repo",
+            lifecycle: ReviewTargetLifecycle.Removed));
+
+        Assert.False(await this._dbContext.CrawlConfigurations.AnyAsync(config => config.ClientId == this._clientId));
+    }
+
+    [Fact]
     public async Task DestinationPolicy_CreateAndConditionalEditPersistAtomicallyWithoutChangingSettings()
     {
         var created = await this._repo.AddReviewTargetAsync(
