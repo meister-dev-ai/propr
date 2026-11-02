@@ -45,6 +45,12 @@ public sealed record ReviewCommentPostingDiagnosticsDto
     /// </summary>
     public IReadOnlyList<ReviewCommentSuppressionRecord> PostedFindingNearMisses { get; init; } = [];
 
+    /// <summary>
+    ///     Published findings with a file and a line that the provider could not attach to the diff as an inline
+    ///     comment, and that the review summary lists in full.
+    /// </summary>
+    public int PlacedInSummaryCount { get; init; }
+
     /// <summary>Count of candidates skipped because they originated from carried-forward file results.</summary>
     public int CarriedForwardCandidatesSkipped { get; init; }
 

@@ -24,10 +24,11 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
     private const string ReviewsUri = "https://api.github.com/repos/acme/propr/pulls/42/reviews";
 
-    // The comment listing asks for a page size: left to GitHub's default of thirty, a review posting more
-    // comments than that recorded provenance for the first thirty only.
+    // The pull request's comment listing, which carries each comment's line and review. It asks for a page size:
+    // left to GitHub's default of thirty, a review posting more comments than that recorded provenance for the
+    // first thirty only.
     private const string ReviewCommentsUri =
-        "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments?per_page=100";
+        "https://api.github.com/repos/acme/propr/pulls/42/comments?per_page=100";
 
     [Theory]
     [InlineData("```")]
@@ -604,7 +605,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
                 {
                     UserUri => CreateJsonResponse(new { login = "meister-dev" }),
                     ReviewsUri => CreateJsonResponse(new { id = 555L }),
-                    ReviewCommentsUri => CreateJsonResponse(new[] { new { id = 9001L, path = "src/file.ts", line = 18 } }),
+                    ReviewCommentsUri => CreateJsonResponse(new[] { new { id = 9001L, path = "src/file.ts", line = 18, pull_request_review_id = 555L } }),
                     _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
                 };
             }));
@@ -663,7 +664,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
                 {
                     UserUri => CreateJsonResponse(new { login = "meister-dev" }),
                     ReviewsUri => CreateJsonResponse(new { id = 555L }),
-                    ReviewCommentsUri => CreateJsonResponse(new[] { new { id = 9001L, path = "src/file.ts", line = 18 } }),
+                    ReviewCommentsUri => CreateJsonResponse(new[] { new { id = 9001L, path = "src/file.ts", line = 18, pull_request_review_id = 555L } }),
                     GraphQlUri => CreateRefusedReviewThreadsResponse(ThreadNodeId, 9001L),
                     _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
                 })));
@@ -718,7 +719,9 @@ public sealed class GitHubCodeReviewPublicationServiceTests
                     ReviewCommentsUri => CreateJsonResponse(
                         new[]
                         {
-                            new { id = 9001L, path = "src/file.ts", line = 18 },
+                            // A comment of an earlier review on the same line is not part of this publication.
+                            new { id = 8001L, path = "src/file.ts", line = 18, pull_request_review_id = 444L },
+                            new { id = 9001L, path = "src/file.ts", line = 18, pull_request_review_id = 555L },
                         }),
                     GraphQlUri => CreateReviewThreadsResponse(ThreadNodeId, 9001L),
                     _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
@@ -982,7 +985,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         TestPostedCommentComposer.AssertMarkedOnce(payload.RootElement.GetProperty("body").GetString(), marker);
         var summary = payload.RootElement.GetProperty("body").GetString()!;
         Assert.Contains("Looks solid overall.", summary);
-        Assert.Contains("- **Warning** · `src/file.ts:18`: Guard this null case.", summary);
+        Assert.DoesNotContain("Guard this null case.", summary);
         Assert.Contains(withRisk ? "| 3 | Low: 3 | Certain: 3 |" : "| 3 | Unassessed: 3 | Unassessed: 3 |", summary);
         Assert.Contains("**`src/settings.ts`**", summary);
         Assert.Contains(withRisk ? "![Risk: Low]" : "\n\nCheck the file-level setting.", summary);

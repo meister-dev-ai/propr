@@ -10,22 +10,26 @@ namespace MeisterDev.ProPR.Application.Tests.Services;
 public sealed class ReviewPresentationTemplateTests
 {
     [Fact]
-    public void SummaryCompositionKeepsSeparatorsAroundBoundedActionsAndOmissionNotice()
+    public void SummaryCompositionKeepsSeparatorsAroundListedDetailsAndTheNote()
     {
-        var comments = Enumerable.Range(1, 25).Select(index => new ReviewComment($"File{index}.cs", index, CommentSeverity.Warning, "Item.")).ToArray();
-        var result = new ReviewResult("Conclusion.", comments);
+        var result = new ReviewResult(
+            "Conclusion.",
+            [
+                new("a.cs", 1, CommentSeverity.Warning, "First."),
+                new("b.cs", null, CommentSeverity.Warning, "Second."),
+                new(null, null, CommentSeverity.Warning, "Third."),
+            ]);
 
-        var rendered = ReviewSummaryTextFormatter.Format(result);
+        var rendered = ReviewSummaryTextFormatter.Format(
+            result, includeFilelessFindingDetails: true, findingRenderer: comment => comment.Message, findingsNote: "Note.");
 
         Assert.Equal(
-            "**Findings to review**\n\n"
-            + string.Join("\n\n", Enumerable.Range(1, 20).Select(index => $"- **Warning** · `File{index}.cs:{index}`: Item."))
-            + "\n\n5 additional finding actions omitted from this summary. See the full review record or individual finding comments when available."
-            + "\n\n| Findings to report | Risk levels | Confidence levels |\n| --- | --- | --- |\n| 25 | Unassessed: 25 | Unassessed: 25 |", rendered);
+            "**Findings to review**\n\n**`b.cs`**\n\nSecond.\n\nThird.\n\nNote."
+            + "\n\n| Findings to report | Risk levels | Confidence levels |\n| --- | --- | --- |\n| 3 | Unassessed: 3 | Unassessed: 3 |", rendered);
     }
 
     [Fact]
-    public void SummaryCompositionRetainsActionSpacingAndCompleteProviderRenderedDetails()
+    public void SummaryCompositionRetainsCompleteProviderRenderedDetailsAndLeavesOutInlineFindings()
     {
         const string details = "Provider `{{literal}}` details.\r\n```csharp\r\nreturn \"<tag>\";\r\n```\r\n";
         var result = new ReviewResult(
@@ -35,8 +39,8 @@ public sealed class ReviewPresentationTemplateTests
         var rendered = ReviewSummaryTextFormatter.Format(result, includeFilelessFindingDetails: true, findingRenderer: _ => details);
 
         Assert.Equal(
-            "**Findings to review**\n\n- **Error** · `a.cs:1`: First.\n\n**`b.cs`**\n\n" + details
-                                                                                         + "\n\n| Findings to report | Risk levels | Confidence levels |\n| --- | --- | --- |\n| 2 | Unassessed: 2 | Unassessed: 2 |",
+            "**Findings to review**\n\n**`b.cs`**\n\n" + details
+                                                       + "\n\n| Findings to report | Risk levels | Confidence levels |\n| --- | --- | --- |\n| 2 | Unassessed: 2 | Unassessed: 2 |",
             rendered);
     }
 

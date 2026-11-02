@@ -85,7 +85,9 @@ public sealed class GitLabPublicationContextContractTests
         }
 
         var summary = postedBodies[0];
-        foreach (var field in new[] { "author", "conclusion", "action", "budget", "degraded", "skipped" })
+        // The inline finding has its own discussion, so its path does not appear in the summary.
+        Assert.DoesNotContain("script&gt;action", summary);
+        foreach (var field in new[] { "author", "conclusion", "budget", "degraded", "skipped" })
         {
             Assert.Contains($"&lt;/details&gt;&lt;script&gt;{field}&lt;/script&gt;", summary);
         }
@@ -534,7 +536,7 @@ public sealed class GitLabPublicationContextContractTests
 
         var summary = Assert.Single(decodedBodies, body => body.StartsWith("## Meister Review Bot Review", StringComparison.Ordinal));
         Assert.Contains("Looks solid overall.", summary);
-        Assert.Contains("- **Warning** · `src/file.ts:18`: Guard this null case.", summary);
+        Assert.DoesNotContain("Guard this null case.", summary);
         Assert.Contains(withRisk ? "| 3 | Low: 3 | Unassessed: 3 |" : "| 3 | Unassessed: 3 | Unassessed: 3 |", summary);
         Assert.Contains("**`src/settings.ts`**", summary);
         Assert.Contains(withRisk ? "![Risk: Low]" : "\n\nCheck the file-level setting.", summary);

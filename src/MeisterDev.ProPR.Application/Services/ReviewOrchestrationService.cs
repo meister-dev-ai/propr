@@ -1572,6 +1572,7 @@ public sealed partial class ReviewOrchestrationService(
             {
                 candidateCount = diagnostics.CandidateCount,
                 postedCount = diagnostics.PostedCount,
+                placedInSummaryCount = diagnostics.PlacedInSummaryCount,
                 suppressedCount = diagnostics.SuppressedCount,
                 failedCount = diagnostics.FailedCount,
                 suppressionReasons = diagnostics.SuppressionReasons,

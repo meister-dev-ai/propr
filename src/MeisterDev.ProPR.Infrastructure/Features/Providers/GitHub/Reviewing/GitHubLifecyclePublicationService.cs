@@ -31,6 +31,9 @@ internal sealed partial class GitHubLifecyclePublicationService(
 {
     private const int MaximumCommentBodyCharacters = 65_536;
 
+    // GitHub lists at most 300 changed files in a comparison. A listing of that size may leave files out.
+    private const int ComparisonFileLimit = 300;
+
     // Read across pages from pageInfo, matching the thread read path. A pull request past a hundred threads
     // used to leave the overflow without a thread id, which cost auto-resolution on those findings.
     private const string ReviewThreadIdsQuery =
@@ -57,9 +60,62 @@ internal sealed partial class GitHubLifecyclePublicationService(
         activity?.SetTag("publication.author.login", author.Login);
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
-        var payload = BuildPayload(
-            review, revision, result, author, composer, publicationContext?.CurrentHeadSha,
-            publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo);
+        var badgeStyle = publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo;
+        var diffLines = await this.TryReadDiffLinesAsync(context, review, revision, ct);
+        var payload = BuildPayload(review, revision, result, author, composer, publicationContext?.CurrentHeadSha, badgeStyle, diffLines);
+        if (payload.OutsideDiffCount > 0)
+        {
+            LogFindingsOutsideDiff(this._logger, review.Number, payload.OutsideDiffCount);
+        }
+
+        var response = await this.SendReviewAsync(context, review, payload, ct);
+        try
+        {
+            // GitHub refuses the whole review when one inline comment names a line it cannot resolve against the
+            // diff, and creates nothing. The diff read above prevents that in the common case. A push between that
+            // read and this request, or a diff the read could not obtain, still ends here, so the review is sent
+            // once more with every finding in the summary and the customer receives the result.
+            if (response.StatusCode == HttpStatusCode.UnprocessableEntity && payload.Comments.Count > 0)
+            {
+                var refusal = await ReadDiagnosticBodyAsync(response, ct);
+                LogInlineCommentsRefused(this._logger, review.Number, payload.Comments.Count, Sanitize(refusal));
+                response.Dispose();
+                payload = BuildPayload(review, revision, result, author, composer, publicationContext?.CurrentHeadSha, badgeStyle, GitHubDiffLines.None);
+                response = await this.SendReviewAsync(context, review, payload, ct);
+            }
+
+            await this.ThrowIfRefusedAsync(review, response, ct);
+
+            // Best-effort capture of the created provider comment ids. The crawler keys retained comments on
+            // each review comment's REST numeric id (GraphQL databaseId). The POST /reviews response only
+            // carries the review id, so the per-comment ids are fetched via a follow-up read. Any failure
+            // here must leave PostedComments empty without disrupting publishing.
+            // The review-thread node ids need a second follow-up read: GitHub exposes review threads only
+            // through GraphQL, and neither the create-review response nor the REST comment payload names the
+            // thread a comment opened.
+            var postedComments = await this.TryCapturePostedCommentsAsync(context, review, response, result, payload, ct);
+
+            return ReviewCommentPostingDiagnosticsDto.Empty(
+                    result.Comments.Count + result.CarriedForwardCandidatesSkipped,
+                    result.CarriedForwardCandidatesSkipped) with
+                {
+                    PostedCount = result.Comments.Count,
+                    PostedComments = postedComments,
+                    PlacedInSummaryCount = payload.OutsideDiffCount,
+                };
+        }
+        finally
+        {
+            response.Dispose();
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendReviewAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        CodeReviewRef review,
+        GitHubReviewRequest payload,
+        CancellationToken ct)
+    {
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             GitHubConnectionVerifier.BuildApiUri(
@@ -69,19 +125,20 @@ internal sealed partial class GitHubLifecyclePublicationService(
             Content = JsonContent.Create(payload),
         };
         await context.AuthorizeRequestAsync(request, ct);
+        return await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+    }
 
-        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+    private async Task ThrowIfRefusedAsync(CodeReviewRef review, HttpResponseMessage response, CancellationToken ct)
+    {
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             var responseBody = await ReadDiagnosticBodyAsync(response, ct);
-            var safeRepositoryPath = BuildRepositoryPath(review.Repository).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
-            var safeResponseBody = (responseBody ?? string.Empty).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             this._logger.LogWarning(
                 "GitHub review publication permission failure for repository {RepositoryPath} review {ReviewNumber} with status {StatusCode}. Detail: {Detail}",
-                safeRepositoryPath,
+                Sanitize(BuildRepositoryPath(review.Repository)),
                 review.Number,
                 (int)response.StatusCode,
-                safeResponseBody);
+                Sanitize(responseBody));
             throw new InvalidOperationException(
                 string.IsNullOrWhiteSpace(responseBody)
                     ? "GitHub review publication failed because the configured credential no longer has permission to publish review comments."
@@ -96,23 +153,55 @@ internal sealed partial class GitHubLifecyclePublicationService(
                     ? $"GitHub review publication failed with status {(int)response.StatusCode}."
                     : $"GitHub review publication failed with status {(int)response.StatusCode}: {responseBody}");
         }
+    }
 
-        // Best-effort capture of the created provider comment ids. The crawler keys retained comments on
-        // each review comment's REST numeric id (GraphQL databaseId). The POST /reviews response only
-        // carries the review id, so the per-comment ids are fetched via a follow-up read. Any failure
-        // here must leave PostedComments empty without disrupting publishing.
-        // The review-thread node ids need a second follow-up read: GitHub exposes review threads only
-        // through GraphQL, and neither the create-review response nor the REST comment payload names the
-        // thread a comment opened.
-        var postedComments = await this.TryCapturePostedCommentsAsync(context, review, response, result, payload, ct);
+    /// <summary>
+    ///     Reads the lines of the reviewed revision's diff that accept a review comment. GitHub resolves a comment
+    ///     against the diff of the commit the review names, so the comparison of the revision's base and head is
+    ///     read, not the pull request's current file list, which follows later pushes. Returns
+    ///     <see langword="null" /> when the comparison cannot be read; every finding is then sent inline as before,
+    ///     and a refusal falls back to the summary.
+    /// </summary>
+    private async Task<GitHubDiffLines?> TryReadDiffLinesAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        CodeReviewRef review,
+        ReviewRevision revision,
+        CancellationToken ct)
+    {
+        try
+        {
+            // The page size limits the commits of the answer. GitHub lists the changed files on the first page only.
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                GitHubConnectionVerifier.BuildApiUri(
+                    review.Repository.Host,
+                    $"/repos/{BuildRepositoryPath(review.Repository)}/compare/{Uri.EscapeDataString(revision.BaseSha)}...{Uri.EscapeDataString(revision.HeadSha)}",
+                    "per_page=1"));
+            await context.AuthorizeRequestAsync(request, ct);
 
-        return ReviewCommentPostingDiagnosticsDto.Empty(
-                result.Comments.Count + result.CarriedForwardCandidatesSkipped,
-                result.CarriedForwardCandidatesSkipped) with
+            using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
             {
-                PostedCount = result.Comments.Count,
-                PostedComments = postedComments,
-            };
+                LogDiffUnavailable(this._logger, review.Number, (int)response.StatusCode, null);
+                return null;
+            }
+
+            var comparison = await response.Content.ReadFromJsonAsync<GitHubComparisonResponse>(ct);
+            if (comparison?.Files is not { } files)
+            {
+                LogDiffUnavailable(this._logger, review.Number, (int)response.StatusCode, null);
+                return null;
+            }
+
+            return GitHubDiffLines.FromFiles(
+                files.Select(file => (file.FileName ?? string.Empty, file.Patch)),
+                complete: files.Count < ComparisonFileLimit);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            LogDiffUnavailable(this._logger, review.Number, null, ex);
+            return null;
+        }
     }
 
     private async Task<IReadOnlyList<PostedReviewCommentRef>> TryCapturePostedCommentsAsync(
@@ -123,6 +212,13 @@ internal sealed partial class GitHubLifecyclePublicationService(
         GitHubReviewRequest payload,
         CancellationToken ct)
     {
+        // A review without inline comments created no comment to read back, and the pull request's comment listing
+        // would be read across all its pages for nothing.
+        if (payload.Comments.Count == 0)
+        {
+            return [];
+        }
+
         try
         {
             var createdReview = await reviewResponse.Content
@@ -132,22 +228,23 @@ internal sealed partial class GitHubLifecyclePublicationService(
                 return [];
             }
 
-            var reviewIdText = reviewId.ToString(CultureInfo.InvariantCulture);
-
-            // Read across pages: without a page size this listing takes GitHub's default of thirty, so a
-            // review posting more comments than that recorded provenance for the first thirty only and lost
-            // auto-resolution on the rest.
-            var comments = await ProviderRestPager.LoadAllAsync(
-                (page, pageSize, pageCt) => this.GetReviewCommentPageAsync(
-                    context,
-                    review,
-                    reviewIdText,
-                    page,
-                    pageSize,
-                    pageCt),
-                comment => comment.Id?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-                $"GitHub's comment listing for review {reviewIdText}",
-                ct);
+            // GitHub's listing of one review's comments carries each comment's diff position and no line, so a
+            // comment could never be matched to the finding it was sent for. The pull request's comment listing
+            // carries the line and the review each comment belongs to, so the comments are read from there and
+            // kept when they belong to the review just created. The read spans pages: without a page size the
+            // listing takes GitHub's default of thirty.
+            var comments = (await ProviderRestPager.LoadAllAsync(
+                    (page, pageSize, pageCt) => this.GetPullRequestCommentPageAsync(
+                        context,
+                        review,
+                        page,
+                        pageSize,
+                        pageCt),
+                    comment => comment.Id?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                    $"GitHub's review-comment listing for pull request {review.Number}",
+                    ct))
+                .Where(comment => comment.ReviewId == reviewId)
+                .ToList();
             if (comments.Count == 0)
             {
                 return [];
@@ -155,20 +252,40 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
             var threadIdsByCommentId = await this.TryResolveReviewThreadIdsAsync(context, review, ct);
 
-            var originals = result.Comments.Select((finding, ordinal) => (Finding: finding, Ordinal: ordinal))
-                .Where(item => !string.IsNullOrWhiteSpace(item.Finding.FilePath) && item.Finding.LineNumber is > 0).ToArray();
-            return comments.Where(comment => comment.Id is not null).Select(comment =>
+            // Each sent comment is matched once, in the order GitHub created the comments.
+            var claimed = new HashSet<int>();
+            return comments.Where(comment => comment.Id is not null).OrderBy(comment => comment.Id).Select(comment =>
             {
+                // The sent comments name lines of the reviewed revision. GitHub reports that line as the original line,
+                // and the current line follows later pushes, so the original line is compared first.
+                var line = comment.OriginalLine ?? comment.Line;
                 var matches = payload.Comments.Select((sent, index) => (Sent: sent, Index: index))
-                    .Where(item => item.Sent.Path == comment.Path && item.Sent.Line == comment.Line
-                                                                  && (comment.Body is null || item.Sent.Body == comment.Body)).Take(2).ToArray();
-                var original = matches.Length == 1 ? originals[matches[0].Index] : default;
+                    .Where(item => !claimed.Contains(item.Index) && item.Sent.Path == comment.Path && item.Sent.Line == line).ToArray();
+
+                // The body tells apart two comments on the same line. It is not compared otherwise, so that a change
+                // GitHub makes to a stored body does not cost the match. Comments that still match after the
+                // comparison carry the same text and stand for interchangeable findings, so the first one is taken.
+                if (matches.Length > 1)
+                {
+                    matches = comment.Body is null ? [] : matches.Where(item => item.Sent.Body == comment.Body).Take(1).ToArray();
+                }
+
+                // Only the findings placed inline were sent as comments, so the sent comment's position maps to the
+                // finding through the ordinals recorded when the payload was built.
+                int? ordinal = null;
+                if (matches.Length == 1)
+                {
+                    claimed.Add(matches[0].Index);
+                    ordinal = payload.InlineFindingOrdinals[matches[0].Index];
+                }
+
+                var finding = ordinal is { } index ? result.Comments[index] : null;
                 return new PostedReviewCommentRef(
                     comment.Id!.Value.ToString(CultureInfo.InvariantCulture),
-                    threadIdsByCommentId.GetValueOrDefault(comment.Id.Value), original.Finding?.FilePath ?? comment.Path,
-                    original.Finding?.LineNumber ?? comment.Line)
+                    threadIdsByCommentId.GetValueOrDefault(comment.Id.Value), finding?.FilePath ?? comment.Path,
+                    finding?.LineNumber ?? line)
                 {
-                    FindingOrdinal = original.Finding is not null ? original.Ordinal : null,
+                    FindingOrdinal = ordinal,
                 };
             }).ToList();
         }
@@ -179,10 +296,9 @@ internal sealed partial class GitHubLifecyclePublicationService(
         }
     }
 
-    private async Task<ProviderRestPager.RestPage<GitHubReviewCommentResponse>> GetReviewCommentPageAsync(
+    private async Task<ProviderRestPager.RestPage<GitHubReviewCommentResponse>> GetPullRequestCommentPageAsync(
         GitHubConnectionVerifier.GitHubConnectionContext context,
         CodeReviewRef review,
-        string reviewIdText,
         int page,
         int pageSize,
         CancellationToken ct)
@@ -191,7 +307,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
             HttpMethod.Get,
             GitHubConnectionVerifier.BuildApiUri(
                 review.Repository.Host,
-                $"/repos/{BuildRepositoryPath(review.Repository)}/pulls/{review.Number}/reviews/{reviewIdText}/comments",
+                $"/repos/{BuildRepositoryPath(review.Repository)}/pulls/{review.Number}/comments",
                 page <= 1
                     ? $"per_page={pageSize.ToString(CultureInfo.InvariantCulture)}"
                     : $"per_page={pageSize.ToString(CultureInfo.InvariantCulture)}&page={page.ToString(CultureInfo.InvariantCulture)}"));
@@ -320,45 +436,72 @@ internal sealed partial class GitHubLifecyclePublicationService(
         ReviewResult result,
         ReviewerIdentity author,
         IPostedCommentComposer composer,
-        string? currentHeadSha = null, FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo)
+        string? currentHeadSha = null, FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo,
+        GitHubDiffLines? diffLines = null)
     {
         ArgumentNullException.ThrowIfNull(composer);
 
         var bodyBudget = Math.Max(0, MaximumCommentBodyCharacters - composer.AppendRendered(string.Empty, GitHubFindingCommentRenderer.RenderText).Length - 2);
         var inlineComments = new List<GitHubInlineReviewComment>();
-        foreach (var comment in result.Comments)
+        var inlineOrdinals = new List<int>();
+        var inlineFindings = new HashSet<ReviewComment>();
+        for (var ordinal = 0; ordinal < result.Comments.Count; ordinal++)
         {
-            if (!string.IsNullOrWhiteSpace(comment.FilePath) && comment.LineNumber.HasValue &&
-                comment.LineNumber.Value > 0)
+            var comment = result.Comments[ordinal];
+            if (string.IsNullOrWhiteSpace(comment.FilePath) || comment.LineNumber is not > 0)
             {
-                var applicable = currentHeadSha == revision.HeadSha && ReviewSuggestedFixRenderer.CanApply(comment, currentHeadSha);
-                var fix = applicable ? comment.SuggestedFix : null;
-                var body = FitFindingMetadata(GitHubFindingCommentRenderer.Format(comment, applicable, badgeStyle: badgeStyle), bodyBudget);
-                if (body.Length > bodyBudget && comment.SuggestedFix is not null)
-                {
-                    body = FitFindingMetadata(
-                        GitHubFindingCommentRenderer.Format(comment with { SuggestedFix = null }, badgeStyle: badgeStyle),
-                        bodyBudget);
-                    fix = null;
-                }
-
-                body = composer.AppendRendered(ReviewFindingTextFormatter.Truncate(body, bodyBudget), GitHubFindingCommentRenderer.RenderText);
-
-                inlineComments.Add(
-                    new GitHubInlineReviewComment(
-                        NormalizePath(comment.FilePath),
-                        fix?.EndLine ?? comment.LineNumber.Value,
-                        "RIGHT",
-                        body,
-                        fix is not null && fix.StartLine != fix.EndLine ? fix.StartLine : null,
-                        fix is not null && fix.StartLine != fix.EndLine ? "RIGHT" : null));
+                continue;
             }
+
+            var path = NormalizePath(comment.FilePath);
+            var applicable = currentHeadSha == revision.HeadSha && ReviewSuggestedFixRenderer.CanApply(comment, currentHeadSha);
+
+            // An applicable replacement names a line range, and GitHub accepts the range when its first and its last
+            // line are lines of the diff; the two may lie in different hunks. A range reaching outside the diff is
+            // shown as ordinary code on the finding's own line.
+            if (applicable && diffLines is not null && comment.SuggestedFix is { } range
+                && !(diffLines.Accepts(path, range.StartLine) && diffLines.Accepts(path, range.EndLine)))
+            {
+                applicable = false;
+            }
+
+            var fix = applicable ? comment.SuggestedFix : null;
+            var body = FitFindingMetadata(GitHubFindingCommentRenderer.Format(comment, applicable, badgeStyle: badgeStyle), bodyBudget);
+            if (body.Length > bodyBudget && comment.SuggestedFix is not null)
+            {
+                body = FitFindingMetadata(
+                    GitHubFindingCommentRenderer.Format(comment with { SuggestedFix = null }, badgeStyle: badgeStyle),
+                    bodyBudget);
+                fix = null;
+            }
+
+            var line = fix?.EndLine ?? comment.LineNumber.Value;
+            if (diffLines is not null && !diffLines.Accepts(path, line))
+            {
+                // GitHub would refuse the whole review over this comment, so the summary lists the finding in full.
+                continue;
+            }
+
+            body = composer.AppendRendered(ReviewFindingTextFormatter.Truncate(body, bodyBudget), GitHubFindingCommentRenderer.RenderText);
+
+            inlineComments.Add(
+                new GitHubInlineReviewComment(
+                    path,
+                    line,
+                    "RIGHT",
+                    body,
+                    fix is not null && fix.StartLine != fix.EndLine ? fix.StartLine : null,
+                    fix is not null && fix.StartLine != fix.EndLine ? "RIGHT" : null));
+            inlineOrdinals.Add(ordinal);
+            inlineFindings.Add(comment);
         }
 
-        var summary = BuildSummaryBody(result, author, includeSuggestedFixes: true, badgeStyle, bodyBudget);
+        var outsideDiffCount = result.Comments.Count(comment =>
+            !string.IsNullOrWhiteSpace(comment.FilePath) && comment.LineNumber is > 0 && !inlineFindings.Contains(comment));
+        var summary = BuildSummaryBody(result, author, includeSuggestedFixes: true, badgeStyle, bodyBudget, inlineFindings, outsideDiffCount);
         if (summary.Length > bodyBudget)
         {
-            summary = BuildSummaryBody(result, author, includeSuggestedFixes: false, badgeStyle, bodyBudget);
+            summary = BuildSummaryBody(result, author, includeSuggestedFixes: false, badgeStyle, bodyBudget, inlineFindings, outsideDiffCount);
         }
 
         summary = composer.AppendRendered(ReviewFindingTextFormatter.Truncate(summary, bodyBudget), GitHubFindingCommentRenderer.RenderText);
@@ -367,7 +510,11 @@ internal sealed partial class GitHubLifecyclePublicationService(
             revision.HeadSha,
             summary,
             "COMMENT",
-            inlineComments);
+            inlineComments)
+        {
+            InlineFindingOrdinals = inlineOrdinals,
+            OutsideDiffCount = outsideDiffCount,
+        };
     }
 
     private static string FitFindingMetadata(string body, int maximumBodyLength)
@@ -382,24 +529,33 @@ internal sealed partial class GitHubLifecyclePublicationService(
     }
 
     private static string BuildSummaryBody(
-        ReviewResult result, ReviewerIdentity author, bool includeSuggestedFixes, FindingBadgeStyle badgeStyle, int maximumBodyLength)
+        ReviewResult result,
+        ReviewerIdentity author,
+        bool includeSuggestedFixes,
+        FindingBadgeStyle badgeStyle,
+        int maximumBodyLength,
+        IReadOnlySet<ReviewComment> inlineFindings,
+        int outsideDiffCount)
     {
-        var fileless = result.Comments.Where(comment => string.IsNullOrWhiteSpace(comment.FilePath) || comment.LineNumber is not > 0).ToArray();
+        // Every finding without an inline comment appears in full: findings without a file or line, and findings
+        // on lines outside the diff.
+        var fileless = result.Comments.Where(comment => !inlineFindings.Contains(comment)).ToArray();
         var rendered = fileless.Distinct().ToDictionary(
             comment => comment,
             comment => GitHubFindingCommentRenderer.Format(includeSuggestedFixes ? comment : comment with { SuggestedFix = null }, badgeStyle: badgeStyle));
-        var summary = FormatSummary(result, author, comment => rendered[comment]);
+        var layout = new SummaryLayout(inlineFindings, outsideDiffCount);
+        var summary = FormatSummary(result, author, layout, comment => rendered[comment]);
         if (summary.Length <= maximumBodyLength)
         {
             return summary;
         }
 
         // Only formatter-owned prefixes are reduced; badge examples in descriptions remain unchanged.
-        var withoutHeaders = FormatSummary(result, author, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], 0));
+        var withoutHeaders = FormatSummary(result, author, layout, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], 0));
         if (withoutHeaders.Length <= maximumBodyLength && fileless.Length > 0)
         {
             var headerBudget = (maximumBodyLength - withoutHeaders.Length) / fileless.Length;
-            return FormatSummary(result, author, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], headerBudget));
+            return FormatSummary(result, author, layout, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], headerBudget));
         }
 
         if (includeSuggestedFixes)
@@ -409,11 +565,11 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
         if (fileless.Length == 0)
         {
-            return ReviewFindingTextFormatter.Truncate(FormatSummary(result, author, _ => string.Empty), maximumBodyLength);
+            return ReviewFindingTextFormatter.Truncate(FormatSummary(result, author, layout, _ => string.Empty), maximumBodyLength);
         }
 
         var shellBudget = maximumBodyLength / 2;
-        var shell = FormatSummary(result, author, _ => string.Empty, shellBudget);
+        var shell = FormatSummary(result, author, layout, _ => string.Empty, shellBudget);
         if (shell.Length >= maximumBodyLength)
         {
             return ReviewFindingTextFormatter.Truncate(shell, maximumBodyLength);
@@ -421,11 +577,16 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
         var findingBudget = (maximumBodyLength - shell.Length) / fileless.Length;
         return FormatSummary(
-            result, author, comment => ReviewFindingTextFormatter.Truncate(FitFindingMetadata(rendered[comment], findingBudget), findingBudget), shellBudget);
+            result, author, layout, comment => ReviewFindingTextFormatter.Truncate(FitFindingMetadata(rendered[comment], findingBudget), findingBudget),
+            shellBudget);
     }
 
     private static string FormatSummary(
-        ReviewResult result, ReviewerIdentity author, Func<ReviewComment, string> findingRenderer, int? maximumShellLength = null)
+        ReviewResult result,
+        ReviewerIdentity author,
+        SummaryLayout layout,
+        Func<ReviewComment, string> findingRenderer,
+        int? maximumShellLength = null)
     {
         var summaryBuilder = new StringBuilder();
         summaryBuilder.AppendLine($"## {GitHubFindingCommentRenderer.RenderText(author.DisplayName.ReplaceLineEndings(" "))} Review");
@@ -455,13 +616,16 @@ internal sealed partial class GitHubLifecyclePublicationService(
         var findings = ReviewSummaryTextFormatter.Format(
             summaryResult, includeFilelessFindingDetails: true,
             findingRenderer: comment => findingRenderer(sourcesByDisplay.GetValueOrDefault(comment, comment)),
-            renderText: GitHubFindingCommentRenderer.RenderText);
+            renderText: GitHubFindingCommentRenderer.RenderText,
+            hasInlineComment: layout.HasInlineComment,
+            findingsNote: layout.OutsideDiffNote);
         var contextBuilder = new StringBuilder();
         ContextBudgetSummarySections.Append(contextBuilder, result, GitHubFindingCommentRenderer.RenderText);
         if (maximumShellLength is { } shellBudget)
         {
             var emptyFindings = ReviewSummaryTextFormatter.Format(
-                summaryResult, includeFilelessFindingDetails: true, findingRenderer: _ => string.Empty, renderText: GitHubFindingCommentRenderer.RenderText);
+                summaryResult, includeFilelessFindingDetails: true, findingRenderer: _ => string.Empty, renderText: GitHubFindingCommentRenderer.RenderText,
+                hasInlineComment: layout.HasInlineComment, findingsNote: layout.OutsideDiffNote);
             var textBudget = Math.Max(0, shellBudget - emptyFindings.Length - 4);
             if (summaryBuilder.Length + contextBuilder.Length > textBudget)
             {
@@ -474,6 +638,11 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
         summaryBuilder.AppendLine(findings).Append(contextBuilder);
         return summaryBuilder.ToString().Trim();
+    }
+
+    private static string Sanitize(string? text)
+    {
+        return (text ?? string.Empty).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
     }
 
     private static string BuildRepositoryPath(RepositoryRef repository)
@@ -537,6 +706,48 @@ internal sealed partial class GitHubLifecyclePublicationService(
         Message = "GitHub review-thread id lookup failed for pull request {ReviewNumber}; posted comments carry no thread id.")]
     private static partial void LogReviewThreadIdLookupFailed(ILogger logger, int reviewNumber, Exception exception);
 
+    [LoggerMessage(
+        EventId = 4785,
+        Level = LogLevel.Warning,
+        Message =
+            "GitHub's comparison for pull request {ReviewNumber} could not be read (status {StatusCode}); every finding is sent inline and a refusal falls back to the summary.")]
+    private static partial void LogDiffUnavailable(ILogger logger, int reviewNumber, int? statusCode, Exception? exception);
+
+    [LoggerMessage(
+        EventId = 4786,
+        Level = LogLevel.Information,
+        Message = "{FindingCount} findings of pull request {ReviewNumber} refer to lines outside the diff; the review summary lists them.")]
+    private static partial void LogFindingsOutsideDiff(ILogger logger, int reviewNumber, int findingCount);
+
+    [LoggerMessage(
+        EventId = 4787,
+        Level = LogLevel.Warning,
+        Message =
+            "GitHub refused the review of pull request {ReviewNumber} with {CommentCount} inline comments; sending it again with every finding in the summary. Detail: {Detail}")]
+    private static partial void LogInlineCommentsRefused(ILogger logger, int reviewNumber, int commentCount, string detail);
+
+    /// <summary>Which findings the summary lists in full, and how many of them lie outside the diff.</summary>
+    private sealed class SummaryLayout(IReadOnlySet<ReviewComment> inlineFindings, int outsideDiffCount)
+    {
+        public bool HasInlineComment(ReviewComment comment) => inlineFindings.Contains(comment);
+
+        public string? OutsideDiffNote => outsideDiffCount switch
+        {
+            <= 0 => null,
+            1 =>
+                "1 finding refers to a line outside the diff of this pull request. GitHub accepts review comments only on lines of the diff, so this summary lists the finding in full.",
+            _ =>
+                $"{outsideDiffCount.ToString(CultureInfo.InvariantCulture)} findings refer to lines outside the diff of this pull request. GitHub accepts review comments only on lines of the diff, so this summary lists these findings in full.",
+        };
+    }
+
+    private sealed record GitHubComparisonResponse([property: JsonPropertyName("files")] IReadOnlyList<GitHubComparisonFile>? Files);
+
+    private sealed record GitHubComparisonFile(
+        [property: JsonPropertyName("filename")]
+        string? FileName,
+        [property: JsonPropertyName("patch")] string? Patch);
+
     private sealed record GitHubReviewResponse([property: JsonPropertyName("id")] long? Id);
 
     private sealed record GitHubThreadLookupResponse(
@@ -585,7 +796,11 @@ internal sealed partial class GitHubLifecyclePublicationService(
         [property: JsonPropertyName("id")] long? Id,
         [property: JsonPropertyName("path")] string? Path,
         [property: JsonPropertyName("line")] int? Line,
-        [property: JsonPropertyName("body")] string? Body = null);
+        [property: JsonPropertyName("body")] string? Body = null,
+        [property: JsonPropertyName("pull_request_review_id")]
+        long? ReviewId = null,
+        [property: JsonPropertyName("original_line")]
+        int? OriginalLine = null);
 
     internal sealed record GitHubReviewRequest(
         [property: JsonPropertyName("commit_id")]
@@ -593,7 +808,16 @@ internal sealed partial class GitHubLifecyclePublicationService(
         [property: JsonPropertyName("body")] string Body,
         [property: JsonPropertyName("event")] string Event,
         [property: JsonPropertyName("comments")]
-        IReadOnlyList<GitHubInlineReviewComment> Comments);
+        IReadOnlyList<GitHubInlineReviewComment> Comments)
+    {
+        /// <summary>The position in the review result of the finding behind each entry of <see cref="Comments" />.</summary>
+        [JsonIgnore]
+        public IReadOnlyList<int> InlineFindingOrdinals { get; init; } = [];
+
+        /// <summary>Findings with a file and a line that the summary lists because GitHub would not accept their line.</summary>
+        [JsonIgnore]
+        public int OutsideDiffCount { get; init; }
+    }
 
     internal sealed record GitHubInlineReviewComment(
         [property: JsonPropertyName("path")] string Path,

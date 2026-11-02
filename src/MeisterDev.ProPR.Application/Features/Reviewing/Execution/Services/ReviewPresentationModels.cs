@@ -12,18 +12,17 @@ internal static class ReviewPresentationModels
 
     internal sealed record Assessment(IReadOnlyList<AssessmentRow> Rows, bool Collapsed = false);
 
-    internal sealed record SummaryAction(string Classification, string Location, string Message, string? Risk);
-
     internal sealed record SummaryDetails(string? Location, string Body);
 
     internal sealed record Summary(
-        bool HasFindings,
         IReadOnlyList<string> Entries,
-        int OmittedActions,
+        string? Note,
         int FindingCount,
         string RiskDistribution,
         string ConfidenceDistribution)
     {
+        public bool HasFindings => this.Entries.Count > 0;
+
         public string LineBreak => Environment.NewLine;
     }
 }

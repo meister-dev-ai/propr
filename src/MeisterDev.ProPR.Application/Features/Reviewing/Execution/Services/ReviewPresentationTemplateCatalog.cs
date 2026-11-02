@@ -12,7 +12,6 @@ internal enum ReviewPresentationTemplate
     MarkdownAssessment,
     HtmlAssessment,
     Summary,
-    SummaryAction,
     SummaryDetails,
 }
 
@@ -87,7 +86,6 @@ internal sealed class ReviewPresentationTemplateCatalog
             ReviewPresentationTemplate.MarkdownAssessment => "assessment-markdown",
             ReviewPresentationTemplate.HtmlAssessment => "assessment-html",
             ReviewPresentationTemplate.Summary => "summary",
-            ReviewPresentationTemplate.SummaryAction => "summary-action",
             ReviewPresentationTemplate.SummaryDetails => "summary-details",
             _ => throw new ArgumentOutOfRangeException(nameof(template)),
         };

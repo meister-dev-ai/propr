@@ -117,16 +117,14 @@ Assessment details expand to show a table with Assessment, Level and Reason colu
 Impact, Likelihood and Confidence rows. Risk states its derivation from impact and likelihood; the other rows
 retain their recorded reasons. Findings without an assessment show severity, available finding types and description.
 
-Review summaries preserve the conclusion, list findings with their recorded descriptions and locations,
-and show a compact table of findings to report, risk levels and confidence levels. These counts describe
-findings offered to the provider after publication policy evaluation. Provider deduplication or individual
-posting failures can reduce the number posted. Missing evidence has an Unassessed bucket; an empty set
-shows zero findings and None for both distributions. Compact actions show up to 20 findings with
-320-character description excerpts and 160-character path excerpts; Unicode scalars remain intact.
-Compact action text is limited to 8,000 characters. An omission notice reports any additional actions;
-totals still count every offered finding. Complete finding comments retain their original descriptions.
-PR-level findings included in a summary use the same complete finding layout, including expandable
-assessment details.
+Review summaries preserve the conclusion and show a compact table of findings to report, risk levels and
+confidence levels. A finding with a comment of its own does not appear again in the summary. On GitHub,
+GitLab and Forgejo, the summary lists the findings without an inline comment in full, in the layout of a
+finding comment with expandable assessment details: findings without a line, and on GitHub findings on
+lines outside the diff. Azure DevOps posts every finding as a thread of its own, so its summary lists no
+finding. The counts describe findings offered to the provider after publication policy evaluation.
+Provider deduplication or individual posting failures can reduce the number posted. Missing evidence has
+an Unassessed bucket; an empty set shows zero findings and None for both distributions.
 
 Review traces and retained finding details show the same evidence. Code Quality provides risk
 distributions and independent filters for each dimension. Reviewer Performance supports those filters,
@@ -134,7 +132,7 @@ series and matrix axes; [its evidence limits](reviewer-performance.md#evidence-l
 
 ProPR starts review summaries with a **Fix first** entry for the highest assessed confirmed defect before the
 conclusion. The entry requires a confirmed defect with scored risk and uses the first recorded defect when
-several share that risk. ProPR orders finding actions by risk with stable ties. The stored comment order and
+several share that risk. ProPR orders the listed findings by risk with stable ties. The stored comment order and
 publication ordinals do not change. Findings without a scored assessment remain Unassessed.
 
 Exact local fixes are optional. A fix specifies complete original and replacement lines in one contiguous source
@@ -441,6 +439,14 @@ pull-request-level comment, and on a provider that only anchors comments on inse
 rest the same way. Neither carries a line number afterwards, and both keep their label, so the setting
 holds them back like any other finding. A consolidated comment keeps a label only when every finding in it
 agrees; a mixed group carries none and is posted.
+
+On GitHub, a review comment has to sit on a line of the pull request's diff: an added line, or one of the
+three unchanged lines GitHub shows around each change. Before publishing, ProPR compares each finding with
+the diff of the reviewed commit. A finding on any other line, including a line of a file the pull request
+does not change, gets no inline comment, and the review summary lists it in full with its file and line. A
+suggested change whose first or last line lies outside the diff appears as ordinary code in the comment. If
+GitHub still refuses a line, for example after a push during publication, ProPR sends the review once more
+with every finding in the summary.
 
 ### Review passes
 

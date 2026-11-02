@@ -386,7 +386,7 @@ public sealed class ForgejoPublicationContextContractTests
         TestPostedCommentComposer.AssertMarkedOnce(payload.RootElement.GetProperty("body").GetString(), marker);
         var summary = payload.RootElement.GetProperty("body").GetString()!;
         Assert.Contains("Looks solid overall.", summary);
-        Assert.Contains("- **Warning** · `src/file.ts:18`: Guard this null case.", summary);
+        Assert.DoesNotContain("Guard this null case.", summary);
         Assert.Contains(withRisk ? "| 3 | Low: 3 | Unassessed: 3 |" : "| 3 | Unassessed: 3 | Unassessed: 3 |", summary);
         Assert.Contains("**`src/settings.ts`**", summary);
         Assert.Contains(withRisk ? "![Risk: Low]" : "\n\nCheck the file-level setting.", summary);

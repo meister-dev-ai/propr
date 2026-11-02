@@ -43,7 +43,7 @@ public sealed class ReviewPresentationRegressionTests
         var low = Finding("low.cs", FindingImpact.Low, FindingLikelihood.Unlikely);
         var high = Finding("high.cs", FindingImpact.Critical, FindingLikelihood.Likely);
         var comments = new[] { low, high };
-        var body = ReviewSummaryTextFormatter.Format(new ReviewResult("Review.", comments));
+        var body = ReviewSummaryTextFormatter.Format(new ReviewResult("Review.", comments), includeFilelessFindingDetails: true, hasInlineComment: _ => false);
         Assert.Contains("high.cs", body);
         Assert.Contains("low.cs", body);
         Assert.True(body.IndexOf("high.cs", StringComparison.Ordinal) < body.IndexOf("low.cs", StringComparison.Ordinal));

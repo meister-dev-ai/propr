@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
+using Microsoft.Extensions.Logging;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 
@@ -17,8 +18,9 @@ internal sealed class GitHubCodeReviewPublicationService : ICodeReviewPublicatio
     public GitHubCodeReviewPublicationService(
         GitHubConnectionVerifier connectionVerifier,
         IHttpClientFactory httpClientFactory,
-        IPostedCommentComposer composer)
-        : this(new GitHubLifecyclePublicationService(connectionVerifier, httpClientFactory, composer))
+        IPostedCommentComposer composer,
+        ILogger<GitHubLifecyclePublicationService>? logger = null)
+        : this(new GitHubLifecyclePublicationService(connectionVerifier, httpClientFactory, composer, logger))
     {
     }
 

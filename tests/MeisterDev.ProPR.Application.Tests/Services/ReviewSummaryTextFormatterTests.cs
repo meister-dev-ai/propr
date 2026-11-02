@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Text;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -68,33 +67,21 @@ public sealed class ReviewSummaryTextFormatterTests
     }
 
     [Fact]
-    public void Format_ActionsRetainStableRiskOrderingIncludingSuggestionsAndUnassessedFindings()
+    public void Format_ListedFindingsRetainStableRiskOrderingIncludingSuggestionsAndUnassessedFindings()
     {
-        var lower = Finding("src/Lower.cs", 2, FindingImpact.Low, FindingLikelihood.Unlikely).WithMessage("Lower risk.");
-        var first = Finding("src/First.cs", 4, FindingImpact.Critical, FindingLikelihood.Likely).WithMessage("First critical.");
-        var tied = first.WithAnchorAndSeverity("src/Tied.cs", 6, CommentSeverity.Suggestion).WithMessage("Tied critical.");
-        var unassessed = new ReviewComment("src/Unknown.cs", 8, CommentSeverity.Error, "Unassessed defect.");
+        var lower = Finding("src/Lower.cs", null, FindingImpact.Low, FindingLikelihood.Unlikely).WithMessage("Lower risk.");
+        var first = Finding("src/First.cs", null, FindingImpact.Critical, FindingLikelihood.Likely).WithMessage("First critical.");
+        var tied = first.WithAnchorAndSeverity("src/Tied.cs", null, CommentSeverity.Suggestion).WithMessage("Tied critical.");
+        var unassessed = new ReviewComment("src/Unknown.cs", null, CommentSeverity.Error, "Unassessed defect.");
         var comments = new[] { unassessed, lower, first, tied };
 
-        var text = ReviewSummaryTextFormatter.Format(new ReviewResult("Conclusion.", comments));
+        var text = ReviewSummaryTextFormatter.Format(new ReviewResult("Conclusion.", comments), includeFilelessFindingDetails: true);
         var positions = new[] { first, tied, lower, unassessed }.Select(comment => text.IndexOf(comment.Message, StringComparison.Ordinal)).ToArray();
 
         Assert.All(positions, position => Assert.True(position >= 0));
         Assert.Equal(positions.Order(), positions);
         Assert.Contains("| 4 | Critical: 2, Low: 1, Unassessed: 1 |", text);
         Assert.Equal(new[] { unassessed, lower, first, tied }, comments);
-    }
-
-    [Fact]
-    public void Format_CompactActionsNeutralizeBlockCodeSyntaxFlattenedIntoInlineText()
-    {
-        var finding = new ReviewComment("src/Work.cs", 7, CommentSeverity.Warning, "```csharp\n</details><script>bad</script>\n```");
-
-        var body = ReviewSummaryTextFormatter.Format(new ReviewResult("Conclusion.", [finding]));
-
-        Assert.Contains("- **Warning** · `src/Work.cs:7`: ```csharp <\u200B/details><\u200Bscript>bad<\u200B/script> ```", body, StringComparison.Ordinal);
-        Assert.DoesNotContain("</details>", body, StringComparison.Ordinal);
-        Assert.DoesNotContain("<script>", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -115,7 +102,7 @@ public sealed class ReviewSummaryTextFormatterTests
             renderText: System.Net.WebUtility.HtmlEncode);
 
         Assert.Equal(new[] { fileless, fileLevel }, rendered);
-        Assert.Contains("- **Warning** · `src/Inline.cs:3`: Check the recorded behavior.", body);
+        Assert.DoesNotContain("src/Inline.cs", body);
         Assert.Contains("Provider output: Preserve the complete PR-level finding.", body);
         Assert.Contains("**`src/&lt;details&gt;.cs`**", body);
         Assert.Equal(1, body.Split(fileless.Message, StringSplitOptions.None).Length - 1);
@@ -124,7 +111,7 @@ public sealed class ReviewSummaryTextFormatterTests
     }
 
     [Fact]
-    public void Format_ListsOfferedFindingsAndCountsIndependentAssessmentDimensions()
+    public void Format_WithoutFindingDetails_ListsNoFindingAndCountsIndependentAssessmentDimensions()
     {
         var comments = new[]
         {
@@ -140,17 +127,14 @@ public sealed class ReviewSummaryTextFormatterTests
 
         var text = ReviewSummaryTextFormatter.Format(result);
 
-        Assert.StartsWith("**Findings to review**", text);
-        Assert.Contains("- **Warning** · `src/A.cs:7`: Check the recorded behavior.", text);
-        Assert.Contains("- **Info** · PR-level: Evidence remains incomplete.", text);
-        Assert.Contains("| Findings to report | Risk levels | Confidence levels |", text);
+        // A provider that posts every finding as a thread of its own lists none of them again in the summary.
+        Assert.StartsWith("| Findings to report | Risk levels | Confidence levels |", text);
+        Assert.DoesNotContain("Findings to review", text);
+        Assert.DoesNotContain("Check the recorded behavior.", text);
+        Assert.DoesNotContain("Evidence remains incomplete.", text);
         Assert.Contains("| 4 | Critical: 1, Medium: 1, Low: 1, Unassessed: 1 | Certain: 1, High: 1, Medium: 1, Unassessed: 1 |", text);
-        Assert.True(text.IndexOf("Evidence remains incomplete.", StringComparison.Ordinal) < text.IndexOf("| Findings to report", StringComparison.Ordinal));
         Assert.Equal("Keep the original conclusion.", result.Summary);
         Assert.Same(comments, result.Comments);
-        Assert.DoesNotContain("Published findings", text);
-        Assert.DoesNotContain("Files reviewed", text);
-        Assert.DoesNotContain("Review time", text);
     }
 
     [Fact]
@@ -185,7 +169,7 @@ public sealed class ReviewSummaryTextFormatterTests
 
         var text = ReviewSummaryTextFormatter.Format(result, includeFilelessFindingDetails: true);
 
-        Assert.Contains("- **Warning** · `src/A.cs:3`: Check the recorded behavior.", text);
+        Assert.DoesNotContain("src/A.cs:3", text);
         Assert.Contains("![Severity: Warning]", text);
         Assert.Contains("![Risk: Medium]", text);
         Assert.Contains("\n\nRetain the shared invariant.\n\n<!-- propr-risk-assessment:start -->\n\n| Assessment | Level | Reason |", text);
@@ -209,79 +193,46 @@ public sealed class ReviewSummaryTextFormatterTests
     }
 
     [Fact]
-    public void Format_ActionTextKeepsMarkdownReadableAndCannotIntroduceExtraActionsOrHtml()
-    {
-        var finding = new ReviewComment("src/`odd`.cs", 12, CommentSeverity.Warning, "Check `a | b`.\r\n- This is the same finding. <script>bad</script>");
-
-        var text = ReviewSummaryTextFormatter.Format(new ReviewResult("Review.", [finding]));
-
-        Assert.Contains("``src/`odd`.cs:12``", text);
-        Assert.Contains("Check `a | b`. - This is the same finding. <\u200Bscript>bad<\u200B/script>", text);
-        Assert.Single(text.Split('\n').Where(line => line.StartsWith("- ", StringComparison.Ordinal)));
-        Assert.Equal("Check `a | b`.\r\n- This is the same finding. <script>bad</script>", finding.Message);
-    }
-
-    [Fact]
-    public void Format_CompactActionsUseExcerptsAndKeepAllOfferedFindingTotals()
+    public void Format_LeavesOutEveryFindingWithAnInlineCommentAndKeepsAllOfferedFindingTotals()
     {
         var comments = Enumerable.Range(1, 25)
             .Select(index => new ReviewComment($"src/File{index}.cs", index, CommentSeverity.Warning, "Review the recorded request behavior."))
             .ToArray();
 
-        var text = ReviewSummaryTextFormatter.Format(new ReviewResult("Review.", comments));
-
-        Assert.Equal(20, text.Split('\n').Count(line => line.StartsWith("- **Warning**", StringComparison.Ordinal)));
-        Assert.Contains("5 additional finding actions omitted from this summary.", text);
-        Assert.Contains("full review record", text);
-        Assert.Contains("| 25 | Unassessed: 25 | Unassessed: 25 |", text);
-        Assert.Equal(25, comments.Length);
-    }
-
-    [Fact]
-    public void Format_CompactActionBudgetBoundsLongLocationsAndMessages()
-    {
-        var comments = Enumerable.Range(1, 25)
-            .Select(index => new ReviewComment("src/" + new string('x', 2000) + index + ".cs", index, CommentSeverity.Warning, new string('a', 4000)))
-            .ToArray();
-
-        var text = ReviewSummaryTextFormatter.Format(new ReviewResult("Review.", comments));
-        var actions = text.Split('\n').Where(line => line.StartsWith("- **Warning**", StringComparison.Ordinal)).ToArray();
-
-        Assert.True(actions.Sum(action => action.Length + 2) <= 8000);
-        Assert.InRange(actions.Length, 1, 20);
-        Assert.Contains($"{25 - actions.Length} additional finding actions omitted from this summary.", text);
-        Assert.Contains("| 25 | Unassessed: 25 | Unassessed: 25 |", text);
-        Assert.All(comments, comment => Assert.Equal(4000, comment.Message.Length));
-    }
-
-    [Fact]
-    public void Format_MessageExcerptsDoNotSplitUnicodeScalars()
-    {
-        var message = new string('x', 319) + "😀" + new string('z', 1000);
-        var comment = new ReviewComment("src/Unicode.cs", 7, CommentSeverity.Warning, message);
-
-        var text = ReviewSummaryTextFormatter.Format(new ReviewResult("Review.", [comment]));
-
-        Assert.Contains(new string('x', 319) + "😀…", text);
-        Assert.DoesNotContain(new string('z', 1000), text);
-        Assert.Equal(text, Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(text)));
-        Assert.Equal(message, comment.Message);
-    }
-
-    [Fact]
-    public void Format_CompactActionLimitsDoNotRemoveFullFilelessFindingDetails()
-    {
-        var comments = Enumerable.Range(1, 25)
-            .Select(index => new ReviewComment($"src/File{index}.cs", index, CommentSeverity.Warning, "Check the request."))
-            .Append(new ReviewComment(null, null, CommentSeverity.Warning, "PR-level details: " + new string('x', 4000)))
-            .ToArray();
-
         var text = ReviewSummaryTextFormatter.Format(new ReviewResult("Review.", comments), includeFilelessFindingDetails: true);
 
-        Assert.Equal(20, text.Split('\n').Count(line => line.StartsWith("- **Warning**", StringComparison.Ordinal)));
-        Assert.Contains("5 additional finding actions omitted from this summary.", text);
-        Assert.Contains(comments[^1].Message, text);
-        Assert.Contains("| 26 | Unassessed: 26 | Unassessed: 26 |", text);
+        Assert.DoesNotContain("Findings to review", text);
+        Assert.DoesNotContain("Review the recorded request behavior.", text);
+        Assert.Contains("| 25 | Unassessed: 25 | Unassessed: 25 |", text);
+    }
+
+    [Fact]
+    public void Format_ListsAnAnchoredFindingInFullWhenTheProviderHasNoInlineCommentForIt()
+    {
+        var anchored = Finding("src/Outside.cs", 40).WithMessage("The unchanged loop reads past the end.");
+        var inline = Finding("src/Inside.cs", 3).WithMessage("The changed line drops the suffix.");
+
+        var text = ReviewSummaryTextFormatter.Format(
+            new ReviewResult("Review.", [anchored, inline]), includeFilelessFindingDetails: true,
+            hasInlineComment: comment => comment.FilePath == "src/Inside.cs",
+            findingsNote: "1 finding refers to a line outside the diff.");
+
+        Assert.Contains("**`src/Outside.cs:40`**", text);
+        Assert.Contains("The unchanged loop reads past the end.", text);
+        Assert.DoesNotContain("The changed line drops the suffix.", text);
+        var note = text.IndexOf("1 finding refers to a line outside the diff.", StringComparison.Ordinal);
+        Assert.True(text.IndexOf("The unchanged loop reads past the end.", StringComparison.Ordinal) < note);
+        Assert.True(note < text.IndexOf("| Findings to report", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Format_LeavesOutTheNoteWhenNoFindingIsListed()
+    {
+        var text = ReviewSummaryTextFormatter.Format(
+            new ReviewResult("Review.", [Finding("src/Inside.cs", 3)]), includeFilelessFindingDetails: true,
+            findingsNote: "1 finding refers to a line outside the diff.");
+
+        Assert.DoesNotContain("outside the diff", text);
     }
 
     private static ReviewComment Finding(

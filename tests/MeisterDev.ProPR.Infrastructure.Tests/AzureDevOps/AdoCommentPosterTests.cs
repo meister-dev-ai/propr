@@ -408,7 +408,7 @@ public class AdoCommentPosterTests
     }
 
     [Fact]
-    public async Task PostResolvedThreadsAsync_PreservesNarrativeAndPublishesActionsAndOfferedFindingTotals()
+    public async Task PostResolvedThreadsAsync_PreservesNarrativeAndOfferedFindingTotalsWithoutRepeatingFindings()
     {
         var messages = new List<string>();
         AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
@@ -431,8 +431,12 @@ public class AdoCommentPosterTests
 
         var summary = Assert.Single(messages, message => message.StartsWith(SummaryPrefix, StringComparison.Ordinal));
         Assert.StartsWith(SummaryPrefix + "\n\n" + result.Summary, summary);
-        Assert.Contains("- **Warning** · `src/A.cs:7`: Guard the request.", summary);
-        Assert.Contains("- **Info** · PR-level: Check the shared setting.", summary);
+        // Every finding has a thread of its own, so the summary does not repeat it.
+        Assert.DoesNotContain("Guard the request.", summary);
+        Assert.DoesNotContain("Check the shared setting.", summary);
+        var threads = messages.Where(message => !message.StartsWith(SummaryPrefix, StringComparison.Ordinal)).ToArray();
+        Assert.Single(threads, message => message.Contains("Guard the request."));
+        Assert.Single(threads, message => message.Contains("Check the shared setting."));
         Assert.Contains("| 2 | Medium: 1, Unassessed: 1 | High: 1, Unassessed: 1 |", summary);
         Assert.Contains("Skipped — exceeds model context window", summary);
         Assert.EndsWith(TestPostedCommentComposer.Default.Text, summary);
@@ -551,7 +555,7 @@ public class AdoCommentPosterTests
         Assert.EndsWith(TestPostedCommentComposer.Default.Text, inline);
         var summary = Assert.Single(messages, message => message.StartsWith(SummaryPrefix, StringComparison.Ordinal));
         Assert.StartsWith(SummaryPrefix + "\n\n**Fix first · Risk: Critical** · `src/A.cs:7`: " + finding.Message + "\n\n" + result.Summary, summary);
-        Assert.Contains("- **Error** · `src/A.cs:7`: " + finding.Message, summary);
+        Assert.Equal(1, summary.Split(finding.Message, StringSplitOptions.None).Length - 1);
         Assert.Contains("| 1 | Critical: 1 | High: 1 |", summary);
         Assert.EndsWith(TestPostedCommentComposer.Default.Text, summary);
         Assert.Equal("/src/A.cs", contexts[1]!.FilePath);
