@@ -78,11 +78,13 @@ public static class ProviderContractMapping
     {
         ArgumentNullException.ThrowIfNull(options);
 
+        // The probe options hold the credential as the envelope it is stored in, and a family receives it as it
+        // receives the credential of a saved connection.
         return new ProviderEndpoint(
             options.ProviderKind,
             options.BaseUrl,
             options.AuthMode,
-            options.Secret,
+            ProviderSecretEnvelope.Decode(options.Secret, options.AuthMode).DriverSecret(),
             options.DefaultHeaders,
             options.DefaultQueryParams)
         {

@@ -103,6 +103,21 @@ public sealed record ProviderSecretEnvelope(
         this.Fields.Count == 1 ? this.Fields.Values.First() : null;
 
     /// <summary>
+    ///     The credential as a driver receives it in <see cref="ProviderEndpoint.Secret" />: the single value for a
+    ///     mode whose credential is one string, the encoded envelope for a mode whose credential is several fields,
+    ///     which its driver decodes, and <see langword="null" /> when the envelope carries no fields.
+    /// </summary>
+    public string? DriverSecret()
+    {
+        return this.Fields.Count switch
+        {
+            0 => null,
+            1 => this.SingleValue,
+            _ => this.Encode(),
+        };
+    }
+
+    /// <summary>
     ///     Whether <paramref name="readingKey" /> may read this envelope: the family that wrote it, or any family
     ///     when the envelope records no key.
     /// </summary>

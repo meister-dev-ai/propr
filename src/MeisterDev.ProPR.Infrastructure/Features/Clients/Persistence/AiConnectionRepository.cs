@@ -1212,9 +1212,8 @@ public sealed partial class AiConnectionRepository(
             : ProviderSecretEnvelope.Decode(secretProtectionCodec.Unprotect(protectedSecret, SecretPurpose), authMode);
     }
 
-    // Returns what a driver needs: the single value for the modes whose credential is one string, and the encoded
-    // envelope for the modes whose credential is not, which their driver decodes. Rows written before the
-    // envelope existed hold a bare string and read back unchanged.
+    // Returns the credential as a driver receives it. Rows written before the envelope existed hold a bare string
+    // and read back unchanged.
     private string? UnprotectSecret(string? secret, string authMode)
     {
         if (string.IsNullOrWhiteSpace(secret))
@@ -1222,13 +1221,7 @@ public sealed partial class AiConnectionRepository(
             return secret;
         }
 
-        var envelope = this.DecodeStored(secret, authMode)!;
-        return envelope.SingleValue ?? ResolveFallbackSecret(envelope);
-    }
-
-    private static string? ResolveFallbackSecret(ProviderSecretEnvelope envelope)
-    {
-        return envelope.Fields.Count == 0 ? null : envelope.Encode();
+        return this.DecodeStored(secret, authMode)!.DriverSecret();
     }
 
     private async Task<TResult> WithReadDbAsync<TResult>(
@@ -1410,7 +1403,7 @@ public sealed partial class AiConnectionRepository(
             record.UpdatedAt,
             NormalizeMap(record.DefaultHeaders),
             NormalizeMap(record.DefaultQueryParams),
-            storedSecret is null ? null : storedSecret.SingleValue ?? ResolveFallbackSecret(storedSecret),
+            storedSecret?.DriverSecret(),
             record.TenantId)
         {
             ConfigurationStamp = SnapshotStamp(record),

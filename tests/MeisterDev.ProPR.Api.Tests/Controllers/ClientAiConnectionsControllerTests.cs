@@ -1257,6 +1257,37 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.Empty(factory.ProviderWire.Requests);
     }
 
+    // An unsaved profile is called with the key the operator entered, as a saved one is. The key arrives both as
+    // the single key property and as a credential field, which is how the hosted platform sends it, and the
+    // provider is given the key and not the document the key is stored in.
+    [Theory]
+    [InlineData("discover-models")]
+    [InlineData("probe")]
+    public async Task UnsavedOpenAiCompatibleProfile_SendsTheEnteredKeyAsTheBearerToken(string route)
+    {
+        var client = this.CreateAuthorizedClient();
+        factory.ProviderWire.Clear();
+
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{route}",
+            new
+            {
+                providerKind = "meisterdev/openAiCompatible",
+                baseUrl = "https://llm.example.test/v1",
+                auth = new
+                {
+                    mode = "meisterdev/openAiCompatible:ApiKey",
+                    apiKey = "sk-litellm-key",
+                    fields = new Dictionary<string, string> { ["apiKey"] = "sk-litellm-key" },
+                },
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var sent = factory.ProviderWire.Single();
+        Assert.Equal("/v1/models", sent.Uri!.AbsolutePath);
+        Assert.Equal("Bearer sk-litellm-key", sent.Header("Authorization"));
+    }
+
     // The operator route writes into the same protected column a provider family's own credential goes into, so
     // it is held to the same bound. Without it the only bound left is the request-body limit of the host.
     [Fact]

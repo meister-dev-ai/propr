@@ -37,6 +37,22 @@ public sealed class ProviderSecretEnvelopeTests
     }
 
     [Fact]
+    public void ADriverReceivesTheKeyOfAOneStringCredentialTheEnvelopeOfSeveralFieldsAndNothingWithoutFields()
+    {
+        var multiField = new ProviderSecretEnvelope(
+            SigV4Shape,
+            new Dictionary<string, string> { ["accessKeyId"] = "AKIDEXAMPLE", ["secretAccessKey"] = "secret-example" });
+
+        Assert.Equal("sk-secret-value", ProviderSecretEnvelope.ForApiKey(ApiKeyShape, "sk-secret-value").DriverSecret());
+        Assert.Equal(multiField.Encode(), multiField.DriverSecret());
+        Assert.Equal(
+            "secret-example",
+            ProviderSecretEnvelope.Decode(multiField.DriverSecret(), SigV4Shape).Field("secretAccessKey"));
+        Assert.Null(ProviderSecretEnvelope.ForApiKey(ApiKeyShape, null).DriverSecret());
+        Assert.Null(ProviderSecretEnvelope.Decode(null, ApiKeyShape).DriverSecret());
+    }
+
+    [Fact]
     public void AMultiFieldCredentialKeepsEveryField()
     {
         var envelope = new ProviderSecretEnvelope(
