@@ -11,6 +11,19 @@ public interface IDiscussionSynchronizationStore
     Task RequestFromDeliveryAsync(PullRequestThreadSnapshotTarget target, string? threadId, Guid deliveryId, CancellationToken ct = default);
 
     Task DeferAsync(Guid id, long requestedGeneration, TimeSpan delay, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Counts a failed attempt and defers the state by <see cref="DiscussionSynchronizationState.RetryDelay" /> of the
+    ///     failures in a row, reopened and marked for a full refresh. When the state holds more failures than
+    ///     <paramref name="failuresBeforeAttempt" />, the lease of the attempt already counted and deferred it, and the
+    ///     state is left unchanged. A state with another requested generation or an active lease is left unchanged too.
+    /// </summary>
+    /// <param name="id">The state.</param>
+    /// <param name="requestedGeneration">The generation the deferral applies to.</param>
+    /// <param name="failuresBeforeAttempt">The failures in a row that the state held when the attempt started.</param>
+    /// <param name="ct">Cancellation.</param>
+    Task DeferAfterFailureAsync(Guid id, long requestedGeneration, int failuresBeforeAttempt, CancellationToken ct = default);
+
     Task<DiscussionSynchronizationState?> ReadAsync(PullRequestThreadSnapshotTarget target, CancellationToken ct = default);
     Task<bool> IsCurrentObservationAsync(PullRequestThreadSnapshotTarget target, DateTimeOffset observedAt, CancellationToken ct = default);
     Task RequestAsync(PullRequestThreadSnapshotTarget target, string? threadId = null, CancellationToken ct = default);

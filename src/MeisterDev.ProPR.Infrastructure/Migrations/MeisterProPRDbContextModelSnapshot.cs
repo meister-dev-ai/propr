@@ -1576,6 +1576,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("connection_id");
 
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer")
+                        .HasColumnName("consecutive_failures");
+
                     b.Property<bool>("FullRefreshRequested")
                         .HasColumnType("boolean")
                         .HasColumnName("full_refresh_requested");

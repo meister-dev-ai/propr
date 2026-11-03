@@ -36,6 +36,29 @@ public sealed class DiscussionSynchronizationState
     public string ThreadProgressJson { get; set; } = "{}";
     public string ReviewerSummariesJson { get; set; } = "[]";
 
+    /// <summary>The attempts that failed since the last completed observation.</summary>
+    public int ConsecutiveFailures { get; set; }
+
+    /// <summary>The delay before the next attempt after the first failed one.</summary>
+    public static readonly TimeSpan FirstRetryDelay = TimeSpan.FromSeconds(15);
+
+    /// <summary>The longest delay between two attempts while the observation keeps failing.</summary>
+    public static readonly TimeSpan MaximumRetryDelay = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    ///     The delay before the next attempt after this many failed attempts in a row: <see cref="FirstRetryDelay" />
+    ///     after the first, doubled after each further one, and at most <see cref="MaximumRetryDelay" />. A discussion
+    ///     that cannot be read, such as one whose connection no longer matches the pull request, is then read four times
+    ///     an hour instead of every few seconds, while a single failure is retried soon.
+    /// </summary>
+    /// <param name="consecutiveFailures">The failed attempts in a row, including the one that just failed.</param>
+    public static TimeSpan RetryDelay(int consecutiveFailures)
+    {
+        var doublings = Math.Clamp(consecutiveFailures - 1, 0, 16);
+        var delay = FirstRetryDelay * Math.Pow(2, doublings);
+        return delay < MaximumRetryDelay ? delay : MaximumRetryDelay;
+    }
+
     public Dictionary<string, DiscussionThreadProgress> ReadProgress() =>
         JsonSerializer.Deserialize<Dictionary<string, DiscussionThreadProgress>>(this.ThreadProgressJson) ?? [];
 

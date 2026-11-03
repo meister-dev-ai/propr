@@ -8,8 +8,11 @@ uses its own `PR_CRAWL_INTERVAL_SECONDS` setting.
 The worker checks PostgreSQL once per second for due work when processing capacity is available.
 Each check reads database time and a bounded list of due pull requests; it does not fetch provider discussions.
 The default bounds are eight operations globally, four per provider host, and one per client and host.
-An operation has a 90-second deadline. Failed operations retain pending work and retry after 15 seconds.
-Unavailable connections retry at the reconciliation interval.
+An operation has a 90-second deadline. Failed operations retain pending work. The first retry follows after
+15 seconds, and each further failure in a row doubles the wait up to 15 minutes: 15 and 30 seconds, then 1, 2, 4
+and 8 minutes, then every 15 minutes. A completed observation resets the wait. An accepted webhook notification
+requests a refresh without waiting; a new pull-request revision found by discovery waits while operations for that
+pull request are failing. Unavailable connections retry at the reconciliation interval.
 
 Active review admission reads current discussion and pull-request evidence without waiting for
 resolution-memory generation. The discussion worker processes pending memory under its existing

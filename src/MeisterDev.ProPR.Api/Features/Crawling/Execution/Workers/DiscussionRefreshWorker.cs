@@ -137,13 +137,34 @@ public sealed class DiscussionRefreshWorker(
                                                                                ? uri.Authority.ToLowerInvariant()
                                                                                : state.ProviderScopePath.ToLowerInvariant());
 
+    private static PullRequestThreadSnapshotTarget Target(DiscussionSynchronizationState state) => new(
+        state.ClientId, state.ConnectionId, state.Provider,
+        state.ProviderScopePath, state.ProviderProjectKey, state.RepositoryId, state.PullRequestId);
+
     private static async Task DeferForRetryAsync(DiscussionSynchronizationState state, IDiscussionSynchronizationStore store, CancellationToken ct)
     {
-        var target = new PullRequestThreadSnapshotTarget(
-            state.ClientId, state.ConnectionId, state.Provider,
-            state.ProviderScopePath, state.ProviderProjectKey, state.RepositoryId, state.PullRequestId);
-        var current = await store.ReadAsync(target, ct);
+        var current = await store.ReadAsync(Target(state), ct);
         await store.DeferAsync(state.Id, current?.RequestedGeneration ?? state.RequestedGeneration, TimeSpan.FromSeconds(15), ct);
+    }
+
+    /// <summary>
+    ///     Counts a refresh that could not read the discussion. An attempt that failed under a lease was already counted
+    ///     and deferred by the lease; one that failed before it, such as one whose connection no longer matches the pull
+    ///     request, left the state due, and without this it would be picked up again on the next poll a second later.
+    ///     The generation is the one this attempt worked on, so a request that arrived during the attempt is still
+    ///     processed on the next poll.
+    /// </summary>
+    private static Task DeferUnavailableDiscussionAsync(DiscussionSynchronizationState state, IDiscussionSynchronizationStore store, CancellationToken ct) =>
+        store.DeferAfterFailureAsync(state.Id, state.RequestedGeneration, state.ConsecutiveFailures, ct);
+
+    /// <summary>
+    ///     Counts a refresh that threw and reopens its state for the current generation, so that work which the failed
+    ///     refresh left unfinished after a completed observation, such as lifecycle completion, is retried.
+    /// </summary>
+    private static async Task DeferAfterFailureAsync(DiscussionSynchronizationState state, IDiscussionSynchronizationStore store, CancellationToken ct)
+    {
+        var current = await store.ReadAsync(Target(state), ct);
+        await store.DeferAfterFailureAsync(state.Id, current?.RequestedGeneration ?? state.RequestedGeneration, state.ConsecutiveFailures, ct);
     }
 
     private async Task RefreshAsync(DiscussionSynchronizationState state, CancellationToken ct)
@@ -181,7 +202,7 @@ public sealed class DiscussionRefreshWorker(
             var review = new CodeReviewRef(
                 repository, CodeReviewPlatformKind.PullRequest,
                 state.PullRequestId.ToString(System.Globalization.CultureInfo.InvariantCulture), state.PullRequestId);
-            await scope.ServiceProvider.GetRequiredService<IPullRequestSynchronizationService>().SynchronizeAsync(
+            var outcome = await scope.ServiceProvider.GetRequiredService<IPullRequestSynchronizationService>().SynchronizeAsync(
                 new PullRequestSynchronizationRequest
                 {
                     ActivationSource = PullRequestActivationSource.Crawl, SummaryLabel = "discussion refresh", ClientId = state.ClientId,
@@ -191,6 +212,10 @@ public sealed class DiscussionRefreshWorker(
                     Repository = repository, CodeReview = review,
                     AllowReviewSubmission = false, DiscussionOnly = true,
                 }, deadline.Token);
+            if (outcome.DiscussionUnavailable)
+            {
+                await DeferUnavailableDiscussionAsync(state, scope.ServiceProvider.GetRequiredService<IDiscussionSynchronizationStore>(), deadline.Token);
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -214,7 +239,7 @@ public sealed class DiscussionRefreshWorker(
             }
 
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await DeferForRetryAsync(state, scope.ServiceProvider.GetRequiredService<IDiscussionSynchronizationStore>(), cleanup.Token);
+            await DeferAfterFailureAsync(state, scope.ServiceProvider.GetRequiredService<IDiscussionSynchronizationStore>(), cleanup.Token);
         }
     }
 }

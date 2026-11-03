@@ -129,7 +129,9 @@ public sealed class DiscussionSynchronizationStoreTests(PostgresContainerFixture
             Assert.True(retry.State.FullRefreshRequested);
         }
 
-        clock.Advance(TimeSpan.FromSeconds(16));
+        // The retry also ends without completing. Without a completed observation in between it is the second failed
+        // attempt in a row and waits twice as long.
+        clock.Advance(DiscussionSynchronizationState.RetryDelay(completeBeforeRestart ? 1 : 2) + TimeSpan.FromSeconds(1));
         await using var secondRetry = await restarted.TryAcquireAsync(target, "revision", false, Interval);
         Assert.NotNull(secondRetry);
         Assert.Equal("ack", secondRetry.State.ReadProgress()["7"].Consumers["memory"]);
@@ -217,6 +219,10 @@ public sealed class DiscussionSynchronizationStoreTests(PostgresContainerFixture
     }
 
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(300);
+
+    /// <summary>PostgreSQL keeps microseconds, so a stored time can lie up to one microsecond before the computed one.</summary>
+    private static void AssertDelay(TimeSpan expected, DateTimeOffset nextAttemptAt, FakeTimeProvider clock) =>
+        Assert.InRange((nextAttemptAt - clock.GetUtcNow() - expected).Duration(), TimeSpan.Zero, TimeSpan.FromMicroseconds(1));
 
     [SkippableFact]
     public async Task EventDuringRefreshSurvivesAcknowledgmentAndRestart()
@@ -365,6 +371,83 @@ public sealed class DiscussionSynchronizationStoreTests(PostgresContainerFixture
         await using var due = await store.TryAcquireAsync(target, null, false, Interval);
         Assert.NotNull(due);
         await due.CompleteAsync("{}", "[]", due.ObservedAt, true, true, true, null, Interval);
+    }
+
+    [SkippableFact]
+    public async Task RepeatedFailedAttemptsWaitLongerUpToFifteenMinutesAndACompletedObservationResetsTheWait()
+    {
+        postgres.SkipIfUnavailable();
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(1));
+        var store = new DiscussionSynchronizationStore(this.Factory(), LocalScmPolicies.Registry, clock);
+        var target = Target();
+        TimeSpan[] expected =
+        [
+            TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(4),
+            TimeSpan.FromMinutes(8), TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(15),
+        ];
+
+        for (var failure = 1; failure <= expected.Length; failure++)
+        {
+            await using (var failed = await store.TryAcquireAsync(target, "revision", false, Interval))
+            {
+                Assert.NotNull(failed);
+            }
+
+            var state = (await store.ReadAsync(target))!;
+            Assert.Equal(failure, state.ConsecutiveFailures);
+            AssertDelay(expected[failure - 1], state.NextAttemptAt, clock);
+            clock.Advance(expected[failure - 1] - TimeSpan.FromSeconds(1));
+            Assert.Null(await store.TryAcquireAsync(target, "revision", false, Interval));
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        await using (var completed = await store.TryAcquireAsync(target, "revision", false, Interval))
+        {
+            Assert.NotNull(completed);
+            await completed.CompleteAsync("{}", "[]", completed.ObservedAt, true, true, false, "revision", Interval);
+        }
+
+        Assert.Equal(0, (await store.ReadAsync(target))!.ConsecutiveFailures);
+    }
+
+    [SkippableFact]
+    public async Task AFailureAfterTheAttemptCountsItOnceAndReopensAClosedState()
+    {
+        postgres.SkipIfUnavailable();
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddDays(1));
+        var store = new DiscussionSynchronizationStore(this.Factory(), LocalScmPolicies.Registry, clock);
+        var target = Target();
+        await using (var closed = await store.TryAcquireAsync(target, "revision", true, Interval))
+        {
+            Assert.NotNull(closed);
+            await closed.CompleteAsync("{}", "[]", closed.ObservedAt, true, true, true, "revision", Interval);
+        }
+
+        var before = (await store.ReadAsync(target))!;
+        Assert.True(before.IsClosed);
+
+        await store.DeferAfterFailureAsync(before.Id, before.RequestedGeneration, 0);
+        var reopened = (await store.ReadAsync(target))!;
+        Assert.False(reopened.IsClosed);
+        Assert.True(reopened.FullRefreshRequested);
+        Assert.Equal(1, reopened.ConsecutiveFailures);
+        AssertDelay(TimeSpan.FromSeconds(15), reopened.NextAttemptAt, clock);
+
+        // The same attempt reported again finds a failure it did not start with and is not counted twice.
+        await store.DeferAfterFailureAsync(before.Id, before.RequestedGeneration, 0);
+        Assert.Equal(1, (await store.ReadAsync(target))!.ConsecutiveFailures);
+
+        await store.DeferAfterFailureAsync(before.Id, before.RequestedGeneration, 1);
+        var second = (await store.ReadAsync(target))!;
+        Assert.Equal(2, second.ConsecutiveFailures);
+        AssertDelay(TimeSpan.FromSeconds(30), second.NextAttemptAt, clock);
+
+        // A newer request is not deferred by the failure of an attempt at an earlier generation.
+        await store.RequestAsync(target, "9");
+        await store.DeferAfterFailureAsync(before.Id, before.RequestedGeneration, 2);
+        var newer = (await store.ReadAsync(target))!;
+        Assert.Equal(2, newer.ConsecutiveFailures);
+        Assert.True(newer.NextAttemptAt <= clock.GetUtcNow());
     }
 
     [SkippableFact]

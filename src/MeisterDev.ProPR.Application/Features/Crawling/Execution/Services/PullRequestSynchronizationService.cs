@@ -114,7 +114,10 @@ public sealed class PullRequestSynchronizationService(
                         activity, startedAt, liveRequest, new(
                             PullRequestSynchronizationReviewDecision.None,
                             PullRequestSynchronizationLifecycleDecision.None,
-                            ["Discussion evidence or the current review revision is unavailable; review admission remains pending."]));
+                            ["Discussion evidence or the current review revision is unavailable; review admission remains pending."])
+                        {
+                            DiscussionUnavailable = observed.ReadFailure is not null,
+                        });
                 }
 
                 if (blockedPullRequestStore is not null && (await blockedPullRequestStore.IsBlockedAsync(

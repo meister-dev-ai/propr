@@ -38,6 +38,26 @@ public sealed class DiscussionSynchronizationStore(
                     .SetProperty(state => state.IsClosed, false).SetProperty(state => state.FullRefreshRequested, true), ct);
     }
 
+    public async Task DeferAfterFailureAsync(Guid id, long requestedGeneration, int failuresBeforeAttempt, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var now = await this.NowAsync(db, ct);
+        var failures = await db.DiscussionSynchronizationStates.Where(state => state.Id == id)
+            .Select(state => (int?)state.ConsecutiveFailures).SingleOrDefaultAsync(ct);
+        if (failures is not { } current || current > failuresBeforeAttempt)
+        {
+            return;
+        }
+
+        var next = current + 1;
+        var retryAt = now + DiscussionSynchronizationState.RetryDelay(next);
+        await db.DiscussionSynchronizationStates.Where(state => state.Id == id && state.RequestedGeneration == requestedGeneration &&
+                                                                state.LeaseToken == null && state.ConsecutiveFailures == current)
+            .ExecuteUpdateAsync(
+                set => set.SetProperty(state => state.ConsecutiveFailures, next).SetProperty(state => state.NextAttemptAt, retryAt)
+                    .SetProperty(state => state.IsClosed, false).SetProperty(state => state.FullRefreshRequested, true), ct);
+    }
+
     public async Task<DiscussionSynchronizationState?> ReadAsync(PullRequestThreadSnapshotTarget target, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
@@ -153,7 +173,10 @@ public sealed class DiscussionSynchronizationStore(
             var now = await this.NowAsync(db, ct);
             var pending = state.RequestedGeneration > state.CompletedGeneration;
             var due = state.FullRefreshRequested || state.LastFullReconciledAt is null || state.LastFullReconciledAt <= now - reconciliationInterval;
-            var revisionMoved = revision is not null && revision != state.LastReviewRevision;
+            // A new revision is observed without waiting for the next attempt, except while attempts are failing: the
+            // revision of an observation that never completed is not stored, so every crawl would present it as new
+            // and bypass the wait after a failure.
+            var revisionMoved = revision is not null && revision != state.LastReviewRevision && state.ConsecutiveFailures == 0;
             if (!force && !revisionMoved && (!pending && !due || state.NextAttemptAt > now))
             {
                 await sourceLock.DisposeAsync();
@@ -446,6 +469,7 @@ public sealed class DiscussionSynchronizationStore(
                                                             row.RetentionGeneration == state.RetentionGeneration &&
                                                             row.CollectionGeneration == state.CollectionGeneration)
                             .SetProperty(row => row.CompletedGeneration, row => allConsumersCurrent ? this._generation : row.CompletedGeneration)
+                            .SetProperty(row => row.ConsecutiveFailures, 0)
                             .SetProperty(
                                 row => row.NextAttemptAt, row =>
                                     row.RequestedGeneration > this._generation || row.RetentionGeneration != state.RetentionGeneration ||
@@ -495,13 +519,17 @@ public sealed class DiscussionSynchronizationStore(
                 {
                     if (!this._completed)
                     {
+                        // A lease that ends without completing is a failed attempt. The next attempt waits longer with
+                        // each failure in a row, unless a newer request arrived while this one ran.
                         var now = await nowAsync(db, CancellationToken.None);
-                        var retryAt = now + TimeSpan.FromSeconds(15);
+                        var failures = state.ConsecutiveFailures + 1;
+                        var retryAt = now + DiscussionSynchronizationState.RetryDelay(failures);
                         await db.DiscussionSynchronizationStates.Where(row => row.Id == state.Id && row.LeaseToken == this._token)
                             .ExecuteUpdateAsync(
                                 set => set.SetProperty(row => row.LeaseToken, (Guid?)null)
                                     .SetProperty(row => row.LeaseExpiresAt, (DateTimeOffset?)null)
                                     .SetProperty(row => row.FullRefreshRequested, true)
+                                    .SetProperty(row => row.ConsecutiveFailures, failures)
                                     .SetProperty(row => row.NextAttemptAt, row => row.RequestedGeneration > this._generation ? now : retryAt),
                                 CancellationToken.None);
                     }

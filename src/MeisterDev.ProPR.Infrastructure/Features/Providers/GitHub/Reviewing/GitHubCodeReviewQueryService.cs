@@ -34,10 +34,16 @@ internal sealed class GitHubCodeReviewQueryService(
         var context = selected is null
             ? await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct)
             : await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, selected, ct);
+        var repositoryPath = await this.ResolveRepositoryPathAsync(context, review.Repository, ct);
+        if (repositoryPath is null)
+        {
+            return null;
+        }
+
         using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 review.Repository.Host,
-                $"/repos/{BuildRepositoryPath(review.Repository)}/pulls/{review.Number}"),
+                $"/repos/{repositoryPath}/pulls/{review.Number}"),
             ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
@@ -111,6 +117,40 @@ internal sealed class GitHubCodeReviewQueryService(
     {
         var item = await this.GetReviewAsync(clientId, review, ct);
         return item?.ReviewRevision;
+    }
+
+    /// <summary>Returns the owner and name to address, or null when GitHub knows no repository with the captured id.</summary>
+    /// <remarks>
+    ///     A discussion target stores only the numeric repository id, so a repository rebuilt from it carries that id
+    ///     where the name belongs. GitHub addresses pull requests by owner and name, so the name is read by id first.
+    /// </remarks>
+    private async Task<string?> ResolveRepositoryPathAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context, RepositoryRef repository, CancellationToken ct)
+    {
+        var id = repository.ExternalRepositoryId;
+        if (!id.All(char.IsAsciiDigit) || !string.Equals(
+                repository.ProjectPath.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault(), id, StringComparison.Ordinal))
+        {
+            return BuildRepositoryPath(repository);
+        }
+
+        using var request = await context.CreateAuthenticatedRequestAsync(GitHubConnectionVerifier.BuildApiUri(repository.Host, $"/repositories/{id}"), ct: ct);
+        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitHub repository lookup failed with status {(int)response.StatusCode}.");
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<GitHubRepositoryResponse>(ct);
+        var path = payload?.FullName?.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return path is { Length: 2 }
+            ? $"{Uri.EscapeDataString(path[0])}/{Uri.EscapeDataString(path[1])}"
+            : throw new InvalidOperationException("GitHub repository lookup did not return a repository full name.");
     }
 
     private static string BuildRepositoryPath(RepositoryRef repository)
@@ -201,6 +241,10 @@ internal sealed class GitHubCodeReviewQueryService(
         [property: JsonPropertyName("requested_reviewers")]
         IReadOnlyList<GitHubReviewerResponse>? RequestedReviewers,
         [property: JsonPropertyName("user")] GitHubReviewerResponse? User = null);
+
+    private sealed record GitHubRepositoryResponse(
+        [property: JsonPropertyName("full_name")]
+        string? FullName);
 
     private sealed record GitHubRefResponse(
         [property: JsonPropertyName("ref")] string? Ref,

@@ -220,7 +220,44 @@ public sealed class DiscussionRefreshWorkerTests
         using var worker = Worker(services, metrics);
         await worker.RunCycleAsync(CancellationToken.None);
         await worker.DrainAsync();
-        await store.Received(1).DeferAsync(state.Id, completedGeneration, TimeSpan.FromSeconds(15), Arg.Any<CancellationToken>());
+        await store.Received(1).DeferAfterFailureAsync(state.Id, completedGeneration, state.ConsecutiveFailures, Arg.Any<CancellationToken>());
+        await store.DidNotReceive().DeferAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ARefreshThatCouldNotReadTheDiscussionCountsAsAFailedAttempt(bool discussionUnavailable)
+    {
+        var store = Substitute.For<IDiscussionSynchronizationStore>();
+        var state = State();
+        state.ConsecutiveFailures = 3;
+        store.ListDueAsync(Arg.Any<TimeSpan>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([state]);
+        var connections = Substitute.For<IClientScmConnectionRepository>();
+        connections.GetByIdAsync(state.ClientId, state.ConnectionId, Arg.Any<CancellationToken>()).Returns(
+            new ClientScmConnectionDto(
+                state.ConnectionId, state.ClientId, state.Provider, state.ProviderScopePath,
+                ScmAuthenticationKind.PersonalAccessToken, "Test", true, "verified", null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+        var service = Substitute.For<IPullRequestSynchronizationService>();
+        service.SynchronizeAsync(Arg.Any<PullRequestSynchronizationRequest>(), Arg.Any<CancellationToken>()).Returns(
+            new PullRequestSynchronizationOutcome(PullRequestSynchronizationReviewDecision.None, PullRequestSynchronizationLifecycleDecision.None, [])
+            {
+                DiscussionUnavailable = discussionUnavailable,
+            });
+        var builder = Services(store);
+        builder.AddSingleton(connections);
+        builder.AddSingleton(service);
+        await using var services = builder.BuildServiceProvider();
+        using var metrics = new ReviewJobMetrics(services.GetRequiredService<IServiceScopeFactory>());
+        using var worker = Worker(services, metrics);
+
+        await worker.RunCycleAsync(CancellationToken.None);
+        await worker.DrainAsync();
+
+        // The deferral names the generation of this attempt and the failures it started with, so the store can tell an
+        // attempt that the lease already counted from one that failed before it.
+        await store.Received(discussionUnavailable ? 1 : 0).DeferAfterFailureAsync(state.Id, state.RequestedGeneration, 3, Arg.Any<CancellationToken>());
+        await store.DidNotReceive().DeferAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]

@@ -110,4 +110,11 @@ public sealed record PullRequestSynchronizationOutcome(
     Guid? JobId = null,
     PullRequestSynchronizationThreadPassDecision ThreadPassDecision =
         PullRequestSynchronizationThreadPassDecision.None,
-    Guid? ThreadPassJobId = null);
+    Guid? ThreadPassJobId = null)
+{
+    /// <summary>
+    ///     Whether this pass could not read the discussion of the pull request. A caller that schedules discussion
+    ///     refreshes counts such a pass as a failed attempt.
+    /// </summary>
+    public bool DiscussionUnavailable { get; init; }
+}
