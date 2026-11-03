@@ -1,6 +1,6 @@
 # Build context: repository root (example/docker-compose sets context: ../..)
 # Stage 1: Build
-FROM node:26-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS builder
+FROM node:26-alpine@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94 AS builder
 WORKDIR /app
 # Copy openapi.json from repo root for code generation
 COPY openapi.json ./openapi.json
@@ -20,7 +20,7 @@ RUN npm run build
 # native library closure (libtiff, freetype, libgd, nghttp2). Serving the built
 # SPA needs none of them, and dropping them clears the libtiff CVEs (no Alpine
 # fix available) that the full alpine tag carries.
-FROM docker.io/library/nginx:alpine-slim@sha256:ebd058041a732a2b2dc0b606e34572dd8e0034de6a4aa4d50d8c13a240ac6005
+FROM docker.io/library/nginx:alpine-slim@sha256:f45171d36c76a8b2f5ef97108a3a8a2294248a6578a0a180edc2d78f7d2edc26
 # Apply available security fixes to the TLS, regular-expression and compression
 # libraries used by nginx. The zlib minimum prevents a failed repository refresh
 # from retaining a vulnerable installed version.
