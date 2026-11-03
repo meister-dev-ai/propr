@@ -198,6 +198,67 @@ public sealed class OpenAiCompatibleProviderDriverTests
         Assert.DoesNotContain(UndeclaredResponsesProtocol, Assert.Single(discovered.Models).SupportedProtocolModes);
     }
 
+    // A LiteLLM gateway states what each model is for. The stated mode decides over the identifier, so an
+    // embedding model whose name does not say so is offered as one, and a model that serves neither chat nor
+    // embeddings is not offered at all.
+    [Fact]
+    public async Task TheModeAGatewayStatesDecidesWhatAModelIsOfferedAs()
+    {
+        var wire = new FakeCompatibleEndpoint(
+            HttpStatusCode.OK, """
+                               {"data":[
+                                 {"id":"bge-m3","mode":"embedding","max_input_tokens":8191},
+                                 {"id":"gpt-6.1-terra","mode":"chat","max_input_tokens":922000},
+                                 {"id":"embedding-router","mode":"chat"},
+                                 {"id":"dall-e-3","mode":"image_generation"},
+                                 {"id":"Auto"}
+                               ]}
+                               """);
+
+        var discovered = await Driver().DiscoverModelsAsync(EndpointOn(wire));
+
+        Assert.Equal(["Auto", "bge-m3", "embedding-router", "gpt-6.1-terra"], discovered.Models.Select(model => model.RemoteModelId));
+        var embedding = Assert.Single(discovered.Models, model => model.RemoteModelId == "bge-m3");
+        Assert.Equal([AiOperationKind.Embedding], embedding.OperationKinds);
+        Assert.Equal(8191, embedding.MaxInputTokens);
+        Assert.All(
+            discovered.Models.Where(model => model.RemoteModelId != "bge-m3"),
+            model => Assert.Equal([AiOperationKind.Chat], model.OperationKinds));
+    }
+
+    // Provider calls do not follow redirects. A sign-in proxy in front of an endpoint answers with one, and reading it
+    // as an answer reports a verified connection with no models.
+    [Theory]
+    [InlineData(HttpStatusCode.Found)]
+    [InlineData(HttpStatusCode.TemporaryRedirect)]
+    public async Task ARedirectIsAFailureOfDiscoveryAndVerification(HttpStatusCode status)
+    {
+        var wire = new FakeCompatibleEndpoint(status, "");
+
+        var discovered = await Driver().DiscoverModelsAsync(EndpointOn(wire));
+        var verification = await Driver().VerifyAsync(EndpointOn(wire));
+
+        Assert.Equal("failed", discovered.DiscoveryStatus);
+        Assert.Equal(AiVerificationFailureCategory.EndpointReachability, discovered.FailureCategory);
+        Assert.Equal((int)status, discovered.HttpStatus);
+        Assert.Equal(AiVerificationStatus.Failed, verification.Status);
+        Assert.Equal(AiVerificationFailureCategory.EndpointReachability, verification.FailureCategory);
+        Assert.Contains("redirects", verification.ActionHint, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARefusedDiscoveryNamesTheCategoryAndTheStatus()
+    {
+        var wire = new FakeCompatibleEndpoint(HttpStatusCode.Unauthorized, """{"error":{"message":"bad key"}}""");
+
+        var discovered = await Driver().DiscoverModelsAsync(EndpointOn(wire));
+
+        Assert.Equal("failed", discovered.DiscoveryStatus);
+        Assert.Equal(AiVerificationFailureCategory.Credentials, discovered.FailureCategory);
+        Assert.Equal(401, discovered.HttpStatus);
+        Assert.Contains("bad key", Assert.Single(discovered.Warnings), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AnEndpointThatAnswersTheModelListIsVerified()
     {

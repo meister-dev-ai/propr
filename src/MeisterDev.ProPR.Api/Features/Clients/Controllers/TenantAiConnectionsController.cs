@@ -262,7 +262,8 @@ public sealed class TenantAiConnectionsController(
         // the endpoint and not an action against the stored connection: without it a family loaded from a
         // directory would report a configuration it could not reach as though it had checked it.
         var verification = ProviderOutcomeGuard.Adopt(
-            await driver.VerifyAsync(
+            await DriverCalls.VerifyAsync(
+                driver,
                 existing.ToProviderEndpoint(hostContexts?.ForConnection(existing) ?? this.ProbeContext()),
                 ct),
             ProviderOutcomeGuard.SecretsOf(existing));

@@ -24,9 +24,12 @@ internal static class OpenAiCompatibleModels
 {
     /// <summary>What an endpoint answered when asked for its models.</summary>
     /// <param name="Status">The status the endpoint replied with.</param>
-    /// <param name="Models">The model identifiers it listed, empty when it listed none or refused.</param>
+    /// <param name="Models">The models it listed, empty when it listed none or refused.</param>
     /// <param name="Detail">What it said when it refused, or null when it did not.</param>
-    internal readonly record struct Listing(HttpStatusCode Status, IReadOnlyList<string> Models, string? Detail);
+    internal readonly record struct Listing(
+        HttpStatusCode Status,
+        IReadOnlyList<ProviderListedModel> Models,
+        string? Detail);
 
     /// <summary>Asks an endpoint for its models.</summary>
     /// <param name="endpoint">Where to reach the provider, and what to authenticate with.</param>
@@ -58,15 +61,19 @@ internal static class OpenAiCompatibleModels
             .ConfigureAwait(false);
 
         // A model list the host did not read to the end cannot be parsed, and reporting the models found in the
-        // part that was read would present an incomplete list as the endpoint's own.
+        // part that was read would present an incomplete list as the endpoint's own. Reported as a refusal
+        // rather than raised, because both callers of this method read a refusal and neither catches an
+        // exception: raising one would reach the operator as an internal error naming nothing to act on.
         if (truncated)
         {
-            throw new HttpRequestException(
+            return new Listing(
+                HttpStatusCode.BadGateway,
+                [],
                 $"The provider's model list is longer than the {ProviderResponseBody.MaximumDocumentBytes} bytes "
                 + "this host reads from a response body.");
         }
 
-        if (!ProviderModelListJson.TryReadModelIds(payload, out var models))
+        if (!ProviderModelListJson.TryReadModels(payload, out var models))
         {
             return new Listing(
                 HttpStatusCode.BadGateway,
@@ -87,12 +94,18 @@ internal static class OpenAiCompatibleModels
     ///     left out: it is an OpenAI-specific surface, and assuming it of a compatible endpoint turns into a 404
     ///     on the first call.
     /// </remarks>
-    /// <param name="remoteModelId">The identifier the endpoint listed.</param>
-    internal static ProviderDiscoveredModel Describe(string remoteModelId)
+    /// <param name="listed">The model the endpoint listed.</param>
+    /// <returns>The model as it is offered, or null for a model that serves neither chat nor embeddings.</returns>
+    internal static ProviderDiscoveredModel? Describe(ProviderListedModel listed)
     {
-        var normalized = remoteModelId.Trim();
+        var normalized = listed.Id.Trim();
+        var operation = ProviderModelListJson.OperationOf(listed);
+        if (operation is null)
+        {
+            return null;
+        }
 
-        if (normalized.Contains("embedding", StringComparison.OrdinalIgnoreCase))
+        if (operation == AiOperationKind.Embedding)
         {
             return new ProviderDiscoveredModel(
                 normalized,
@@ -100,7 +113,7 @@ internal static class OpenAiCompatibleModels
                 [AiOperationKind.Embedding],
                 [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
                 "cl100k_base",
-                MaxInputTokens: 8192,
+                MaxInputTokens: listed.MaxInputTokens ?? 8192,
                 MaxContextTokens: null,
 
                 // No width is stated. This surface lists identifiers and nothing else, and an identifier does

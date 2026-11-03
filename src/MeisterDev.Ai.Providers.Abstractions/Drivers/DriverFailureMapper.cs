@@ -42,6 +42,14 @@ public static partial class DriverFailureMapper
             warnings ?? []);
     }
 
+    /// <summary>
+    ///     Whether a provider's answer is a failure. Only a 2xx answer carries what was asked for: a redirect is a
+    ///     failure as well, because provider calls do not follow redirects, and one from a sign-in proxy in front of
+    ///     an endpoint answers with no models and no error.
+    /// </summary>
+    /// <param name="statusCode">The status the provider returned.</param>
+    public static bool IsFailure(HttpStatusCode statusCode) => (int)statusCode is < 200 or >= 300;
+
     public static ProviderVerificationResult Failed(HttpStatusCode statusCode, string? detail = null)
     {
         return new ProviderVerificationResult(
@@ -55,6 +63,42 @@ public static partial class DriverFailureMapper
             {
                 ["httpStatus"] = ((int)statusCode).ToString(),
             });
+    }
+
+    /// <summary>Describes a model discovery that the provider refused.</summary>
+    /// <param name="statusCode">The status the provider returned.</param>
+    /// <param name="detail">What the provider said, or null.</param>
+    public static ProviderModelDiscoveryResult DiscoveryFailed(HttpStatusCode statusCode, string? detail = null)
+    {
+        return new ProviderModelDiscoveryResult(
+            "failed",
+            true,
+            [detail ?? $"Provider discovery failed with status {(int)statusCode}."],
+            [])
+        {
+            FailureCategory = MapFailureCategory(statusCode),
+            HttpStatus = (int)statusCode,
+        };
+    }
+
+    /// <summary>
+    ///     Describes a model discovery that threw rather than answering, such as an address that does not resolve,
+    ///     a connection refused by the egress rules of the installation, a certificate the host does not trust or a
+    ///     timeout. The exception is read as <see cref="Failed(Exception)" /> reads it.
+    /// </summary>
+    /// <param name="exception">The exception the call threw.</param>
+    public static ProviderModelDiscoveryResult DiscoveryFailed(Exception exception)
+    {
+        var verification = Failed(exception);
+        return new ProviderModelDiscoveryResult(
+            "failed",
+            true,
+            [verification.Summary ?? exception.Message],
+            [])
+        {
+            FailureCategory = verification.FailureCategory,
+            HttpStatus = StatusOf(exception),
+        };
     }
 
     /// <summary>Describes a verification that threw rather than answering.</summary>
@@ -147,6 +191,8 @@ public static partial class DriverFailureMapper
             HttpStatusCode.NotFound => "Confirm the base URL is correct, including any required path prefix.",
             HttpStatusCode.TooManyRequests => "Reduce review concurrency or raise the provider-side rate limit.",
             HttpStatusCode.RequestTimeout => "Retry later, or check the network path to the provider.",
+            _ when (int)statusCode is >= 300 and < 400 =>
+                "Enter the address the provider answers at. Provider calls do not follow redirects, for example to a sign-in page.",
             _ when (int)statusCode >= 500 => "Retry later or inspect provider-side service health.",
             _ => "Inspect the provider response and update the profile settings before retrying.",
         };
@@ -323,6 +369,7 @@ public static partial class DriverFailureMapper
             HttpStatusCode.Forbidden => AiVerificationFailureCategory.Authorization,
             HttpStatusCode.NotFound => AiVerificationFailureCategory.EndpointReachability,
             HttpStatusCode.BadRequest => AiVerificationFailureCategory.ProviderRejected,
+            _ when (int)statusCode is >= 300 and < 400 => AiVerificationFailureCategory.EndpointReachability,
             _ when (int)statusCode >= 500 => AiVerificationFailureCategory.ProviderRejected,
             _ => AiVerificationFailureCategory.Unknown,
         };

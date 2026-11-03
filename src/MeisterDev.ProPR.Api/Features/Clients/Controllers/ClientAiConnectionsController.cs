@@ -60,6 +60,11 @@ public sealed partial class ClientAiConnectionsController(
     [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} verified for client {ClientId} with status {Status}")]
     private static partial void LogConnectionVerified(ILogger logger, Guid connectionId, Guid clientId, AiVerificationStatus status);
 
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "A model of AI connection profile {ConnectionId} of client {ClientId} was checked for {Operation}: passed {Passed}, reason {Reason}")]
+    private static partial void LogModelChecked(ILogger logger, Guid connectionId, Guid clientId, AiOperationKind operation, bool passed, string? reason);
+
     // What a family may do while answering for values that have not been stored: the transport and nothing
     // else. Discovery and verification are calls the family makes to the endpoint an operator entered, and a
     // family reaches the network only through the factory the host supplies.
@@ -377,6 +382,159 @@ public sealed partial class ClientAiConnectionsController(
             return this.NotFound();
         }
 
+        var call = await this.PrepareStoredProfileCallAsync(clientId, existing, "verified", ct);
+        if (call.Refusal is not null)
+        {
+            return call.Refusal;
+        }
+
+        var driver = call.Driver!;
+
+        // Verification reflects connectivity and configured-model reachability only. Whether the product's
+        // purposes are satisfied is a client-level concern resolved through logical models and the purpose map,
+        // not a per-connection binding requirement.
+        // Verifying is the family's own call to the provider, so the endpoint carries the primitives it reaches
+        // the network through. A family with no other route to an HTTP client has none without this. Where the
+        // connection-bound set cannot be built the transport alone stands in, because verification is a call to
+        // the endpoint and not an action against the stored connection: without it a family loaded from a
+        // directory would report a configuration it could not reach as though it had checked it.
+        var verification = ProviderOutcomeGuard.Adopt(
+            await DriverCalls.VerifyAsync(
+                driver,
+                existing.ToProviderEndpoint(hostContexts?.ForConnection(existing) ?? this.ProbeContext()),
+                ct),
+            ProviderOutcomeGuard.SecretsOf(existing));
+
+        await aiConnections.SaveVerificationAsync(connectionId, verification, ct);
+        LogConnectionVerified(logger, connectionId, clientId, verification.Status);
+        return this.Ok(verification);
+    }
+
+    /// <summary>
+    ///     Sends one small request to each of up to three configured models of a stored profile and reports whether
+    ///     each model answers as the profile configures it: a chat model for at most a few tokens, an embedding model
+    ///     with one short text whose vector length is compared with the configured dimensions.
+    /// </summary>
+    /// <remarks>
+    ///     Verification proves the address and the credential; this proves the models, such as a model identifier
+    ///     with a typo, or one the credential may not use. The calls use the stored credential and cost the owner of
+    ///     the credential a few tokens, so a caller asks before it checks. Nothing is stored. The checks run at the
+    ///     same time, and each one may take at most 25 seconds.
+    /// </remarks>
+    /// <param name="clientId">The owning client.</param>
+    /// <param name="connectionId">The stored profile.</param>
+    /// <param name="request">The configured models and what each one is checked for.</param>
+    /// <param name="ct">Request cancellation.</param>
+    /// <response code="200">The outcome of each check, in the order of the request; a failed check is an outcome.</response>
+    /// <response code="400">The request names no model, too many, an empty entry, the same model and operation twice, a model of another profile, or an operation other than chat and embedding or one the model does not serve; or the profile cannot be called.</response>
+    [HttpPost("{connectionId:guid}/check-models")]
+    [ProducesResponseType(typeof(AiModelCheckResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CheckAiModels(
+        Guid clientId,
+        Guid connectionId,
+        [FromBody] AiModelCheckRequest request,
+        CancellationToken ct = default)
+    {
+        if (this.AuthorizeClientAccessAsync(clientId) is { } authResult)
+        {
+            return authResult;
+        }
+
+        var existing = await aiConnections.GetByIdAsync(connectionId, ct);
+        if (existing is null || existing.ClientId != clientId)
+        {
+            return this.NotFound();
+        }
+
+        if (request.Models is not { Count: > 0 and <= AiModelCheckReasons.MaximumModels } items)
+        {
+            this.ModelState.AddModelError(
+                "models",
+                $"Name one to {AiModelCheckReasons.MaximumModels} configured models of this profile to check.");
+            return this.ValidationProblem();
+        }
+
+        // Every entry is a paid call to the provider, so an entry that names nothing, an operation the host does
+        // not know, or a check already in the request is refused rather than sent.
+        var checks = new List<(AiConfiguredModelDto Model, AiOperationKind Operation)>();
+        foreach (var item in items)
+        {
+            if (item is null || !Enum.IsDefined(item.Operation))
+            {
+                this.ModelState.AddModelError("models", "Name a configured model and chat or embedding in each entry.");
+                return this.ValidationProblem();
+            }
+
+            if (checks.Exists(check => check.Model.Id == item.ConfiguredModelId && check.Operation == item.Operation))
+            {
+                this.ModelState.AddModelError("models", "Name each model and operation once.");
+                return this.ValidationProblem();
+            }
+
+            var model = existing.ConfiguredModels.FirstOrDefault(candidate => candidate.Id == item.ConfiguredModelId);
+            if (model is null)
+            {
+                this.ModelState.AddModelError("models", "Name configured models of this profile.");
+                return this.ValidationProblem();
+            }
+
+            if (item.Operation == AiOperationKind.Embedding ? !model.SupportsEmbedding : !model.SupportsChat)
+            {
+                this.ModelState.AddModelError(
+                    "models",
+                    $"The model '{model.RemoteModelId}' is not configured for {(item.Operation == AiOperationKind.Embedding ? "embeddings" : "chat")}.");
+                return this.ValidationProblem();
+            }
+
+            checks.Add((model, item.Operation));
+        }
+
+        var call = await this.PrepareStoredProfileCallAsync(clientId, existing, "checked", ct);
+        if (call.Refusal is not null)
+        {
+            return call.Refusal;
+        }
+
+        var secrets = ProviderOutcomeGuard.SecretsOf(existing);
+        var outcomes = await Task.WhenAll(
+            checks.Select(check => AiModelChecks.CheckAsync(
+                call.Driver!,
+                existing.ToProviderEndpoint(hostContexts?.ForConnection(existing) ?? this.ProbeContext()),
+                check.Model,
+                check.Operation,
+                ct)));
+        var guarded = outcomes.Select(outcome => ProviderOutcomeGuard.Adopt(outcome, secrets)).ToList();
+        foreach (var outcome in guarded)
+        {
+            LogModelChecked(logger, connectionId, clientId, outcome.Operation, outcome.Passed, outcome.Reason);
+        }
+
+        return this.Ok(new AiModelCheckResultDto(guarded));
+    }
+
+    /// <summary>A stored profile that a family may be called for, or the refusal that answers the request.</summary>
+    private sealed record StoredProfileCall(IActionResult? Refusal, IAiProviderDriver? Driver);
+
+    /// <summary>
+    ///     Checks a stored profile before its family is called with its credential: where the traffic goes, whether
+    ///     the host can serve and is licensed for the family, and whether the stored target, egress and credential
+    ///     still hold. A verification and a model check send the stored credential to the provider, so both answer
+    ///     these checks the same way.
+    /// </summary>
+    /// <param name="clientId">The owning client.</param>
+    /// <param name="existing">The stored profile.</param>
+    /// <param name="action">What the request does with the profile, as a refusal names it: verified or checked.</param>
+    /// <param name="ct">Request cancellation.</param>
+    private async Task<StoredProfileCall> PrepareStoredProfileCallAsync(
+        Guid clientId,
+        AiConnectionDto existing,
+        string action,
+        CancellationToken ct)
+    {
         // Where the traffic goes is read first, because the refusal names the permitted hosts and the profile's
         // availability carries the same fact without them. A tenant that added or tightened its host list after
         // this profile was saved would otherwise have the stored credential sent to a host it no longer permits.
@@ -386,8 +544,8 @@ public sealed partial class ClientAiConnectionsController(
             providerDrivers.ReachedHostPatterns(existing.ProviderKind));
         if (reachRefusal is not null)
         {
-            this.ModelState.AddModelError("baseUrl", $"This profile cannot be verified because {reachRefusal}.");
-            return this.ValidationProblem();
+            this.ModelState.AddModelError("baseUrl", $"This profile cannot be {action} because {reachRefusal}.");
+            return new(this.ValidationProblem(), null);
         }
 
         // A profile the host cannot serve is refused before a driver is resolved for it, so a stored value the
@@ -399,8 +557,8 @@ public sealed partial class ClientAiConnectionsController(
         {
             this.ModelState.AddModelError(
                 "providerKind",
-                $"This profile cannot be verified because {DescribeUnavailability(existing)}.");
-            return this.ValidationProblem();
+                $"This profile cannot be {action} because {DescribeUnavailability(existing)}.");
+            return new(this.ValidationProblem(), null);
         }
 
         // Verification sends the stored credential to the family, which is a use of the family, so it needs the
@@ -408,15 +566,15 @@ public sealed partial class ClientAiConnectionsController(
         // would otherwise keep verifying it.
         if (await this.RefuseUnlicensedProviderAsync(existing.ProviderKind, ct) is { } unlicensed)
         {
-            return unlicensed;
+            return new(unlicensed, null);
         }
 
         var driver = providerDrivers.GetRequired(existing.ProviderKind);
 
-        this.RefuseUndeclaredAuthMode(existing.ProviderKind, existing.AuthMode, refusedAction: "verified");
+        this.RefuseUndeclaredAuthMode(existing.ProviderKind, existing.AuthMode, refusedAction: action);
         if (!this.ModelState.IsValid)
         {
-            return this.ValidationProblem();
+            return new(this.ValidationProblem(), null);
         }
 
         // Re-validate the stored target before probing: a row saved before this guard existed (or saved in a
@@ -425,7 +583,7 @@ public sealed partial class ClientAiConnectionsController(
         if (targetError is not null)
         {
             this.ModelState.AddModelError("baseUrl", targetError);
-            return this.ValidationProblem();
+            return new(this.ValidationProblem(), null);
         }
 
         // The addresses the family declared are checked again for the same reason. They are stored values a
@@ -433,7 +591,7 @@ public sealed partial class ClientAiConnectionsController(
         // the profile was saved.
         if (this.RefuseStoredDeclaredEgress(driver, existing) is { } refusedEgress)
         {
-            return refusedEgress;
+            return new(refusedEgress, null);
         }
 
         // The stored credential is checked against the declaration for the same reason the target is: a profile
@@ -447,26 +605,10 @@ public sealed partial class ClientAiConnectionsController(
                     driver.Declaration.CredentialFieldsFor(existing.AuthMode),
                     ProviderCredentialValues.From(ProviderSecretEnvelope.Decode(existing.Secret, existing.AuthMode).Fields))))
         {
-            return this.ValidationProblem();
+            return new(this.ValidationProblem(), null);
         }
 
-        // Verification reflects connectivity and configured-model reachability only. Whether the product's
-        // purposes are satisfied is a client-level concern resolved through logical models and the purpose map,
-        // not a per-connection binding requirement.
-        // Verifying is the family's own call to the provider, so the endpoint carries the primitives it reaches
-        // the network through. A family with no other route to an HTTP client has none without this. Where the
-        // connection-bound set cannot be built the transport alone stands in, because verification is a call to
-        // the endpoint and not an action against the stored connection: without it a family loaded from a
-        // directory would report a configuration it could not reach as though it had checked it.
-        var verification = ProviderOutcomeGuard.Adopt(
-            await driver.VerifyAsync(
-                existing.ToProviderEndpoint(hostContexts?.ForConnection(existing) ?? this.ProbeContext()),
-                ct),
-            ProviderOutcomeGuard.SecretsOf(existing));
-
-        await aiConnections.SaveVerificationAsync(connectionId, verification, ct);
-        LogConnectionVerified(logger, connectionId, clientId, verification.Status);
-        return this.Ok(verification);
+        return new(null, driver);
     }
 
     /// <summary>Discovers provider models using the supplied unsaved profile settings.</summary>
@@ -521,7 +663,8 @@ public sealed partial class ClientAiConnectionsController(
 
         var driver = providerDrivers.GetRequired(request.ProviderKind);
         var discovered = ProviderOutcomeGuard.Adopt(
-            await driver.DiscoverModelsAsync(
+            await DriverCalls.DiscoverModelsAsync(
+                driver,
                 probeOptions.ToProviderEndpoint(ProbeContext(), DeclaredValuesOf(declared)),
                 ct),
             DateTimeOffset.UtcNow,
@@ -602,7 +745,8 @@ public sealed partial class ClientAiConnectionsController(
         var driver = providerDrivers.GetRequired(request.ProviderKind);
         return this.Ok(
             ProviderOutcomeGuard.Adopt(
-                await driver.VerifyAsync(
+                await DriverCalls.VerifyAsync(
+                    driver,
                     probeOptions.ToProviderEndpoint(ProbeContext(), DeclaredValuesOf(declared)),
                     ct),
                 ProviderOutcomeGuard.SecretsOf(probeOptions, declared.Secrets)));

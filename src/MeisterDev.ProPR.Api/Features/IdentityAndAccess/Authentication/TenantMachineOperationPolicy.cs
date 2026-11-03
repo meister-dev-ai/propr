@@ -61,6 +61,7 @@ public static class TenantMachineOperationPolicy
             Action<ClientAiConnectionsController>(nameof(ClientAiConnectionsController.ActivateAiConnection)),
             Action<ClientAiConnectionsController>(nameof(ClientAiConnectionsController.DeactivateAiConnection)),
             Action<ClientAiConnectionsController>(nameof(ClientAiConnectionsController.VerifyAiConnection)),
+            Action<ClientAiConnectionsController>(nameof(ClientAiConnectionsController.CheckAiModels)),
             Action<ClientAiConnectionsController>(nameof(ClientAiConnectionsController.VerifyUpdateAiConnection)),
             Action<ClientAiConnectionsController>(nameof(ClientAiConnectionsController.SelectAiPurposes)),
             Action<ClientAiConnectionsController>(nameof(ClientAiConnectionsController.DiscoverModels)),

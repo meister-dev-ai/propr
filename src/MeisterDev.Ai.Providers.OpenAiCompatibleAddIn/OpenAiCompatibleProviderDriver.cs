@@ -162,20 +162,16 @@ public sealed class OpenAiCompatibleProviderDriver : IAiProviderDriver
         CancellationToken ct = default)
     {
         var listing = await OpenAiCompatibleModels.ListAsync(endpoint, ct).ConfigureAwait(false);
-        if ((int)listing.Status >= 400)
+        if (DriverFailureMapper.IsFailure(listing.Status))
         {
-            return new ProviderModelDiscoveryResult(
-                "failed",
-                true,
-                [listing.Detail ?? $"Provider discovery failed with status {(int)listing.Status}."],
-                []);
+            return DriverFailureMapper.DiscoveryFailed(listing.Status, listing.Detail);
         }
 
         return new ProviderModelDiscoveryResult(
             "succeeded",
             true,
             listing.Models.Count == 0 ? [NoModelsDiscovered] : [],
-            [.. listing.Models.Select(OpenAiCompatibleModels.Describe)]);
+            [.. listing.Models.Select(OpenAiCompatibleModels.Describe).OfType<ProviderDiscoveredModel>()]);
     }
 
     /// <inheritdoc />
@@ -185,7 +181,7 @@ public sealed class OpenAiCompatibleProviderDriver : IAiProviderDriver
 
         var listing = await OpenAiCompatibleModels.ListAsync(endpoint, ct).ConfigureAwait(false);
 
-        return (int)listing.Status >= 400
+        return DriverFailureMapper.IsFailure(listing.Status)
             ? DriverFailureMapper.Failed(listing.Status, listing.Detail)
             : DriverFailureMapper.Verified(
                 $"Verified connectivity for '{endpoint.BaseUrl}'.",

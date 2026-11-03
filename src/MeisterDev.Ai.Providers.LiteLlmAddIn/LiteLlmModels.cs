@@ -23,9 +23,12 @@ internal static class LiteLlmModels
 {
     /// <summary>What a gateway answered when asked for its models.</summary>
     /// <param name="Status">The status the gateway replied with.</param>
-    /// <param name="Models">The model identifiers it listed, empty when it listed none or refused.</param>
+    /// <param name="Models">The models it listed, empty when it listed none or refused.</param>
     /// <param name="Detail">What it said when it refused, or null when it did not.</param>
-    internal readonly record struct Listing(HttpStatusCode Status, IReadOnlyList<string> Models, string? Detail);
+    internal readonly record struct Listing(
+        HttpStatusCode Status,
+        IReadOnlyList<ProviderListedModel> Models,
+        string? Detail);
 
     /// <summary>Asks a gateway for its models.</summary>
     /// <param name="endpoint">Where to reach the gateway, and what to authenticate with.</param>
@@ -69,7 +72,7 @@ internal static class LiteLlmModels
                 + "this host reads from a response body.");
         }
 
-        if (!ProviderModelListJson.TryReadModelIds(payload, out var models))
+        if (!ProviderModelListJson.TryReadModels(payload, out var models))
         {
             return new Listing(
                 HttpStatusCode.BadGateway,
@@ -88,12 +91,18 @@ internal static class LiteLlmModels
     ///     A gateway lists an identifier per model and no capabilities, so what is offered here is a starting
     ///     point an operator corrects rather than a statement about the model behind it.
     /// </remarks>
-    /// <param name="remoteModelId">The identifier the gateway listed.</param>
-    internal static ProviderDiscoveredModel Describe(string remoteModelId)
+    /// <param name="listed">The model the gateway listed.</param>
+    /// <returns>The model as it is offered, or null for a model that serves neither chat nor embeddings.</returns>
+    internal static ProviderDiscoveredModel? Describe(ProviderListedModel listed)
     {
-        var normalized = remoteModelId.Trim();
+        var normalized = listed.Id.Trim();
+        var operation = ProviderModelListJson.OperationOf(listed);
+        if (operation is null)
+        {
+            return null;
+        }
 
-        if (normalized.Contains("embedding", StringComparison.OrdinalIgnoreCase))
+        if (operation == AiOperationKind.Embedding)
         {
             return new ProviderDiscoveredModel(
                 normalized,
@@ -101,7 +110,7 @@ internal static class LiteLlmModels
                 [AiOperationKind.Embedding],
                 [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
                 "cl100k_base",
-                MaxInputTokens: 8192,
+                MaxInputTokens: listed.MaxInputTokens ?? 8192,
                 MaxContextTokens: null,
 
                 // No width is stated. This surface lists identifiers and nothing else, and an identifier does

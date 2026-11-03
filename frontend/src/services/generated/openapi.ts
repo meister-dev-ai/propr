@@ -4796,6 +4796,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/ai-connections/{connectionId}/check-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sends one small request to each of up to three configured models of a stored profile and reports whether
+         *     each model answers as the profile configures it: a chat model for at most a few tokens, an embedding model
+         *     with one short text whose vector length is compared with the configured dimensions.
+         * @description Verification proves the address and the credential; this proves the models, such as a model identifier
+         *     with a typo, or one the credential may not use. The calls use the stored credential and cost the owner of
+         *     the credential a few tokens, so a caller asks before it checks. Nothing is stored. The checks run at the
+         *     same time, and each one may take at most 25 seconds.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The owning client. */
+                    clientId: string;
+                    /** @description The stored profile. */
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The configured models and what each one is checked for. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AiModelCheckRequest"];
+                    "text/json": components["schemas"]["AiModelCheckRequest"];
+                    "application/*+json": components["schemas"]["AiModelCheckRequest"];
+                };
+            };
+            responses: {
+                /** @description The outcome of each check, in the order of the request; a failed check is an outcome. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiModelCheckResultDto"];
+                        "application/json": components["schemas"]["AiModelCheckResultDto"];
+                        "text/json": components["schemas"]["AiModelCheckResultDto"];
+                    };
+                };
+                /** @description The request names no model, too many, an empty entry, the same model and operation twice, a model of another profile, or an operation other than chat and embedding or one the model does not serve; or the profile cannot be called. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/ai-connections/discover-models": {
         parameters: {
             query?: never;
@@ -23493,12 +23595,60 @@ export interface components {
              */
             cacheWriteCostPer1MUsd?: number | null;
         };
+        /** @description A configured model of a profile that a model check calls, and whether it is called for chat or embeddings. */
+        AiModelCheckItem: {
+            /**
+             * Format: uuid
+             * @description The configured model of the profile.
+             */
+            configuredModelId?: string;
+            operation?: components["schemas"]["AiOperationKind"];
+        };
+        /** @description What a model check found for one model. */
+        AiModelCheckOutcomeDto: {
+            /**
+             * Format: uuid
+             * @description The configured model.
+             */
+            configuredModelId?: string;
+            /** @description The identifier the provider knows the model by. */
+            remoteModelId?: string | null;
+            operation?: components["schemas"]["AiOperationKind"];
+            /** @description Whether the model answered as the profile configures it. */
+            passed?: boolean;
+            /** @description Why the check failed, one of MeisterDev.ProPR.Application.DTOs.AiModelCheckReasons, or null when it passed. */
+            reason?: string | null;
+            /**
+             * Format: int32
+             * @description The status the provider answered a failed call with, or null without one.
+             */
+            httpStatus?: number | null;
+            /** @description What the provider or the check said about a failure, without credential material. */
+            summary?: string | null;
+            /** @description What to try next after a failure. */
+            actionHint?: string | null;
+        };
+        /** @description The configured models of a profile to check, at most MeisterDev.ProPR.Application.DTOs.AiModelCheckReasons.MaximumModels. */
+        AiModelCheckRequest: {
+            /** @description The models and what each one is checked for. */
+            models?: components["schemas"]["AiModelCheckItem"][] | null;
+        };
+        /** @description The outcomes of a model check, in the order of the request. */
+        AiModelCheckResultDto: {
+            results?: components["schemas"]["AiModelCheckOutcomeDto"][] | null;
+        };
         /** @description Normalized model discovery payload returned by provider drivers. */
         AiModelDiscoveryResultDto: {
             discoveryStatus?: string | null;
             manualEntryAllowed?: boolean;
             warnings?: string[] | null;
             models?: components["schemas"]["AiConfiguredModelDto"][] | null;
+            failureCategory?: components["schemas"]["AiVerificationFailureCategory"];
+            /**
+             * Format: int32
+             * @description The status a failed discovery was answered with, or null without one.
+             */
+            httpStatus?: number | null;
         };
         /**
          * @description Supported AI operation categories.

@@ -4,6 +4,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -561,6 +562,138 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
 
         // The credential itself never reaches a response, whatever the family says about it.
         Assert.DoesNotContain("client_email", body, StringComparison.Ordinal);
+    }
+
+    // Verification lists the models of an endpoint and does not call one model, so a model identifier with a typo
+    // passes it and every call of a review is refused. The check calls the configured model once.
+    [Fact]
+    public async Task CheckAiModels_AsksAChatModelForAFewTokensAndReportsThatItAnswered()
+    {
+        var profile = await this.SeedProviderProfileAsync(
+            "meisterdev/openAiCompatible", "apiKey", "https://llm.example.test/v1",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["apiKey"] = "sk-litellm-key" }, "gpt-6.1-terra");
+        factory.ProviderWire.Clear();
+        using var answer = factory.ProviderWire.Answer(request => request.Uri!.AbsolutePath.EndsWith("/chat/completions", StringComparison.Ordinal)
+            ? Json(
+                HttpStatusCode.OK,
+                """{"id":"c1","object":"chat.completion","created":1,"model":"gpt-6.1-terra","choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1,"total_tokens":4}}""")
+            : null);
+
+        var response = await this.CheckModelsAsync(profile, new { configuredModelId = profile.ConfiguredModels[0].Id, operation = "chat" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var outcome = Assert.Single((await response.Content.ReadFromJsonAsync<AiModelCheckResultDto>(ApiJsonOptions))!.Results);
+        Assert.True(outcome.Passed);
+        Assert.Equal(("gpt-6.1-terra", AiOperationKind.Chat), (outcome.RemoteModelId, outcome.Operation));
+        var sent = factory.ProviderWire.Single();
+        Assert.Equal("/v1/chat/completions", sent.Uri!.AbsolutePath);
+        Assert.Equal("Bearer sk-litellm-key", sent.Header("Authorization"));
+        Assert.Contains("\"gpt-6.1-terra\"", sent.Body, StringComparison.Ordinal);
+        Assert.Contains($":{AiModelChecks.MaximumOutputTokens}", sent.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CheckAiModels_ReportsAModelTheKeyMayNotUseWithoutEchoingTheKey()
+    {
+        var profile = await this.SeedProviderProfileAsync(
+            "meisterdev/openAiCompatible", "apiKey", "https://llm.example.test/v1",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["apiKey"] = "sk-litellm-key" }, "gpt-6.1-terrra");
+        factory.ProviderWire.Clear();
+        using var answer = factory.ProviderWire.Answer(_ => Json(
+            HttpStatusCode.Forbidden,
+            """{"error":{"message":"key_model_access_denied: The requested model 'gpt-6.1-terrra' is not available for this API key sk-litellm-key, or the model name is invalid.","type":"key_model_access_denied","code":"403"}}"""));
+
+        var response = await this.CheckModelsAsync(profile, new { configuredModelId = profile.ConfiguredModels[0].Id, operation = "chat" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("sk-litellm-key", body, StringComparison.Ordinal);
+        var outcome = Assert.Single(JsonSerializer.Deserialize<AiModelCheckResultDto>(body, ApiJsonOptions)!.Results);
+        Assert.False(outcome.Passed);
+        Assert.Equal((AiModelCheckReasons.ModelUnavailable, 403), (outcome.Reason, outcome.HttpStatus));
+        Assert.Contains("gpt-6.1-terrra", outcome.Summary, StringComparison.Ordinal);
+        Assert.Contains("model identifier", outcome.ActionHint, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CheckAiModels_ReportsAnEmbeddingModelWhoseVectorsHaveAnotherSize()
+    {
+        var client = this.CreateAuthorizedClient();
+        var created = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections",
+            new
+            {
+                displayName = "Embeddings",
+                providerKind = "meisterdev/openAiCompatible",
+                baseUrl = "https://llm.example.test/v1",
+                auth = new { mode = "apiKey", fields = new Dictionary<string, string> { ["apiKey"] = "sk-litellm-key" } },
+                discoveryMode = "manualOnly",
+                configuredModels = new[] { BuildConfiguredModel("bge-m3", embedding: true) },
+            });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var profile = (await created.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions))!;
+        factory.ProviderWire.Clear();
+        using var answer = factory.ProviderWire.Answer(_ => Json(
+            HttpStatusCode.OK,
+            """{"object":"list","data":[{"object":"embedding","index":0,"embedding":[0.1,0.2,0.3]}],"model":"bge-m3","usage":{"prompt_tokens":3,"total_tokens":3}}"""));
+
+        var response = await this.CheckModelsAsync(profile, new { configuredModelId = profile.ConfiguredModels[0].Id, operation = "embedding" });
+
+        var outcome = Assert.Single((await response.Content.ReadFromJsonAsync<AiModelCheckResultDto>(ApiJsonOptions))!.Results);
+        Assert.False(outcome.Passed);
+        Assert.Equal(AiModelCheckReasons.Dimensions, outcome.Reason);
+        Assert.Contains("3 dimensions", outcome.Summary, StringComparison.Ordinal);
+        Assert.Contains("3072", outcome.Summary, StringComparison.Ordinal);
+        Assert.Equal("/v1/embeddings", factory.ProviderWire.Single().Uri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task CheckAiModels_RefusesAnInvalidRequestBeforeAnyProviderIsContacted()
+    {
+        var profile = await this.SeedProviderProfileAsync(
+            "meisterdev/openAiCompatible", "apiKey", "https://llm.example.test/v1",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["apiKey"] = "sk-litellm-key" }, "gpt-6.1-terra");
+        var model = profile.ConfiguredModels[0].Id;
+        factory.ProviderWire.Clear();
+
+        var none = await this.CheckModelsAsync(profile);
+        var tooMany = await this.CheckModelsAsync(
+            profile,
+            new { configuredModelId = model, operation = "chat" }, new { configuredModelId = model, operation = "chat" },
+            new { configuredModelId = model, operation = "chat" }, new { configuredModelId = model, operation = "chat" });
+        var foreign = await this.CheckModelsAsync(profile, new { configuredModelId = Guid.NewGuid(), operation = "chat" });
+        var wrongOperation = await this.CheckModelsAsync(profile, new { configuredModelId = model, operation = "embedding" });
+        var empty = await this.CheckModelsAsync(profile, new object?[] { null }!);
+        var undefinedOperation = await this.CheckModelsAsync(profile, new { configuredModelId = model, operation = 2 });
+        var twice = await this.CheckModelsAsync(
+            profile, new { configuredModelId = model, operation = "chat" }, new { configuredModelId = model, operation = "chat" });
+        var missing = await this.CreateAuthorizedClient().PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{Guid.NewGuid()}/check-models",
+            new { models = new[] { new { configuredModelId = model, operation = "chat" } } });
+
+        Assert.Equal(
+            [
+                HttpStatusCode.BadRequest, HttpStatusCode.BadRequest, HttpStatusCode.BadRequest, HttpStatusCode.BadRequest,
+                HttpStatusCode.BadRequest, HttpStatusCode.BadRequest, HttpStatusCode.BadRequest, HttpStatusCode.NotFound,
+            ],
+            new[]
+            {
+                none.StatusCode, tooMany.StatusCode, foreign.StatusCode, wrongOperation.StatusCode,
+                empty.StatusCode, undefinedOperation.StatusCode, twice.StatusCode, missing.StatusCode,
+            });
+        Assert.Contains("not configured for embeddings", await wrongOperation.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Contains("each model and operation once", await twice.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(factory.ProviderWire.Requests);
+    }
+
+    private async Task<HttpResponseMessage> CheckModelsAsync(AiConnectionDto profile, params object[] models)
+    {
+        return await this.CreateAuthorizedClient().PostAsJsonAsync($"/clients/{ClientId}/ai-connections/{profile.Id}/check-models", new { models });
+    }
+
+    private static HttpResponseMessage Json(HttpStatusCode status, string body)
+    {
+        return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
     }
 
     private async Task<AiConnectionDto> SeedProviderProfileAsync(

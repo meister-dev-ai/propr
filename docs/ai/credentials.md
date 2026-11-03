@@ -18,7 +18,8 @@ there is labelled **Add Profile**; the object it creates is what these pages cal
    authentication mode. See [Credentials by provider](#credentials-by-provider).
 4. **Verify.** ProPR probes the endpoint and reports what is wrong when the probe fails.
 5. **Add models.** Either discover them from the provider, browse the model catalog, or define one by hand - see
-   [models and the catalog](models-and-catalog.md).
+   [models and the catalog](models-and-catalog.md). To find a mistyped model id or one the key may not use before
+   a review does, check up to three models per request: each selected model is called once with a few tokens.
 6. **Activate it.** A connection is created inactive, and activation is refused until the connection has been
    verified since its last change. While it is inactive, its purpose bindings are invisible to the review loop -
    the second resolution layer described under [AI purposes](purposes.md#ai-purposes) only looks at active

@@ -6225,6 +6225,159 @@
         }
       }
     },
+    "/clients/{clientId}/ai-connections/{connectionId}/check-models": {
+      "post": {
+        "tags": [
+          "ClientAiConnections"
+        ],
+        "summary": "Sends one small request to each of up to three configured models of a stored profile and reports whether\neach model answers as the profile configures it: a chat model for at most a few tokens, an embedding model\nwith one short text whose vector length is compared with the configured dimensions.",
+        "description": "Verification proves the address and the credential; this proves the models, such as a model identifier\nwith a typo, or one the credential may not use. The calls use the stored credential and cost the owner of\nthe credential a few tokens, so a caller asks before it checks. Nothing is stored. The checks run at the\nsame time, and each one may take at most 25 seconds.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "The owning client.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "The stored profile.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The configured models and what each one is checked for.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCheckRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCheckRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The outcome of each check, in the order of the request; a failed check is an outcome.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiModelCheckResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiModelCheckResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiModelCheckResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request names no model, too many, an empty entry, the same model and operation twice, a model of another profile, or an operation other than chat and embedding or one the model does not serve; or the profile cannot be called.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/ai-connections/discover-models": {
       "post": {
         "tags": [
@@ -33995,6 +34148,95 @@
         "additionalProperties": false,
         "description": "A tenant's override of catalog values for one model. Only pricing and the display name are overridable,\nbecause those are what can genuinely differ for a customer; a model's capabilities are facts about the\nmodel and always come from the snapshot."
       },
+      "AiModelCheckItem": {
+        "type": "object",
+        "properties": {
+          "configuredModelId": {
+            "type": "string",
+            "description": "The configured model of the profile.",
+            "format": "uuid"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/AiOperationKind"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A configured model of a profile that a model check calls, and whether it is called for chat or embeddings."
+      },
+      "AiModelCheckOutcomeDto": {
+        "type": "object",
+        "properties": {
+          "configuredModelId": {
+            "type": "string",
+            "description": "The configured model.",
+            "format": "uuid"
+          },
+          "remoteModelId": {
+            "type": "string",
+            "description": "The identifier the provider knows the model by.",
+            "nullable": true
+          },
+          "operation": {
+            "$ref": "#/components/schemas/AiOperationKind"
+          },
+          "passed": {
+            "type": "boolean",
+            "description": "Whether the model answered as the profile configures it."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the check failed, one of MeisterDev.ProPR.Application.DTOs.AiModelCheckReasons, or null when it passed.",
+            "nullable": true
+          },
+          "httpStatus": {
+            "type": "integer",
+            "description": "The status the provider answered a failed call with, or null without one.",
+            "format": "int32",
+            "nullable": true
+          },
+          "summary": {
+            "type": "string",
+            "description": "What the provider or the check said about a failure, without credential material.",
+            "nullable": true
+          },
+          "actionHint": {
+            "type": "string",
+            "description": "What to try next after a failure.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What a model check found for one model."
+      },
+      "AiModelCheckRequest": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiModelCheckItem"
+            },
+            "description": "The models and what each one is checked for.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The configured models of a profile to check, at most MeisterDev.ProPR.Application.DTOs.AiModelCheckReasons.MaximumModels."
+      },
+      "AiModelCheckResultDto": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiModelCheckOutcomeDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The outcomes of a model check, in the order of the request."
+      },
       "AiModelDiscoveryResultDto": {
         "type": "object",
         "properties": {
@@ -34017,6 +34259,15 @@
             "items": {
               "$ref": "#/components/schemas/AiConfiguredModelDto"
             },
+            "nullable": true
+          },
+          "failureCategory": {
+            "$ref": "#/components/schemas/AiVerificationFailureCategory"
+          },
+          "httpStatus": {
+            "type": "integer",
+            "description": "The status a failed discovery was answered with, or null without one.",
+            "format": "int32",
             "nullable": true
           }
         },

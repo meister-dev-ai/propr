@@ -13,7 +13,23 @@ what to enter instead, is per family: see
 [provider-specific setup notes](credentials.md#provider-specific-setup-notes).
 
 Discovery returns model ids. It does not return context windows, capabilities or prices. The catalog holds
-those.
+those. A LiteLLM gateway also states what each model is for (`mode`) and its input limit: an embedding model is then
+offered as one whatever its name, and a model for images, speech or reranking is left out. Without a stated mode,
+a model whose id contains `embedding` is offered as an embedding model and every other one as a chat model.
+
+A discovery that fails says why in the categories of a verification, also when the call got no answer at all, for
+example because the address does not resolve, the host does not trust the certificate, or the egress rules refuse
+the connection. A redirect, such as one to a sign-in page in front of the endpoint, is a failure, because provider
+calls do not follow redirects.
+
+## Checking the models
+
+Verification proves the address and the credential. It does not prove a model: a model id with a typo, or one the
+key may not use, verifies and then fails every call of a review. `POST /{connectionId}/check-models` calls up to
+three configured models once each, a chat model for at most 16 tokens and an embedding model with one short text,
+and reports each model that does not answer as configured, including an embedding model whose vectors have another
+size than the configured dimensions. The check uses the credential of the connection, so it costs its owner a few
+tokens and is only run when asked for.
 
 ## The model catalog
 

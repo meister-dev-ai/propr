@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
@@ -82,7 +83,10 @@ public sealed partial class ClientAiConnectionsController
                     try
                     {
                         return ProviderOutcomeGuard.Adopt(
-                            await driver.VerifyAsync(candidate.ToProviderEndpoint(this.ProbeContext()), cancellation),
+                            await DriverCalls.VerifyAsync(
+                                driver,
+                                candidate.ToProviderEndpoint(this.ProbeContext()),
+                                cancellation),
                             ProviderOutcomeGuard.SecretsOf(candidate));
                     }
                     catch (Exception) when (!cancellation.IsCancellationRequested)

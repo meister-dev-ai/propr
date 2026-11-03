@@ -156,13 +156,9 @@ public sealed class AnthropicProviderDriver : IAiProviderDriver
         CancellationToken ct = default)
     {
         var listing = await AnthropicModels.ListAsync(endpoint, ct).ConfigureAwait(false);
-        if ((int)listing.Status >= 400)
+        if (DriverFailureMapper.IsFailure(listing.Status))
         {
-            return new ProviderModelDiscoveryResult(
-                "failed",
-                true,
-                [listing.Detail ?? $"Provider discovery failed with status {(int)listing.Status}."],
-                []);
+            return DriverFailureMapper.DiscoveryFailed(listing.Status, listing.Detail);
         }
 
         return new ProviderModelDiscoveryResult(
@@ -179,7 +175,7 @@ public sealed class AnthropicProviderDriver : IAiProviderDriver
 
         var listing = await AnthropicModels.ListAsync(endpoint, ct).ConfigureAwait(false);
 
-        return (int)listing.Status >= 400
+        return DriverFailureMapper.IsFailure(listing.Status)
             ? DriverFailureMapper.Failed(listing.Status, listing.Detail)
             : DriverFailureMapper.Verified(
                 $"Verified Anthropic connectivity for '{endpoint.BaseUrl}'.",

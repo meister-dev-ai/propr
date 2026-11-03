@@ -29,6 +29,24 @@ internal sealed class FakeProviderEndpoint : HttpMessageHandler
     private readonly object _gate = new();
     private readonly List<RecordedRequest> _requests = [];
 
+    private Func<RecordedRequest, HttpResponseMessage?>? _responder;
+
+    /// <summary>
+    ///     Answers requests in place of the empty model list until the returned scope ends, for a test that needs
+    ///     another answer, such as a chat completion or a refusal. A null answer falls back to the empty model list.
+    ///     The endpoint is shared by the tests of a class, so the answer ends with the test that set it.
+    /// </summary>
+    /// <param name="responder">The answer to a recorded request, or null for the empty model list.</param>
+    public IDisposable Answer(Func<RecordedRequest, HttpResponseMessage?> responder)
+    {
+        lock (this._gate)
+        {
+            this._responder = responder;
+        }
+
+        return new AnswerScope(this, responder);
+    }
+
     /// <summary>The requests received since the last <see cref="Clear" />, in order.</summary>
     public IReadOnlyList<RecordedRequest> Requests
     {
@@ -76,9 +94,17 @@ internal sealed class FakeProviderEndpoint : HttpMessageHandler
             ? null
             : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
+        var recorded = new RecordedRequest(request.Method, request.RequestUri, headers, body);
+        Func<RecordedRequest, HttpResponseMessage?>? responder;
         lock (this._gate)
         {
-            this._requests.Add(new RecordedRequest(request.Method, request.RequestUri, headers, body));
+            this._requests.Add(recorded);
+            responder = this._responder;
+        }
+
+        if (responder?.Invoke(recorded) is { } answer)
+        {
+            return answer;
         }
 
         return new HttpResponseMessage(HttpStatusCode.OK)
@@ -126,6 +152,21 @@ internal sealed class FakeProviderEndpoint : HttpMessageHandler
         public string? Header(string name)
         {
             return this.Headers.TryGetValue(name, out var value) ? value : null;
+        }
+    }
+
+    private sealed class AnswerScope(FakeProviderEndpoint endpoint, Func<RecordedRequest, HttpResponseMessage?> responder)
+        : IDisposable
+    {
+        public void Dispose()
+        {
+            lock (endpoint._gate)
+            {
+                if (ReferenceEquals(endpoint._responder, responder))
+                {
+                    endpoint._responder = null;
+                }
+            }
         }
     }
 }

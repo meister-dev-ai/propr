@@ -64,6 +64,28 @@ internal static class ProviderOutcomeGuard
         };
     }
 
+    /// <summary>
+    ///     A model check outcome as the host answers it: the summary and the hint are the provider's words and can echo
+    ///     the credential, so they are bounded and the credential is masked like every other provider text.
+    /// </summary>
+    /// <param name="outcome">The outcome of one check.</param>
+    /// <param name="secrets">The credential values the host presented.</param>
+    public static AiModelCheckOutcomeDto Adopt(AiModelCheckOutcomeDto outcome, IReadOnlyCollection<string> secrets)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        ArgumentNullException.ThrowIfNull(secrets);
+
+        return outcome with
+        {
+            Summary = outcome.Summary is null
+                ? null
+                : ProviderMessageGuard.Sanitize(outcome.Summary, secrets, ProviderHostLimits.MaximumFieldTextLength),
+            ActionHint = outcome.ActionHint is null
+                ? null
+                : ProviderMessageGuard.Sanitize(outcome.ActionHint, secrets, ProviderHostLimits.MaximumFieldTextLength),
+        };
+    }
+
     /// <summary>What a family discovered at an endpoint, as the product's own result.</summary>
     /// <param name="result">The outcome the family returned.</param>
     /// <param name="discoveredAt">When the discovery ran.</param>

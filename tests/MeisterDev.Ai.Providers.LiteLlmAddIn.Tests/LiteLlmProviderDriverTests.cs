@@ -133,6 +133,23 @@ public sealed class LiteLlmProviderDriverTests
         Assert.Contains("credential", refusal, StringComparison.Ordinal);
     }
 
+    // A gateway states what each model it routes to is for, which decides over the name of the model.
+    [Fact]
+    public async Task TheModeTheGatewayStatesDecidesWhatAModelIsOfferedAs()
+    {
+        var wire = new FakeGateway(
+            HttpStatusCode.OK, """
+                               {"data":[{"id":"bge-m3","mode":"embedding","max_input_tokens":8191},{"id":"gpt-5","mode":"chat"},{"id":"tts-1","mode":"audio_speech"}]}
+                               """);
+
+        var discovered = await Driver().DiscoverModelsAsync(EndpointOn(wire));
+
+        Assert.Equal(["bge-m3", "gpt-5"], discovered.Models.Select(model => model.RemoteModelId));
+        var embedding = discovered.Models[0];
+        Assert.Equal([AiOperationKind.Embedding], embedding.OperationKinds);
+        Assert.Equal(8191, embedding.MaxInputTokens);
+    }
+
     [Fact]
     public async Task TheModelListIsReadFromTheGatewaysOwnPath()
     {

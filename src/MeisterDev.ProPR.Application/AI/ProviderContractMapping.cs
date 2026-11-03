@@ -144,7 +144,9 @@ public static class ProviderContractMapping
             result.DiscoveryStatus,
             result.ManualEntryAllowed,
             result.Warnings,
-            result.Models.Select(model => model.ToDto(discoveredAt)).ToList());
+            result.Models.Select(model => model.ToDto(discoveredAt)).ToList(),
+            result.FailureCategory,
+            result.HttpStatus);
     }
 
     private static AiConfiguredModelDto ToDto(this ProviderDiscoveredModel model, DateTimeOffset discoveredAt)
