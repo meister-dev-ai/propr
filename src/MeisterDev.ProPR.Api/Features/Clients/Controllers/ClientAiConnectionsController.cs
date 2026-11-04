@@ -168,6 +168,8 @@ public sealed partial class ClientAiConnectionsController(
             return this.ValidationProblem();
         }
 
+        writeRequest = await this.FillEmbeddingDefaultsAsync(clientId, writeRequest, ct);
+
         if (request.CreationRequestId == Guid.Empty)
         {
             this.ModelState.AddModelError(nameof(request.CreationRequestId), "A creation request ID must not be empty.");
@@ -249,6 +251,8 @@ public sealed partial class ClientAiConnectionsController(
         {
             return this.ValidationProblem();
         }
+
+        writeRequest = await this.FillEmbeddingDefaultsAsync(clientId, writeRequest, ct);
 
         try
         {
@@ -612,6 +616,11 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Discovers provider models using the supplied unsaved profile settings.</summary>
+    /// <remarks>
+    ///     A listed embedding model carries the tokenizer, input limit and vector width a save would fill in.
+    ///     <c>catalogModels</c> holds the catalog models the family can serve and the provider did not list, at most
+    ///     200, embedding models first; it is filled also when the discovery failed.
+    /// </remarks>
     [HttpPost("discover-models")]
     [ProducesResponseType(typeof(AiModelDiscoveryResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -673,12 +682,25 @@ public sealed partial class ClientAiConnectionsController(
         // A model list is identifiers, not economics — several providers return nothing but an id — so the
         // catalog supplies price, context and capabilities. Without it a discovered model arrives unpriced and a
         // budget cap is enforced against zero.
-        if (modelCatalog is not null)
+        var providerKind = driver.Declaration.Key;
+        var catalog = modelCatalog is null
+            ? []
+            : await modelCatalog.GetEffectiveForClientAsync(clientId, ct: ct);
+        discovered = DiscoveredModelCatalogEnricher.Enrich(discovered, catalog, providerKind);
+
+        // A listed embedding model carries no tokenizer, input limit or width unless the listing states them, so
+        // the values a save would fill in are filled in here and the operator sees them before saving. The catalog
+        // models are offered also when the listing failed or was empty, because then they are the models an
+        // operator can pick from.
+        discovered = discovered with
         {
-            discovered = DiscoveredModelCatalogEnricher.Enrich(
-                discovered,
-                await modelCatalog.GetEffectiveForClientAsync(clientId, ct: ct));
-        }
+            Models = discovered.Models.Select(model => EmbeddingModelDefaults.Apply(model, providerKind, catalog)).ToList(),
+            CatalogModels = CatalogModelSuggestions.Suggest(
+                providerKind,
+                catalog,
+                discovered.Models.Select(model => model.RemoteModelId),
+                this.DefaultProtocolModes(providerKind, isEmbeddingOnly: false)),
+        };
 
         return this.Ok(discovered);
     }
@@ -961,9 +983,13 @@ public sealed partial class ClientAiConnectionsController(
             return null;
         }
 
+        // A tokenizer is checked when the request states the models. An update that leaves the models out restates
+        // the stored ones unchecked, so a profile that stores a tokenizer outside the supported list can still be
+        // renamed or pointed at another address without restating its models.
         var configuredModels = this.NormalizeConfiguredModels(
             providerKind,
-            request.ConfiguredModels ?? existing.ConfiguredModels.Select(ToConfiguredModelRequest).ToList());
+            request.ConfiguredModels ?? existing.ConfiguredModels.Select(ToConfiguredModelRequest).ToList(),
+            checkTokenizers: request.ConfiguredModels is not null);
         var purposeBindings = this.NormalizePurposeBindings(
             request.PurposeBindings ?? existing.PurposeBindings.Select(ToBindingRequest).ToList(),
             configuredModels);
@@ -1238,7 +1264,8 @@ public sealed partial class ClientAiConnectionsController(
 
     private IReadOnlyList<AiConfiguredModelDto> NormalizeConfiguredModels(
         string providerKind,
-        IReadOnlyList<AiConfiguredModelRequest>? requestModels)
+        IReadOnlyList<AiConfiguredModelRequest>? requestModels,
+        bool checkTokenizers = true)
     {
         if (requestModels is null || requestModels.Count == 0)
         {
@@ -1249,9 +1276,9 @@ public sealed partial class ClientAiConnectionsController(
         var models = new List<AiConfiguredModelDto>();
         var seen = new HashSet<string>(ModelNameComparer);
 
-        foreach (var requestModel in requestModels)
+        for (var index = 0; index < requestModels.Count; index++)
         {
-            var normalizedModel = this.NormalizeConfiguredModel(providerKind, requestModel, seen);
+            var normalizedModel = this.NormalizeConfiguredModel(providerKind, requestModels[index], seen, index, checkTokenizers);
             if (normalizedModel is not null)
             {
                 models.Add(normalizedModel);
@@ -1264,7 +1291,9 @@ public sealed partial class ClientAiConnectionsController(
     private AiConfiguredModelDto? NormalizeConfiguredModel(
         string providerKind,
         AiConfiguredModelRequest requestModel,
-        HashSet<string> seen)
+        HashSet<string> seen,
+        int index,
+        bool checkTokenizer)
     {
         if (string.IsNullOrWhiteSpace(requestModel.RemoteModelId))
         {
@@ -1294,7 +1323,7 @@ public sealed partial class ClientAiConnectionsController(
 
         if (operationKinds.Contains(AiOperationKind.Embedding))
         {
-            this.AddEmbeddingModelErrors(requestModel, remoteModelId);
+            this.AddEmbeddingModelErrors(requestModel, remoteModelId, index, checkTokenizer);
         }
 
         if (ProviderVocabulary.Names(protocolModes, ProviderDeclaredProtocolModes.Embeddings)
@@ -1336,24 +1365,50 @@ public sealed partial class ClientAiConnectionsController(
             string.IsNullOrWhiteSpace(requestModel.ReasoningContentField) ? null : requestModel.ReasoningContentField.Trim());
     }
 
-    private void AddEmbeddingModelErrors(AiConfiguredModelRequest requestModel, string remoteModelId)
+    // An embedding model may leave its tokenizer, input limit and width out, and the save fills them in. A stated
+    // value is kept, so a stated value the embedding paths cannot use is refused here.
+    private void AddEmbeddingModelErrors(AiConfiguredModelRequest requestModel, string remoteModelId, int index, bool checkTokenizer)
     {
-        if (string.IsNullOrWhiteSpace(requestModel.TokenizerName))
+        if (checkTokenizer && EmbeddingModelDefaults.TokenizerRefusal(requestModel.TokenizerName, remoteModelId) is { } tokenizerRefusal)
         {
-            this.ModelState.AddModelError(RequestModelsPropertyName, $"Embedding model '{remoteModelId}' requires tokenizerName.");
+            this.ModelState.AddModelError($"configuredModels[{index}].tokenizerName", tokenizerRefusal);
         }
 
-        if (!requestModel.MaxInputTokens.HasValue || requestModel.MaxInputTokens.Value <= 0)
+        if (requestModel.MaxInputTokens is <= 0)
         {
             this.ModelState.AddModelError(RequestModelsPropertyName, $"Embedding model '{remoteModelId}' requires maxInputTokens greater than zero.");
         }
 
-        if (!requestModel.EmbeddingDimensions.HasValue || requestModel.EmbeddingDimensions.Value is < 64 or > 4096)
+        if (requestModel.EmbeddingDimensions is { } dimensions && !EmbeddingModelDefaults.IsAcceptedDimensions(dimensions))
         {
             this.ModelState.AddModelError(
                 RequestModelsPropertyName,
-                $"Embedding model '{remoteModelId}' requires embeddingDimensions between 64 and 4096.");
+                $"Embedding model '{remoteModelId}' requires embeddingDimensions between "
+                + $"{EmbeddingModelDefaults.MinimumDimensions} and {EmbeddingModelDefaults.MaximumDimensions}.");
         }
+    }
+
+    // The defaults are filled in after the request is validated, from the table of documented embedding models,
+    // the catalog of the client and the fallback values. The catalog is read only when a model needs it.
+    private async Task<AiConnectionWriteRequestDto> FillEmbeddingDefaultsAsync(
+        Guid clientId,
+        AiConnectionWriteRequestDto writeRequest,
+        CancellationToken ct)
+    {
+        var catalog = modelCatalog is not null && writeRequest.ConfiguredModels.Any(EmbeddingModelDefaults.ReadsCatalog)
+            ? await modelCatalog.GetEffectiveForClientAsync(clientId, ct: ct)
+            : [];
+        var providerKind = providerDrivers.IsRegistered(writeRequest.ProviderKind)
+            ? providerDrivers.GetRequired(writeRequest.ProviderKind).Declaration.Key
+            : writeRequest.ProviderKind;
+
+        return writeRequest with
+        {
+            ConfiguredModels = writeRequest.ConfiguredModels
+                .Select(model => EmbeddingModelDefaults.Apply(model, providerKind, catalog))
+                .ToList()
+                .AsReadOnly(),
+        };
     }
 
     private IReadOnlyList<AiPurposeBindingDto> NormalizePurposeBindings(

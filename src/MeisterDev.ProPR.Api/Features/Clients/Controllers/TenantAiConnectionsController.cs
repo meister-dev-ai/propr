@@ -36,7 +36,8 @@ public sealed class TenantAiConnectionsController(
     EgressUrlPolicy egressPolicy,
     IProviderConnectionContextFactory? hostContexts = null,
     IProviderAddInCapabilityGate? addInCapabilities = null,
-    IProviderHttpClientFactory? providerHttp = null) : ControllerBase
+    IProviderHttpClientFactory? providerHttp = null,
+    IModelCatalogRepository? modelCatalog = null) : ControllerBase
 {
     // What a family may do while answering for a connection whose bound primitives cannot be built: the
     // transport and nothing else. Verification is a call the family makes to the endpoint, and a family reaches
@@ -121,6 +122,8 @@ public sealed class TenantAiConnectionsController(
         {
             return this.ValidationProblem();
         }
+
+        writeRequest = await this.FillEmbeddingDefaultsAsync(tenantId, writeRequest, ct);
 
         try
         {
@@ -462,8 +465,9 @@ public sealed class TenantAiConnectionsController(
         var models = new List<AiConfiguredModelDto>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var model in requestModels)
+        for (var index = 0; index < requestModels.Count; index++)
         {
+            var model = requestModels[index];
             var remoteModelId = model.RemoteModelId?.Trim();
             if (string.IsNullOrWhiteSpace(remoteModelId))
             {
@@ -482,9 +486,10 @@ public sealed class TenantAiConnectionsController(
                 : new List<AiOperationKind> { AiOperationKind.Chat }.AsReadOnly();
             var isEmbedding = operationKinds.Contains(AiOperationKind.Embedding);
 
-            if (isEmbedding && (string.IsNullOrWhiteSpace(model.TokenizerName) || !model.MaxInputTokens.HasValue || !model.EmbeddingDimensions.HasValue))
+            // An embedding model may leave its tokenizer, input limit and width out, and the save fills them in.
+            // A stated value is kept, so a stated value the embedding paths cannot use is refused here.
+            if (isEmbedding && !this.AcceptStatedEmbeddingValues(model, remoteModelId, index))
             {
-                this.ModelState.AddModelError("configuredModels", $"Embedding model '{remoteModelId}' requires tokenizer, max input tokens, and dimensions.");
                 continue;
             }
 
@@ -515,6 +520,56 @@ public sealed class TenantAiConnectionsController(
         }
 
         return models.AsReadOnly();
+    }
+
+    private bool AcceptStatedEmbeddingValues(AiConfiguredModelRequest model, string remoteModelId, int index)
+    {
+        var accepted = true;
+        if (EmbeddingModelDefaults.TokenizerRefusal(model.TokenizerName, remoteModelId) is { } tokenizerRefusal)
+        {
+            this.ModelState.AddModelError($"configuredModels[{index}].tokenizerName", tokenizerRefusal);
+            accepted = false;
+        }
+
+        if (model.MaxInputTokens is <= 0)
+        {
+            this.ModelState.AddModelError("configuredModels", $"Embedding model '{remoteModelId}' requires maxInputTokens greater than zero.");
+            accepted = false;
+        }
+
+        if (model.EmbeddingDimensions is { } dimensions && !EmbeddingModelDefaults.IsAcceptedDimensions(dimensions))
+        {
+            this.ModelState.AddModelError(
+                "configuredModels",
+                $"Embedding model '{remoteModelId}' requires embeddingDimensions between "
+                + $"{EmbeddingModelDefaults.MinimumDimensions} and {EmbeddingModelDefaults.MaximumDimensions}.");
+            accepted = false;
+        }
+
+        return accepted;
+    }
+
+    // The defaults are filled in after the request is validated, from the table of documented embedding models,
+    // the catalog of the tenant and the fallback values. The catalog is read only when a model needs it.
+    private async Task<AiConnectionWriteRequestDto> FillEmbeddingDefaultsAsync(
+        Guid tenantId,
+        AiConnectionWriteRequestDto writeRequest,
+        CancellationToken ct)
+    {
+        var catalog = modelCatalog is not null && writeRequest.ConfiguredModels.Any(EmbeddingModelDefaults.ReadsCatalog)
+            ? await modelCatalog.GetEffectiveForTenantAsync(tenantId, ct: ct)
+            : [];
+        var providerKind = providerDrivers.IsRegistered(writeRequest.ProviderKind)
+            ? providerDrivers.GetRequired(writeRequest.ProviderKind).Declaration.Key
+            : writeRequest.ProviderKind;
+
+        return writeRequest with
+        {
+            ConfiguredModels = writeRequest.ConfiguredModels
+                .Select(model => EmbeddingModelDefaults.Apply(model, providerKind, catalog))
+                .ToList()
+                .AsReadOnly(),
+        };
     }
 
     // The shapes a model serves when the request states none. An embedding model gets the two the host

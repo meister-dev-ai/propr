@@ -29,6 +29,12 @@ namespace MeisterDev.ProPR.Application.AI;
 ///         rate as merely one more conflicting candidate left the model unpriced, which made recording the rate
 ///         pointless in exactly the case it was entered for.
 ///     </para>
+///     <para>
+///         A family with a catalog provider of its own, see <see cref="ProviderCatalogScope" />, buys its models
+///         from that provider. When that provider lists the model, the entries of other providers for the same
+///         identifier are set aside before the layers and the ambiguity are judged, so an OpenAI connection that
+///         discovers <c>gpt-4o</c> is priced at the OpenAI rate.
+///     </para>
 /// </remarks>
 public static class DiscoveredModelCatalogEnricher
 {
@@ -38,9 +44,14 @@ public static class DiscoveredModelCatalogEnricher
     /// </summary>
     /// <param name="discovered">The provider's discovery result.</param>
     /// <param name="catalog">Catalog entries the client may draw on, overrides already applied.</param>
+    /// <param name="providerKind">
+    ///     The declared key of the family that discovered the models, whose own catalog provider is preferred; null
+    ///     to consider every catalog provider alike.
+    /// </param>
     public static AiModelDiscoveryResultDto Enrich(
         AiModelDiscoveryResultDto discovered,
-        IReadOnlyList<AiModelCatalogEntryDto> catalog)
+        IReadOnlyList<AiModelCatalogEntryDto> catalog,
+        string? providerKind = null)
     {
         ArgumentNullException.ThrowIfNull(discovered);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -66,7 +77,7 @@ public static class DiscoveredModelCatalogEnricher
                 continue;
             }
 
-            var candidates = ModelCatalogLayerPrecedence.NarrowToMostSpecific(offered);
+            var candidates = ModelCatalogLayerPrecedence.NarrowToMostSpecific(ProviderCatalogScope.PreferOwnProvider(providerKind, offered));
             var distinct = candidates.DistinctBy(Fingerprint).ToList();
             if (distinct.Count > 1)
             {

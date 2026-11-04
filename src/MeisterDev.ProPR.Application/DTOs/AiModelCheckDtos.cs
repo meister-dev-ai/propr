@@ -23,6 +23,10 @@ public sealed record AiModelCheckRequest(IReadOnlyList<AiModelCheckItem>? Models
 /// <param name="HttpStatus">The status the provider answered a failed call with, or null without one.</param>
 /// <param name="Summary">What the provider or the check said about a failure, without credential material.</param>
 /// <param name="ActionHint">What to try next after a failure.</param>
+/// <param name="ReturnedDimensions">
+///     The length of the vector an embedding model returned, whether the check passed or failed; null for a chat
+///     check and for an embedding check that returned no vector.
+/// </param>
 public sealed record AiModelCheckOutcomeDto(
     Guid ConfiguredModelId,
     string RemoteModelId,
@@ -31,7 +35,8 @@ public sealed record AiModelCheckOutcomeDto(
     string? Reason = null,
     int? HttpStatus = null,
     string? Summary = null,
-    string? ActionHint = null);
+    string? ActionHint = null,
+    int? ReturnedDimensions = null);
 
 /// <summary>The outcomes of a model check, in the order of the request.</summary>
 public sealed record AiModelCheckResultDto(IReadOnlyList<AiModelCheckOutcomeDto> Results);

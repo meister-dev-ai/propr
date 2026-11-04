@@ -210,12 +210,22 @@ public sealed partial class AiConnectionRepository
 
                 if (model is null || (purpose == AiPurpose.EmbeddingDefault
                         ? !model.SupportsEmbedding || string.IsNullOrWhiteSpace(model.TokenizerName) ||
-                          model.MaxInputTokens is not > 0 || model.EmbeddingDimensions is not (>= 64 and <= 4096)
+                          model.MaxInputTokens is not > 0
                         : !model.SupportsChat))
                 {
                     return new(
                         false,
-                        "Select chat-capable Default and High models and an embedding model with tokenizer, input limit and dimensions from 64 to 4096.");
+                        "Select chat-capable Default and High models and an embedding model with tokenizer and input limit.");
+                }
+
+                // Every embedding column stores vectors of one width, so a model configured for another width
+                // would be selected here and fail on its first embedding call.
+                if (purpose == AiPurpose.EmbeddingDefault && model.EmbeddingDimensions != EmbeddingModelDefaults.VectorDimensions)
+                {
+                    return new(
+                        false,
+                        $"Select an embedding model configured for {EmbeddingModelDefaults.VectorDimensions} dimensions. "
+                        + $"ProPR stores embedding vectors with {EmbeddingModelDefaults.VectorDimensions} dimensions.");
                 }
 
                 if (purpose != AiPurpose.EmbeddingDefault && !string.IsNullOrWhiteSpace(model.ReasoningContentField) &&

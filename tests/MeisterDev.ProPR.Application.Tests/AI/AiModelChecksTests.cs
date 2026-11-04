@@ -65,7 +65,32 @@ public sealed class AiModelChecksTests
         var outcome = await AiModelChecks.CheckAsync(this._driver, Endpoint, Embedding, AiOperationKind.Embedding, CancellationToken.None);
 
         Assert.True(outcome.Passed);
+        Assert.Equal(4, outcome.ReturnedDimensions);
         this._driver.Received(1).CreateEmbeddingGenerator(Endpoint, Arg.Any<ProviderModelDescriptor>(), ProviderDeclaredProtocolModes.Embeddings, 4);
+    }
+
+    // The measured length is what an operator enters when the configured width is wrong, so it is reported.
+    [Fact]
+    public async Task AnEmbeddingModelWhoseVectorHasAnotherLengthFailsAndReportsTheLength()
+    {
+        this.Embed(1536);
+
+        var outcome = await AiModelChecks.CheckAsync(this._driver, Endpoint, Embedding, AiOperationKind.Embedding, CancellationToken.None);
+
+        Assert.Equal((false, AiModelCheckReasons.Dimensions, (int?)1536), (outcome.Passed, outcome.Reason, outcome.ReturnedDimensions));
+        Assert.Contains("1536 dimensions", outcome.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnEmbeddingCallThatReturnsNoVectorReportsNoLength()
+    {
+        this._embeddings.GenerateAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<EmbeddingGenerationOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new GeneratedEmbeddings<Embedding<float>>());
+
+        var outcome = await AiModelChecks.CheckAsync(this._driver, Endpoint, Embedding, AiOperationKind.Embedding, CancellationToken.None);
+
+        Assert.Equal((false, AiModelCheckReasons.Dimensions), (outcome.Passed, outcome.Reason));
+        Assert.Null(outcome.ReturnedDimensions);
     }
 
     [Fact]

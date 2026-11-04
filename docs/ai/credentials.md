@@ -46,8 +46,8 @@ leaves the saved profile and active bindings unchanged. A concurrent credential,
 `POST /clients/{clientId}/ai-connections/select-purposes` accepts `default`, `high` and `embedding`, each with
 `connectionId` and `configuredModelId`. All selected connections must belong to the client and be verified.
 Default and High require chat models. Embedding requires embedding capability, a tokenizer, a positive input
-limit and dimensions between 64 and 4096. Both the configured model and its provider driver must support
-the selected chat or embeddings protocol.
+limit and 1536 dimensions, the width ProPR stores embedding vectors with. Both the configured model and its
+provider driver must support the selected chat or embeddings protocol.
 
 ProPR applies Review default, Triage, Verification, Low effort, Medium effort and Memory reconsideration to
 Default. High effort uses High, and Embedding default uses Embedding. ProPR activates selected connections and

@@ -154,7 +154,7 @@ that case. That client throws on first use.
 | `Runtime` | `ProviderRuntimePipeline`, `ProviderRuntimeStage`, `IProviderChatClientDecorator`, `NormalizedUsageChatClientDecorator`, `ReasoningModelSamplingDecorator` |
 | `Resilience` | `ProviderRetryPolicy`, `ProviderRetryChatClient(Decorator)`, `ProviderRetryEmbeddingGenerator`, `ProviderPacingChatClient(Decorator)`, `ProviderThrottleGate`, `ProviderCallFailedException` |
 | `Transport` | `ReasoningContentRoundTripHandler`, `FinishReasonNormalizingHandler` |
-| `Catalog` | `BundledCatalogSnapshot`, `ICatalogSnapshotImporter`, `ModelsDevCatalogSnapshotImporter`, `ProviderCatalogEntry` |
+| `Catalog` | `BundledCatalogSnapshot`, `ICatalogSnapshotImporter`, `ModelsDevCatalogSnapshotImporter`, `ProviderCatalogEntry`, `KnownEmbeddingModels`, `KnownEmbeddingModel` |
 | `Contracts` | `ProviderSecretEnvelope`, `ProviderCallTarget` |
 
 Both assemblies put their types under the root namespace `MeisterDev.Ai.Providers`, so the namespace does not

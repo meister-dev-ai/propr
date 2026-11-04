@@ -146,7 +146,7 @@ public sealed class OpenAiProviderDriverTests
     }
 
     // The vendor lists identifiers and no capabilities, so what a model is offered as is read off its identifier
-    // and corrected by the operator.
+    // and corrected by the operator. The list states no tokenizer, input limit or vector width, so none is offered.
     [Fact]
     public async Task AModelNamedAsAnEmbeddingIsOfferedAsOne()
     {
@@ -157,6 +157,7 @@ public sealed class OpenAiProviderDriverTests
         var model = Assert.Single(discovered.Models);
         Assert.Equal([AiOperationKind.Embedding], model.OperationKinds);
         Assert.Equal([ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings], model.SupportedProtocolModes);
+        Assert.Equal((null, null, null), (model.TokenizerName, model.MaxInputTokens, model.EmbeddingDimensions));
     }
 
     // The vendor's list holds more than the models a chat or an embedding client can call. Offered as chat

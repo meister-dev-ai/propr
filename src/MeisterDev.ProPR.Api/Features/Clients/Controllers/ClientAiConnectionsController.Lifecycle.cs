@@ -74,6 +74,8 @@ public sealed partial class ClientAiConnectionsController
             return this.ValidationProblem();
         }
 
+        write = await this.FillEmbeddingDefaultsAsync(clientId, write, ct);
+
         try
         {
             var result = await aiConnections.VerifyUpdateAsync(
@@ -145,7 +147,7 @@ public sealed partial class ClientAiConnectionsController
     /// <param name="request">All three configured model and connection selections.</param>
     /// <param name="ct">Request cancellation.</param>
     /// <response code="200">All selected purposes were applied together.</response>
-    /// <response code="400">A selection is invalid or unverified; existing routing is unchanged.</response>
+    /// <response code="400">A selection is invalid or unverified, or the embedding model is not configured for 1536 dimensions; existing routing is unchanged.</response>
     /// <response code="401">Authentication is required.</response>
     /// <response code="403">Client administrator access is required.</response>
     /// <response code="409">A logical or managed binding conflicts, or configuration changed concurrently.</response>

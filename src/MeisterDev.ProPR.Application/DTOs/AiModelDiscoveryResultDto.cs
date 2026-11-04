@@ -19,4 +19,12 @@ public sealed record AiModelDiscoveryResultDto(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<AiConfiguredModelDto> Models,
     AiVerificationFailureCategory? FailureCategory = null,
-    int? HttpStatus = null);
+    int? HttpStatus = null)
+{
+    /// <summary>
+    ///     Models of the model catalog that the family can serve and the provider did not list, with the source
+    ///     <c>knownCatalog</c>. Present also when the provider listed nothing or the discovery failed, and empty when
+    ///     the catalog holds nothing for the family.
+    /// </summary>
+    public IReadOnlyList<AiConfiguredModelDto> CatalogModels { get; init; } = [];
+}

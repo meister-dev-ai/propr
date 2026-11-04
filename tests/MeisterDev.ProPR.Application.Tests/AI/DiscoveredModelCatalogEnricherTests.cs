@@ -161,6 +161,58 @@ public sealed class DiscoveredModelCatalogEnricherTests
         Assert.Contains(result.Warnings, warning => warning.Contains("negotiated rate", StringComparison.Ordinal));
     }
 
+    // An OpenAI connection buys gpt-4o from OpenAI, so the OpenAI entry prices it even though other catalog
+    // providers list the same identifier at other rates.
+    [Theory]
+    [InlineData("meisterdev/openAi", 2.5)]
+    [InlineData("meisterdev/azureOpenAi", 2.75)]
+    public void AFamilyWithItsOwnCatalogProviderIsPricedFromThatProvider(string providerKind, double expectedInput)
+    {
+        var result = DiscoveredModelCatalogEnricher.Enrich(
+            Discovery(Discovered("gpt-4o")),
+            [
+                Catalog("openai", "gpt-4o", input: 2.5m, output: 10m),
+                Catalog("azure", "gpt-4o", input: 2.75m, output: 11m),
+                Catalog("openrouter", "gpt-4o", input: 3m, output: 12m),
+            ],
+            providerKind);
+
+        Assert.Equal((decimal)expectedInput, Assert.Single(result.Models).InputCostPer1MUsd);
+        Assert.DoesNotContain(result.Warnings, warning => warning.Contains("left unpriced", StringComparison.Ordinal));
+    }
+
+    // A gateway can buy the model from any of them, so the identifier stays ambiguous for it.
+    [Theory]
+    [InlineData("meisterdev/openAiCompatible")]
+    [InlineData("meisterdev/liteLlm")]
+    [InlineData(null)]
+    public void AFamilyWithoutItsOwnCatalogProviderStillLeavesAnAmbiguousModelUnpriced(string? providerKind)
+    {
+        var result = DiscoveredModelCatalogEnricher.Enrich(
+            Discovery(Discovered("gpt-4o")),
+            [
+                Catalog("openai", "gpt-4o", input: 2.5m, output: 10m),
+                Catalog("azure", "gpt-4o", input: 2.75m, output: 11m),
+            ],
+            providerKind);
+
+        Assert.Null(Assert.Single(result.Models).InputCostPer1MUsd);
+        Assert.Contains(result.Warnings, warning => warning.Contains("left unpriced", StringComparison.Ordinal));
+    }
+
+    // The preference applies when the family's own provider lists the model. When it does not, the other entries
+    // are judged as before.
+    [Fact]
+    public void AModelItsOwnCatalogProviderDoesNotListIsPricedFromTheOthers()
+    {
+        var result = DiscoveredModelCatalogEnricher.Enrich(
+            Discovery(Discovered("deepseek-v4-flash")),
+            [Catalog("opencode", "deepseek-v4-flash", input: 0.14m, output: 0.28m)],
+            "meisterdev/openAi");
+
+        Assert.Equal(0.14m, Assert.Single(result.Models).InputCostPer1MUsd);
+    }
+
     private static AiModelDiscoveryResultDto Discovery(params AiConfiguredModelDto[] models)
     {
         return new AiModelDiscoveryResultDto("succeeded", true, [], models);

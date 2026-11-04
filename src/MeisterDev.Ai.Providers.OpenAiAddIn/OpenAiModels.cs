@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Collections.Frozen;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -81,37 +80,11 @@ internal static class OpenAiModels
         return new Listing(response.StatusCode, models, null);
     }
 
-    /// <summary>
-    ///     What a model identifier says about the model behind it, for an endpoint that publishes identifiers and
-    ///     nothing else.
-    /// </summary>
-    /// <remarks>
-    ///     The list carries an id and nothing else, so the operation kinds and the protocol modes are inferred from
-    ///     the id. An embedding model is named as one; everything else is offered for chat on both protocol modes the
-    ///     vendor serves, and a model that turns out not to serve one says so on its first call.
-    /// </remarks>
-    /// <param name="remoteModelId">The identifier the endpoint listed.</param>
-    // The vector width each documented embedding model returns. The listing carries an id and nothing else, so
-    // a model absent from this table reports no width instead of a guessed one: text-embedding-3-large returns
-    // 3072, and answering 1536 for it configured a connection that produces vectors of the wrong size.
-    private static readonly FrozenDictionary<string, int> EmbeddingDimensionsByModel =
-        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["text-embedding-3-small"] = 1536,
-            ["text-embedding-3-large"] = 3072,
-            ["text-embedding-ada-002"] = 1536,
-        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-
     // The families the vendor lists that neither this host nor this family serves: images, speech, transcription
     // and moderation. The listing carries an id and nothing else, so they are told apart by the id, which is how
     // the embedding models are told apart too.
     private static readonly string[] NonConversationalFamilies =
         ["dall-e", "gpt-image", "tts-", "whisper", "moderation", "sora", "omni-moderation"];
-
-    private static int? DimensionsOf(string remoteModelId)
-    {
-        return EmbeddingDimensionsByModel.TryGetValue(remoteModelId, out var dimensions) ? dimensions : null;
-    }
 
     /// <summary>
     ///     Whether the id names a model this host can bind to an operation.
@@ -131,6 +104,17 @@ internal static class OpenAiModels
             family => normalized.Contains(family, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    ///     What a model identifier says about the model behind it, for an endpoint that publishes identifiers and
+    ///     nothing else.
+    /// </summary>
+    /// <remarks>
+    ///     The list carries an id and nothing else, so the operation kinds and the protocol modes are inferred from
+    ///     the id. An embedding model is named as one; everything else is offered for chat on both protocol modes the
+    ///     vendor serves, and a model that turns out not to serve one says so on its first call. An embedding model
+    ///     is offered without a tokenizer, an input limit or a vector width, because the list states none of them.
+    /// </remarks>
+    /// <param name="remoteModelId">The identifier the endpoint listed.</param>
     internal static ProviderDiscoveredModel Describe(string remoteModelId)
     {
         var normalized = remoteModelId.Trim();
@@ -141,11 +125,7 @@ internal static class OpenAiModels
                 normalized,
                 normalized,
                 [AiOperationKind.Embedding],
-                [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
-                "cl100k_base",
-                MaxInputTokens: 8192,
-                MaxContextTokens: null,
-                EmbeddingDimensions: DimensionsOf(normalized));
+                [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings]);
         }
 
         return new ProviderDiscoveredModel(

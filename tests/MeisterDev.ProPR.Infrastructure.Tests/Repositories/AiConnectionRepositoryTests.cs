@@ -476,6 +476,47 @@ public sealed class AiConnectionRepositoryTests
         Assert.False(result.Applied);
     }
 
+    // Every embedding column stores vectors of 1536 dimensions, so a model configured for another width would be
+    // selected and then fail on its first embedding call.
+    [Theory]
+    [InlineData(1536, true)]
+    [InlineData(3072, false)]
+    [InlineData(1024, false)]
+    [InlineData(null, false)]
+    public async Task SelectPurposesAsync_AcceptsOnlyAnEmbeddingModelConfiguredFor1536Dimensions(int? dimensions, bool applied)
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        db.Clients.Add(new ClientRecord { Id = clientId, TenantId = Guid.NewGuid(), DisplayName = "Owner" });
+        var profile = MakeProfile(clientId, false, true);
+        profile.AuthMode = "ApiKey";
+        var embedding = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Embedding"));
+        embedding.EmbeddingDimensions = dimensions;
+        db.Add(profile);
+        await db.SaveChangesAsync();
+        var chat = profile.ConfiguredModels.Single(m => m.OperationKinds.Contains("Chat"));
+        var before = profile.PurposeBindings.Select(b => b.Id).ToArray();
+
+        var result = await CreateRepository(db).SelectPurposesAsync(
+            clientId,
+            new(new(profile.Id, chat.Id), new(profile.Id, chat.Id), new(profile.Id, embedding.Id)));
+
+        Assert.Equal(applied, result.Applied);
+        if (applied)
+        {
+            var binding = await CreateRepository(db).GetActiveBindingForPurposeAsync(clientId, AiPurpose.EmbeddingDefault);
+            Assert.Equal(profile.Id, binding!.Connection.Id);
+            Assert.Equal(embedding.Id, binding.Model.Id);
+            Assert.Equal(1536, binding.Model.EmbeddingDimensions);
+        }
+        else
+        {
+            Assert.False(result.Conflict);
+            Assert.Contains("1536 dimensions", result.Error, StringComparison.Ordinal);
+            Assert.Equal(before, profile.PurposeBindings.Select(b => b.Id));
+        }
+    }
+
     [Fact]
     public async Task SelectPurposesAsync_RefusesStaleMachineTenantWithoutChangingBindings()
     {
@@ -681,7 +722,7 @@ public sealed class AiConnectionRepositoryTests
                     ],
                     TokenizerName = "cl100k_base",
                     MaxInputTokens = 8192,
-                    EmbeddingDimensions = 3072,
+                    EmbeddingDimensions = 1536,
                     SupportsStructuredOutput = false,
                     SupportsToolUse = false,
                     Source = AiConfiguredModelSource.Manual.ToString(),

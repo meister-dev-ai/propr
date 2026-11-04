@@ -17,10 +17,37 @@ those. A LiteLLM gateway also states what each model is for (`mode`) and its inp
 offered as one whatever its name, and a model for images, speech or reranking is left out. Without a stated mode,
 a model whose id contains `embedding` is offered as an embedding model and every other one as a chat model.
 
+Discovery also returns `catalogModels`, the models of the catalog that the provider did not list. An OpenAI,
+Azure OpenAI, Anthropic, Google Vertex or Amazon Bedrock connection gets the models of its own catalog provider. An
+OpenAI-compatible or LiteLLM connection gets models from the whole catalog, each id once. Where several catalog
+providers sell a model at different rates, that model comes without a price. Image, video, speech, transcription,
+realtime and moderation models are left out. The list holds at most 200 models, the embedding models first and then
+the chat models with the newest release first. It is returned also when the provider lists nothing or the listing
+fails. A model id that neither list holds can still be entered by hand.
+
 A discovery that fails says why in the categories of a verification, also when the call got no answer at all, for
 example because the address does not resolve, the host does not trust the certificate, or the egress rules refuse
 the connection. A redirect, such as one to a sign-in page in front of the endpoint, is a failure, because provider
 calls do not follow redirects.
+
+## Values of an embedding model
+
+An embedding model is configured with a tokenizer, an input limit and a vector width. A connection can be saved
+without them. ProPR then fills in each missing value from the first of these sources that has it:
+
+1. The values OpenAI documents for `text-embedding-3-small`, `text-embedding-3-large` and `text-embedding-ada-002`:
+   `cl100k_base`, 8191 tokens, and 1536, 3072 and 1536 dimensions. An id with a vendor prefix, such as
+   `openai/text-embedding-3-small`, matches as well.
+2. For the input limit, the context window of the model in the catalog, when its catalog entries agree on one value.
+3. `cl100k_base`, 8191 tokens and 1536 dimensions.
+
+A stated value is kept. A stated tokenizer must be `cl100k_base`, `o200k_base`, `o200k_harmony`, `r50k_base`,
+`p50k_base` or `p50k_edit`, and a stated width must be between 64 and 4096. Discovered models and catalog models
+arrive with the same values filled in.
+
+ProPR stores embedding vectors with 1536 dimensions. The Embedding purpose accepts a model configured for 1536
+dimensions and refuses any other width, so `text-embedding-3-large`, which returns 3072, cannot serve it. A width that
+ProPR filled in is an assumption until a model check has measured the vectors the model returns.
 
 ## Checking the models
 
@@ -28,8 +55,9 @@ Verification proves the address and the credential. It does not prove a model: a
 key may not use, verifies and then fails every call of a review. `POST /{connectionId}/check-models` calls up to
 three configured models once each, a chat model for at most 16 tokens and an embedding model with one short text,
 and reports each model that does not answer as configured, including an embedding model whose vectors have another
-size than the configured dimensions. The check uses the credential of the connection, so it costs its owner a few
-tokens and is only run when asked for.
+size than the configured dimensions. The result for an embedding model contains `returnedDimensions`, the length of the
+vector the model returned, also when the check passed. The check uses the credential of the connection, so it costs
+its owner a few tokens and is only run when asked for.
 
 ## The model catalog
 

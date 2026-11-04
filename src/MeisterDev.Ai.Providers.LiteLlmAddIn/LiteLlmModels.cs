@@ -109,15 +109,11 @@ internal static class LiteLlmModels
                 normalized,
                 [AiOperationKind.Embedding],
                 [ProviderDeclaredProtocolModes.Auto, ProviderDeclaredProtocolModes.Embeddings],
-                "cl100k_base",
-                MaxInputTokens: listed.MaxInputTokens ?? 8192,
-                MaxContextTokens: null,
 
-                // No width is stated. This surface lists identifiers and nothing else, and an identifier does
-                // not say how long a vector the model returns: text-embedding-3-large returns 3072 where
-                // text-embedding-3-small returns 1536, and answering one for the other configures a connection
-                // whose vectors are the wrong size. The operator enters it, which the form asks for.
-                EmbeddingDimensions: null);
+                // The input limit is the one the listing states, if any. The tokenizer and the vector width are not
+                // stated, because the listing does not carry them and an identifier does not tell them:
+                // text-embedding-3-large returns 3072 dimensions where text-embedding-3-small returns 1536.
+                MaxInputTokens: listed.MaxInputTokens);
         }
 
         return new ProviderDiscoveredModel(

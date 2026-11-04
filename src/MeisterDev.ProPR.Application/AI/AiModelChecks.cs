@@ -19,9 +19,10 @@ namespace MeisterDev.ProPR.Application.AI;
 ///     A verification lists the models of an endpoint, which proves the credential and the address but not one model:
 ///     a model identifier with a typo, or one the key may not use, passes verification and fails every call of a
 ///     review. A chat model is asked for at most <see cref="MaximumOutputTokens" /> tokens, and an embedding
-///     model embeds one short text, whose vector length is compared with the configured dimensions. The calls go to
-///     the family directly and not through the review runtime, so they are neither retried nor metered against a
-///     review. They use the credential of the profile, so a caller asks its owner before it checks.
+///     model embeds one short text, whose vector length is compared with the configured dimensions and reported in
+///     the outcome. The calls go to the family directly and not through the review runtime, so they are neither
+///     retried nor metered against a review. They use the credential of the profile, so a caller asks its owner
+///     before it checks.
 /// </remarks>
 public static class AiModelChecks
 {
@@ -70,15 +71,16 @@ public static class AiModelChecks
                 var embeddings = await generator
                     .GenerateAsync([EmbeddingInput], cancellationToken: deadline.Token)
                     .ConfigureAwait(false);
-                var length = embeddings.Count == 0 ? 0 : embeddings[0].Vector.Length;
-                return length == dimensions
+                int? returned = embeddings.Count == 0 ? null : embeddings[0].Vector.Length;
+                var checkedWidth = returned == dimensions
                     ? Passed(model, operation)
                     : Failed(
                         model, operation, AiModelCheckReasons.Dimensions, null,
                         string.Create(
                             CultureInfo.InvariantCulture,
-                            $"The model returned a vector of {length} dimensions; the profile configures {dimensions}."),
+                            $"The model returned a vector of {returned ?? 0} dimensions; the profile configures {dimensions}."),
                         "Enter the dimensions of the vectors that the model returns.");
+                return checkedWidth with { ReturnedDimensions = returned };
             }
 
             using var client = driver.CreateChatClient(endpoint, model.ToProviderModel(), ProviderDeclaredProtocolModes.Auto);

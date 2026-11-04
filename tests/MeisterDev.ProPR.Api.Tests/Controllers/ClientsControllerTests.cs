@@ -1586,6 +1586,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         internal FakeProviderEndpoint ProviderWire { get; } = new();
 
         /// <summary>
+        ///     The effective model catalog every client and tenant of this host reads. Empty unless a test states
+        ///     entries; the factory is shared by the tests of a class, so a test that states entries clears them.
+        /// </summary>
+        internal List<MeisterDev.ProPR.Application.DTOs.AiModelCatalogEntryDto> CatalogEntries { get; } = [];
+
+        /// <summary>
         ///     Answers the client deletion. The deletion itself runs against PostgreSQL and is tested there, and these tests
         ///     cover what the endpoint answers.
         /// </summary>
@@ -1685,6 +1691,15 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 providerPolicies.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(_ => this.ProviderPolicy);
                 services.AddSingleton(providerPolicies);
+
+                // The catalog repository reads the catalog tables through a composition this host does not build,
+                // so the catalog is stated here and read when a request reads it.
+                var modelCatalog = Substitute.For<IModelCatalogRepository>();
+                modelCatalog.GetEffectiveForClientAsync(Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                    .Returns(call => this.CatalogFor(call.ArgAt<string?>(1)));
+                modelCatalog.GetEffectiveForTenantAsync(Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                    .Returns(call => this.CatalogFor(call.ArgAt<string?>(1)));
+                services.AddSingleton(modelCatalog);
                 services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
                 services.AddScoped<IAiConnectionScopeGuard, AiConnectionScopeGuard>();
                 services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();
@@ -1724,6 +1739,13 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 services.AddHttpClient("AiProviderAdmin").ConfigurePrimaryHttpMessageHandler(this.ProviderWire.AsSharedPrimaryHandler);
                 services.AddHttpClient("AiProviderRuntime").ConfigurePrimaryHttpMessageHandler(this.ProviderWire.AsSharedPrimaryHandler);
             });
+        }
+
+        private IReadOnlyList<MeisterDev.ProPR.Application.DTOs.AiModelCatalogEntryDto> CatalogFor(string? providerId)
+        {
+            return this.CatalogEntries
+                .Where(entry => providerId is null || entry.ProviderId == providerId)
+                .ToList();
         }
 
         private StockQuotaAdmission DecideStockQuota(LicenseLimitKey key)

@@ -120,7 +120,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
                 supportedProtocolModes = new[] { "Auto", "Embeddings" },
                 tokenizerName = "cl100k_base",
                 maxInputTokens = 8192,
-                embeddingDimensions = 3072,
+                embeddingDimensions = 1536,
                 supportsStructuredOutput = false,
                 supportsToolUse = false,
                 source = "manual",
@@ -642,8 +642,9 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         var outcome = Assert.Single((await response.Content.ReadFromJsonAsync<AiModelCheckResultDto>(ApiJsonOptions))!.Results);
         Assert.False(outcome.Passed);
         Assert.Equal(AiModelCheckReasons.Dimensions, outcome.Reason);
+        Assert.Equal(3, outcome.ReturnedDimensions);
         Assert.Contains("3 dimensions", outcome.Summary, StringComparison.Ordinal);
-        Assert.Contains("3072", outcome.Summary, StringComparison.Ordinal);
+        Assert.Contains("1536", outcome.Summary, StringComparison.Ordinal);
         Assert.Equal("/v1/embeddings", factory.ProviderWire.Single().Uri!.AbsolutePath);
     }
 

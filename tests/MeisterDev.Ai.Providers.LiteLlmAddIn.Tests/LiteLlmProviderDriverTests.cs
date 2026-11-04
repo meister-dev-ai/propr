@@ -150,6 +150,18 @@ public sealed class LiteLlmProviderDriverTests
         Assert.Equal(8191, embedding.MaxInputTokens);
     }
 
+    // A gateway that states no input limit gets none offered, and the tokenizer and the width are never stated.
+    [Fact]
+    public async Task AnEmbeddingModelIsOfferedWithOnlyTheValuesTheGatewayStates()
+    {
+        var wire = new FakeGateway(HttpStatusCode.OK, """{"data":[{"id":"bge-m3","mode":"embedding"}]}""");
+
+        var discovered = await Driver().DiscoverModelsAsync(EndpointOn(wire));
+
+        var embedding = Assert.Single(discovered.Models);
+        Assert.Equal((null, null, null), (embedding.TokenizerName, embedding.MaxInputTokens, embedding.EmbeddingDimensions));
+    }
+
     [Fact]
     public async Task TheModelListIsReadFromTheGatewaysOwnPath()
     {

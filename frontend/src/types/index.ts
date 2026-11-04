@@ -4907,7 +4907,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Discovers provider models using the supplied unsaved profile settings. */
+        /**
+         * Discovers provider models using the supplied unsaved profile settings.
+         * @description A listed embedding model carries the tokenizer, input limit and vector width a save would fill in.
+         *     `catalogModels` holds the catalog models the family can serve and the provider did not list, at most
+         *     200, embedding models first; it is filled also when the discovery failed.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -5205,7 +5210,7 @@ export interface paths {
                         "text/json": components["schemas"]["AiConfigurationResult"];
                     };
                 };
-                /** @description A selection is invalid or unverified; existing routing is unchanged. */
+                /** @description A selection is invalid or unverified, or the embedding model is not configured for 1536 dimensions; existing routing is unchanged. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -23627,6 +23632,12 @@ export interface components {
             summary?: string | null;
             /** @description What to try next after a failure. */
             actionHint?: string | null;
+            /**
+             * Format: int32
+             * @description The length of the vector an embedding model returned, whether the check passed or failed; null for a chat
+             *     check and for an embedding check that returned no vector.
+             */
+            returnedDimensions?: number | null;
         };
         /** @description The configured models of a profile to check, at most MeisterDev.ProPR.Application.DTOs.AiModelCheckReasons.MaximumModels. */
         AiModelCheckRequest: {
@@ -23649,6 +23660,12 @@ export interface components {
              * @description The status a failed discovery was answered with, or null without one.
              */
             httpStatus?: number | null;
+            /**
+             * @description Models of the model catalog that the family can serve and the provider did not list, with the source
+             *     `knownCatalog`. Present also when the provider listed nothing or the discovery failed, and empty when
+             *     the catalog holds nothing for the family.
+             */
+            catalogModels?: components["schemas"]["AiConfiguredModelDto"][] | null;
         };
         /**
          * @description Supported AI operation categories.
