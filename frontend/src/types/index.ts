@@ -28232,6 +28232,11 @@ export interface components {
             /** @description Target branch as captured by the most recent run. */
             prTargetBranch?: string | null;
             /**
+             * @description Address of the pull request page on the provider host, or null when the captured coordinates do not form
+             *     a valid address.
+             */
+            pullRequestUrl?: string | null;
+            /**
              * Format: date-time
              * @description Most recent activity across the runs; the ordering key.
              */

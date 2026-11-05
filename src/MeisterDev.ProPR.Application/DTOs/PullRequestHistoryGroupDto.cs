@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Domain.Enums;
+
 namespace MeisterDev.ProPR.Application.DTOs;
 
 /// <summary>
@@ -33,6 +35,9 @@ namespace MeisterDev.ProPR.Application.DTOs;
 ///     total covers only part of the work.
 /// </param>
 /// <param name="Jobs">Every run against this pull request, most recent first, with running work first.</param>
+/// <param name="Provider">Source-control provider family, taken from the most recent run.</param>
+/// <param name="HostBaseUrl">Normalized provider host URL, taken from the most recent run.</param>
+/// <param name="RepositoryProjectPath">Repository path on the provider host, taken from the most recent run.</param>
 public sealed record PullRequestHistoryGroupDto(
     string ProviderScopePath,
     string ProviderProjectKey,
@@ -48,4 +53,7 @@ public sealed record PullRequestHistoryGroupDto(
     long TotalOutputTokens,
     decimal? TotalEstimatedCostUsd,
     bool CostIsApproximate,
-    IReadOnlyList<JobListPageItemDto> Jobs);
+    IReadOnlyList<JobListPageItemDto> Jobs,
+    ScmProvider Provider,
+    string? HostBaseUrl,
+    string? RepositoryProjectPath);

@@ -152,6 +152,7 @@ public sealed class AdoReviewDiscoveryProviderTests
         this.StubRepositoryQuery();
         var row = this.PullRequest();
         row.Url = "https://dev.azure.com/acme/_apis/git/pullRequests/42";
+        row.Repository.Name = "payments api";
         this._git.GetPullRequestsAsync(
             "project", this._repositoryId, Arg.Any<GitPullRequestSearchCriteria>(),
             Arg.Any<int?>(), Arg.Any<int?>(), 100, Arg.Any<object>(), Arg.Any<CancellationToken>()).Returns([row]);
@@ -159,7 +160,21 @@ public sealed class AdoReviewDiscoveryProviderTests
         var result = Assert.Single(
             await this.CreateProvider(this.SelectedConnection(connectionId)).ListOpenReviewsAsync(
                 this._clientId, this.Repository(), null, context: new(connectionId, "https://dev.azure.com/acme")));
-        Assert.Equal($"https://dev.azure.com/acme/project/_git/{this._repositoryId}/pullrequest/42", result.WebUrl);
+
+        // Azure DevOps opens no pull request when the path carries the repository identifier.
+        Assert.Equal("https://dev.azure.com/acme/project/_git/payments%20api/pullrequest/42", result.WebUrl);
+    }
+
+    [Fact]
+    public async Task ListOpenReviewsAsync_GivesNoBrowserUrlWithoutARepositoryName()
+    {
+        this.StubRepositoryQuery();
+        var connectionId = Guid.NewGuid();
+        var result = Assert.Single(
+            await this.CreateProvider(this.SelectedConnection(connectionId)).ListOpenReviewsAsync(
+                this._clientId, this.Repository(), null, context: new(connectionId, "https://dev.azure.com/acme")));
+
+        Assert.Null(result.WebUrl);
     }
 
     private readonly Guid _clientId = Guid.NewGuid();

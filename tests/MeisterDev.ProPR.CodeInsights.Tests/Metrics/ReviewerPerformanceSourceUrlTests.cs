@@ -94,17 +94,37 @@ public sealed class ReviewerPerformanceSourceUrlTests
         await using var db = Db();
         var client = Guid.NewGuid();
         var job = Job(client, ScmProvider.AzureDevOps, "https://scm.test/collection", "Team Project", "repo", "Team Project");
-        AddExclusion(db, job, Scope(job));
+        AddExclusion(db, job, Scope(job), repositoryName: "repo");
         db.Add(job);
         db.Entry(job).Property(row => row.HostBaseUrl).CurrentValue = null;
         await db.SaveChangesAsync();
         Assert.Equal("https://scm.test/collection/Team%20Project/_git/repo/pullrequest/17", (await Entry(db, client)).SourceUrl);
     }
 
+    [Fact]
+    public async Task AzureDevOpsLinksUseTheRepositoryNameAndNeedOne()
+    {
+        // Azure DevOps opens no pull request when the path carries the repository identifier.
+        await using var named = Db();
+        var client = Guid.NewGuid();
+        var job = Job(client, ScmProvider.AzureDevOps, "https://dev.azure.com/acme", "Team Project", Guid.NewGuid().ToString("D"), "Team Project");
+        AddExclusion(named, job, Scope(job), repositoryName: "payments-api");
+        named.Add(job);
+        await named.SaveChangesAsync();
+        Assert.Equal("https://dev.azure.com/acme/Team%20Project/_git/payments-api/pullrequest/17", (await Entry(named, client)).SourceUrl);
+
+        await using var unnamed = Db();
+        var other = Job(client, ScmProvider.AzureDevOps, "https://dev.azure.com/acme", "Team Project", Guid.NewGuid().ToString("D"), "Team Project");
+        AddExclusion(unnamed, other, Scope(other));
+        unnamed.Add(other);
+        await unnamed.SaveChangesAsync();
+        Assert.Null((await Entry(unnamed, client)).SourceUrl);
+    }
+
     [Theory]
     [InlineData(
         ScmProvider.AzureDevOps, "https://scm.test/collection", "Team Project", "repo id", "Team Project",
-        "https://scm.test/collection/Team%20Project/_git/repo%20id/pullrequest/17")]
+        "https://scm.test/collection/Team%20Project/_git/repo%20name/pullrequest/17")]
     [InlineData(ScmProvider.GitHub, "https://scm.test/deploy", "owner", "123", "owner/repo name", "https://scm.test/deploy/owner/repo%20name/pull/17")]
     [InlineData(
         ScmProvider.GitLab, "https://scm.test/deploy", "group", "123", "group/subgroup/repo",
@@ -116,7 +136,7 @@ public sealed class ReviewerPerformanceSourceUrlTests
         await using var db = Db();
         var client = Guid.NewGuid();
         var job = Job(client, provider, host, project, repository, path);
-        AddExclusion(db, job, Scope(job));
+        AddExclusion(db, job, Scope(job), repositoryName: "repo name");
         db.Add(job);
         db.Entry(job).Property(row => row.HostBaseUrl).CurrentValue = host;
         await db.SaveChangesAsync();
@@ -176,10 +196,13 @@ public sealed class ReviewerPerformanceSourceUrlTests
     private static string Scope(ReviewJob job) =>
         ProviderSourceIdentity.FromReviewJob(job, LocalScmPolicies.Registry.GetSourceIdentityPolicy(job.Provider)).Value;
 
-    private static void AddExclusion(MeisterProPRDbContext db, ReviewJob job, string scope, Guid? client = null)
+    private static void AddExclusion(MeisterProPRDbContext db, ReviewJob job, string scope, Guid? client = null, string? repositoryName = null)
     {
         var aggregate = new CodeInsightPullRequest
-            { Id = Guid.NewGuid(), ClientId = client ?? job.ClientId, RepositoryId = job.RepositoryId, PullRequestId = job.PullRequestId };
+        {
+            Id = Guid.NewGuid(), ClientId = client ?? job.ClientId, RepositoryId = job.RepositoryId, PullRequestId = job.PullRequestId,
+            RepositoryName = repositoryName,
+        };
         db.AddRange(
             aggregate, new ReviewerPerformanceDailyCount
             {

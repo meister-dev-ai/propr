@@ -173,6 +173,63 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         Assert.Equal("repo", twiceReviewed.GetProperty("repositoryId").GetString());
     }
 
+    [Theory]
+    [InlineData(
+        ScmProvider.Forgejo, "http://localhost:8091", "local_admin", "1", "http://localhost:8091", "local_admin/propr", null,
+        "http://localhost:8091/local_admin/propr/pulls/3")]
+    [InlineData(
+        ScmProvider.Forgejo, "http://localhost:8091/benchmark", "benchmark", "benchmark/vega", "http://localhost:8091", "benchmark/vega", null,
+        "http://localhost:8091/benchmark/vega/pulls/3")]
+    [InlineData(
+        ScmProvider.GitHub, "https://github.com/acme", "acme", "123456", "https://github.com", "acme/widgets", null,
+        "https://github.com/acme/widgets/pull/3")]
+    [InlineData(
+        ScmProvider.GitLab, "https://gitlab.example.com", "group", "42", "https://gitlab.example.com", "group/subgroup/app", null,
+        "https://gitlab.example.com/group/subgroup/app/-/merge_requests/3")]
+    [InlineData(
+        ScmProvider.AzureDevOps, "https://dev.azure.com/acme", "Team Project", "8e41131e-1e11-4bbd-bbba-2a887c22cbba", "https://dev.azure.com",
+        "Team Project", "payments-api", "https://dev.azure.com/acme/Team%20Project/_git/payments-api/pullrequest/3")]
+    [InlineData(
+        ScmProvider.AzureDevOps, "https://dev.azure.com/acme", "Team Project", "8e41131e-1e11-4bbd-bbba-2a887c22cbba", "https://dev.azure.com",
+        "Team Project", null, null)]
+    public async Task GetPullRequestHistory_LinksEachPullRequestToItsProviderPage(
+        ScmProvider provider,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        string hostBaseUrl,
+        string projectPath,
+        string? repositoryName,
+        string? expectedUrl)
+    {
+        var clientId = Guid.NewGuid();
+        var repo = factory.Services.GetRequiredService<IJobRepository>();
+        var platform = provider == ScmProvider.GitLab ? CodeReviewPlatformKind.MergeRequest : CodeReviewPlatformKind.PullRequest;
+        var job = new ReviewJob(
+            new CodeReviewSourceContext(provider, hostBaseUrl, projectId, projectPath, platform, "3"),
+            Guid.NewGuid(),
+            clientId,
+            organizationUrl,
+            projectId,
+            repositoryId,
+            3,
+            1);
+        job.SetPrContext("Update", repositoryName, "feature", "main");
+        await repo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/pull-requests?clientId={clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var item = Assert.Single(body.RootElement.GetProperty("items").EnumerateArray().ToList());
+        var url = item.TryGetProperty("pullRequestUrl", out var value) && value.ValueKind != JsonValueKind.Null ? value.GetString() : null;
+        Assert.Equal(expectedUrl, url);
+    }
+
     [Fact]
     public async Task GetPullRequestHistory_ReachesPastTheOldFiveHundredJobCeiling()
     {

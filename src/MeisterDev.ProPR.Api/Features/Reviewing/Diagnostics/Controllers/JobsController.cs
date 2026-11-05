@@ -24,9 +24,13 @@ namespace MeisterDev.ProPR.Api.Controllers;
 public sealed class JobsController(
     IJobRepository jobRepository,
     GetReviewJobProtocolHandler getReviewJobProtocolHandler,
-    GetFileDiffHandler getFileDiffHandler) : ControllerBase
+    GetFileDiffHandler getFileDiffHandler,
+    IEnumerable<IReviewSourcePolicy> sourcePolicies) : ControllerBase
 {
     private static readonly IReadOnlySet<Guid> NoWithheldClients = new HashSet<Guid>();
+
+    private readonly IReadOnlyDictionary<ScmProvider, IReviewSourcePolicy> _sourcePolicies =
+        sourcePolicies.ToDictionary(policy => policy.Provider);
 
     /// <summary>
     ///     Returns all review jobs across all clients, newest first.
@@ -265,6 +269,7 @@ public sealed class JobsController(
                             g.PrRepositoryName,
                             g.PrSourceBranch,
                             g.PrTargetBranch,
+                            this.PullRequestUrl(g),
                             g.LatestActivityAt,
                             g.TotalInputTokens,
                             g.TotalOutputTokens,
@@ -274,6 +279,30 @@ public sealed class JobsController(
                             groupWithheld);
                     })
                     .ToList()));
+    }
+
+    /// <summary>
+    ///     Builds the browser address of a pull request from the coordinates its most recent run captured. Each
+    ///     provider has its own page route, so the provider's source policy builds the address. The result is
+    ///     null when the provider has no policy or the coordinates do not form a valid address.
+    /// </summary>
+    private string? PullRequestUrl(PullRequestHistoryGroupDto group)
+    {
+        if (!this._sourcePolicies.TryGetValue(group.Provider, out var policy))
+        {
+            return null;
+        }
+
+        var coordinates = new CapturedReviewUrlCoordinates(
+            group.Provider,
+            group.ProviderScopePath,
+            group.HostBaseUrl,
+            group.ProviderProjectKey,
+            group.RepositoryId,
+            group.RepositoryProjectPath,
+            group.PullRequestId,
+            group.PrRepositoryName);
+        return policy.CreateCapturedReviewUrl(coordinates);
     }
 
     /// <summary>Returns detail for a single review job including per-tier token breakdown.</summary>
@@ -627,6 +656,10 @@ public sealed class JobsController(
     /// <param name="PrRepositoryName">Repository display name as captured by the most recent run.</param>
     /// <param name="PrSourceBranch">Source branch as captured by the most recent run.</param>
     /// <param name="PrTargetBranch">Target branch as captured by the most recent run.</param>
+    /// <param name="PullRequestUrl">
+    ///     Address of the pull request page on the provider host, or null when the captured coordinates do not form
+    ///     a valid address.
+    /// </param>
     /// <param name="LatestActivityAt">Most recent activity across the runs; the ordering key.</param>
     /// <param name="TotalInputTokens">Input tokens summed across the runs.</param>
     /// <param name="TotalOutputTokens">Output tokens summed across the runs.</param>
@@ -647,6 +680,7 @@ public sealed class JobsController(
         string? PrRepositoryName,
         string? PrSourceBranch,
         string? PrTargetBranch,
+        string? PullRequestUrl,
         DateTimeOffset LatestActivityAt,
         long TotalInputTokens,
         long TotalOutputTokens,

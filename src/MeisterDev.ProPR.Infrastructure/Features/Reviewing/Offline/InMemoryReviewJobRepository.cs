@@ -302,7 +302,10 @@ public sealed class InMemoryReviewJobRepository(IEnumerable<IReviewSourcePolicy>
                 job.InScopeChangedFileCount,
                 job.TotalEstimatedCostUsd,
                 job.CostIsApproximate,
-                job.Status == JobStatus.Completed && job.BudgetBlockCapKind == BudgetCapKind.Soft))
+                job.Status == JobStatus.Completed && job.BudgetBlockCapKind == BudgetCapKind.Soft,
+                job.Provider,
+                job.HostBaseUrl,
+                job.RepositoryProjectPath))
             .ToList()
             .AsReadOnly();
         return Task.FromResult<(int total, IReadOnlyList<JobListPageItemDto> items)>((ordered.Count, page));
@@ -359,7 +362,10 @@ public sealed class InMemoryReviewJobRepository(IEnumerable<IReviewSourcePolicy>
                     jobs.Sum(j => j.TotalOutputTokens),
                     anyPriced ? jobs.Sum(j => j.TotalEstimatedCostUsd ?? 0m) : null,
                     jobs.Exists(j => j.CostIsApproximate) || (anyPriced && anyUnpriced),
-                    jobs);
+                    jobs,
+                    newest.Provider,
+                    newest.HostBaseUrl,
+                    newest.RepositoryProjectPath);
             })
             .OrderByDescending(g => g.LatestActivityAt)
             .ToList();

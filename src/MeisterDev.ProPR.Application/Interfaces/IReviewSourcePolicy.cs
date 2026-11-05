@@ -122,6 +122,17 @@ public interface IReviewSourcePolicy
 public sealed record ReviewSourceCacheCoordinates(string Authority, string ScopePath, string ProjectKey);
 
 /// <summary>Retained non-secret coordinates used to identify a native review page.</summary>
+/// <param name="Provider">Source-control provider family.</param>
+/// <param name="SourcePath">Organization or host URL the review was captured from.</param>
+/// <param name="HostBaseUrl">Normalized provider host URL, if captured.</param>
+/// <param name="ProjectId">Provider project key.</param>
+/// <param name="RepositoryId">Provider repository identifier.</param>
+/// <param name="RepositoryProjectPath">Repository path on the provider host, if captured.</param>
+/// <param name="PullRequestId">Pull request number.</param>
+/// <param name="RepositoryName">
+///     Repository name, if captured. Azure DevOps web pages address a repository by name, and an address that
+///     carries the repository identifier opens no pull request.
+/// </param>
 public sealed record CapturedReviewUrlCoordinates(
     ScmProvider Provider,
     string SourcePath,
@@ -129,7 +140,8 @@ public sealed record CapturedReviewUrlCoordinates(
     string ProjectId,
     string RepositoryId,
     string? RepositoryProjectPath,
-    int PullRequestId);
+    int PullRequestId,
+    string? RepositoryName = null);
 
 /// <summary>Selects saved scope coverage or a connection host using the native coordinate predicate.</summary>
 public sealed record ReviewMentionScopeSelection(string? ScopeType, Func<string, bool> MatchesScope);

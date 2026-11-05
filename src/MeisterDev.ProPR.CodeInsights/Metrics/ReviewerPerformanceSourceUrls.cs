@@ -31,6 +31,16 @@ internal static class ReviewerPerformanceSourceUrls
             throw new ArgumentException("The scope exceeds the retained-source limit. Narrow the dates or clients.");
         }
 
+        // Azure DevOps addresses a repository by name. The aggregate keeps the name the provider last reported, so
+        // jobs from before a rename still link to the current page. Aggregates that disagree on the name give no name.
+        var repositoryNames = (await aggregates
+                .Select(pr => new { pr.ClientId, pr.RepositoryId, pr.PullRequestId, pr.RepositoryName })
+                .ToListAsync(ct))
+            .GroupBy(pr => (pr.ClientId, pr.RepositoryId, pr.PullRequestId))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(pr => pr.RepositoryName).Where(name => name is not null).Distinct().ToArray() is [var name] ? name : null);
+
         var sources = cells.GroupBy(cell => (cell.ClientId, cell.RepositoryId, cell.PullRequestId))
             .ToDictionary(group => group.Key, group => group.Select(ReviewerPerformanceSourceKey.Of).Distinct().ToArray());
         var urls = new Dictionary<ReviewerPerformanceSourceKey, string?>();
@@ -43,7 +53,8 @@ internal static class ReviewerPerformanceSourceUrls
 
             var coordinates = new CapturedReviewUrlCoordinates(
                 job.Provider, job.OrganizationUrl, job.HostBaseUrl, job.ProjectId,
-                job.RepositoryId, job.RepositoryProjectPath, job.PullRequestId);
+                job.RepositoryId, job.RepositoryProjectPath, job.PullRequestId,
+                repositoryNames.GetValueOrDefault((job.ClientId, job.RepositoryId, (long)job.PullRequestId)));
             string scope;
             string? link;
             try

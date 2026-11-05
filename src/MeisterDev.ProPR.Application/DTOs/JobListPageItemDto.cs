@@ -53,6 +53,9 @@ namespace MeisterDev.ProPR.Application.DTOs;
 ///     True when this completed review stopped scanning further files early because the per-increment budget soft
 ///     cap was reached. Lets the overview mark the row soft-capped without a distinct job status.
 /// </param>
+/// <param name="Provider">Source-control provider family of the reviewed repository.</param>
+/// <param name="HostBaseUrl">Normalized provider host URL captured with the job, if known.</param>
+/// <param name="RepositoryProjectPath">Repository path on the provider host captured with the job, if known.</param>
 public sealed record JobListPageItemDto(
     Guid Id,
     Guid? ClientId,
@@ -79,4 +82,7 @@ public sealed record JobListPageItemDto(
     int? FilesInScope,
     decimal? TotalEstimatedCostUsd,
     bool CostIsApproximate,
-    bool BudgetSoftCapped);
+    bool BudgetSoftCapped,
+    ScmProvider Provider,
+    string? HostBaseUrl,
+    string? RepositoryProjectPath);

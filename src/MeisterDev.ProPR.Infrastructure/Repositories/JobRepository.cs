@@ -80,7 +80,10 @@ public sealed partial class JobRepository(
             j.TotalEstimatedCostUsd,
             j.CostIsApproximate,
             // A completed job carries a budget block only when the per-increment soft cap stopped it early.
-            j.Status == JobStatus.Completed && j.BudgetBlockCapKind == BudgetCapKind.Soft);
+            j.Status == JobStatus.Completed && j.BudgetBlockCapKind == BudgetCapKind.Soft,
+            j.Provider,
+            j.HostBaseUrl,
+            j.RepositoryProjectPath);
 
     // Jobs still live for a pull request — not yet terminal — so a newer push supersedes them, a closed PR
     // cancels them, and intake treats them as an existing job rather than creating a duplicate. Budget-held and
@@ -543,7 +546,10 @@ public sealed partial class JobRepository(
                     groupJobs.Sum(j => j.TotalOutputTokens),
                     anyPriced ? groupJobs.Sum(j => j.TotalEstimatedCostUsd ?? 0m) : null,
                     groupJobs.Exists(j => j.CostIsApproximate) || (anyPriced && anyUnpriced),
-                    groupJobs));
+                    groupJobs,
+                    newest.Provider,
+                    newest.HostBaseUrl,
+                    newest.RepositoryProjectPath));
         }
 
         return (totalGroups, groups);

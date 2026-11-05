@@ -33,7 +33,8 @@ export interface PrGroup {
   prRepositoryName: string | null
   prSourceBranch: string | null
   prTargetBranch: string | null
-  prUrl: string
+  /** Address of the pull request page on the provider host, or null when the server could not build one. */
+  prUrl: string | null
   latestActivityAt: string
   totalInTokens: number
   totalOutTokens: number
@@ -500,7 +501,7 @@ function toPrGroup(item: PullRequestHistoryItem): PrGroup {
     prRepositoryName: item.prRepositoryName ?? null,
     prSourceBranch: item.prSourceBranch ?? null,
     prTargetBranch: item.prTargetBranch ?? null,
-    prUrl: `${providerScopePath}/${providerProjectKey}/_git/${repositoryId}/pullrequest/${pullRequestId}`,
+    prUrl: item.pullRequestUrl ?? null,
     latestActivityAt: item.latestActivityAt ?? '',
     totalInTokens: item.totalInputTokens ?? 0,
     totalOutTokens: item.totalOutputTokens ?? 0,

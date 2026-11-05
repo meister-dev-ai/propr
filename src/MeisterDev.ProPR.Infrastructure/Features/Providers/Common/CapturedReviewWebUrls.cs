@@ -9,16 +9,22 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 /// <summary>Validates saved browser coordinates and encodes native route components.</summary>
 internal static class CapturedReviewWebUrls
 {
+    /// <summary>
+    ///     Builds the Azure DevOps pull request page address. Azure DevOps resolves a project identifier in the
+    ///     path but opens no pull request for a repository identifier, so the address uses the repository name and
+    ///     is null when no name was captured.
+    /// </summary>
     internal static string? AzureDevOps(CapturedReviewUrlCoordinates coordinates)
     {
         if (!TryReadBase(coordinates.SourcePath, out var source) || !SafeComponent(coordinates.ProjectId)
-                                                                 || !SafeComponent(coordinates.RepositoryId) || coordinates.PullRequestId <= 0)
+                                                                 || coordinates.RepositoryName is not { } repositoryName
+                                                                 || !SafeComponent(repositoryName) || coordinates.PullRequestId <= 0)
         {
             return null;
         }
 
         return
-            $"{source}/{Uri.EscapeDataString(coordinates.ProjectId)}/_git/{Uri.EscapeDataString(coordinates.RepositoryId)}/pullrequest/{coordinates.PullRequestId.ToString(CultureInfo.InvariantCulture)}";
+            $"{source}/{Uri.EscapeDataString(coordinates.ProjectId)}/_git/{Uri.EscapeDataString(repositoryName.Trim())}/pullrequest/{coordinates.PullRequestId.ToString(CultureInfo.InvariantCulture)}";
     }
 
     internal static string? Repository(CapturedReviewUrlCoordinates coordinates, string reviewRoute)

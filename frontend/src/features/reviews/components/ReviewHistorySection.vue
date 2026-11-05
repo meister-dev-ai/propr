@@ -15,9 +15,19 @@
             <section v-for="group in paginatedGroups" :key="group.key" class="pr-group-card">
                 <div class="pr-card-header">
                     <div class="pr-card-title">
-                        <a :href="group.prUrl" target="_blank" rel="noopener noreferrer" class="pr-link">
+                        <a
+                            v-if="group.prUrl"
+                            :href="group.prUrl"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="pr-link"
+                            data-testid="pr-title-link"
+                        >
                             {{ group.prTitle ?? 'PR #' + group.pullRequestId }}
                         </a>
+                        <span v-else class="pr-title-text" data-testid="pr-title-text">
+                            {{ group.prTitle ?? 'PR #' + group.pullRequestId }}
+                        </span>
                         <span
                             v-if="group.contentWithheld"
                             class="withheld-badge"
@@ -447,6 +457,10 @@ function prReviewLink(group: PrGroup): object {
 .pr-link {
     font-weight: 600;
     color: var(--color-accent);
+}
+
+.pr-title-text {
+    font-weight: 600;
 }
 
 .repo-name {

@@ -43757,6 +43757,11 @@
             "description": "Target branch as captured by the most recent run.",
             "nullable": true
           },
+          "pullRequestUrl": {
+            "type": "string",
+            "description": "Address of the pull request page on the provider host, or null when the captured coordinates do not form\na valid address.",
+            "nullable": true
+          },
           "latestActivityAt": {
             "type": "string",
             "description": "Most recent activity across the runs; the ordering key.",

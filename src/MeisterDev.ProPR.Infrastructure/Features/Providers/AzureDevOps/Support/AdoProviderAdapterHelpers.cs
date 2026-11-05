@@ -237,9 +237,7 @@ internal static class AdoProviderAdapterHelpers
             revision,
             requestedReviewer,
             pullRequest.Title ?? $"Pull Request #{pullRequest.PullRequestId}",
-            organizationUrl is null
-                ? null
-                : $"{organizationUrl.TrimEnd('/')}/{Uri.EscapeDataString(ResolveProjectId(repository))}/_git/{Uri.EscapeDataString(repository.ExternalRepositoryId)}/pullrequest/{pullRequest.PullRequestId}",
+            PullRequestWebUrl(organizationUrl, repository, pullRequest),
             StripRefsHeads(pullRequest.SourceRefName),
             StripRefsHeads(pullRequest.TargetRefName),
             ReviewOverviewPresentation.AuthorName(pullRequest.CreatedBy?.DisplayName, pullRequest.CreatedBy?.UniqueName),
@@ -286,6 +284,27 @@ internal static class AdoProviderAdapterHelpers
             login,
             reviewer.DisplayName ?? login,
             false);
+    }
+
+    /// <summary>
+    ///     Builds the browser address of a pull request. Azure DevOps opens no pull request for a repository
+    ///     identifier in the path, so the address uses the repository name from the pull request, then the name
+    ///     from discovery, and is null when neither is known.
+    /// </summary>
+    internal static string? PullRequestWebUrl(string? organizationUrl, RepositoryRef repository, GitPullRequest pullRequest)
+    {
+        var repositoryName = !string.IsNullOrWhiteSpace(pullRequest.Repository?.Name)
+            ? pullRequest.Repository.Name
+            : !string.Equals(repository.RepositoryName, repository.ExternalRepositoryId, StringComparison.Ordinal)
+                ? repository.RepositoryName
+                : null;
+        if (organizationUrl is null || repositoryName is null)
+        {
+            return null;
+        }
+
+        return
+            $"{organizationUrl.TrimEnd('/')}/{Uri.EscapeDataString(ResolveProjectId(repository))}/_git/{Uri.EscapeDataString(repositoryName.Trim())}/pullrequest/{pullRequest.PullRequestId.ToString(CultureInfo.InvariantCulture)}";
     }
 
     public static string ResolveProjectId(RepositoryRef repository)
