@@ -76,7 +76,7 @@ reported, which the administration UI shows as an update marker. Nothing in the 
 |---|---|
 | Endpoint | `https://telemetry.meister-dev.ai/v1/ping`, over TLS |
 | Operator | Meister DEV, the vendor of ProPR |
-| Hosting | A virtual machine and Azure Database for PostgreSQL on Microsoft Azure, in the Austria East region |
+| Hosting | Microsoft Azure, in the Austria East region |
 | Storage shape | One row per installation per day |
 | Retention | Rows are deleted 180 days after that installation's last report |
 | Processors | None. No third-party analytics, no advertising service, no data broker |
