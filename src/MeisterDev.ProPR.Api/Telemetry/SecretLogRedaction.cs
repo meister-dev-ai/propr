@@ -41,6 +41,14 @@ public static class SecretLogRedaction
         ArgumentNullException.ThrowIfNull(configuration);
 
         return AiConnectionLogRedaction.Apply(configuration)
+            .Destructure
+            .ByTransforming<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionAuthorizationStart>(_ => new { Redacted = true })
+            .Destructure
+            .ByTransforming<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionTokenRequest>(_ => new { Redacted = true })
+            .Destructure.ByTransforming<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionTokenDto>(_ => new { Redacted = true })
+            .Destructure
+            .ByTransforming<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionDecisionRequest>(_ => new { Redacted = true })
+            .Destructure.ByTransforming<ExtensionAuthorizationRedirectDto>(_ => new { Redacted = true })
             .Destructure.ByTransforming<TenantMachineCredential>(credential => new
             {
                 credential.Id,

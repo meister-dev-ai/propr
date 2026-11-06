@@ -213,3 +213,15 @@ that response's activity or revision.
 PostgreSQL advisory locks use shared helpers with explicit bigint, `hashtext` and two-integer key
 protocols. Callers own key derivation, transactions, isolation and retries. Transaction locks retain
 the caller's transaction lifetime; owned session leases retain separate acquisition and disposal.
+
+
+### Browser extension authorization
+
+IdentityAndAccess owns registered extension callbacks, protected pending/code payloads, consent-grant
+persistence and website-session-bound access. The browser extension obtains a dedicated short-lived
+Bearer audience through PKCE and retains no renewal credential. The API validates consent and website
+session state on each extension request and enforces an explicit MVC action allowlist before ordinary
+authorization. Website consent is reached through normal sign-in, including tenant linking, and is
+revocable from Settings → Connected applications. The authorize endpoint accepts a canonical HTTPS
+frontend origin under the existing website sign-in trust policy for separate frontend deployments.
+Explicit approval replaces obsolete scope grants within the same database transaction.

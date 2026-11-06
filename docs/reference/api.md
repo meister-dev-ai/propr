@@ -1005,3 +1005,31 @@ this page except `/healthz`, `/livez` and `/metrics`, which [observability](../o
 describes. Its paths carry no `/api` prefix: `/clients/{clientId}/ai-connections`, not
 `/api/clients/{clientId}/ai-connections`. Through the bundled proxy, prepend `https://localhost:5443/api` as
 every example above does. The public webhook receiver is forwarded at its own path.
+
+
+## Browser extension authorization
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/auth/extension/options` | Versioned metadata, enabled reason, canonical issuer, endpoints and S256 support. |
+| GET | `/auth/extension/authorize` | Browser navigation for interactive authorization or `prompt=none` renewal. |
+| GET | `/auth/extension/consent` | Consent details for a protected pending request and the current website session. |
+| POST | `/auth/extension/consent` | Explicitly approve or deny that request. |
+| POST | `/auth/extension/token` | Exchange a single-use code and verifier for 900-second extension access; no renewal token. |
+| GET | `/auth/extension/grants` | Current user's active application consents. |
+| DELETE | `/auth/extension/grants/{id}` | Revoke that user's application consent. |
+
+Authorization uses OAuth parameter names `client_id`, `redirect_uri`, `response_type=code`,
+`code_challenge`, `code_challenge_method=S256`, `state` and optional `prompt=none`. Optional `ui_origin`
+selects the consent frontend when it has a separate origin: it must be an exact canonical HTTPS
+origin trusted by the installation's website sign-in policy, without a path, trailing slash,
+credentials, query or fragment. Invalid origins receive `400` before authorization starts. Without
+`ui_origin`, consent uses the configured public application origin or the issuer origin. The token exchange
+uses the typed JSON contract `clientId`, `redirectUri`, `code`, `codeVerifier`,
+`grantType=authorization_code`. The response contains `accessToken`, `tokenType=Bearer`, `expiresIn`,
+`subject` and `issuer`. Authorization errors return only to an already validated callback; invalid
+client/callback requests receive a local error. These endpoints set no-cache response policy.
+
+Consent and grant management require website authentication. Extension tokens cannot approve consent,
+create PATs, administer the installation or call website refresh/logout. Existing review permissions
+and licensing apply to all permitted extension operations.

@@ -10542,6 +10542,384 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/extension/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the available versioned extension sign-in protocol and trusted endpoints. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configured metadata, or an explicit disabled reason. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionSignInOptionsDto"];
+                        "application/json": components["schemas"]["ExtensionSignInOptionsDto"];
+                        "text/json": components["schemas"]["ExtensionSignInOptionsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/extension/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Starts an interactive or silent authorization-code flow using the website session. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Registered public client identifier. */
+                    client_id?: string;
+                    /** @description Exactly registered browser callback. */
+                    redirect_uri?: string;
+                    /** @description Must be code. */
+                    response_type?: string;
+                    /** @description S256 challenge. */
+                    code_challenge?: string;
+                    /** @description Must be S256. */
+                    code_challenge_method?: string;
+                    /** @description Opaque state returned unchanged. */
+                    state?: string;
+                    /** @description Optional none for noninteractive renewal. */
+                    prompt?: string;
+                    /** @description Optional canonical HTTPS frontend origin trusted by this installation. */
+                    ui_origin?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Browser callback or the ProPR login/consent surface. */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Untrusted or invalid authorization request. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionAuthFailureDto"];
+                        "application/json": components["schemas"]["ExtensionAuthFailureDto"];
+                        "text/json": components["schemas"]["ExtensionAuthFailureDto"];
+                    };
+                };
+                /** @description Extension sign-in is unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionAuthFailureDto"];
+                        "application/json": components["schemas"]["ExtensionAuthFailureDto"];
+                        "text/json": components["schemas"]["ExtensionAuthFailureDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/extension/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns consent details for the current authenticated website user and session. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Protected pending request. */
+                    request?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Application and permission details. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionConsentDto"];
+                        "application/json": components["schemas"]["ExtensionConsentDto"];
+                        "text/json": components["schemas"]["ExtensionConsentDto"];
+                    };
+                };
+                /** @description The pending request expired or does not match the website session. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionAuthFailureDto"];
+                        "application/json": components["schemas"]["ExtensionAuthFailureDto"];
+                        "text/json": components["schemas"]["ExtensionAuthFailureDto"];
+                    };
+                };
+                /** @description Website authentication is required. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Records a user's explicit application consent or denial. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Protected pending request and decision. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ExtensionDecisionRequest"];
+                    "text/json": components["schemas"]["ExtensionDecisionRequest"];
+                    "application/*+json": components["schemas"]["ExtensionDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description Validated callback URL carrying the code or denial. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionAuthorizationRedirectDto"];
+                        "application/json": components["schemas"]["ExtensionAuthorizationRedirectDto"];
+                        "text/json": components["schemas"]["ExtensionAuthorizationRedirectDto"];
+                    };
+                };
+                /** @description The pending request expired or was consumed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionAuthFailureDto"];
+                        "application/json": components["schemas"]["ExtensionAuthFailureDto"];
+                        "text/json": components["schemas"]["ExtensionAuthFailureDto"];
+                    };
+                };
+                /** @description Website authentication is required. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/extension/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchanges one PKCE-bound authorization code for short-lived extension access. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Code and its original verifier, client and callback. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ExtensionTokenRequest"];
+                    "text/json": components["schemas"]["ExtensionTokenRequest"];
+                    "application/*+json": components["schemas"]["ExtensionTokenRequest"];
+                };
+            };
+            responses: {
+                /** @description Access token, lifetime, subject and issuer; no refresh token. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionTokenDto"];
+                        "application/json": components["schemas"]["ExtensionTokenDto"];
+                        "text/json": components["schemas"]["ExtensionTokenDto"];
+                    };
+                };
+                /** @description Invalid, expired or already redeemed code. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionAuthFailureDto"];
+                        "application/json": components["schemas"]["ExtensionAuthFailureDto"];
+                        "text/json": components["schemas"]["ExtensionAuthFailureDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/extension/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the current user's active application consents. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The current user's grants. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExtensionGrantDto"][];
+                        "application/json": components["schemas"]["ExtensionGrantDto"][];
+                        "text/json": components["schemas"]["ExtensionGrantDto"][];
+                    };
+                };
+                /** @description Website authentication is required. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/extension/grants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revokes one application consent belonging to the current user. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Consent grant identifier. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The user's grant is revoked or absent. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Website authentication is required. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/reviewing/dismiss-finding": {
         parameters: {
             query?: never;
@@ -25991,6 +26369,56 @@ export interface components {
             addInKey?: string | null;
             /** @description The action, as that family declared it. */
             actionId?: string | null;
+        };
+        ExtensionAuthFailureDto: {
+            error?: string | null;
+        };
+        ExtensionAuthorizationRedirectDto: {
+            redirectUrl?: string | null;
+        };
+        ExtensionConsentDto: {
+            application?: string | null;
+            issuer?: string | null;
+            subject?: string | null;
+            permissions?: string[] | null;
+            /** Format: date-time */
+            expiresAt?: string;
+        };
+        ExtensionDecisionRequest: {
+            request?: string | null;
+            approve?: boolean;
+        };
+        ExtensionGrantDto: {
+            /** Format: uuid */
+            id?: string;
+            application?: string | null;
+            /** Format: date-time */
+            grantedAt?: string;
+        };
+        ExtensionSignInOptionsDto: {
+            /** Format: int32 */
+            protocolVersion?: number;
+            enabled?: boolean;
+            reason?: string | null;
+            issuer?: string | null;
+            authorizationEndpoint?: string | null;
+            tokenEndpoint?: string | null;
+            supportedPkceMethods?: string[] | null;
+        };
+        ExtensionTokenDto: {
+            accessToken?: string | null;
+            tokenType?: string | null;
+            /** Format: int32 */
+            expiresIn?: number;
+            subject?: string | null;
+            issuer?: string | null;
+        };
+        ExtensionTokenRequest: {
+            clientId?: string | null;
+            redirectUri?: string | null;
+            code?: string | null;
+            codeVerifier?: string | null;
+            grantType?: string | null;
         };
         /**
          * @description Carries the unified diff for a single file that was reviewed in a review job.

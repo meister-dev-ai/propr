@@ -572,3 +572,46 @@ of the tenant.
 
 The audit history of a tenant also records the elevations of platform administrators and every content read
 under them; see [platform administrator access to tenant content](#platform-administrator-access-to-tenant-content).
+
+
+## Browser extension sign-in
+
+ProPR Lens opens ProPR's own sign-in and consent page from its settings. ProPR issues a short-lived
+extension access token through an authorization code with PKCE S256. The callback carries only the
+one-time code, state and canonical issuer. The extension exchanges it without cookies and receives
+no refresh token. Codes expire after 60 seconds; pending consent requests expire after ten minutes.
+
+The website keeps its existing HttpOnly, Secure renewal cookie. Silent authorization uses that cookie
+only during a top-level browser authentication flow. The extension's ordinary API calls remain
+cookie-free, and the extension CORS policy does not permit credentials. Only explicitly registered
+HTTPS callbacks qualify; a publisher ID is not an extension callback identity.
+
+The consent frontend uses an exact HTTPS origin from the existing website sign-in trust policy.
+The optional `ui_origin` parameter supports separately hosted frontends configured in `CORS_ORIGINS`;
+it cannot select an arbitrary page, an HTTP origin or a provider-declared browser extension origin.
+Redirect responses omit the callback and protected pending request from MVC redirect logs.
+
+An extension token has audience `propr-lens` and the configured canonical issuer. Its consent grant,
+website session and active user are checked on every request. The server accepts only the extension's
+explicit review/read/action allowlist, while existing client permissions, licensing and platform
+administrator elevation rules still apply. Website logout, expiry, account disablement or revoking
+consent refuses subsequent extension requests. Extension activity renews the website idle window only
+when an access-token exchange is actually needed; it does not create an idle keep-alive schedule.
+
+Settings → Connected applications lists application consents. Revoking ProPR Lens there removes its
+access across installations and does not log out the website. Removing a connection in the extension
+only clears its local session and configuration; it must not call the website's global logout.
+Approving a changed permission scope atomically revokes the previous scope grant and creates the
+current grant. Concurrent approvals share the same current grant.
+
+One-time extension requests and codes remain consumed if later grant persistence, cancellation or a
+website-session activity write fails. The user starts a new authorization handoff from the extension
+settings. Replaying a consumed code neither issues access nor refreshes the website idle window.
+Non-revoked consent records remain visible for revocation even if their permission scope is obsolete;
+only the current scope authorizes extension access.
+
+Website continuation storage failures leave ordinary website login and logout available. A known
+extension continuation failure stops before login or SSO and displays a session-storage instruction
+and a restart action. Only that fixed error surface is available without website authentication. Connected
+applications distinguishes a failed list from an empty list and removes successful revocations before
+refreshing the remaining records.

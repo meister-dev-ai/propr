@@ -290,6 +290,11 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
             return Task.CompletedTask;
         }
 
+        public Task<RefreshToken?> GetActiveByIdAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.FromResult(this._tokens.FirstOrDefault(token => token.Id == id && token.RevokedAt is null && token.ExpiresAt > DateTimeOffset.UtcNow));
+        }
+
         public Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
         {
             var now = DateTimeOffset.UtcNow;

@@ -54,6 +54,11 @@ internal static class RowByRowRevocations
             return repository.GetActiveByHashAsync(tokenHash, ct);
         }
 
+        public Task<RefreshToken?> GetActiveByIdAsync(Guid id, CancellationToken ct = default)
+        {
+            return repository.GetActiveByIdAsync(id, ct);
+        }
+
         public Task TouchLastUsedAsync(Guid id, DateTimeOffset lastUsedAt, CancellationToken ct = default)
         {
             return repository.TouchLastUsedAsync(id, lastUsedAt, ct);

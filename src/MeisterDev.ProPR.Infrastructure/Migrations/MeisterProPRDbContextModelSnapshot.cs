@@ -5664,6 +5664,45 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("crawl_repo_filters", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ExtensionAuthorizationGrantRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("GrantedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("granted_at");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<int>("ScopeVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("scope_version");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ClientId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_extension_grants_active_user_client")
+                        .HasFilter("revoked_at IS NULL");
+
+                    b.ToTable("extension_authorization_grants", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ExternalIdentityRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8246,6 +8285,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("CrawlConfiguration");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ExtensionAuthorizationGrantRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.AppUserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.ExternalIdentityRecord", b =>

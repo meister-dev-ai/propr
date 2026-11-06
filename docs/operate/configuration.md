@@ -943,3 +943,29 @@ request header, so a plain `http` endpoint would put it on the wire unencrypted.
 Authenticated webhook notifications make affected discussions eligible immediately. Full reconciliation
 recovers missed notifications and providers with incomplete event coverage.
 See [discussion synchronization](discussion-synchronization.md) for retries, retention and diagnostics.
+
+
+## Browser extension authorization
+
+Extension sign-in is disabled until both settings are configured:
+
+| Setting | Value |
+|---|---|
+| `MEISTER_EXTENSION_AUTH_ISSUER` | Canonical HTTPS API base URL, such as `https://propr.example/api`, without credentials, query or fragment. |
+| `MEISTER_EXTENSION_AUTH_REDIRECT_URIS` | JSON array of exact HTTPS callbacks returned by the packaged extension's `identity.getRedirectURL('propr')`. |
+
+The public client identifier is `propr-lens`; it has no client secret. A PostgreSQL-backed identity store
+and normal ProPR website sign-in are required. The configured public application address provides the
+default website consent origin. For a separately hosted frontend, include its HTTPS origin in
+`CORS_ORIGINS`; the extension selects that trusted origin with the authorize endpoint's `ui_origin`
+parameter. Provider-declared extension origins do not qualify as website frontends. If the configured
+public application address is HTTP or otherwise insecure, extension sign-in is disabled with
+`insecure_ui_origin`; the existing website login configuration is unchanged. HTTPS must reach the API
+as HTTPS through the trusted proxy configuration.
+
+Chrome callbacks depend on the assigned extension item ID, not the publisher ID. Firefox's stable
+ProPR Lens add-on identity produces `https://55f77125cbbe3f6350d8fe4f69084905c317e015.extensions.allizom.org/propr`.
+Register the exact callbacks for the actual packaged clients. Wildcards, arbitrary return addresses,
+HTTP callbacks and callbacks containing credentials, queries or fragments are refused. Invalid partial
+configuration prevents startup; absent configuration reports sign-in unavailable without requiring a
+database merely to read public metadata.

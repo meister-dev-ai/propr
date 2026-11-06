@@ -15354,6 +15354,497 @@
         }
       }
     },
+    "/auth/extension/options": {
+      "get": {
+        "tags": [
+          "ExtensionAuthorization"
+        ],
+        "summary": "Returns the available versioned extension sign-in protocol and trusted endpoints.",
+        "responses": {
+          "200": {
+            "description": "Configured metadata, or an explicit disabled reason.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSignInOptionsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSignInOptionsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSignInOptionsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/extension/authorize": {
+      "get": {
+        "tags": [
+          "ExtensionAuthorization"
+        ],
+        "summary": "Starts an interactive or silent authorization-code flow using the website session.",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "query",
+            "description": "Registered public client identifier.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Exactly registered browser callback.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "description": "Must be code.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "description": "S256 challenge.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "description": "Must be S256.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Opaque state returned unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "prompt",
+            "in": "query",
+            "description": "Optional none for noninteractive renewal.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ui_origin",
+            "in": "query",
+            "description": "Optional canonical HTTPS frontend origin trusted by this installation.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Browser callback or the ProPR login/consent surface."
+          },
+          "400": {
+            "description": "Untrusted or invalid authorization request.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Extension sign-in is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/extension/consent": {
+      "get": {
+        "tags": [
+          "ExtensionAuthorization"
+        ],
+        "summary": "Returns consent details for the current authenticated website user and session.",
+        "parameters": [
+          {
+            "name": "request",
+            "in": "query",
+            "description": "Protected pending request.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Application and permission details.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionConsentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionConsentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionConsentDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Website authentication is required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The pending request expired or does not match the website session.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ExtensionAuthorization"
+        ],
+        "summary": "Records a user's explicit application consent or denial.",
+        "requestBody": {
+          "description": "Protected pending request and decision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionDecisionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionDecisionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated callback URL carrying the code or denial.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthorizationRedirectDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthorizationRedirectDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthorizationRedirectDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Website authentication is required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The pending request expired or was consumed.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/extension/token": {
+      "post": {
+        "tags": [
+          "ExtensionAuthorization"
+        ],
+        "summary": "Exchanges one PKCE-bound authorization code for short-lived extension access.",
+        "requestBody": {
+          "description": "Code and its original verifier, client and callback.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionTokenRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionTokenRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token, lifetime, subject and issuer; no refresh token.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionTokenDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionTokenDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionTokenDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid, expired or already redeemed code.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionAuthFailureDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/extension/grants": {
+      "get": {
+        "tags": [
+          "ExtensionAuthorization"
+        ],
+        "summary": "Lists the current user's active application consents.",
+        "responses": {
+          "200": {
+            "description": "The current user's grants.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExtensionGrantDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExtensionGrantDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExtensionGrantDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Website authentication is required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/extension/grants/{id}": {
+      "delete": {
+        "tags": [
+          "ExtensionAuthorization"
+        ],
+        "summary": "Revokes one application consent belonging to the current user.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Consent grant identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The user's grant is revoked or absent."
+          },
+          "401": {
+            "description": "Website authentication is required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/reviewing/dismiss-finding": {
       "post": {
         "tags": [
@@ -38786,6 +39277,174 @@
         "additionalProperties": false,
         "description": "Starts one declared action against one connection."
       },
+      "ExtensionAuthFailureDto": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtensionAuthorizationRedirectDto": {
+        "type": "object",
+        "properties": {
+          "redirectUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtensionConsentDto": {
+        "type": "object",
+        "properties": {
+          "application": {
+            "type": "string",
+            "nullable": true
+          },
+          "issuer": {
+            "type": "string",
+            "nullable": true
+          },
+          "subject": {
+            "type": "string",
+            "nullable": true
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtensionDecisionRequest": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "type": "string",
+            "nullable": true
+          },
+          "approve": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtensionGrantDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "application": {
+            "type": "string",
+            "nullable": true
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtensionSignInOptionsDto": {
+        "type": "object",
+        "properties": {
+          "protocolVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "issuer": {
+            "type": "string",
+            "nullable": true
+          },
+          "authorizationEndpoint": {
+            "type": "string",
+            "nullable": true
+          },
+          "tokenEndpoint": {
+            "type": "string",
+            "nullable": true
+          },
+          "supportedPkceMethods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtensionTokenDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "tokenType": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "subject": {
+            "type": "string",
+            "nullable": true
+          },
+          "issuer": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtensionTokenRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "redirectUri": {
+            "type": "string",
+            "nullable": true
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "codeVerifier": {
+            "type": "string",
+            "nullable": true
+          },
+          "grantType": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "FileDiffDto": {
         "type": "object",
         "properties": {
@@ -50144,6 +50803,9 @@
     },
     {
       "name": "CompletedReviewUsage"
+    },
+    {
+      "name": "ExtensionAuthorization"
     },
     {
       "name": "FindingDismissal"

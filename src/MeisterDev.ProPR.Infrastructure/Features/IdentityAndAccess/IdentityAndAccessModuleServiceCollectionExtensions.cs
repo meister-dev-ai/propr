@@ -42,6 +42,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
         // Session lifetimes are needed both by the DB-backed refresh-token repository and by the
         // auth controllers, so register the policy unconditionally.
         services.AddSingleton(SessionPolicyFactory.FromConfiguration(configuration));
+        services.AddSingleton(ExtensionAuthorizationOptions.FromConfiguration(configuration));
 
         // Tenant administration is EF-backed and must be available in test hosts that swap in
         // an in-memory DbContext without providing a full DB connection string.
@@ -153,6 +154,8 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
         {
             services.AddScoped<IUserRepository, AppUserRepository>();
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+            services.AddScoped<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.IExtensionAuthorizationService,
+                MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.ExtensionAuth.ExtensionAuthorizationService>();
             services.AddScoped<IUserPatRepository, UserPatRepository>();
             services.AddScoped<ITenantMembershipService, TenantMembershipService>();
             services.AddScoped<ITenantMemberClientAccessService, TenantMemberClientAccessService>();

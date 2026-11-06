@@ -10,6 +10,7 @@ import { createRuntime } from './app/runtime/createRuntime'
 import { provideRuntime, setActiveRuntime } from './app/runtime/runtimeContext'
 import { useSession, LOGOUT_BROADCAST_KEY } from '@/composables/useSession'
 import { refreshAccessToken, setOnSessionExpired } from '@/services/api'
+import { extensionSignInLoginRoute, forgetExtensionSignIn } from '@/features/auth/extensionSignInContinuation'
 
 const app = createApp(App)
 app.use(vuetify)
@@ -32,17 +33,21 @@ if (runtime.isMock) {
 
 const { setAccessToken, loadClientRoles, clearTokens } = useSession()
 
-// When a refresh fails terminally (session expired/revoked), clear state and go to login.
+// When a refresh fails terminally, clear website state and preserve or stop a pending extension handoff.
 setOnSessionExpired(() => {
+  const destination = router.currentRoute.value.name === 'extension-consent'
+    ? extensionSignInLoginRoute(router.currentRoute.value.query.request)
+    : { name: 'login' }
   clearTokens()
   if (router.currentRoute.value.name !== 'login') {
-    void router.replace({ name: 'login' })
+    void router.replace(destination)
   }
 })
 
 // Another tab logged out → tear down this tab's session too.
 window.addEventListener('storage', (event) => {
   if (event.key === LOGOUT_BROADCAST_KEY && event.newValue) {
+    forgetExtensionSignIn()
     clearTokens()
     if (router.currentRoute.value.name !== 'login') {
       void router.replace({ name: 'login' })

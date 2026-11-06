@@ -12,6 +12,9 @@ public interface IJwtTokenService
     /// <summary>Generates a 15-minute JWT access token for the given user.</summary>
     string GenerateAccessToken(AppUser user);
 
+    /// <summary>Issues access limited to extension operations and an active website session and consent grant.</summary>
+    string GenerateExtensionAccessToken(AppUser user, Guid grantId, Guid sessionId);
+
     /// <summary>
     ///     Validates an access token and returns the associated <see cref="ClaimsPrincipal" />,
     ///     or <see langword="null" /> if the token is invalid or expired.

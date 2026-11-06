@@ -16,10 +16,12 @@ public sealed class JwtTokenService : IJwtTokenService
 {
     private readonly JwtSecurityTokenHandler _handler = new();
     private readonly SymmetricSecurityKey _signingKey;
+    private readonly string? _extensionIssuer;
 
     public JwtTokenService(IConfiguration configuration)
     {
         this._handler.MapInboundClaims = false;
+        this._extensionIssuer = MeisterDev.ProPR.Application.Options.ExtensionAuthorizationOptions.FromConfiguration(configuration).Issuer;
 
         var secret = configuration["MEISTER_JWT_SECRET"]
                      ?? throw new InvalidOperationException(
@@ -36,6 +38,14 @@ public sealed class JwtTokenService : IJwtTokenService
 
     /// <inheritdoc />
     public string GenerateAccessToken(AppUser user)
+        => this.Generate(user, "meisterpropr", "meisterpropr", []);
+
+    public string GenerateExtensionAccessToken(AppUser user, Guid grantId, Guid sessionId)
+        => this.Generate(
+            user, "propr-lens", this._extensionIssuer ?? throw new InvalidOperationException("Extension issuer is not configured."),
+            [new Claim("extension_grant_id", grantId.ToString()), new Claim("extension_session_id", sessionId.ToString())]);
+
+    private string Generate(AppUser user, string audience, string issuer, Claim[] additional)
     {
         var claims = new[]
         {
@@ -46,11 +56,11 @@ public sealed class JwtTokenService : IJwtTokenService
 
         var descriptor = new SecurityTokenDescriptor
         {
-            Subject = new ClaimsIdentity(claims),
+            Subject = new ClaimsIdentity(claims.Concat(additional)),
             Expires = DateTime.UtcNow.AddMinutes(15),
             SigningCredentials = new SigningCredentials(this._signingKey, SecurityAlgorithms.HmacSha256),
-            Issuer = "meisterpropr",
-            Audience = "meisterpropr",
+            Issuer = issuer,
+            Audience = audience,
         };
 
         var token = this._handler.CreateToken(descriptor);
@@ -65,9 +75,20 @@ public sealed class JwtTokenService : IJwtTokenService
             var parameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
-                ValidIssuer = "meisterpropr",
+                IssuerValidator = (issuer, token, _) =>
+                {
+                    if (token is JwtSecurityToken jwt && jwt.Audiences.ToArray() is [var audience]
+                                                      && ((audience == "meisterpropr" && issuer == "meisterpropr")
+                                                          || (audience == "propr-lens" && this._extensionIssuer is not null &&
+                                                              issuer == this._extensionIssuer)))
+                    {
+                        return issuer;
+                    }
+
+                    throw new SecurityTokenInvalidIssuerException("Invalid issuer and audience pair.");
+                },
                 ValidateAudience = true,
-                ValidAudience = "meisterpropr",
+                ValidAudiences = ["meisterpropr", "propr-lens"],
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = this._signingKey,

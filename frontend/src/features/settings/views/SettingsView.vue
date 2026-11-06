@@ -30,6 +30,7 @@
           >
             <i class="fi fi-rr-link"></i> Single sign-on
           </button>
+          <button class="sidebar-nav-link" :class="{ active: activeTab === 'applications' }" @click="activeTab = 'applications'">Connected applications</button>
         </div>
       </div>
     </aside>
@@ -106,6 +107,7 @@
       <div v-if="showSignInLinks && activeTab === 'sign-ins'">
         <SignInLinksPanel />
       </div>
+      <ConnectedApplicationsPanel v-if="activeTab === 'applications'" />
     </main>
   </div>
 </template>
@@ -118,10 +120,11 @@ import { offersPasswordSignIn, turnsOffTenantSignIn } from '@/features/auth/inst
 import { getAuthOptions, type AuthOptions } from '@/services/authOptionsService'
 import PatsView from '@/features/pats/views/PatsView.vue'
 import SignInLinksPanel from '@/features/settings/components/SignInLinksPanel.vue'
+import ConnectedApplicationsPanel from '@/features/settings/components/ConnectedApplicationsPanel.vue'
 
 const vm = useSettingsViewModel()
 const { isCapabilityAvailable } = useSession()
-const activeTab = ref<'profile' | 'pats' | 'sign-ins'>('profile')
+const activeTab = ref<'profile' | 'pats' | 'sign-ins' | 'applications'>('profile')
 const signInOptions = ref<AuthOptions | null>(null)
 // A password serves only the password sign-in, so the form appears only while the installation offers it.
 const canChangePassword = computed(() => vm.hasLocalPassword.value && offersPasswordSignIn(signInOptions.value))

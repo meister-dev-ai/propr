@@ -7,6 +7,7 @@ import type { RouteLocationNormalizedGeneric, RouteLocationRaw, RouteRecordRaw }
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 import { takePendingLinkConfirmation } from '@/features/auth/pendingSignInLink'
+import { extensionSignInLoginRoute, isExtensionSignInUnavailable, takeExtensionSignIn } from '@/features/auth/extensionSignInContinuation'
 
 /** The tenant pages that became sections, by the route name each kept and the section it now opens. */
 const TENANT_SECTION_ROUTE_NAMES = {
@@ -41,6 +42,8 @@ const router = createRouter({
         if (takePendingLinkConfirmation()) {
           return { name: 'sign-in-link' }
         }
+        const extension = takeExtensionSignIn()
+        if (extension) return extension
 
         const hasAnyAdminRole = isAdmin.value || Object.values(clientRoles.value).some((role) => role >= RoleLevel.Administrator)
         if (hasAnyAdminRole) {
@@ -65,6 +68,12 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('@/features/auth/views/LoginView.vue'),
+    },
+    {
+      path: '/extension/authorize',
+      name: 'extension-consent',
+      component: () => import('@/features/auth/views/ExtensionConsentView.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/login/callback',
@@ -375,6 +384,10 @@ router.beforeEach((to) => {
   } = useSession()
 
   if (to.meta.requiresAuth && !isAuthenticated.value) {
+    if (to.name === 'extension-consent') {
+      if (isExtensionSignInUnavailable(to.query)) return
+      return extensionSignInLoginRoute(to.query.request)
+    }
     return { name: 'login' }
   }
   if (to.meta.requiresAdmin && !isAdmin.value) {

@@ -68,6 +68,22 @@ public sealed class RefreshTokenRepository(MeisterProPRDbContext db, SessionPoli
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<RefreshToken?> GetActiveByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var idleThreshold = now - sessionPolicy.IdleTimeout;
+        var value = await db.RefreshTokens.AsNoTracking().SingleOrDefaultAsync(
+            token => token.Id == id
+                     && token.RevokedAt == null && token.ExpiresAt > now && token.LastUsedAt > idleThreshold, ct);
+        return value is null
+            ? null
+            : new RefreshToken
+            {
+                Id = value.Id, UserId = value.UserId, TokenHash = value.TokenHash,
+                CreatedAt = value.CreatedAt, LastUsedAt = value.LastUsedAt, ExpiresAt = value.ExpiresAt, RevokedAt = value.RevokedAt
+            };
+    }
+
     public async Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;

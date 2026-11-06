@@ -27,6 +27,30 @@ public sealed class SecretLogRedactionTests
     private const string Secret = "sk-must-never-be-logged";
 
     [Fact]
+    public void ExtensionCodesVerifiersAndAccessNeverReachEitherLogRenderingPath()
+    {
+        object[] payloads =
+        [
+            new MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionTokenRequest(
+                "propr-lens", "https://callback.test/", Secret, Secret, "authorization_code"),
+            new MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionTokenDto(
+                Secret, "Bearer", 900, "subject", "https://propr.test/api"),
+            new MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionDecisionRequest(Secret, true),
+            new MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionAuthorizationStart(
+                RedirectUrl: "https://callback.test/?code=" + Secret, PendingRequest: Secret),
+            new ExtensionAuthorizationRedirectDto("https://callback.test/?code=" + Secret),
+        ];
+        var sink = new CapturingSink();
+        using var logger = SecretLogRedaction.Apply(new LoggerConfiguration()).WriteTo.Sink(sink).CreateLogger();
+        foreach (var payload in payloads)
+        {
+            logger.Information("Payload {@Payload} text {Text}", payload, payload);
+        }
+
+        Assert.DoesNotContain(Secret, sink.Rendered(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MachineCredentialRenderingWithholdsIssuedTokenAndStoredVerifiers()
     {
         var sink = new CapturingSink();

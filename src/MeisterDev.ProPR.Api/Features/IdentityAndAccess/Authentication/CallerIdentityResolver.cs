@@ -12,8 +12,8 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
-using Microsoft.EntityFrameworkCore;
 using MeisterDev.ProPR.Web;
+using Microsoft.EntityFrameworkCore;
 
 namespace MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
 
@@ -44,6 +44,7 @@ public static class CallerIdentityResolver
     public static async Task<CallerIdentityResolution> ResolveAsync(HttpContext context, string authenticationScheme)
     {
         context.Items["IsAdmin"] = false;
+        context.Items[ExtensionOperationPolicy.ItemKey] = false;
         context.Items["ClientRoles"] = new Dictionary<Guid, ClientRole>();
         context.Items["TenantRoles"] = new Dictionary<Guid, TenantRole>();
 
@@ -113,6 +114,21 @@ public static class CallerIdentityResolver
             return null;
         }
 
+        if (principal.HasClaim("aud", "propr-lens"))
+        {
+            var extension = context.RequestServices
+                .GetService<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.IExtensionAuthorizationService>();
+            if (extension is null || !Guid.TryParse(principal.FindFirst("sub")?.Value, out var extensionUser)
+                                  || !Guid.TryParse(principal.FindFirst("extension_grant_id")?.Value, out var grant)
+                                  || !Guid.TryParse(principal.FindFirst("extension_session_id")?.Value, out var session)
+                                  || !await extension.IsAccessActiveAsync(extensionUser, grant, session, context.RequestAborted))
+            {
+                return CallerIdentityResolution.Anonymous;
+            }
+
+            context.Items[ExtensionOperationPolicy.ItemKey] = true;
+        }
+
         var sub = principal.FindFirst("sub")?.Value;
         var role = principal.FindFirst("global_role")?.Value;
         if (string.IsNullOrEmpty(sub))
@@ -142,6 +158,16 @@ public static class CallerIdentityResolver
         if (user is not null && !user.IsActive)
         {
             return CallerIdentityResolution.DisabledAccount;
+        }
+
+        if (context.Items[ExtensionOperationPolicy.ItemKey] is true)
+        {
+            if (user is null)
+            {
+                return CallerIdentityResolution.Anonymous;
+            }
+
+            context.Items["IsAdmin"] = user.GlobalRole == AppUserRole.Admin;
         }
 
         var explicitClientRoles = user is not null

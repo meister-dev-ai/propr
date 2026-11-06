@@ -126,6 +126,8 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Server-persisted refresh tokens.</summary>
     public DbSet<RefreshTokenRecord> RefreshTokens => this.Set<RefreshTokenRecord>();
 
+    public DbSet<ExtensionAuthorizationGrantRecord> ExtensionAuthorizationGrants => this.Set<ExtensionAuthorizationGrantRecord>();
+
     /// <summary>Per-client AI connection configurations.</summary>
     public DbSet<AiConnectionRecord> AiConnections => this.Set<AiConnectionRecord>();
 

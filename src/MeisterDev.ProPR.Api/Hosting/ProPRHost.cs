@@ -679,6 +679,9 @@ public static class ProPRHost
             TenantMachineOperationPolicy.ValidateRegisteredActions(
                 app.Services.GetRequiredService<Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider>()
                     .ActionDescriptors.Items.OfType<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>());
+            ExtensionOperationPolicy.ValidateRegisteredActions(
+                app.Services.GetRequiredService<Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider>()
+                    .ActionDescriptors.Items.OfType<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>());
 
             if (args.Contains("--generate-openapi", StringComparer.OrdinalIgnoreCase))
             {
@@ -871,6 +874,12 @@ public static class ProPRHost
 
                 if (ctx.Items[TenantMachineOperationPolicy.TenantItemKey] is Guid &&
                     !await TenantMachineOperationPolicy.AuthorizeAsync(ctx))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return;
+                }
+
+                if (ctx.Items[ExtensionOperationPolicy.ItemKey] is true && !ExtensionOperationPolicy.Authorize(ctx))
                 {
                     ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
                     return;

@@ -19,6 +19,7 @@ export const routeParity: RouteParityItem[] = [
   { id: 'home', workflowName: 'Role-aware default redirect' },
   { id: 'login', workflowName: 'Platform recovery sign-in' },
   { id: 'login-callback', workflowName: 'Sign-in completion through an identity provider of the installation' },
+  { id: 'extension-consent', workflowName: 'Consent to browser extension access through the current website session' },
   { id: 'tenant-directory', workflowName: 'Tenant directory access' },
   { id: 'tenant-login', workflowName: 'Tenant-scoped sign-in' },
   { id: 'tenant-login-callback', workflowName: 'External tenant sign-in completion' },
