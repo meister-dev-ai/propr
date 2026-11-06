@@ -29,18 +29,21 @@ public sealed class RefreshTokenRepository(MeisterProPRDbContext db, SessionPoli
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    ///     Returns the refresh tokens of the website sessions that are signed in at <paramref name="now" />: not revoked,
+    ///     not expired, and used within the idle timeout of <paramref name="policy" />.
+    /// </summary>
+    /// <remarks>The extension sign-in checks the website session of an extension token with the same rule.</remarks>
+    internal static IQueryable<RefreshTokenRecord> Active(IQueryable<RefreshTokenRecord> tokens, SessionPolicy policy, DateTimeOffset now)
+    {
+        var idleThreshold = now - policy.IdleTimeout;
+        return tokens.Where(token => token.RevokedAt == null && token.ExpiresAt > now && token.LastUsedAt > idleThreshold);
+    }
+
     public async Task<RefreshToken?> GetActiveByHashAsync(string tokenHash, CancellationToken ct = default)
     {
-        var now = DateTimeOffset.UtcNow;
-        var idleThreshold = now - sessionPolicy.IdleTimeout;
-        var record = await db.RefreshTokens
-            .FirstOrDefaultAsync(
-                t =>
-                    t.TokenHash == tokenHash &&
-                    t.RevokedAt == null &&
-                    t.ExpiresAt > now &&
-                    t.LastUsedAt > idleThreshold,
-                ct);
+        var record = await Active(db.RefreshTokens, sessionPolicy, DateTimeOffset.UtcNow)
+            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
 
         return record is null
             ? null
@@ -66,22 +69,6 @@ public sealed class RefreshTokenRepository(MeisterProPRDbContext db, SessionPoli
 
         record.LastUsedAt = lastUsedAt;
         await db.SaveChangesAsync(ct);
-    }
-
-    public async Task<RefreshToken?> GetActiveByIdAsync(Guid id, CancellationToken ct = default)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var idleThreshold = now - sessionPolicy.IdleTimeout;
-        var value = await db.RefreshTokens.AsNoTracking().SingleOrDefaultAsync(
-            token => token.Id == id
-                     && token.RevokedAt == null && token.ExpiresAt > now && token.LastUsedAt > idleThreshold, ct);
-        return value is null
-            ? null
-            : new RefreshToken
-            {
-                Id = value.Id, UserId = value.UserId, TokenHash = value.TokenHash,
-                CreatedAt = value.CreatedAt, LastUsedAt = value.LastUsedAt, ExpiresAt = value.ExpiresAt, RevokedAt = value.RevokedAt
-            };
     }
 
     public async Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Features.IdentityAndAccess.Authentication.Models;
+using MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth;
 using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
@@ -41,13 +42,10 @@ public static class SecretLogRedaction
         ArgumentNullException.ThrowIfNull(configuration);
 
         return AiConnectionLogRedaction.Apply(configuration)
-            .Destructure
-            .ByTransforming<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionAuthorizationStart>(_ => new { Redacted = true })
-            .Destructure
-            .ByTransforming<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionTokenRequest>(_ => new { Redacted = true })
-            .Destructure.ByTransforming<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionTokenDto>(_ => new { Redacted = true })
-            .Destructure
-            .ByTransforming<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.ExtensionDecisionRequest>(_ => new { Redacted = true })
+            .Destructure.ByTransforming<ExtensionAuthorizationStart>(_ => new { Redacted = true })
+            .Destructure.ByTransforming<ExtensionTokenRequest>(_ => new { Redacted = true })
+            .Destructure.ByTransforming<ExtensionTokenDto>(_ => new { Redacted = true })
+            .Destructure.ByTransforming<ExtensionDecisionRequest>(_ => new { Redacted = true })
             .Destructure.ByTransforming<ExtensionAuthorizationRedirectDto>(_ => new { Redacted = true })
             .Destructure.ByTransforming<TenantMachineCredential>(credential => new
             {

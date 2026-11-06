@@ -28,14 +28,23 @@ Set `MEISTER_PUBLIC_BASE_URL` to the externally reachable API base URL, includin
 your proxy uses one. ProPR uses it for the webhook listener URLs shown in the UI, for SSO redirect URLs,
 and for the browser origin it allows. Without it, callback URLs fall back to the request host.
 
-`X-Forwarded-For` and `X-Forwarded-Proto` are honoured from a single hop, and only when the connecting
-proxy is on loopback or in a private range (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). There is no
-setting that widens that list. Where your ingress sits outside it, both headers are ignored and ProPR
-reads the direct connection. Every request then appears to come from the proxy's address, so the per-IP
-rate limit on the sign-in endpoints buckets all sign-in attempts together (see
+ProPR uses `X-Forwarded-For` and `X-Forwarded-Proto` from a single hop, and only when the connecting
+proxy is on loopback, in a private range (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), or in a
+network listed in [`MEISTER_TRUSTED_PROXY_NETWORKS`](configuration.md#trusted-proxy-networks). Because ProPR
+reads a single hop, the proxy that connects to ProPR has to send the scheme of the browser. A proxy that
+sets `X-Forwarded-Proto` to the protocol of its own incoming connection sends `http` when another proxy in
+front of it has terminated TLS.
+
+If your ingress connects from another address, ProPR ignores both headers and reads the direct
+connection. Every request then appears to come from the proxy's address, so the per-IP rate limit on the
+sign-in endpoints buckets all sign-in attempts together (see
 [sign-in and sessions](../reference/security.md#sign-in-and-sessions)). The request scheme becomes the
-one the proxy used to reach the API, not the one the browser used. `MEISTER_PUBLIC_BASE_URL` keeps
-generated URLs correct in that case, because ProPR uses it ahead of the request's own scheme and host.
+one the proxy used to reach the API, not the one the browser used. ProPR then refuses the
+[ProPR Lens sign-in](configuration.md#browser-extension-authorization) and sets its cookies without the
+`Secure` attribute. `MEISTER_PUBLIC_BASE_URL` keeps generated URLs correct in that case, because ProPR
+uses it ahead of the request's own scheme and host. For the first request after a start that carries these
+headers from an address outside the trusted networks, ProPR logs a warning that contains the address. If
+the address belongs to your ingress, add its network to `MEISTER_TRUSTED_PROXY_NETWORKS`.
 
 Allow additional browser origins with `CORS_ORIGINS` (comma-separated).
 
@@ -44,6 +53,17 @@ Do not route `/metrics`, or `/api/metrics`, from a public edge - see
 
 Symptoms that trace back to routing or the public base URL are indexed in
 [troubleshooting](troubleshooting.md).
+
+### Azure Container Apps
+
+The ingress of Azure Container Apps overwrites `X-Forwarded-Proto` with the protocol of the connection it
+receives. If a reverse proxy app in the environment calls the internal ingress of the API over HTTP, every
+request reaches ProPR as `http`, whichever protocol the browser used. The reverse proxy in
+`example/azure/.azure/` calls the internal ingress of the API and of the frontend over HTTPS, with SNI and
+certificate verification.
+
+In an environment with workload profiles, set `MEISTER_TRUSTED_PROXY_NETWORKS` to the address ranges that
+the environment reserves for the platform: `100.100.0.0/17,100.100.128.0/19,100.100.160.0/19,100.100.192.0/19`.
 
 ## Running published images
 

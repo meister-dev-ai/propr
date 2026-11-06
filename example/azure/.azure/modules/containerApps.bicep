@@ -193,6 +193,9 @@ resource backend 'Microsoft.App/containerapps@2025-10-02-preview' = {
             { name: 'PROCURSOR_SERVICE_BASE_URL', value: 'http://${proCursorHost}' }
             { name: 'PROCURSOR_SHARED_KEY', secretRef: 'procursor-shared-key' }
             { name: 'MEISTER_DATA_PROTECTION_KEYS_PATH', value: '/app/.data-protection-keys' }
+            // The ingress forwards requests from the address ranges that a workload profiles environment reserves for the
+            // platform. Without them, the backend ignores the X-Forwarded-Proto of the ingress and treats every request as http.
+            { name: 'MEISTER_TRUSTED_PROXY_NETWORKS', value: '100.100.0.0/17,100.100.128.0/19,100.100.160.0/19,100.100.192.0/19' }
           ]
           resources: { cpu: json('0.5'), memory: '1Gi' }
           probes: [

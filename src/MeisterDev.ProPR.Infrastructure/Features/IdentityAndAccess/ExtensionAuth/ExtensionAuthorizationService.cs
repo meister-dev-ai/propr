@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
+using MeisterDev.ProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -23,6 +24,7 @@ public sealed class ExtensionAuthorizationService(
     ExternalSignInRedemptions redemptions,
     IUserRepository users,
     IRefreshTokenRepository sessions,
+    SessionPolicy sessionPolicy,
     IJwtTokenService jwt,
     ExtensionAuthorizationOptions options,
     TimeProvider? clock = null) : IExtensionAuthorizationService
@@ -216,17 +218,15 @@ public sealed class ExtensionAuthorizationService(
             return false;
         }
 
-        var session = await sessions.GetActiveByIdAsync(sessionId, ct);
-        if (session?.UserId != userId)
-        {
-            return false;
-        }
-
-        var user = await users.GetByIdAsync(userId, ct);
-        return user is { IsActive: true } && await db.ExtensionAuthorizationGrants.AsNoTracking().AnyAsync(
-            grant =>
-                grant.Id == grantId && grant.UserId == userId && grant.ClientId == ExtensionAuthorizationOptions.ClientId
-                && grant.ScopeVersion == ExtensionAuthorizationGrant.CurrentScopeVersion && grant.RevokedAt == null, ct);
+        // ProPR calls this for every request with an extension token, so one query checks the grant, the website session
+        // and the account.
+        var activeSessions = RefreshTokenRepository.Active(db.RefreshTokens, sessionPolicy, this.Now);
+        return await db.ExtensionAuthorizationGrants.AsNoTracking().AnyAsync(
+            grant => grant.Id == grantId && grant.UserId == userId && grant.ClientId == ExtensionAuthorizationOptions.ClientId
+                     && grant.ScopeVersion == ExtensionAuthorizationGrant.CurrentScopeVersion && grant.RevokedAt == null
+                     && activeSessions.Any(session => session.Id == sessionId && session.UserId == userId)
+                     && db.AppUsers.Any(user => user.Id == userId && user.IsActive),
+            ct);
     }
 
     public async Task<IReadOnlyList<ExtensionGrantDto>> ListGrantsAsync(Guid userId, CancellationToken ct) =>
@@ -235,7 +235,9 @@ public sealed class ExtensionAuthorizationService(
 
     public async Task RevokeAsync(Guid userId, Guid grantId, CancellationToken ct)
     {
-        var value = await db.ExtensionAuthorizationGrants.SingleOrDefaultAsync(grant => grant.Id == grantId && grant.UserId == userId, ct);
+        // A grant that is revoked already keeps the time of its first revocation.
+        var value = await db.ExtensionAuthorizationGrants.SingleOrDefaultAsync(
+            grant => grant.Id == grantId && grant.UserId == userId && grant.RevokedAt == null, ct);
         if (value is null)
         {
             return;

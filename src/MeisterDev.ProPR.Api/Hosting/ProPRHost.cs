@@ -239,6 +239,8 @@ public static class ProPRHost
             // shared set-up, so this host and ProCursor hold one protection identity and one key-ring protector.
             builder.Services.AddMeisterDataProtection(builder.Configuration);
 
+            // ProPR reads the trusted networks here, ahead of the first request, so that an invalid entry ends the start.
+            var trustedProxyNetworks = TrustedProxyNetworks.Parse(builder.Configuration[TrustedProxyNetworks.ConfigurationKey]);
             builder.Services.Configure<ForwardedHeadersOptions>(options =>
             {
                 options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -246,13 +248,18 @@ public static class ProPRHost
                 options.KnownIPNetworks.Clear();
                 options.KnownProxies.Clear();
 
-                // Trust loopback and private proxy networks by default; deployments with public ingress should
-                // extend this list explicitly instead of opening forwarded headers to every remote address.
+                // Trust loopback and private proxy networks by default. A deployment whose proxy connects from another
+                // range lists the networks of that proxy in MEISTER_TRUSTED_PROXY_NETWORKS, instead of opening forwarded
+                // headers to every remote address.
                 options.KnownIPNetworks.Add(new IPNetwork(IPAddress.Loopback, 8));
                 options.KnownIPNetworks.Add(new IPNetwork(IPAddress.IPv6Loopback, 128));
                 options.KnownIPNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
                 options.KnownIPNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
                 options.KnownIPNetworks.Add(new IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+                foreach (var network in trustedProxyNetworks)
+                {
+                    options.KnownIPNetworks.Add(network);
+                }
             });
 
             builder.Services.AddSingleton<IValidator<CreateClientRequest>, CreateClientRequestValidator>();
@@ -542,6 +549,11 @@ public static class ProPRHost
                         options.PermitLimit = permits;
                     }
 
+                    if (int.TryParse(builder.Configuration["MEISTER_AUTH_RATELIMIT_EXTENSION_PERMITS"], out var extensionPermits))
+                    {
+                        options.ExtensionPermitLimit = extensionPermits;
+                    }
+
                     if (int.TryParse(builder.Configuration["MEISTER_AUTH_RATELIMIT_WINDOW_SECONDS"], out var windowSeconds))
                     {
                         options.WindowSeconds = windowSeconds;
@@ -550,28 +562,34 @@ public static class ProPRHost
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
+            // The website sign-in and refresh share the "auth" window. ProPR Lens renews its access with two requests per
+            // renewal, and its sign-in endpoints count against a window of their own, so that the renewals of a team behind
+            // one address do not use up the window of the website.
             builder.Services.AddRateLimiter(limiterOptions =>
             {
                 limiterOptions.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                limiterOptions.AddPolicy("auth", httpContext => SignInPartition(httpContext, "auth", limits => limits.PermitLimit));
                 limiterOptions.AddPolicy(
-                    "auth", httpContext =>
-                    {
-                        var authRateLimit = httpContext.RequestServices.GetRequiredService<IOptions<AuthRateLimitOptions>>().Value;
-                        if (!authRateLimit.Enabled)
-                        {
-                            return RateLimitPartition.GetNoLimiter("auth-disabled");
-                        }
+                    "extension-sign-in", httpContext => SignInPartition(httpContext, "extension-sign-in", limits => limits.ExtensionPermitLimit));
 
-                        var partitionKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                        return RateLimitPartition.GetFixedWindowLimiter(
-                            partitionKey,
-                            _ => new FixedWindowRateLimiterOptions
-                            {
-                                PermitLimit = authRateLimit.PermitLimit,
-                                Window = TimeSpan.FromSeconds(authRateLimit.WindowSeconds),
-                                QueueLimit = 0,
-                            });
-                    });
+                static RateLimitPartition<string> SignInPartition(HttpContext httpContext, string policy, Func<AuthRateLimitOptions, int> permitLimit)
+                {
+                    var authRateLimit = httpContext.RequestServices.GetRequiredService<IOptions<AuthRateLimitOptions>>().Value;
+                    if (!authRateLimit.Enabled)
+                    {
+                        return RateLimitPartition.GetNoLimiter(policy + "-disabled");
+                    }
+
+                    var partitionKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                    return RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey,
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = permitLimit(authRateLimit),
+                            Window = TimeSpan.FromSeconds(authRateLimit.WindowSeconds),
+                            QueueLimit = 0,
+                        });
+                }
             });
 
             // JSON list responses are highly repetitive and compress by roughly six times. Without this the
@@ -795,6 +813,9 @@ public static class ProPRHost
                     licensingIdentityScope.ServiceProvider.GetRequiredService<ILogger<Program>>());
             }
 
+            // The warning runs ahead of the forwarded headers middleware, so that it tests the address of the connection and
+            // not the client address that a trusted proxy forwarded.
+            app.UseMiddleware<UntrustedProxyWarningMiddleware>();
             app.UseForwardedHeaders();
 
             // Ahead of the endpoints it compresses, and ahead of CORS so preflight replies are left alone.

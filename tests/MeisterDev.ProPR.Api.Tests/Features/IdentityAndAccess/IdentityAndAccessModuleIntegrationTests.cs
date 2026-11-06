@@ -10,7 +10,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Auth;
@@ -18,7 +20,9 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +36,14 @@ namespace MeisterDev.ProPR.Api.Tests.Features.IdentityAndAccess;
 public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessModuleIntegrationTests.IdentityAndAccessApiFactory factory)
     : IClassFixture<IdentityAndAccessModuleIntegrationTests.IdentityAndAccessApiFactory>
 {
+    private const string LensIssuer = "https://propr.test/api";
+    private const string LensCallback = "https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/propr";
+
+    private const string LoginRequiredCallback = LensCallback + "?state=deployment-diagnostic&iss=https%3A%2F%2Fpropr.test%2Fapi&error=login_required";
+
+    // The address ranges that an Azure Container Apps environment with workload profiles reserves for the platform.
+    private const string ContainerAppsProxyNetworks = "100.100.0.0/17,100.100.128.0/19,100.100.160.0/19,100.100.192.0/19";
+
     [Fact]
     public async Task Login_WithValidCredentials_ReturnsAccessAndRefreshTokens()
     {
@@ -153,6 +165,164 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         }
 
         Assert.Equal(HttpStatusCode.TooManyRequests, last);
+    }
+
+    [Fact]
+    public async Task ExtensionSignIn_CountsAgainstAWindowOfItsOwn()
+    {
+        await factory.ResetStateAsync();
+        using var limited = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("MEISTER_AUTH_RATELIMIT_ENABLED", "true");
+            builder.UseSetting("MEISTER_AUTH_RATELIMIT_PERMITS", "3");
+            builder.UseSetting("MEISTER_AUTH_RATELIMIT_EXTENSION_PERMITS", "5");
+            builder.UseSetting("MEISTER_AUTH_RATELIMIT_WINDOW_SECONDS", "60");
+        });
+        var client = limited.CreateClient();
+        var exchange = new
+        {
+            clientId = "propr-lens",
+            redirectUri = LensCallback,
+            code = "code",
+            codeVerifier = new string('v', 43),
+            grantType = "authorization_code",
+        };
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/auth/extension/token", exchange)).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.PostAsJsonAsync("/auth/extension/token", exchange)).StatusCode);
+        var login = await client.PostAsJsonAsync("/auth/login", new { username = "nobody", password = "whatever" });
+        Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExtensionToken_ReachesOnlyTheExtensionActions()
+    {
+        await factory.ResetStateAsync();
+        var access = Substitute.For<IExtensionAuthorizationService>();
+        using var lens = this.WithExtensionSignIn(access);
+        var user = await factory.SeedUserAsync("lens-user", "CorrectPassword1!");
+        var grantId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        access.IsAccessActiveAsync(user.Id, grantId, sessionId, Arg.Any<CancellationToken>()).Returns(true);
+        var token = lens.Services.GetRequiredService<IJwtTokenService>().GenerateExtensionAccessToken(user, grantId, sessionId);
+        var client = lens.CreateClient();
+
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Get, "/auth/me", token)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, "/users/me/pats", token, new { label = "created-by-extension" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Post, "/auth/refresh", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, HttpMethod.Get, "/auth/extension/grants", token)).StatusCode);
+
+        access.IsAccessActiveAsync(user.Id, grantId, sessionId, Arg.Any<CancellationToken>()).Returns(false);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(client, HttpMethod.Get, "/auth/me", token)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ExtensionToken_OfADisabledAccount_IsRefusedAsDisabled()
+    {
+        await factory.ResetStateAsync();
+        var access = Substitute.For<IExtensionAuthorizationService>();
+        access.IsAccessActiveAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
+        using var lens = this.WithExtensionSignIn(access);
+        var user = await factory.SeedUserAsync("disabled-lens-user", "CorrectPassword1!");
+        var token = lens.Services.GetRequiredService<IJwtTokenService>().GenerateExtensionAccessToken(user, Guid.NewGuid(), Guid.NewGuid());
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            (await db.AppUsers.SingleAsync(record => record.Id == user.Id)).IsActive = false;
+            await db.SaveChangesAsync();
+        }
+
+        var response = await SendAsync(lens.CreateClient(), HttpMethod.Get, "/auth/me", token);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("User account is not active.", body.GetProperty("error").GetString());
+    }
+
+    // The API serves plain http, so the test server receives every request over http, as the API does behind a proxy that
+    // terminates TLS. The connection address is the address of the proxy.
+    [Theory]
+    [InlineData(ContainerAppsProxyNetworks, "100.100.0.206")]
+    [InlineData(ContainerAppsProxyNetworks, "::ffff:100.100.0.206")]
+    [InlineData(null, "10.1.2.3")]
+    public async Task ExtensionAuthorization_ThatATrustedProxyReportsAsHttps_AnswersWithTheCallback(string? trustedProxyNetworks, string proxyAddress)
+    {
+        await factory.ResetStateAsync();
+        var access = Substitute.For<IExtensionAuthorizationService>();
+        access.StartAsync(Arg.Any<ExtensionAuthorizationRequest>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new ExtensionAuthorizationStart(RedirectUrl: LoginRequiredCallback));
+        using var lens = this.WithExtensionSignIn(access, trustedProxyNetworks);
+
+        var context = await lens.Server.SendAsync(http => Authorize(http, proxyAddress, "https"));
+
+        Assert.Equal(StatusCodes.Status302Found, context.Response.StatusCode);
+        Assert.Equal(LoginRequiredCallback, context.Response.Headers.Location.ToString());
+        await access.Received(1).StartAsync(Arg.Any<ExtensionAuthorizationRequest>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    // Without the setting, ProPR does not trust the platform range of Azure Container Apps.
+    [InlineData(null, "100.100.0.206", "https")]
+    // A client outside the trusted networks sends the header itself.
+    [InlineData(ContainerAppsProxyNetworks, "203.0.113.10", "https")]
+    // The trusted proxy reached ProPR over http.
+    [InlineData(ContainerAppsProxyNetworks, "100.100.0.206", "http")]
+    // The request carries no forwarding headers.
+    [InlineData(ContainerAppsProxyNetworks, "100.100.0.206", null)]
+    public async Task ExtensionAuthorization_ThatNoTrustedProxyReportsAsHttps_IsRefusedWithHttpsRequired(
+        string? trustedProxyNetworks, string proxyAddress, string? forwardedProto)
+    {
+        await factory.ResetStateAsync();
+        var access = Substitute.For<IExtensionAuthorizationService>();
+        using var lens = this.WithExtensionSignIn(access, trustedProxyNetworks);
+
+        var context = await lens.Server.SendAsync(http => Authorize(http, proxyAddress, forwardedProto));
+
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+        using var body = await JsonDocument.ParseAsync(context.Response.Body);
+        Assert.Equal("https_required", body.RootElement.GetProperty("error").GetString());
+        await access.DidNotReceive().StartAsync(Arg.Any<ExtensionAuthorizationRequest>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("100.100.0.206", StatusCodes.Status200OK)]
+    [InlineData("203.0.113.10", StatusCodes.Status400BadRequest)]
+    public async Task ExtensionTokenExchange_RunsOnlyForARequestThatATrustedProxyReportsAsHttps(string proxyAddress, int expectedStatus)
+    {
+        await factory.ResetStateAsync();
+        var access = Substitute.For<IExtensionAuthorizationService>();
+        access.ExchangeAsync(Arg.Any<ExtensionTokenRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ExtensionTokenDto("extension-access", "Bearer", 300, Guid.NewGuid().ToString(), LensIssuer));
+        using var lens = this.WithExtensionSignIn(access, ContainerAppsProxyNetworks);
+        var exchange = JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                clientId = "propr-lens",
+                redirectUri = LensCallback,
+                code = "code",
+                codeVerifier = new string('v', 43),
+                grantType = "authorization_code",
+            });
+
+        var context = await lens.Server.SendAsync(http =>
+        {
+            http.Request.Method = HttpMethods.Post;
+            http.Request.Path = "/auth/extension/token";
+            http.Request.ContentType = "application/json";
+            http.Request.ContentLength = exchange.Length;
+            http.Request.Body = new MemoryStream(exchange);
+            ForwardThroughProxy(http, proxyAddress, "https");
+        });
+
+        Assert.Equal(expectedStatus, context.Response.StatusCode);
+        await access.Received(expectedStatus == StatusCodes.Status200OK ? 1 : 0)
+            .ExchangeAsync(Arg.Any<ExtensionTokenRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -308,6 +478,65 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         var detail = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync()).RootElement;
         var assignments = detail.GetProperty("assignments").EnumerateArray().ToList();
         Assert.Contains(assignments, assignment => assignment.GetProperty("clientId").GetGuid() == clientId);
+    }
+
+    private WebApplicationFactory<Program> WithExtensionSignIn(IExtensionAuthorizationService access, string? trustedProxyNetworks = null)
+    {
+        return factory.WithWebHostBuilder(builder =>
+        {
+            if (trustedProxyNetworks is not null)
+            {
+                builder.UseSetting("MEISTER_TRUSTED_PROXY_NETWORKS", trustedProxyNetworks);
+            }
+
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<ExtensionAuthorizationOptions>();
+                services.AddSingleton(new ExtensionAuthorizationOptions(LensIssuer, [LensCallback]));
+                services.RemoveAll<IExtensionAuthorizationService>();
+                services.AddSingleton(access);
+            });
+        });
+    }
+
+    private static void Authorize(HttpContext http, string proxyAddress, string? forwardedProto)
+    {
+        http.Request.Method = HttpMethods.Get;
+        http.Request.Path = "/auth/extension/authorize";
+        http.Request.QueryString = QueryString.Create(
+            new Dictionary<string, string?>
+            {
+                ["client_id"] = "propr-lens",
+                ["redirect_uri"] = LensCallback,
+                ["response_type"] = "code",
+                ["code_challenge"] = new string('a', 43),
+                ["code_challenge_method"] = "S256",
+                ["state"] = "deployment-diagnostic",
+                ["prompt"] = "none",
+            });
+        ForwardThroughProxy(http, proxyAddress, forwardedProto);
+    }
+
+    private static void ForwardThroughProxy(HttpContext http, string proxyAddress, string? forwardedProto)
+    {
+        http.Connection.RemoteIpAddress = IPAddress.Parse(proxyAddress);
+        if (forwardedProto is not null)
+        {
+            http.Request.Headers["X-Forwarded-For"] = "198.51.100.7";
+            http.Request.Headers["X-Forwarded-Proto"] = forwardedProto;
+        }
+    }
+
+    private static async Task<HttpResponseMessage> SendAsync(HttpClient client, HttpMethod method, string path, string token, object? body = null)
+    {
+        using var request = new HttpRequestMessage(method, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        return await client.SendAsync(request);
     }
 
     public sealed class IdentityAndAccessApiFactory : WebApplicationFactory<Program>

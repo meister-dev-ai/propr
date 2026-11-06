@@ -29,7 +29,7 @@ onMounted(load)
 <template>
   <section class="section-card settings-card">
     <h2>Connected applications</h2>
-    <p>Revoking access disconnects this application across its installations. Your ProPR website session stays signed in.</p>
+    <p>Revoking access signs the application out of this account in every browser. Your ProPR website session stays signed in.</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <button v-if="error" type="button" class="btn-secondary" data-testid="retry-applications" :disabled="loading || busy" @click="load">Retry loading applications</button>
     <p v-if="loading" role="status">Loading applications…</p>

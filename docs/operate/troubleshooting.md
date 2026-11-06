@@ -27,6 +27,7 @@ Find your symptom, go to the page that fixes it. Every entry below links to the 
 | The API does not start, and the error message contains `MEISTER_LOCAL_SIGN_IN_ENABLED` | The password sign-in is off, and the identity provider for platform administrators is not configured or not licensed | [installation sign-in policy](configuration.md#installation-sign-in-policy) |
 | Starting a sign-in through an identity provider answers `400` with `return_url_not_allowed` | The user interface runs on an origin that is neither the public base URL's nor in `CORS_ORIGINS` | [the return address of a sign-in](../reference/security.md#the-return-address-of-a-sign-in) |
 | Browser calls from your own origin are blocked | The origin is neither the public base URL's nor in the allowed list | [deployment topology](deploy.md#deployment-topology) |
+| ProPR Lens cannot sign in, and the authorization endpoint answers `503` with `https_required` | The proxy in front of ProPR connects from an address outside the trusted proxy networks, or it calls ProPR over HTTP | [deployment topology](deploy.md#deployment-topology) |
 | A feature is refused with a license message | The capability needs a commercial license | [editions](../reference/editions.md) |
 | A licensed feature stays refused after the term was corrected | The host clock ran far ahead and that instant was recorded | [licensing time](#licensing-time-and-the-installation-identifier) |
 

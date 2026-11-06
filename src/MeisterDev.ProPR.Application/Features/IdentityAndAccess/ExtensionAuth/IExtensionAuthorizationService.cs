@@ -1,8 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.Ai.Providers.Diagnostics;
-
 namespace MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth;
 
 /// <summary>Authorizes a public browser extension through the existing website session.</summary>

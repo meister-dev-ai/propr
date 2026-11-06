@@ -1006,7 +1006,6 @@ describes. Its paths carry no `/api` prefix: `/clients/{clientId}/ai-connections
 `/api/clients/{clientId}/ai-connections`. Through the bundled proxy, prepend `https://localhost:5443/api` as
 every example above does. The public webhook receiver is forwarded at its own path.
 
-
 ## Browser extension authorization
 
 | Method | Endpoint | Purpose |

@@ -17,9 +17,6 @@ public interface IRefreshTokenRepository
     /// </summary>
     Task<RefreshToken?> GetActiveByHashAsync(string tokenHash, CancellationToken ct = default);
 
-    /// <summary>Returns an active website session by its non-secret identifier.</summary>
-    Task<RefreshToken?> GetActiveByIdAsync(Guid id, CancellationToken ct = default);
-
     /// <summary>Advances a refresh token's last-used timestamp to keep the session within its idle window.</summary>
     Task TouchLastUsedAsync(Guid id, DateTimeOffset lastUsedAt, CancellationToken ct = default);
 

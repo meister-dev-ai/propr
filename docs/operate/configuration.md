@@ -31,6 +31,9 @@ The following settings depart from that:
 - `MEISTER_PLATFORM_ADMIN_ELEVATION_MAX_MINUTES` fails startup on anything that is not a whole number from 1 to
   1440. It does not fall back to its default.
 - `MEISTER_PROVISIONED_USER_PAT_MAX_DAYS` fails startup unless it is unset or a whole number from 1 to 3650.
+- `MEISTER_TRUSTED_PROXY_NETWORKS` fails startup when an entry is not a network address followed by its prefix
+  length, or when an entry has the prefix length `0` and covers every address. See
+  [trusted proxy networks](#trusted-proxy-networks).
 - `MEISTER_DEFAULT_ENABLED_PROVIDERS` fails startup when it names a provider family other than `azureDevOps`,
   `github`, `gitLab` or `forgejo`, or when a set value names no family. See
   [enabling a provider family](../platforms/index.md#enabling-a-provider-family).
@@ -103,6 +106,16 @@ secret costs: [sign-in and sessions](../reference/security.md#sign-in-and-sessio
 
 See [deployment topology](deploy.md#deployment-topology) for why both matter behind your own ingress.
 
+## Trusted proxy networks
+
+ProPR uses `X-Forwarded-For` and `X-Forwarded-Proto` from a proxy on loopback or in a private range. A proxy
+that connects from another address needs its network in the following variable. Which proxies need it is
+described under [deployment topology](deploy.md#deployment-topology).
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_TRUSTED_PROXY_NETWORKS` | Adds networks whose proxies ProPR accepts `X-Forwarded-For` and `X-Forwarded-Proto` from | none | comma-separated networks in CIDR notation, for example `100.100.0.0/17`; a single address takes the prefix length `/32` or `/128` | no |
+
 ## Encryption key ring
 
 | Variable | What it does | Default | Accepted | Example stack |
@@ -167,7 +180,8 @@ variable named. Give both services the same key, and the blob URI where you use 
 | `MEISTER_AUTH_LOCKOUT_BASE_MINUTES` | Lockout duration at the first threshold | `15` | 1–1440 | no |
 | `MEISTER_AUTH_LOCKOUT_MAX_MINUTES` | Cap on the exponentially backed-off lockout duration | `60` | 1–10080 | no |
 | `MEISTER_AUTH_RATELIMIT_ENABLED` | Whether the per-IP limiter on the auth endpoints runs | `true` | `true`, `false` | no |
-| `MEISTER_AUTH_RATELIMIT_PERMITS` | Auth requests permitted per window per client IP | `20` | 1–10000 | no |
+| `MEISTER_AUTH_RATELIMIT_PERMITS` | Auth requests permitted per window per client IP, apart from the ProPR Lens sign-in | `20` | 1–10000 | no |
+| `MEISTER_AUTH_RATELIMIT_EXTENSION_PERMITS` | ProPR Lens sign-in requests permitted per window per client IP; one renewal takes two | `120` | 1–10000 | no |
 | `MEISTER_AUTH_RATELIMIT_WINDOW_SECONDS` | Length of that window | `60` | 1–3600 | no |
 
 What these controls are for: [sign-in and sessions](../reference/security.md#sign-in-and-sessions).
@@ -944,28 +958,38 @@ Authenticated webhook notifications make affected discussions eligible immediate
 recovers missed notifications and providers with incomplete event coverage.
 See [discussion synchronization](discussion-synchronization.md) for retries, retention and diagnostics.
 
-
 ## Browser extension authorization
 
-Extension sign-in is disabled until both settings are configured:
+ProPR Lens signs in through the ProPR website once both variables below are set. The sign-in needs the PostgreSQL
+database, because ProPR stores the consent of each user there. The extension is a public client with the identifier
+`propr-lens` and has no client secret.
 
-| Setting | Value |
-|---|---|
-| `MEISTER_EXTENSION_AUTH_ISSUER` | Canonical HTTPS API base URL, such as `https://propr.example/api`, without credentials, query or fragment. |
-| `MEISTER_EXTENSION_AUTH_REDIRECT_URIS` | JSON array of exact HTTPS callbacks returned by the packaged extension's `identity.getRedirectURL('propr')`. |
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `MEISTER_EXTENSION_AUTH_ISSUER` | The URL of the ProPR API, used as the issuer of extension tokens and as the base of the extension sign-in endpoints | unset: extension sign-in is off | absolute `https` URL without credentials, query or fragment, for example `https://propr.example/api` | no |
+| `MEISTER_EXTENSION_AUTH_REDIRECT_URIS` | The callbacks that may receive authorization codes | unset: extension sign-in is off | JSON array of exact `https` URLs on `chromiumapp.org` or `extensions.allizom.org`, without port, credentials, query or fragment | no |
 
-The public client identifier is `propr-lens`; it has no client secret. A PostgreSQL-backed identity store
-and normal ProPR website sign-in are required. The configured public application address provides the
-default website consent origin. For a separately hosted frontend, include its HTTPS origin in
-`CORS_ORIGINS`; the extension selects that trusted origin with the authorize endpoint's `ui_origin`
-parameter. Provider-declared extension origins do not qualify as website frontends. If the configured
-public application address is HTTP or otherwise insecure, extension sign-in is disabled with
-`insecure_ui_origin`; the existing website login configuration is unchanged. HTTPS must reach the API
-as HTTPS through the trusted proxy configuration.
+If only one of the two variables is set or a value is invalid, ProPR does not start.
 
-Chrome callbacks depend on the assigned extension item ID, not the publisher ID. Firefox's stable
-ProPR Lens add-on identity produces `https://55f77125cbbe3f6350d8fe4f69084905c317e015.extensions.allizom.org/propr`.
-Register the exact callbacks for the actual packaged clients. Wildcards, arbitrary return addresses,
-HTTP callbacks and callbacks containing credentials, queries or fragments are refused. Invalid partial
-configuration prevents startup; absent configuration reports sign-in unavailable without requiring a
-database merely to read public metadata.
+The published builds of ProPR Lens use the callbacks in the following example, which adds both variables to the
+`environment:` block of the `meisterpropr` service. The Chrome callback contains the item ID of the extension in the
+Chrome Web Store, and the Firefox callback contains a hash of the add-on ID. A build that you package yourself has its
+own ID and needs its own callback.
+
+```yaml
+    environment:
+      - MEISTER_EXTENSION_AUTH_ISSUER=https://propr.example/api
+      - 'MEISTER_EXTENSION_AUTH_REDIRECT_URIS=["https://panbjoldigbmakfmmafkjogpgcjbpnai.chromiumapp.org/propr","https://55f77125cbbe3f6350d8fe4f69084905c317e015.extensions.allizom.org/propr"]'
+```
+
+ProPR opens the consent page on the origin of `MEISTER_PUBLIC_BASE_URL`, or on the origin of the issuer when that
+variable is not set. If the frontend runs on an origin of its own, add its HTTPS origin to `CORS_ORIGINS`; the
+extension selects that origin with the `ui_origin` parameter of the authorization endpoint. If
+`MEISTER_PUBLIC_BASE_URL` uses `http`, ProPR reports extension sign-in as unavailable with the reason
+`insecure_ui_origin`, and the website sign-in keeps working.
+
+ProPR answers the authorization and token endpoints only over HTTPS. Behind a reverse proxy, ProPR sees the scheme of
+the browser only when the proxy sends `X-Forwarded-Proto` from a trusted address, as described under
+[deployment topology](deploy.md#deployment-topology). A request that reaches ProPR as `http` receives `503` with the
+error `https_required` from the authorization endpoint and `400` with the error `invalid_grant` from the token
+endpoint.

@@ -35,8 +35,18 @@ public sealed class ExtensionAuthorizationFailureTests
         this.session = new RefreshToken { Id = Guid.NewGuid(), UserId = this.user.Id, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1) };
         this.users.GetByIdAsync(this.user.Id, Arg.Any<CancellationToken>()).Returns(this.user);
         this.sessions.GetActiveByHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(this.session);
-        this.sessions.GetActiveByIdAsync(this.session.Id, Arg.Any<CancellationToken>()).Returns(this.session);
         this.jwt.GenerateExtensionAccessToken(this.user, Arg.Any<Guid>(), this.session.Id).Returns("access-only");
+
+        // The per-request access check reads the account and the website session from the database.
+        using var setup = this.Context();
+        setup.AppUsers.Add(new AppUserRecord { Id = this.user.Id, Username = this.user.Username, CreatedAt = DateTimeOffset.UtcNow });
+        setup.RefreshTokens.Add(
+            new RefreshTokenRecord
+            {
+                Id = this.session.Id, UserId = this.user.Id, TokenHash = "session-hash", CreatedAt = DateTimeOffset.UtcNow,
+                LastUsedAt = DateTimeOffset.UtcNow, ExpiresAt = this.session.ExpiresAt,
+            });
+        setup.SaveChanges();
     }
 
     [Theory]
@@ -102,8 +112,9 @@ public sealed class ExtensionAuthorizationFailureTests
     }
 
     private ExtensionAuthorizationService Service(MeisterProPRDbContext db) => new(
-        db, this.codec, new ExternalSignInRedemptions(db),
-        this.users, this.sessions, this.jwt, new ExtensionAuthorizationOptions("https://propr.test/api", [Callback]));
+        db, this.codec, new ExternalSignInRedemptions(db), this.users, this.sessions,
+        new SessionPolicy { IdleTimeout = TimeSpan.FromHours(8), AbsoluteLifetime = TimeSpan.FromHours(72) }, this.jwt,
+        new ExtensionAuthorizationOptions("https://propr.test/api", [Callback]));
 
     private static ExtensionAuthorizationRequest Request() => new(
         "propr-lens", Callback, "code", AuthorizationCodeFlow.ComputeCodeChallenge(Verifier), "S256", "state");

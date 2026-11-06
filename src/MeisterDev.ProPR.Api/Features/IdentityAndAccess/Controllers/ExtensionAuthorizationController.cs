@@ -28,10 +28,18 @@ public sealed class ExtensionAuthorizationController(
     [AllowAnonymous]
     [HttpGet("options")]
     [ProducesResponseType(typeof(ExtensionSignInOptionsDto), StatusCodes.Status200OK)]
-    public ActionResult<ExtensionSignInOptionsDto> GetOptions() => service?.GetOptions()
-                                                                   ?? new ExtensionSignInOptionsDto(
-                                                                       1, false, options.UnavailableReason ?? "database_required", options.Issuer, null, null,
-                                                                       ["S256"]);
+    public ActionResult<ExtensionSignInOptionsDto> GetOptions()
+    {
+        if (service is not null)
+        {
+            return service.GetOptions();
+        }
+
+        // Without a database, sign-in is unavailable: not_configured when the installation sets no extension sign-in,
+        // and database_required when it sets one.
+        var reason = options.UnavailableReason ?? (options.Enabled ? "database_required" : "not_configured");
+        return new ExtensionSignInOptionsDto(1, false, reason, options.Issuer, null, null, ["S256"]);
+    }
 
     /// <summary>Starts an interactive or silent authorization-code flow using the website session.</summary>
     /// <param name="clientId">Registered public client identifier.</param>
@@ -47,7 +55,7 @@ public sealed class ExtensionAuthorizationController(
     /// <response code="400">Untrusted or invalid authorization request.</response>
     /// <response code="503">Extension sign-in is unavailable.</response>
     [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting("extension-sign-in")]
     [HttpGet("authorize")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(typeof(ExtensionAuthFailureDto), StatusCodes.Status400BadRequest)]
@@ -60,9 +68,17 @@ public sealed class ExtensionAuthorizationController(
         CancellationToken ct = default)
     {
         this.Response.Headers["Referrer-Policy"] = "no-referrer";
-        if (service is null || !options.Enabled || !this.Request.IsHttps)
+        if (service is null || !options.Enabled)
         {
             return this.StatusCode(503, new ExtensionAuthFailureDto("sign_in_unavailable"));
+        }
+
+        // Behind a proxy that terminates TLS, the request counts as HTTPS when a trusted proxy reports https in
+        // X-Forwarded-Proto. ProPR answers with an error code of its own, so that an operator who calls this endpoint
+        // can see that the request did not reach ProPR over HTTPS.
+        if (!this.Request.IsHttps)
+        {
+            return this.StatusCode(503, new ExtensionAuthFailureDto("https_required"));
         }
 
         var hasUiOrigin = uiOrigin is not null || this.Request.Query.ContainsKey("ui_origin");
@@ -162,7 +178,7 @@ public sealed class ExtensionAuthorizationController(
     /// <response code="200">Access token, lifetime, subject and issuer; no refresh token.</response>
     /// <response code="400">Invalid, expired or already redeemed code.</response>
     [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting("extension-sign-in")]
     [HttpPost("token")]
     [ProducesResponseType(typeof(ExtensionTokenDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ExtensionAuthFailureDto), StatusCodes.Status400BadRequest)]

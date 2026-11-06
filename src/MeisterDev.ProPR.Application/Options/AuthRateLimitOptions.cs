@@ -23,6 +23,15 @@ public sealed class AuthRateLimitOptions
     [Range(1, 10000, ErrorMessage = "PermitLimit must be between 1 and 10000.")]
     public int PermitLimit { get; set; } = 20;
 
+    /// <summary>
+    ///     ProPR Lens sign-in requests to <c>/auth/extension/authorize</c> and <c>/auth/extension/token</c> permitted per
+    ///     window per client IP. These requests have a window of their own, so the renewals of the extension do not use up
+    ///     the window of the website sign-in and refresh. One renewal costs two requests. Bound to
+    ///     <c>MEISTER_AUTH_RATELIMIT_EXTENSION_PERMITS</c>.
+    /// </summary>
+    [Range(1, 10000, ErrorMessage = "ExtensionPermitLimit must be between 1 and 10000.")]
+    public int ExtensionPermitLimit { get; set; } = 120;
+
     /// <summary>Fixed-window length in seconds. Bound to <c>MEISTER_AUTH_RATELIMIT_WINDOW_SECONDS</c>.</summary>
     [Range(1, 3600, ErrorMessage = "WindowSeconds must be between 1 and 3600.")]
     public int WindowSeconds { get; set; } = 60;

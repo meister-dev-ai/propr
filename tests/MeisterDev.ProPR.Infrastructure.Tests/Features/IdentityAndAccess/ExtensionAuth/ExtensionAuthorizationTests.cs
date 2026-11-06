@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.ExtensionAuth;
 using MeisterDev.ProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -37,11 +38,27 @@ public sealed class ExtensionAuthorizationTests
             { Id = Guid.NewGuid(), UserId = this.user.Id, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1), LastUsedAt = DateTimeOffset.UtcNow };
         this.users.GetByIdAsync(this.user.Id, Arg.Any<CancellationToken>()).Returns(this.user);
         this.sessions.GetActiveByHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(this.session);
-        this.sessions.GetActiveByIdAsync(this.session.Id, Arg.Any<CancellationToken>()).Returns(this.session);
         this.jwt.GenerateExtensionAccessToken(this.user, Arg.Any<Guid>(), this.session.Id).Returns("access-only");
+
+        // The per-request access check reads the account and the website session from the database.
+        this.db.AppUsers.Add(new AppUserRecord { Id = this.user.Id, Username = this.user.Username, CreatedAt = DateTimeOffset.UtcNow });
+        this.db.RefreshTokens.Add(
+            new RefreshTokenRecord
+            {
+                Id = this.session.Id, UserId = this.user.Id, TokenHash = "session-hash", CreatedAt = DateTimeOffset.UtcNow,
+                LastUsedAt = this.session.LastUsedAt, ExpiresAt = this.session.ExpiresAt,
+            });
+        this.db.SaveChanges();
         this.service = new ExtensionAuthorizationService(
             this.db, new SecretProtectionCodec(new EphemeralDataProtectionProvider()), new ExternalSignInRedemptions(this.db), this.users, this.sessions,
-            this.jwt, new ExtensionAuthorizationOptions(Issuer, [Callback]), this.clock);
+            new SessionPolicy { IdleTimeout = TimeSpan.FromHours(8), AbsoluteLifetime = TimeSpan.FromHours(72) }, this.jwt,
+            new ExtensionAuthorizationOptions(Issuer, [Callback]), this.clock);
+    }
+
+    private async Task EndWebsiteSessionAsync()
+    {
+        (await this.db.RefreshTokens.SingleAsync(record => record.Id == this.session.Id)).RevokedAt = DateTimeOffset.UtcNow;
+        await this.db.SaveChangesAsync();
     }
 
     private static ExtensionAuthorizationRequest Request(string? prompt = null) => new(
@@ -101,7 +118,7 @@ public sealed class ExtensionAuthorizationTests
     {
         var start = await this.service.StartAsync(Request(), "cookie", default);
         Assert.Null(await this.service.GetConsentAsync(start.PendingRequest!, Guid.NewGuid(), "cookie", default));
-        this.sessions.GetActiveByIdAsync(this.session.Id, Arg.Any<CancellationToken>()).Returns((RefreshToken?)null);
+        await this.EndWebsiteSessionAsync();
         var approved = await this.service.DecideAsync(start.PendingRequest!, this.user.Id, "cookie", true, default);
         var code = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(approved.RedirectUrl!).Query)["code"].ToString();
         Assert.Null(await this.service.ExchangeAsync(new("propr-lens", Callback, code, Verifier, "authorization_code"), default));
@@ -121,8 +138,43 @@ public sealed class ExtensionAuthorizationTests
         Assert.Null(await this.service.GetConsentAsync(pending.PendingRequest!, this.user.Id, "cookie", default));
         var grant = Assert.Single(await this.service.ListGrantsAsync(this.user.Id, default));
         Assert.True(await this.service.IsAccessActiveAsync(this.user.Id, grant.Id, this.session.Id, default));
-        this.sessions.GetActiveByIdAsync(this.session.Id, Arg.Any<CancellationToken>()).Returns((RefreshToken?)null);
+        await this.EndWebsiteSessionAsync();
         Assert.False(await this.service.IsAccessActiveAsync(this.user.Id, grant.Id, this.session.Id, default));
+    }
+
+    [Fact]
+    public async Task AccessEndsWhenTheAccountIsDisabledOrTheSessionBelongsToAnotherUser()
+    {
+        var start = await this.service.StartAsync(Request(), "cookie", default);
+        await this.service.DecideAsync(start.PendingRequest!, this.user.Id, "cookie", true, default);
+        var grant = Assert.Single(await this.service.ListGrantsAsync(this.user.Id, default));
+        var otherSession = Guid.NewGuid();
+        this.db.RefreshTokens.Add(
+            new RefreshTokenRecord
+            {
+                Id = otherSession, UserId = Guid.NewGuid(), TokenHash = "other-hash", CreatedAt = DateTimeOffset.UtcNow,
+                LastUsedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            });
+        await this.db.SaveChangesAsync();
+        Assert.False(await this.service.IsAccessActiveAsync(this.user.Id, grant.Id, otherSession, default));
+        Assert.True(await this.service.IsAccessActiveAsync(this.user.Id, grant.Id, this.session.Id, default));
+        (await this.db.AppUsers.SingleAsync(record => record.Id == this.user.Id)).IsActive = false;
+        await this.db.SaveChangesAsync();
+        Assert.False(await this.service.IsAccessActiveAsync(this.user.Id, grant.Id, this.session.Id, default));
+    }
+
+    [Fact]
+    public async Task RevokingAGrantAgainKeepsTheTimeOfTheFirstRevocation()
+    {
+        var start = await this.service.StartAsync(Request(), "cookie", default);
+        await this.service.DecideAsync(start.PendingRequest!, this.user.Id, "cookie", true, default);
+        var grant = Assert.Single(await this.service.ListGrantsAsync(this.user.Id, default));
+        await this.service.RevokeAsync(this.user.Id, grant.Id, default);
+        var firstRevocation = this.clock.GetUtcNow();
+        this.clock.Advance(TimeSpan.FromMinutes(5));
+        await this.service.RevokeAsync(this.user.Id, grant.Id, default);
+        var record = await this.db.ExtensionAuthorizationGrants.AsNoTracking().SingleAsync(value => value.Id == grant.Id);
+        Assert.Equal(firstRevocation, record.RevokedAt);
     }
 
     [Fact]

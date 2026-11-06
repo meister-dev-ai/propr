@@ -21,15 +21,21 @@ namespace MeisterDev.ProPR.Api.Tests.IdentityAndAccess;
 
 public sealed class ExtensionAuthorizationApiTests
 {
-    [Fact]
-    public void PublicMetadataWithoutDatabaseServicesIsDisabled()
+    [Theory]
+    [InlineData(false, "not_configured")]
+    [InlineData(true, "database_required")]
+    public void PublicMetadataWithoutDatabaseServicesIsDisabled(bool configured, string reason)
     {
-        var services = new ServiceCollection().AddSingleton(new ExtensionAuthorizationOptions(null, []))
+        var options = configured
+            ? new ExtensionAuthorizationOptions("https://propr.test/api", ["https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/propr"])
+            : new ExtensionAuthorizationOptions(null, []);
+        var services = new ServiceCollection().AddSingleton(options)
             .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build()).BuildServiceProvider();
         var controller = ActivatorUtilities.CreateInstance<ExtensionAuthorizationController>(services);
         var value = controller.GetOptions().Value;
         Assert.NotNull(value);
         Assert.False(value.Enabled);
+        Assert.Equal(reason, value.Reason);
         Assert.Null(value.TokenEndpoint);
     }
 
@@ -103,12 +109,41 @@ public sealed class ExtensionAuthorizationApiTests
         jwt.ValidateAccessToken("test-access").Returns(principal);
         var auth = Substitute.For<IExtensionAuthorizationService>();
         auth.IsAccessActiveAsync(userId, grant, session, Arg.Any<CancellationToken>()).Returns(active);
-        var provider = new ServiceCollection().AddSingleton(jwt).AddSingleton(auth).BuildServiceProvider();
+        var users = Substitute.For<IUserRepository>();
+        users.GetByIdWithAssignmentsAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new AppUser { Id = userId, Username = "alice", IsActive = true });
+        var provider = new ServiceCollection().AddSingleton(jwt).AddSingleton(auth).AddSingleton(users).BuildServiceProvider();
         var context = new DefaultHttpContext { RequestServices = provider };
         context.Request.Headers.Authorization = "Bearer test-access";
         var result = await CallerIdentityResolver.ResolveAsync(context, "test");
         Assert.Equal(active, result.Principal is not null);
         Assert.Equal(active, context.Items[ExtensionOperationPolicy.ItemKey] is true);
+        Assert.Equal(active, context.Items.ContainsKey("UserId"));
+    }
+
+    [Fact]
+    public async Task ExtensionAccessOfADisabledAccountIsRefusedAsDisabled()
+    {
+        var user = new AppUser { Id = Guid.NewGuid(), Username = "alice", IsActive = false };
+        var principal = new ClaimsPrincipal(
+            new ClaimsIdentity(
+            [
+                new("sub", user.Id.ToString()), new("aud", "propr-lens"),
+                new("extension_grant_id", Guid.NewGuid().ToString()), new("extension_session_id", Guid.NewGuid().ToString())
+            ], "test"));
+        var jwt = Substitute.For<IJwtTokenService>();
+        jwt.ValidateAccessToken("test-access").Returns(principal);
+        var auth = Substitute.For<IExtensionAuthorizationService>();
+        var users = Substitute.For<IUserRepository>();
+        users.GetByIdWithAssignmentsAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        var context = new DefaultHttpContext
+            { RequestServices = new ServiceCollection().AddSingleton(jwt).AddSingleton(auth).AddSingleton(users).BuildServiceProvider() };
+        context.Request.Headers.Authorization = "Bearer test-access";
+        var result = await CallerIdentityResolver.ResolveAsync(context, "test");
+        Assert.True(result.AccountDisabled);
+        Assert.Null(result.Principal);
+        Assert.False(context.Items[ExtensionOperationPolicy.ItemKey] is true);
+        Assert.False(context.Items.ContainsKey("UserId"));
     }
 
     [Fact]

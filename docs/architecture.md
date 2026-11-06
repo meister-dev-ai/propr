@@ -214,14 +214,14 @@ PostgreSQL advisory locks use shared helpers with explicit bigint, `hashtext` an
 protocols. Callers own key derivation, transactions, isolation and retries. Transaction locks retain
 the caller's transaction lifetime; owned session leases retain separate acquisition and disposal.
 
-
 ### Browser extension authorization
 
-IdentityAndAccess owns registered extension callbacks, protected pending/code payloads, consent-grant
-persistence and website-session-bound access. The browser extension obtains a dedicated short-lived
-Bearer audience through PKCE and retains no renewal credential. The API validates consent and website
-session state on each extension request and enforces an explicit MVC action allowlist before ordinary
-authorization. Website consent is reached through normal sign-in, including tenant linking, and is
-revocable from Settings → Connected applications. The authorize endpoint accepts a canonical HTTPS
-frontend origin under the existing website sign-in trust policy for separate frontend deployments.
-Explicit approval replaces obsolete scope grants within the same database transaction.
+The IdentityAndAccess module owns the extension sign-in: the registered callbacks, the protected pending consent
+requests and authorization codes, and the consent grants in `extension_authorization_grants`. ProPR Lens obtains a
+short-lived bearer token with the audience `propr-lens` through an authorization code with PKCE and keeps no renewal
+credential. For each request with such a token, `CallerIdentityResolver` checks the account, the consent grant and the
+website session, and a middleware in `ProPRHost` refuses every MVC action outside `ExtensionOperationPolicy` before the
+ordinary authorization runs. The consent page belongs to the website, so a user reaches it through the normal sign-in,
+including tenant linking, and revokes consent under Settings → Connected applications. The authorize endpoint accepts
+the origin of a separately hosted frontend when it uses HTTPS and the website sign-in trusts it. Approving a new version
+of the permissions revokes the grants of earlier versions in the same database transaction.

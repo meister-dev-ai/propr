@@ -138,6 +138,18 @@ Public routes follow the local docker-compose example:
 - `/` serves the frontend
 - `/api/` proxies to the backend and strips the `/api` prefix before forwarding
 
+### HTTPS between the reverse proxy and the apps
+
+The external ingress terminates TLS and forwards each request to the reverse proxy. The reverse proxy calls the
+internal ingress of the backend and of the frontend over HTTPS, with SNI and certificate verification against the
+CA bundle of the image. The ingress overwrites `X-Forwarded-Proto` with the protocol of the connection it receives,
+so the backend sees `https` only for a request that the reverse proxy sends over HTTPS. For a request that reaches it
+as `http`, the backend refuses the ProPR Lens sign-in and sets its cookies without the `Secure` attribute.
+
+The deployment sets `MEISTER_TRUSTED_PROXY_NETWORKS` on the backend to the address ranges that a workload profiles
+environment reserves for the platform. Without this setting, the backend ignores the `X-Forwarded-Proto` of the ingress. See the deployment
+topology in `docs/operate/deploy.md`.
+
 ### Subsequent deployments
 
 Re-run the deploy script with a published `ImageTag` to roll out updated backend, frontend, and ProCursor images, or omit `ImageTag` to use the newest common published tag. The script now validates that the requested tag exists for all three GHCR images before deployment. The nginx and pgvector images stay on their fixed public tags.

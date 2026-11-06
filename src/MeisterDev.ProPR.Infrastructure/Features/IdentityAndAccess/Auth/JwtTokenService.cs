@@ -5,6 +5,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -18,10 +19,21 @@ public sealed class JwtTokenService : IJwtTokenService
     private readonly SymmetricSecurityKey _signingKey;
     private readonly string? _extensionIssuer;
 
+    /// <summary>Creates the service and reads the extension sign-in settings from <paramref name="configuration" />.</summary>
     public JwtTokenService(IConfiguration configuration)
+        : this(configuration, ExtensionAuthorizationOptions.FromConfiguration(configuration))
     {
+    }
+
+    /// <summary>
+    ///     Creates the service with the extension sign-in settings that the host registered. Dependency injection uses this
+    ///     constructor, so the host parses the extension settings once.
+    /// </summary>
+    public JwtTokenService(IConfiguration configuration, ExtensionAuthorizationOptions extensionAuthorization)
+    {
+        ArgumentNullException.ThrowIfNull(extensionAuthorization);
         this._handler.MapInboundClaims = false;
-        this._extensionIssuer = MeisterDev.ProPR.Application.Options.ExtensionAuthorizationOptions.FromConfiguration(configuration).Issuer;
+        this._extensionIssuer = extensionAuthorization.Issuer;
 
         var secret = configuration["MEISTER_JWT_SECRET"]
                      ?? throw new InvalidOperationException(
@@ -40,6 +52,7 @@ public sealed class JwtTokenService : IJwtTokenService
     public string GenerateAccessToken(AppUser user)
         => this.Generate(user, "meisterpropr", "meisterpropr", []);
 
+    /// <inheritdoc />
     public string GenerateExtensionAccessToken(AppUser user, Guid grantId, Guid sessionId)
         => this.Generate(
             user, "propr-lens", this._extensionIssuer ?? throw new InvalidOperationException("Extension issuer is not configured."),

@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using MeisterDev.ProPR.Application.Features.IdentityAndAccess.Authentication.Models;
+using MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -21,7 +22,11 @@ namespace MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
 ///     Resolves the caller identity by evaluating two credential paths in order:
 ///     <list type="number">
 ///         <item>
-///             <description><c>Authorization: Bearer {jwt}</c> — validated locally.</description>
+///             <description>
+///                 <c>Authorization: Bearer {jwt}</c> — validated locally. A ProPR Lens token (audience
+///                 <c>propr-lens</c>) also needs its consent grant, its website session and its account to be active, and
+///                 marks the request for <see cref="ExtensionOperationPolicy" />.
+///             </description>
 ///         </item>
 ///         <item>
 ///             <description><c>X-User-Pat</c> header — verified against stored PAT hashes.</description>
@@ -116,17 +121,7 @@ public static class CallerIdentityResolver
 
         if (principal.HasClaim("aud", "propr-lens"))
         {
-            var extension = context.RequestServices
-                .GetService<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.IExtensionAuthorizationService>();
-            if (extension is null || !Guid.TryParse(principal.FindFirst("sub")?.Value, out var extensionUser)
-                                  || !Guid.TryParse(principal.FindFirst("extension_grant_id")?.Value, out var grant)
-                                  || !Guid.TryParse(principal.FindFirst("extension_session_id")?.Value, out var session)
-                                  || !await extension.IsAccessActiveAsync(extensionUser, grant, session, context.RequestAborted))
-            {
-                return CallerIdentityResolution.Anonymous;
-            }
-
-            context.Items[ExtensionOperationPolicy.ItemKey] = true;
+            return await AuthenticateExtensionAsync(context, principal);
         }
 
         var sub = principal.FindFirst("sub")?.Value;
@@ -160,16 +155,6 @@ public static class CallerIdentityResolver
             return CallerIdentityResolution.DisabledAccount;
         }
 
-        if (context.Items[ExtensionOperationPolicy.ItemKey] is true)
-        {
-            if (user is null)
-            {
-                return CallerIdentityResolution.Anonymous;
-            }
-
-            context.Items["IsAdmin"] = user.GlobalRole == AppUserRole.Admin;
-        }
-
         var explicitClientRoles = user is not null
             ? CreateExplicitClientRoles(user)
             : await userRepo.GetUserClientRolesAsync(userId, context.RequestAborted);
@@ -183,6 +168,53 @@ public static class CallerIdentityResolver
 
         context.Items["TenantRoles"] = tenantRoles;
 
+        return CallerIdentityResolution.ForPrincipal(principal);
+    }
+
+    /// <summary>
+    ///     Resolves a ProPR Lens access token. ProPR accepts the token while the account is enabled and the consent grant
+    ///     and the website session that the token was issued for are active. A request for a disabled account is refused
+    ///     as disabled, as it is with a website token, and any other failed check leaves the request anonymous. The
+    ///     resolver writes the authorization context only after every check has passed.
+    /// </summary>
+    private static async Task<CallerIdentityResolution> AuthenticateExtensionAsync(HttpContext context, ClaimsPrincipal principal)
+    {
+        var extension = context.RequestServices.GetService<IExtensionAuthorizationService>();
+        var userRepo = context.RequestServices.GetService<IUserRepository>();
+        if (extension is null || userRepo is null
+                              || !Guid.TryParse(principal.FindFirst("sub")?.Value, out var userId)
+                              || !Guid.TryParse(principal.FindFirst("extension_grant_id")?.Value, out var grantId)
+                              || !Guid.TryParse(principal.FindFirst("extension_session_id")?.Value, out var sessionId))
+        {
+            return CallerIdentityResolution.Anonymous;
+        }
+
+        var user = await userRepo.GetByIdWithAssignmentsAsync(userId, context.RequestAborted);
+        if (user is null)
+        {
+            return CallerIdentityResolution.Anonymous;
+        }
+
+        if (!user.IsActive)
+        {
+            return CallerIdentityResolution.DisabledAccount;
+        }
+
+        if (!await extension.IsAccessActiveAsync(userId, grantId, sessionId, context.RequestAborted))
+        {
+            return CallerIdentityResolution.Anonymous;
+        }
+
+        context.Items[ExtensionOperationPolicy.ItemKey] = true;
+        context.Items["UserId"] = user.Id.ToString();
+
+        // The global role comes from the account, not from the token, so a role removed after the token was issued no
+        // longer applies.
+        context.Items["IsAdmin"] = user.GlobalRole == AppUserRole.Admin;
+        var tenantRoles = CreateTenantRoles(user);
+        context.Items["ClientRoles"] =
+            await BuildEffectiveClientRolesAsync(context, CreateExplicitClientRoles(user), tenantRoles, context.RequestAborted);
+        context.Items["TenantRoles"] = tenantRoles;
         return CallerIdentityResolution.ForPrincipal(principal);
     }
 

@@ -47,7 +47,7 @@ public sealed class ExtensionAuthorizationPersistenceTests(PostgresContainerFixt
 
             ExtensionAuthorizationService Service(MeisterProPRDbContext context) => new(
                 context, codec, new ExternalSignInRedemptions(context), users,
-                new RefreshTokenRepository(context, policy), jwt, options);
+                new RefreshTokenRepository(context, policy), policy, jwt, options);
 
             await using var setup = Context();
             setup.AppUsers.Add(new AppUserRecord { Id = user.Id, Username = user.Username, CreatedAt = DateTimeOffset.UtcNow });
@@ -115,7 +115,7 @@ public sealed class ExtensionAuthorizationPersistenceTests(PostgresContainerFixt
 
             ExtensionAuthorizationService Service(MeisterProPRDbContext context) => new(
                 context, codec,
-                new ExternalSignInRedemptions(context), users, new RefreshTokenRepository(context, policy), jwt, options);
+                new ExternalSignInRedemptions(context), users, new RefreshTokenRepository(context, policy), policy, jwt, options);
 
             await using var setup = Context();
             setup.AppUsers.Add(new AppUserRecord { Id = user.Id, Username = user.Username, CreatedAt = DateTimeOffset.UtcNow });

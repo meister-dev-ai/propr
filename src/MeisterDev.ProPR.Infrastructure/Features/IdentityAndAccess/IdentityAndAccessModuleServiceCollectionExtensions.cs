@@ -7,7 +7,9 @@ using MeisterDev.ProPR.Application.Features.TenantData;
 using System.Globalization;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Features.IdentityAndAccess.Authentication.Ports;
+using MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Authentication.Persistence;
+using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.ExtensionAuth;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
@@ -154,8 +156,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
         {
             services.AddScoped<IUserRepository, AppUserRepository>();
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
-            services.AddScoped<MeisterDev.ProPR.Application.Features.IdentityAndAccess.ExtensionAuth.IExtensionAuthorizationService,
-                MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.ExtensionAuth.ExtensionAuthorizationService>();
+            services.AddScoped<IExtensionAuthorizationService, ExtensionAuthorizationService>();
             services.AddScoped<IUserPatRepository, UserPatRepository>();
             services.AddScoped<ITenantMembershipService, TenantMembershipService>();
             services.AddScoped<ITenantMemberClientAccessService, TenantMemberClientAccessService>();
