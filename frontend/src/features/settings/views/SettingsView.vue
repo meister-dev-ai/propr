@@ -30,7 +30,13 @@
           >
             <i class="fi fi-rr-link"></i> Single sign-on
           </button>
-          <button class="sidebar-nav-link" :class="{ active: activeTab === 'applications' }" @click="activeTab = 'applications'">Connected applications</button>
+          <button
+            class="sidebar-nav-link"
+            :class="{ active: activeTab === 'applications' }"
+            @click="activeTab = 'applications'"
+          >
+            <i class="fi fi-rr-plug-connection"></i> Connected applications
+          </button>
         </div>
       </div>
     </aside>

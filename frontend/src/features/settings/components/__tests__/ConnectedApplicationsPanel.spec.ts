@@ -39,6 +39,15 @@ describe('connected applications', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('Refresh unavailable')
     expect(wrapper.text()).not.toContain('No applications have access.')
   })
+  it('lists each application with the date its access was granted', async () => {
+    list.mockResolvedValue([grant])
+    const wrapper = mount(ConnectedApplicationsPanel)
+    await flushPromises()
+    const row = wrapper.get('li')
+    expect(row.text()).toContain('ProPR Lens')
+    expect(row.text()).toContain('Access granted')
+    expect(row.get('button').text()).toBe('Revoke access')
+  })
   it('retains an application when revocation itself fails', async () => {
     list.mockResolvedValue([grant]); revoke.mockRejectedValue(new Error('Revocation unavailable'))
     const wrapper = mount(ConnectedApplicationsPanel)
