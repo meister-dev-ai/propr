@@ -206,8 +206,7 @@ public sealed class ConformanceKitTests
     {
         public TemporaryFolder()
         {
-            this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "propr-conformance", Guid.NewGuid().ToString("n"));
-            Directory.CreateDirectory(this.Path);
+            this.Path = Directory.CreateTempSubdirectory("propr-conformance-").FullName;
         }
 
         public string Path { get; }

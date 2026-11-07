@@ -17,7 +17,6 @@ using MeisterDev.ProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
@@ -416,19 +415,7 @@ public sealed class AiConnectionDeclaredNamesTests
 
     private static ISecretProtectionCodec CreateCodec()
     {
-        var keysDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"MeisterDev.ProPR.AiConnectionDeclaredNamesTests.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(keysDirectory);
-
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-
-        return new SecretProtectionCodec(
-            services.BuildServiceProvider()
-                .GetRequiredService<IDataProtectionProvider>());
+        return new SecretProtectionCodec(new EphemeralDataProtectionProvider());
     }
 
     private static MeisterProPRDbContext CreateContext()

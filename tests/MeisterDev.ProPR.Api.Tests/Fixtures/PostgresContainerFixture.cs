@@ -4,6 +4,7 @@
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -22,8 +23,6 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
     private PostgreSqlContainer? _postgres;
     private string? _skipReason;
 
-    private bool _startedContainer;
-
     public bool IsAvailable => this._skipReason is null;
 
     public string ConnectionString => this._connectionString
@@ -34,7 +33,7 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
         var externalConnectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")?.Trim();
         if (!string.IsNullOrWhiteSpace(externalConnectionString))
         {
-            this._connectionString = externalConnectionString;
+            this._connectionString = PostgresTestConnections.WithShortIdleLifetime(externalConnectionString);
             if (await this.TryMigrateAsync())
             {
                 return;
@@ -47,12 +46,14 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
         {
             try
             {
+                await TestContainerOwner.RemoveContainersOfEndedProcessesAsync(null);
+
                 this._postgres = new PostgreSqlBuilder("pgvector/pgvector:pg17")
+                    .WithLabel(TestContainerOwner.Label, TestContainerOwner.Current)
                     .Build();
 
                 await this._postgres.StartAsync();
-                this._startedContainer = true;
-                this._connectionString = this._postgres.GetConnectionString();
+                this._connectionString = PostgresTestConnections.WithShortIdleLifetime(this._postgres.GetConnectionString());
             }
             catch (DockerUnavailableException ex)
             {
@@ -77,12 +78,12 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (!this._startedContainer || this._postgres is null)
+        // A container whose start failed, for example on its readiness check, still exists and is removed as
+        // well.
+        if (this._postgres is not null)
         {
-            return;
+            await this._postgres.DisposeAsync();
         }
-
-        await this._postgres.DisposeAsync();
     }
 
     public void SkipIfUnavailable()

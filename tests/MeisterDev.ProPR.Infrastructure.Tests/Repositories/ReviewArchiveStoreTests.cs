@@ -8,7 +8,6 @@ using MeisterDev.ProPR.Infrastructure.Features.ReviewArchive.Persistence;
 using MeisterDev.ProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
@@ -541,15 +540,6 @@ public sealed class ReviewArchiveStoreTests : IDisposable
 
     private static ISecretProtectionCodec CreateCodec()
     {
-        var keysDirectory = Path.Combine(Path.GetTempPath(), $"MeisterDev.ProPR.ReviewArchiveStoreTests.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(keysDirectory);
-
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-
-        var provider = services.BuildServiceProvider();
-        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+        return new SecretProtectionCodec(new EphemeralDataProtectionProvider());
     }
 }

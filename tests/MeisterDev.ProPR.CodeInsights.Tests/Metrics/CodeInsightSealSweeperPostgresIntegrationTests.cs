@@ -15,7 +15,6 @@ using MeisterDev.ProPR.Infrastructure.Services;
 using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
@@ -43,11 +42,6 @@ public sealed class CodeInsightSealSweeperPostgresIntegrationTests(PostgresConta
     private readonly IPullRequestFetcher _pullRequests = Substitute.For<IPullRequestFetcher>();
     private readonly IJobRepository _jobs = Substitute.For<IJobRepository>();
 
-    private readonly string _keysDirectory = Path.Combine(
-        Path.GetTempPath(),
-        $"MeisterDev.ProPR.CodeInsightSealSweeperPostgresIntegrationTests.{Guid.NewGuid():N}");
-
-    private ServiceProvider? _dataProtection;
     private CodeInsightFindingStore _store = null!;
     private DbContextOptions<MeisterProPRDbContext> _options = null!;
     private MeisterProPRDbContext _dbContext = null!;
@@ -61,7 +55,7 @@ public sealed class CodeInsightSealSweeperPostgresIntegrationTests(PostgresConta
             .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
             .Options;
         this._dbContext = new MeisterProPRDbContext(this._options);
-        this._store = new CodeInsightFindingStore(this._dbContext, this.CreateCodec());
+        this._store = new CodeInsightFindingStore(this._dbContext, CreateCodec());
 
         var now = DateTimeOffset.UtcNow;
         this._dbContext.Tenants.Add(
@@ -127,12 +121,6 @@ public sealed class CodeInsightSealSweeperPostgresIntegrationTests(PostgresConta
         if (this._dbContext is not null)
         {
             await this._dbContext.DisposeAsync();
-        }
-
-        this._dataProtection?.Dispose();
-        if (Directory.Exists(this._keysDirectory))
-        {
-            Directory.Delete(this._keysDirectory, recursive: true);
         }
     }
 
@@ -237,16 +225,8 @@ public sealed class CodeInsightSealSweeperPostgresIntegrationTests(PostgresConta
         return aggregate.Id;
     }
 
-    private ISecretProtectionCodec CreateCodec()
+    private static ISecretProtectionCodec CreateCodec()
     {
-        Directory.CreateDirectory(this._keysDirectory);
-
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(this._keysDirectory));
-
-        this._dataProtection = services.BuildServiceProvider();
-        return new SecretProtectionCodec(this._dataProtection.GetRequiredService<IDataProtectionProvider>());
+        return new SecretProtectionCodec(new EphemeralDataProtectionProvider());
     }
 }

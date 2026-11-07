@@ -5,42 +5,15 @@ using System.Security.Cryptography;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Security;
 
-public sealed class SecretProtectionCodecTests : IDisposable
+public sealed class SecretProtectionCodecTests
 {
-    private readonly string _keysDirectory;
-
-    public SecretProtectionCodecTests()
-    {
-        try
-        {
-            this._keysDirectory = Path.Combine(
-                ResolveRepoScratchRoot(),
-                $"MeisterDev.ProPR.SecretProtectionCodecTests.{Guid.NewGuid():N}");
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new InvalidOperationException(
-                "Failed to initialize SecretProtectionCodecTests because the repository scratch root could not be located.",
-                ex);
-        }
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this._keysDirectory))
-        {
-            Directory.Delete(this._keysDirectory, true);
-        }
-    }
-
     [Fact]
     public void Protect_ThenUnprotect_RoundTripsPlaintext()
     {
-        var sut = this.CreateCodec();
+        var sut = CreateCodec();
 
         var protectedValue = sut.Protect("super-secret-value", "AdoServicePrincipalCredentials");
 
@@ -52,7 +25,7 @@ public sealed class SecretProtectionCodecTests : IDisposable
     [Fact]
     public void Unprotect_PlaintextValue_ReturnsOriginalValue()
     {
-        var sut = this.CreateCodec();
+        var sut = CreateCodec();
 
         Assert.Equal("legacy-plaintext", sut.Unprotect("legacy-plaintext", "AiConnectionApiKey"));
     }
@@ -60,7 +33,7 @@ public sealed class SecretProtectionCodecTests : IDisposable
     [Fact]
     public void Unprotect_WithWrongPurpose_ThrowsCryptographicException()
     {
-        var sut = this.CreateCodec();
+        var sut = CreateCodec();
         var protectedValue = sut.Protect("super-secret-value", "AdoServicePrincipalCredentials");
 
         Assert.ThrowsAny<CryptographicException>(() => sut.Unprotect(protectedValue, "AiConnectionApiKey"));
@@ -69,7 +42,7 @@ public sealed class SecretProtectionCodecTests : IDisposable
     [Fact]
     public void Protect_WebhookSecret_RoundTripsWithWebhookPurpose()
     {
-        var sut = this.CreateCodec();
+        var sut = CreateCodec();
 
         var protectedValue = sut.Protect("generated-webhook-secret", "WebhookSecret");
 
@@ -78,37 +51,8 @@ public sealed class SecretProtectionCodecTests : IDisposable
         Assert.Equal("generated-webhook-secret", sut.Unprotect(protectedValue, "WebhookSecret"));
     }
 
-    private ISecretProtectionCodec CreateCodec()
+    private static ISecretProtectionCodec CreateCodec()
     {
-        Directory.CreateDirectory(this._keysDirectory);
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(this._keysDirectory));
-
-        using var provider = services.BuildServiceProvider();
-        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
-    }
-
-    private static string ResolveRepoScratchRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (current is not null)
-        {
-            var hasSolution = File.Exists(Path.Combine(current.FullName, "MeisterDev.ProPR.slnx"));
-            var hasSourceTree = Directory.Exists(Path.Combine(current.FullName, "src"));
-
-            if (hasSolution && hasSourceTree)
-            {
-                var scratchRoot = Path.Combine(current.FullName, ".ignore", "tmp");
-                Directory.CreateDirectory(scratchRoot);
-                return scratchRoot;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new InvalidOperationException("Unable to locate the repository scratch root.");
+        return new SecretProtectionCodec(new EphemeralDataProtectionProvider());
     }
 }

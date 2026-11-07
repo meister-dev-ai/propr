@@ -12,7 +12,6 @@ using MeisterDev.ProPR.Infrastructure.Services;
 using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.CodeInsights.Contracts;
@@ -246,17 +245,6 @@ public sealed class CodeInsightRetentionPostgresIntegrationTests(PostgresContain
 
     private static ISecretProtectionCodec CreateCodec()
     {
-        var keysDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"MeisterDev.ProPR.CodeInsightRetentionPostgres.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(keysDirectory);
-
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-
-        var provider = services.BuildServiceProvider();
-        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+        return new SecretProtectionCodec(new EphemeralDataProtectionProvider());
     }
 }

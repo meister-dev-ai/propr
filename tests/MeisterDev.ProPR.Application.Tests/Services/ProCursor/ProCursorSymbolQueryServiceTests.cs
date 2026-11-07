@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.ProCursor.Core;
 using MeisterDev.ProPR.ProCursor.Options;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -239,11 +240,10 @@ public sealed class ProCursorSymbolQueryServiceTests
         var symbolExtractor = Substitute.For<IProCursorSymbolExtractor>();
         var source = CreateSource();
         var baseSnapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), "commit-base", true);
-        var rootDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "meisterpropr-procursor-overlay-query-tests",
-            Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(rootDirectory);
+        // The code under test deletes the materialized directory. Disposing the temporary directory deletes it
+        // when the test fails before that.
+        using var temporaryRoot = TemporaryDirectory.Create("propr-procursor-overlay-query-tests-");
+        var rootDirectory = temporaryRoot.Path;
 
         sourceRepository.ListByClientAsync(ClientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ProCursorKnowledgeSource>>([source]));
@@ -302,30 +302,20 @@ public sealed class ProCursorSymbolQueryServiceTests
             NullLogger<ProCursorQueryService>.Instance,
             miniIndexBuilder);
 
-        try
-        {
-            var result = await service.GetSymbolInsightAsync(
-                new ProCursorSymbolQueryRequest(
-                    ClientId,
-                    "Greeter",
-                    StateMode: "reviewTarget",
-                    ReviewContext: new ProCursorReviewContextDto("repo-app", "feature/branch", 17, 3)),
-                CancellationToken.None);
+        var result = await service.GetSymbolInsightAsync(
+            new ProCursorSymbolQueryRequest(
+                ClientId,
+                "Greeter",
+                StateMode: "reviewTarget",
+                ReviewContext: new ProCursorReviewContextDto("repo-app", "feature/branch", 17, 3)),
+            CancellationToken.None);
 
-            Assert.Equal("complete", result.Status);
-            Assert.True(result.OverlayUsed);
-            Assert.Equal(baseSnapshot.Id, result.SnapshotId);
-            Assert.True(result.SupportsSymbolQueries);
-            Assert.NotNull(result.Symbol);
-            Assert.Equal("Greeter", result.Symbol!.DisplayName);
-        }
-        finally
-        {
-            if (Directory.Exists(rootDirectory))
-            {
-                Directory.Delete(rootDirectory, true);
-            }
-        }
+        Assert.Equal("complete", result.Status);
+        Assert.True(result.OverlayUsed);
+        Assert.Equal(baseSnapshot.Id, result.SnapshotId);
+        Assert.True(result.SupportsSymbolQueries);
+        Assert.NotNull(result.Symbol);
+        Assert.Equal("Greeter", result.Symbol!.DisplayName);
     }
 
     private static ProCursorQueryService CreateService(

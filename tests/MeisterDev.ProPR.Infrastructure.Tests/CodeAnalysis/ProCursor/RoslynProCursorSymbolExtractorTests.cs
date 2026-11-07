@@ -139,12 +139,7 @@ public sealed class RoslynProCursorSymbolExtractorTests
 
     private static string CreateRootDirectory()
     {
-        var path = Path.Combine(
-            Path.GetTempPath(),
-            "meisterpropr-procursor-symbol-tests",
-            Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(path);
-        return path;
+        return Directory.CreateTempSubdirectory("propr-procursor-symbol-tests-").FullName;
     }
 
     private static async Task WriteFileAsync(string rootDirectory, string relativePath, string content)

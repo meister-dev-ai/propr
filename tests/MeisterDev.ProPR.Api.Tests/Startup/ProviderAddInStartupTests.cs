@@ -6,6 +6,7 @@ using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,22 +25,14 @@ public sealed class ProviderAddInStartupTests : IDisposable
 
     private const string CompiledInChatCompletions = "example/provider:ChatCompletions";
 
-    private readonly string _directory = Path.Combine(
-        Path.GetTempPath(),
-        "propr-add-in-startup",
-        Guid.NewGuid().ToString("n"));
-
-    public ProviderAddInStartupTests()
-    {
-        Directory.CreateDirectory(this._directory);
-    }
+    private readonly TemporaryDirectory _directory = TemporaryDirectory.Create("propr-add-in-startup-");
 
     [Fact]
     public void AnUnreadableFileInTheDirectoryDoesNotStopTheHostStarting()
     {
         var corrupt = this.PutCorruptAssembly("corrupt");
 
-        using var factory = new ApiHostFactory(this._directory);
+        using var factory = new ApiHostFactory(this._directory.Path);
         _ = factory.CreateClient();
 
         // Listed as found and not activatable, rather than loaded and skipped: nothing in the external
@@ -65,7 +58,7 @@ public sealed class ProviderAddInStartupTests : IDisposable
     {
         var addIn = this.InstallExampleAddIn();
 
-        using var factory = new ApiHostFactory(this._directory, ClaimingTheExampleIdentity());
+        using var factory = new ApiHostFactory(this._directory.Path, ClaimingTheExampleIdentity());
         _ = factory.CreateClient();
 
         // Told before the decision rather than after a load: the add-in states its identity in its assembly
@@ -86,7 +79,7 @@ public sealed class ProviderAddInStartupTests : IDisposable
     [Fact]
     public void AFileAddedAfterStartupChangesNothingUntilTheHostRestarts()
     {
-        using var factory = new ApiHostFactory(this._directory);
+        using var factory = new ApiHostFactory(this._directory.Path);
         _ = factory.CreateClient();
         var catalog = factory.Services.GetRequiredService<ProviderAddInCatalog>();
         Assert.Empty(catalog.Rejected);
@@ -100,20 +93,12 @@ public sealed class ProviderAddInStartupTests : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(this._directory, recursive: true);
-        }
-        catch (IOException)
-        {
-            // A loaded assembly can keep its file open, and a directory left in the temporary path is not worth
-            // failing a test over.
-        }
+        this._directory.Dispose();
     }
 
     private string PutCorruptAssembly(string name)
     {
-        var folder = Directory.CreateDirectory(Path.Combine(this._directory, name));
+        var folder = Directory.CreateDirectory(Path.Combine(this._directory.Path, name));
         var path = Path.Combine(folder.FullName, name + ".dll");
         File.WriteAllBytes(path, [0x4D, 0x5A, 0x00, 0x01]);
 
@@ -124,7 +109,7 @@ public sealed class ProviderAddInStartupTests : IDisposable
     {
         const string Name = "MeisterDev.Ai.Providers.ExampleAddIn";
         var source = Path.Combine(AppContext.BaseDirectory, "add-in-builds", Name);
-        var folder = Directory.CreateDirectory(Path.Combine(this._directory, Name));
+        var folder = Directory.CreateDirectory(Path.Combine(this._directory.Path, Name));
 
         foreach (var file in Directory.EnumerateFiles(source))
         {

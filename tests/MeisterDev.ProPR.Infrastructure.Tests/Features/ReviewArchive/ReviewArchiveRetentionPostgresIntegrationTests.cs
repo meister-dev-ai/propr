@@ -15,7 +15,6 @@ using MeisterDev.ProPR.Infrastructure.Services;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.TestSupport;
 
@@ -328,17 +327,6 @@ public sealed class ReviewArchiveRetentionPostgresIntegrationTests(PostgresConta
 
     private static ISecretProtectionCodec CreateCodec()
     {
-        var keysDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"MeisterDev.ProPR.ReviewArchiveRetentionPostgresIntegrationTests.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(keysDirectory);
-
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-
-        var provider = services.BuildServiceProvider();
-        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+        return new SecretProtectionCodec(new EphemeralDataProtectionProvider());
     }
 }

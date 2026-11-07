@@ -33,8 +33,6 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
     private PostgreSqlContainer? _postgres;
     private string? _skipReason;
 
-    private bool _startedContainer;
-
     public bool IsAvailable => this._skipReason is null;
 
     public string ConnectionString => this._connectionString
@@ -58,7 +56,8 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
         {
             try
             {
-                var postgresBuilder = new PostgreSqlBuilder("pgvector/pgvector:pg17");
+                var postgresBuilder = new PostgreSqlBuilder("pgvector/pgvector:pg17")
+                    .WithLabel(TestContainerOwner.Label, TestContainerOwner.Current);
 
                 // Rootless Podman commonly exposes its API socket here instead of /var/run/docker.sock.
                 var localPodmanSocket = TryGetLocalPodmanSocket();
@@ -67,12 +66,13 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
                     postgresBuilder = postgresBuilder.WithDockerEndpoint(localPodmanSocket);
                 }
 
+                await TestContainerOwner.RemoveContainersOfEndedProcessesAsync(localPodmanSocket);
+
                 this._postgres = postgresBuilder
                     .Build();
 
                 await this._postgres.StartAsync();
-                this._startedContainer = true;
-                this._connectionString = this._postgres.GetConnectionString();
+                this._connectionString = PostgresTestConnections.WithShortIdleLifetime(this._postgres.GetConnectionString());
             }
             catch (DockerUnavailableException ex)
             {
@@ -112,12 +112,12 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
                 $"DROP DATABASE IF EXISTS \"{this._externalDatabaseName}\" WITH (FORCE);");
         }
 
-        if (!this._startedContainer || this._postgres is null)
+        // A container whose start failed, for example on its readiness check, still exists and is removed as
+        // well.
+        if (this._postgres is not null)
         {
-            return;
+            await this._postgres.DisposeAsync();
         }
-
-        await this._postgres.DisposeAsync();
     }
 
     public void SkipIfUnavailable()
@@ -216,7 +216,7 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
         this._externalAdminConnectionString = externalConnectionString;
         this._externalDatabaseName = databaseName;
         builder.Database = databaseName;
-        return builder.ConnectionString;
+        return PostgresTestConnections.WithShortIdleLifetime(builder.ConnectionString);
     }
 
     private static MeisterProPRDbContext CreateContext(string connectionString)

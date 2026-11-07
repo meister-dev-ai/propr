@@ -8,7 +8,6 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using MeisterDev.ProPR.CodeInsights.Contracts;
@@ -1152,17 +1151,6 @@ public sealed class CodeInsightMetricTests : IDisposable
 
     private static ISecretProtectionCodec CreateCodec()
     {
-        var keysDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"MeisterDev.ProPR.CodeInsightMetricTests.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(keysDirectory);
-
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-
-        var provider = services.BuildServiceProvider();
-        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+        return new SecretProtectionCodec(new EphemeralDataProtectionProvider());
     }
 }

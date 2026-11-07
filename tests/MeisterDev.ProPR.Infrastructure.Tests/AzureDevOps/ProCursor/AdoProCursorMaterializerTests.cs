@@ -16,14 +16,30 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AzureDevOps.ProCursor;
 /// <summary>
 ///     Tests the Azure DevOps-backed ProCursor materializers against a controlled in-memory source state.
 /// </summary>
-public sealed class AdoProCursorMaterializerTests
+/// <remarks>
+///     The materializers write each workspace below the local application data directory of the user, in a
+///     directory per source and tracked branch, and leave the directories of the source and the branch in place.
+///     Every test uses a source of its own, so disposing the test deletes the directory of each source it
+///     created, whether the test passed or failed.
+/// </remarks>
+public sealed class AdoProCursorMaterializerTests : IDisposable
 {
     private static readonly Guid ClientId = Guid.Parse("20000000-0000-0000-0000-000000000001");
+
+    private readonly List<Guid> _sourceIds = [];
+
+    public void Dispose()
+    {
+        foreach (var sourceId in this._sourceIds)
+        {
+            DeleteDirectory(SourceWorkspaceRoot(sourceId));
+        }
+    }
 
     [Fact]
     public async Task RepositoryMaterializer_MaterializeAsync_WritesScopedTextFiles()
     {
-        var source = CreateSource(ProCursorSourceKind.Repository, "refs/heads/main", "/src");
+        var source = this.CreateSource(ProCursorSourceKind.Repository, "refs/heads/main", "/src");
         var trackedBranch = source.TrackedBranches.Single();
         var materializer = new TestableRepositoryMaterializer();
 
@@ -45,25 +61,18 @@ public sealed class AdoProCursorMaterializerTests
 
         var result = await materializer.MaterializeAsync(source, trackedBranch, null, CancellationToken.None);
 
-        try
-        {
-            Assert.Equal("commit-head", result.CommitSha);
-            Assert.Equal(new[] { "/src/App/Program.cs", "/src/Docs/Runbook.md" }, result.MaterializedPaths);
-            Assert.True(File.Exists(Path.Combine(result.RootDirectory, "src", "App", "Program.cs")));
-            Assert.True(File.Exists(Path.Combine(result.RootDirectory, "src", "Docs", "Runbook.md")));
-            Assert.False(File.Exists(Path.Combine(result.RootDirectory, "tests", "AppTests.cs")));
-            Assert.False(File.Exists(Path.Combine(result.RootDirectory, "src", "Images", "logo.png")));
-        }
-        finally
-        {
-            DeleteDirectory(result.RootDirectory);
-        }
+        Assert.Equal("commit-head", result.CommitSha);
+        Assert.Equal(new[] { "/src/App/Program.cs", "/src/Docs/Runbook.md" }, result.MaterializedPaths);
+        Assert.True(File.Exists(Path.Combine(result.RootDirectory, "src", "App", "Program.cs")));
+        Assert.True(File.Exists(Path.Combine(result.RootDirectory, "src", "Docs", "Runbook.md")));
+        Assert.False(File.Exists(Path.Combine(result.RootDirectory, "tests", "AppTests.cs")));
+        Assert.False(File.Exists(Path.Combine(result.RootDirectory, "src", "Images", "logo.png")));
     }
 
     [Fact]
     public async Task RepositoryMaterializer_MaterializeAsync_UsesRequestedCommitWhenProvided()
     {
-        var source = CreateSource(ProCursorSourceKind.Repository, "main", null);
+        var source = this.CreateSource(ProCursorSourceKind.Repository, "main", null);
         var trackedBranch = source.TrackedBranches.Single();
         var materializer = new TestableRepositoryMaterializer();
 
@@ -77,22 +86,15 @@ public sealed class AdoProCursorMaterializerTests
             "requested-commit",
             CancellationToken.None);
 
-        try
-        {
-            Assert.Equal("requested-commit", result.CommitSha);
-            Assert.Equal(new[] { "/README.md" }, result.MaterializedPaths);
-            Assert.True(File.Exists(Path.Combine(result.RootDirectory, "README.md")));
-        }
-        finally
-        {
-            DeleteDirectory(result.RootDirectory);
-        }
+        Assert.Equal("requested-commit", result.CommitSha);
+        Assert.Equal(new[] { "/README.md" }, result.MaterializedPaths);
+        Assert.True(File.Exists(Path.Combine(result.RootDirectory, "README.md")));
     }
 
     [Fact]
     public async Task WikiMaterializer_MaterializeAsync_SkipsBinaryAttachments()
     {
-        var source = CreateSource(ProCursorSourceKind.AdoWiki, "refs/heads/wikiMain", "/wiki");
+        var source = this.CreateSource(ProCursorSourceKind.AdoWiki, "refs/heads/wikiMain", "/wiki");
         var trackedBranch = source.TrackedBranches.Single();
         var materializer = new TestableWikiMaterializer();
 
@@ -111,25 +113,18 @@ public sealed class AdoProCursorMaterializerTests
 
         var result = await materializer.MaterializeAsync(source, trackedBranch, null, CancellationToken.None);
 
-        try
-        {
-            Assert.Equal("wiki-commit", result.CommitSha);
-            Assert.Equal(new[] { "/wiki/Home.md", "/wiki/Operations/Token-Caching.md" }, result.MaterializedPaths);
-            Assert.True(File.Exists(Path.Combine(result.RootDirectory, "wiki", "Home.md")));
-            Assert.True(File.Exists(Path.Combine(result.RootDirectory, "wiki", "Operations", "Token-Caching.md")));
-            Assert.False(File.Exists(Path.Combine(result.RootDirectory, "wiki", ".attachments", "diagram.png")));
-            Assert.False(File.Exists(Path.Combine(result.RootDirectory, "docs", "Other.md")));
-        }
-        finally
-        {
-            DeleteDirectory(result.RootDirectory);
-        }
+        Assert.Equal("wiki-commit", result.CommitSha);
+        Assert.Equal(new[] { "/wiki/Home.md", "/wiki/Operations/Token-Caching.md" }, result.MaterializedPaths);
+        Assert.True(File.Exists(Path.Combine(result.RootDirectory, "wiki", "Home.md")));
+        Assert.True(File.Exists(Path.Combine(result.RootDirectory, "wiki", "Operations", "Token-Caching.md")));
+        Assert.False(File.Exists(Path.Combine(result.RootDirectory, "wiki", ".attachments", "diagram.png")));
+        Assert.False(File.Exists(Path.Combine(result.RootDirectory, "docs", "Other.md")));
     }
 
     [Fact]
     public async Task WikiMaterializer_ResolveRepositoryIdAsync_UsesCanonicalWikiIdentifier()
     {
-        var source = CreateSource(ProCursorSourceKind.AdoWiki, "refs/heads/wikiMain", "/wiki");
+        var source = this.CreateSource(ProCursorSourceKind.AdoWiki, "refs/heads/wikiMain", "/wiki");
         var wikiId = Guid.Parse("30000000-0000-0000-0000-000000000071");
         var repositoryId = Guid.Parse("30000000-0000-0000-0000-000000000072");
 
@@ -158,7 +153,7 @@ public sealed class AdoProCursorMaterializerTests
     [Fact]
     public async Task WikiMaterializer_ResolveRepositoryIdAsync_UsesLegacyDisplayNameWhenCanonicalMetadataIsMissing()
     {
-        var source = CreateSource(ProCursorSourceKind.AdoWiki, "refs/heads/wikiMain", "/wiki");
+        var source = this.CreateSource(ProCursorSourceKind.AdoWiki, "refs/heads/wikiMain", "/wiki");
         var repositoryId = Guid.Parse("30000000-0000-0000-0000-000000000073");
 
         source.UpdateDefinition(
@@ -186,7 +181,7 @@ public sealed class AdoProCursorMaterializerTests
     [Fact]
     public async Task RepositoryMaterializer_MaterializeAsync_RemovesStaleTrackedBranchWorkspaceDirectories()
     {
-        var source = CreateSource(ProCursorSourceKind.Repository, "main", null);
+        var source = this.CreateSource(ProCursorSourceKind.Repository, "main", null);
         var trackedBranch = source.TrackedBranches.Single();
         var materializer = new TestableRepositoryMaterializer(
             Microsoft.Extensions.Options.Options.Create(new ProCursorOptions { TempWorkspaceRetentionMinutes = 1 }));
@@ -195,32 +190,20 @@ public sealed class AdoProCursorMaterializerTests
         materializer.SetTree("commit-head", "/README.md");
         materializer.SetContent("commit-head", "/README.md", "# Readme\n");
 
-        var trackedBranchWorkspaceRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify),
-            "meisterpropr-procursor",
-            source.Id.ToString("N"),
-            trackedBranch.Id.ToString("N"));
+        var trackedBranchWorkspaceRoot = Path.Combine(SourceWorkspaceRoot(source.Id), trackedBranch.Id.ToString("N"));
         var staleWorkspace = Path.Combine(trackedBranchWorkspaceRoot, "stale-workspace");
         var freshWorkspace = Path.Combine(trackedBranchWorkspaceRoot, "fresh-workspace");
         Directory.CreateDirectory(staleWorkspace);
         Directory.CreateDirectory(freshWorkspace);
         Directory.SetLastWriteTimeUtc(staleWorkspace, DateTime.UtcNow.AddMinutes(-10));
 
-        var result = await materializer.MaterializeAsync(source, trackedBranch, null, CancellationToken.None);
+        _ = await materializer.MaterializeAsync(source, trackedBranch, null, CancellationToken.None);
 
-        try
-        {
-            Assert.False(Directory.Exists(staleWorkspace));
-            Assert.True(Directory.Exists(freshWorkspace));
-        }
-        finally
-        {
-            DeleteDirectory(result.RootDirectory);
-            DeleteDirectory(trackedBranchWorkspaceRoot);
-        }
+        Assert.False(Directory.Exists(staleWorkspace));
+        Assert.True(Directory.Exists(freshWorkspace));
     }
 
-    private static ProCursorKnowledgeSource CreateSource(
+    private ProCursorKnowledgeSource CreateSource(
         ProCursorSourceKind sourceKind,
         string branchName,
         string? rootPath)
@@ -239,7 +222,16 @@ public sealed class AdoProCursorMaterializerTests
             "auto");
 
         source.AddTrackedBranch(Guid.NewGuid(), branchName, ProCursorRefreshTriggerMode.Manual, true);
+        this._sourceIds.Add(source.Id);
         return source;
+    }
+
+    private static string SourceWorkspaceRoot(Guid sourceId)
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify),
+            "meisterpropr-procursor",
+            sourceId.ToString("N"));
     }
 
     private static void DeleteDirectory(string path)

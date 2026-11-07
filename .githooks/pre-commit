@@ -60,11 +60,49 @@ fi
 # nodes behind, and together they fill the memory of the machine.
 export MSBUILDDISABLENODEREUSE=1
 
+# The MSBuild server outlives the build that starts it, so a server started by the hook would keep running with a
+# temporary directory that the hook has removed. It is off by default, and the hook keeps it off for a developer
+# who turned it on.
+export MSBUILDUSESERVER=0
+export DOTNET_CLI_USE_MSBUILD_SERVER=0
+
 # The format, backend and frontend checks read separate inputs, so they run at the same time. Each writes to
 # its own log, and the logs are printed in a fixed order once all checks have finished. If formatting changes
 # a file, the commit fails, and all checks run again after the formatted file is staged.
 CHECK_DIR=$(mktemp -d)
-trap 'rm -rf "$CHECK_DIR"' EXIT
+
+# Every check writes its temporary files below the check directory, which the hook removes when it ends. MSBuild
+# leaves a directory in the temporary path for each of its processes, and the tests, the test hosts and the
+# formatter leave files there as well.
+export TMPDIR="$CHECK_DIR/tmp"
+mkdir "$TMPDIR"
+FORMAT_PID=
+BACKEND_PID=
+FRONTEND_PID=
+
+# stop_tree PID: stops a process and the processes it started. The started ones go first, because once a process
+# has ended, pgrep -P no longer finds the processes it started.
+stop_tree() {
+    for child in $(pgrep -P "$1" 2>/dev/null); do
+        stop_tree "$child"
+    done
+    kill "$1" 2>/dev/null || true
+}
+
+# cleanup: stops the checks that still run and removes the check directory. Checks still run only when the hook
+# is interrupted, and their processes would otherwise go on writing into a directory that no longer exists.
+cleanup() {
+    for pid in $FORMAT_PID $BACKEND_PID $FRONTEND_PID; do
+        stop_tree "$pid"
+    done
+    wait 2>/dev/null || true
+    rm -rf "$CHECK_DIR"
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 if [ -n "$STAGED_FORMAT_FILES" ]; then
     echo "pre-commit: checking source formatting..."
@@ -75,7 +113,11 @@ fi
 if [ -n "$STAGED_BACKEND_FILES" ]; then
     echo "pre-commit: running dotnet build and dotnet test..."
     (
+        # The build compiles without the shared compiler server. The server outlives the build and listens on a
+        # fixed path in /tmp that every build of the user connects to, so a server started here would go on
+        # compiling for later builds with the temporary directory that the hook removes.
         dotnet build ./MeisterDev.ProPR.slnx --configuration Release --nologo -consoleLoggerParameters:NoSummary \
+            -p:UseSharedCompilation=false \
             || { echo "pre-commit: FAILED -- build errors detected."; exit 1; }
         # At quiet verbosity, dotnet test names a failed test but omits its message and stack trace. The console
         # logger at minimal verbosity adds them and still prints only a summary for passing tests.
@@ -110,16 +152,21 @@ report() {
     fi
 }
 
+# A process id is cleared once its check has been waited for, so that cleanup never signals a process that only
+# received the same id later.
 if [ -n "$STAGED_FORMAT_FILES" ]; then
     report "format check" "$FORMAT_PID" "$CHECK_DIR/format.log"
+    FORMAT_PID=
 fi
 
 if [ -n "$STAGED_BACKEND_FILES" ]; then
     report "backend build and tests" "$BACKEND_PID" "$CHECK_DIR/backend.log"
+    BACKEND_PID=
 fi
 
 if [ -n "$STAGED_FRONTEND_FILES" ]; then
     report "frontend type-check and tests" "$FRONTEND_PID" "$CHECK_DIR/frontend.log"
+    FRONTEND_PID=
 fi
 
 if [ "$CHECK_FAILED" -eq 0 ] && [ "$RECORD_TREE" = yes ]; then

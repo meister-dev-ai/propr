@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.ProCursor.Core;
 using MeisterDev.ProPR.ProCursor.Options;
+using MeisterDev.ProPR.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -28,11 +29,10 @@ public sealed class ProCursorMiniIndexBuilderTests
         var symbolExtractor = Substitute.For<IProCursorSymbolExtractor>();
         var source = CreateSource();
         var baseSnapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), "commit-base", true);
-        var rootDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "meisterpropr-procursor-overlay-tests",
-            Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(rootDirectory);
+        // The code under test deletes the materialized directory. Disposing the temporary directory deletes it
+        // when the test fails before that.
+        using var temporaryRoot = TemporaryDirectory.Create("propr-procursor-overlay-tests-");
+        var rootDirectory = temporaryRoot.Path;
 
         sourceRepository.ListByClientAsync(ClientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ProCursorKnowledgeSource>>([source]));

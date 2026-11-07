@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Api.Tests.Fixtures;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using TemporaryDirectory = MeisterDev.ProPR.TestSupport.TemporaryDirectory;
 
 namespace MeisterDev.ProPR.Api.Tests.Features.Licensing;
 
@@ -19,7 +20,7 @@ public sealed class LicensingIdentityCommandTests(PostgresContainerFixture fixtu
 
         var databaseName = $"propr_identity_command_{Guid.NewGuid():N}";
         var databaseConnectionString = ConnectionStringFor(databaseName);
-        var dataProtectionKeysPath = Path.Combine(Path.GetTempPath(), $"propr-identity-command-{Guid.NewGuid():N}");
+        using var dataProtectionKeys = TemporaryDirectory.Create("propr-identity-command-");
 
         await CreateDatabaseAsync(fixture.ConnectionString, databaseName);
 
@@ -29,7 +30,7 @@ public sealed class LicensingIdentityCommandTests(PostgresContainerFixture fixtu
             // the command is documented for: a database the API has already started against.
             await MigrateAsync(databaseConnectionString);
 
-            using var process = StartIdentityCommand(databaseConnectionString, dataProtectionKeysPath);
+            using var process = StartIdentityCommand(databaseConnectionString, dataProtectionKeys.Path);
             var standardOutput = process.StandardOutput.ReadToEndAsync();
             var standardError = process.StandardError.ReadToEndAsync();
 
@@ -55,11 +56,6 @@ public sealed class LicensingIdentityCommandTests(PostgresContainerFixture fixtu
         finally
         {
             await DropDatabaseAsync(fixture.ConnectionString, databaseName);
-
-            if (Directory.Exists(dataProtectionKeysPath))
-            {
-                Directory.Delete(dataProtectionKeysPath, recursive: true);
-            }
         }
     }
 
@@ -74,13 +70,13 @@ public sealed class LicensingIdentityCommandTests(PostgresContainerFixture fixtu
 
         var databaseName = $"propr_identity_command_{Guid.NewGuid():N}";
         var databaseConnectionString = ConnectionStringFor(databaseName);
-        var dataProtectionKeysPath = Path.Combine(Path.GetTempPath(), $"propr-identity-command-{Guid.NewGuid():N}");
+        using var dataProtectionKeys = TemporaryDirectory.Create("propr-identity-command-");
 
         await CreateDatabaseAsync(fixture.ConnectionString, databaseName);
 
         try
         {
-            using var process = StartIdentityCommand(databaseConnectionString, dataProtectionKeysPath);
+            using var process = StartIdentityCommand(databaseConnectionString, dataProtectionKeys.Path);
             var standardOutput = process.StandardOutput.ReadToEndAsync();
             var standardError = process.StandardError.ReadToEndAsync();
 
@@ -102,11 +98,6 @@ public sealed class LicensingIdentityCommandTests(PostgresContainerFixture fixtu
         finally
         {
             await DropDatabaseAsync(fixture.ConnectionString, databaseName);
-
-            if (Directory.Exists(dataProtectionKeysPath))
-            {
-                Directory.Delete(dataProtectionKeysPath, recursive: true);
-            }
         }
     }
 

@@ -473,14 +473,10 @@ public sealed class ProCursorIndexWorkerTests
         throw new TimeoutException("Timed out waiting for ProCursor jobs to complete.");
     }
 
+    // The coordinator deletes the materialized directory when its indexing run ends, whether the run succeeded or not.
     private static string CreateRootDirectory()
     {
-        var path = Path.Combine(
-            Path.GetTempPath(),
-            "meisterpropr-procursor-worker-tests",
-            Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(path);
-        return path;
+        return Directory.CreateTempSubdirectory("propr-procursor-worker-tests-").FullName;
     }
 
     private sealed class NoOpTrackedBranchChangeDetector : IProCursorTrackedBranchChangeDetector

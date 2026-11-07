@@ -349,14 +349,10 @@ public sealed class ProCursorScalabilityTests
         return ordered[p95Index];
     }
 
+    // The coordinator deletes the materialized directory when its indexing run ends, whether the run succeeded or not.
     private static string CreateRootDirectory()
     {
-        var rootDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "meisterpropr-procursor-performance",
-            Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(rootDirectory);
-        return rootDirectory;
+        return Directory.CreateTempSubdirectory("propr-procursor-performance-").FullName;
     }
 
     private sealed class DeterministicChangeDetector(IReadOnlyDictionary<Guid, string> latestCommitsByBranchId)

@@ -37,22 +37,15 @@ internal sealed class StagedAddInDirectory : IDisposable
     /// <summary>Creates an empty add-in directory that deletes itself when the test is done with it.</summary>
     public static StagedAddInDirectory Create()
     {
-        var path = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(),
-            "propr-add-in-tests",
-            Guid.NewGuid().ToString("n"));
-        Directory.CreateDirectory(path);
-
-        return new StagedAddInDirectory(path);
+        return new StagedAddInDirectory(Directory.CreateTempSubdirectory("propr-add-in-tests-").FullName);
     }
 
-    /// <summary>A path inside this directory that has nothing at it.</summary>
+    /// <summary>A path under the temporary path that has nothing at it.</summary>
     public static string Missing()
     {
         return System.IO.Path.Combine(
             System.IO.Path.GetTempPath(),
-            "propr-add-in-tests",
-            Guid.NewGuid().ToString("n"));
+            "propr-add-in-tests-" + Guid.NewGuid().ToString("n"));
     }
 
     /// <summary>Copies one built add-in into this directory as a family folder.</summary>

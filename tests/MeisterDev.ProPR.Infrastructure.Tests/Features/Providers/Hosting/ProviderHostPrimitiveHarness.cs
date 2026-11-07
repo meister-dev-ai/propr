@@ -11,7 +11,6 @@ using MeisterDev.ProPR.Infrastructure.Services;
 using MeisterDev.ProPR.TestSupport;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
@@ -21,8 +20,9 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 /// </summary>
 /// <remarks>
 ///     Real protection rather than a stand-in, so that what lands in the column is what an operator would find
-///     there. Every primitive opens its own context from the factory, which these fixtures have to
-///     reproduce: a shared context would hide the concurrency the primitives exist to handle.
+///     there. The keys are held in memory, because every value is read back through the same codec and no key
+///     has to outlive the harness. Every primitive opens its own context from the factory, which these fixtures
+///     have to reproduce: a shared context would hide the concurrency the primitives exist to handle.
 /// </remarks>
 public sealed class ProviderHostPrimitiveHarness : IAsyncDisposable
 {
@@ -30,15 +30,13 @@ public sealed class ProviderHostPrimitiveHarness : IAsyncDisposable
     private readonly List<Guid> _connectionIds = [];
     private readonly List<Guid> _tenantIds = [];
     private readonly List<Guid> _userIds = [];
-    private readonly string _keysDirectory;
     private readonly DbContextOptions<MeisterProPRDbContext> _options;
 
-    private ProviderHostPrimitiveHarness(DbContextOptions<MeisterProPRDbContext> options, string keysDirectory)
+    private ProviderHostPrimitiveHarness(DbContextOptions<MeisterProPRDbContext> options)
     {
         this._options = options;
-        this._keysDirectory = keysDirectory;
         this.Contexts = new TestDbContextFactory(options);
-        this.Codec = CreateCodec(keysDirectory);
+        this.Codec = new SecretProtectionCodec(new EphemeralDataProtectionProvider());
         this.Capabilities = Substitute.For<IProviderAddInCapabilityGate>();
         this.Capabilities.IsAvailableAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
         this.Capabilities.IsAvailableNowAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -57,16 +55,10 @@ public sealed class ProviderHostPrimitiveHarness : IAsyncDisposable
     /// <param name="connectionString">Where the database is.</param>
     public static ProviderHostPrimitiveHarness Create(string connectionString)
     {
-        var keysDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"MeisterDev.ProPR.ProviderHostPrimitives.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(keysDirectory);
-
         return new ProviderHostPrimitiveHarness(
             new DbContextOptionsBuilder<MeisterProPRDbContext>()
                 .UseNpgsql(connectionString, npgsql => npgsql.UseVector())
-                .Options,
-            keysDirectory);
+                .Options);
     }
 
     /// <summary>Opens a context of the harness's own, for arranging and asserting.</summary>
@@ -349,24 +341,5 @@ public sealed class ProviderHostPrimitiveHarness : IAsyncDisposable
             await db.Clients.Where(client => this._clientIds.Contains(client.Id)).ExecuteDeleteAsync();
             await db.Tenants.Where(tenant => this._tenantIds.Contains(tenant.Id)).ExecuteDeleteAsync();
         }
-
-        try
-        {
-            Directory.Delete(this._keysDirectory, recursive: true);
-        }
-        catch (IOException)
-        {
-            // A key file still open leaves a temporary directory behind and nothing else.
-        }
-    }
-
-    private static ISecretProtectionCodec CreateCodec(string keysDirectory)
-    {
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-
-        return new SecretProtectionCodec(services.BuildServiceProvider().GetRequiredService<IDataProtectionProvider>());
     }
 }

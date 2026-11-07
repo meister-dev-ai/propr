@@ -26,7 +26,8 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 ///     Profiling harness that quantifies the backend-memory cost of reviewing a large synthetic
 ///     pull request. Heavy paths are gated behind the MEASURE_HEAVY=1 environment variable so the
 ///     ordinary test suite stays fast; the prompt-scaling measurement is always cheap.
-///     Results are written to $MEASURE_OUT (default: obj/large-pr-memory.txt) and the test output.
+///     Results are written to the test output, and appended to the file at the path in $MEASURE_OUT when
+///     that variable is set.
 /// </summary>
 public sealed class LargePrMemoryProfilingTests(ITestOutputHelper output)
 {
@@ -82,7 +83,7 @@ public sealed class LargePrMemoryProfilingTests(ITestOutputHelper output)
             }
         }
 
-        WriteReport("prwide-prompt-scaling", report.ToString());
+        WriteReport(report.ToString());
 
         // Sanity: the prompt must embed all files' diffs (blow-up is real, not clipped).
         var full = ReviewPrompts.BuildPrWidePlanningUserMessage(BuildSyntheticPr(TotalFiles));
@@ -117,7 +118,7 @@ public sealed class LargePrMemoryProfilingTests(ITestOutputHelper output)
             Line(string.Create(CultureInfo.InvariantCulture, $"{fileCount,5} | {deltaMb,10:F2}"));
         }
 
-        WriteReport("pr-retained-heap", report.ToString());
+        WriteReport(report.ToString());
 
         Assert.True(report.Length > 0, "Profile test should have produced output rows.");
     }
@@ -244,7 +245,7 @@ public sealed class LargePrMemoryProfilingTests(ITestOutputHelper output)
                 CultureInfo.InvariantCulture,
                 $"retained protocol text  : {Mb(retainedText * 2L):F1} MB (unbounded InputTextSample/SystemPrompt/OutputSummary, UTF-16)"));
 
-        WriteReport("filebyfile-memory", report.ToString());
+        WriteReport(report.ToString());
 
         Assert.True(report.Length > 0, "Profile test should have produced output rows.");
     }
@@ -327,19 +328,23 @@ public sealed class LargePrMemoryProfilingTests(ITestOutputHelper output)
         return sb.ToString();
     }
 
-    private static void WriteReport(string tag, string content)
+    // Every report is in the test output already. The report is appended to a file only when MEASURE_OUT holds
+    // a path, so an ordinary run writes no file.
+    private static void WriteReport(string content)
     {
         var target = Environment.GetEnvironmentVariable("MEASURE_OUT");
-        var path = string.IsNullOrWhiteSpace(target)
-            ? System.IO.Path.Combine(AppContext.BaseDirectory, $"measure-{tag}.txt")
-            : target;
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return;
+        }
+
         try
         {
-            System.IO.File.AppendAllText(path, content + Environment.NewLine);
+            System.IO.File.AppendAllText(target, content + Environment.NewLine);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[measure] could not write {path}: {ex.Message}");
+            Console.WriteLine($"[measure] could not write {target}: {ex.Message}");
         }
     }
 }

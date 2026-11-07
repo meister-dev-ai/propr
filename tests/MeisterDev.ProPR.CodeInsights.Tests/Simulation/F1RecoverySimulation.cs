@@ -23,7 +23,6 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -56,15 +55,12 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
 
     private readonly MeisterProPRDbContext _db = NewContext();
     private readonly List<string> _log = [];
-    private readonly List<string> _keyDirectories = [];
     private readonly HashSet<Guid> _cancelledJobs = [];
     private readonly HashSet<Guid> _falsePositiveFindings = [];
     private static readonly Guid ReviewerAuthorId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
 
     /// <summary>What the most recent lifecycle synchronization decided, for the experiments that drive one.</summary>
     private PullRequestSynchronizationOutcome? LastLifecycleOutcome { get; set; }
-
-    private readonly List<ServiceProvider> _codecProviders = [];
 
     private CodeInsightFindingStore _store = null!;
     private CodeInsightMissHarvester _harvester = null!;
@@ -1043,26 +1039,6 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
     public void Dispose()
     {
         this._db.Dispose();
-
-        foreach (var provider in this._codecProviders)
-        {
-            provider.Dispose();
-        }
-
-        foreach (var directory in this._keyDirectories)
-        {
-            try
-            {
-                Directory.Delete(directory, recursive: true);
-            }
-            catch (IOException)
-            {
-                // A leftover key directory under the temp path costs nothing and is not worth failing a run.
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-        }
     }
 
     private static MeisterProPRDbContext NewContext()
@@ -1073,21 +1049,9 @@ public sealed class F1RecoverySimulation(ITestOutputHelper output) : IDisposable
                 .Options);
     }
 
-    private ISecretProtectionCodec CreateCodec()
+    private static ISecretProtectionCodec CreateCodec()
     {
-        var keysDirectory = Path.Combine(Path.GetTempPath(), $"MeisterDev.ProPR.F1Sim.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(keysDirectory);
-        this._keyDirectories.Add(keysDirectory);
-
-        var services = new ServiceCollection();
-        services.AddDataProtection()
-            .SetApplicationName("MeisterDev.ProPR.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-
-        var provider = services.BuildServiceProvider();
-        this._codecProviders.Add(provider);
-
-        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+        return new SecretProtectionCodec(new EphemeralDataProtectionProvider());
     }
 
     private sealed class SimulatedPullRequest(long id, ResolutionMoment moment, bool reviewJobStillActiveAtClose)
