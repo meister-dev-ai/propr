@@ -4,7 +4,6 @@
 using System.Globalization;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
-using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Features.ExecutionAuthority;
 using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -47,7 +46,6 @@ public sealed partial class ThreadPassService(
     ILogger<ThreadPassService> logger,
     IAiRuntimeResolver? aiRuntimeResolver = null,
     IProviderActivationService? providerActivationService = null,
-    IPullRequestIterationResolver? iterationResolver = null,
     IPostedCommentOriginStore? postedCommentOriginStore = null,
     IBudgetCapsProvider? budgetCapsProvider = null,
     IReviewSpendAccumulator? spendAccumulator = null,
@@ -336,7 +334,7 @@ public sealed partial class ThreadPassService(
         // is actually current.
         if (await this.IsSupersededAsync(job, ct))
         {
-            LogPassSkippedForMovedRevision(logger, job.Id, job.PullRequestId, job.IterationId);
+            LogPassSkippedForMovedRevision(logger, job.Id, job.PullRequestId, job.RevisionKey);
             await threadPassJobs.SetSkippedAsync(
                 job.Id,
                 "The pull request moved to a later revision before the pass ran.",
@@ -455,23 +453,16 @@ public sealed partial class ThreadPassService(
     ///     that judges the previous revision spends a model call on code the developer has already replaced,
     ///     and answers a thread against a diff nobody is looking at any more.
     /// </summary>
+    /// <remarks>
+    ///     The latest-revision reader of the pull request's provider decides what counts as a later revision,
+    ///     because Azure DevOps numbers the iterations of a pull request and GitHub, GitLab and Forgejo identify a
+    ///     revision by its head commit.
+    /// </remarks>
     private async Task<bool> IsSupersededAsync(ThreadPassJob job, CancellationToken ct)
     {
-        if (iterationResolver is null)
-        {
-            return false;
-        }
-
         try
         {
-            var latestIterationId = await iterationResolver.GetLatestIterationIdAsync(
-                job.ClientId,
-                job.OrganizationUrl,
-                job.ProjectId,
-                job.RepositoryId,
-                job.PullRequestId,
-                ct);
-            return latestIterationId > job.IterationId;
+            return await providerRegistry.GetLatestRevisionReader(job.Provider).HasMovedPastAsync(job, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -1313,12 +1304,12 @@ public sealed partial class ThreadPassService(
         EventId = 6415,
         Level = LogLevel.Information,
         Message =
-            "Thread pass {ThreadPassJobId} skipped: PR {PullRequestId} moved past iteration {IterationId} before the pass ran.")]
+            "Thread pass {ThreadPassJobId} skipped: PR {PullRequestId} moved past revision {RevisionKey} before the pass ran.")]
     private static partial void LogPassSkippedForMovedRevision(
         ILogger logger,
         Guid threadPassJobId,
         int pullRequestId,
-        int iterationId);
+        string revisionKey);
 
     [LoggerMessage(
         EventId = 6416,

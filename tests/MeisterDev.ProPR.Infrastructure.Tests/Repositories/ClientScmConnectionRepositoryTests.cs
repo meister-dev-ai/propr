@@ -734,6 +734,11 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             throw new NotSupportedException();
         }
 
+        public ILatestRevisionReader GetLatestRevisionReader(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
         public ICodeReviewPublicationService GetCodeReviewPublicationService(ScmProvider provider)
         {
             throw new NotSupportedException();

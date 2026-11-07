@@ -59,6 +59,11 @@ public sealed class NoOpScmProviderRegistry : IScmProviderRegistry
         throw CreateUnavailableException(provider);
     }
 
+    public ILatestRevisionReader GetLatestRevisionReader(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
+
     public ICodeReviewPublicationService GetCodeReviewPublicationService(ScmProvider provider)
     {
         throw CreateUnavailableException(provider);

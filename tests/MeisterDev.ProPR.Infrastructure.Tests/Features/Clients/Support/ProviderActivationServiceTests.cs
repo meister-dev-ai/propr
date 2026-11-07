@@ -171,6 +171,11 @@ public sealed class ProviderActivationServiceTests
             throw new NotSupportedException();
         }
 
+        public ILatestRevisionReader GetLatestRevisionReader(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
         public ICodeReviewPublicationService GetCodeReviewPublicationService(ScmProvider provider)
         {
             throw new NotSupportedException();

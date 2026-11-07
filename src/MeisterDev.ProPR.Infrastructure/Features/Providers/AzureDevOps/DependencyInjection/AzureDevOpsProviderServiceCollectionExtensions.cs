@@ -51,6 +51,7 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewerIdentityService, AdoReviewerIdentityService>());
         services.TryAddKeyedScoped<IReviewerIdentityService, AdoReviewerIdentityService>(MeisterDev.ProPR.Domain.Enums.ScmProvider.AzureDevOps);
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewQueryService, AdoCodeReviewQueryService>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ILatestRevisionReader, AdoLatestRevisionReader>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ICodeReviewPublicationService, AdoCodeReviewPublicationService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewDiscoveryProvider, AdoReviewDiscoveryProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewOverviewProvider, AdoReviewOverviewProvider>());

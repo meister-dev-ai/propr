@@ -64,6 +64,12 @@ public interface IScmProviderRegistry
     /// <summary>Resolves review-query capabilities for the given provider family.</summary>
     ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider);
 
+    /// <summary>
+    ///     Resolves the reader that compares the latest revision of a pull request with the revision a thread pass was
+    ///     queued at, for the given provider family.
+    /// </summary>
+    ILatestRevisionReader GetLatestRevisionReader(ScmProvider provider);
+
     /// <summary>Resolves review-publication capabilities for the given provider family.</summary>
     ICodeReviewPublicationService GetCodeReviewPublicationService(ScmProvider provider);
 

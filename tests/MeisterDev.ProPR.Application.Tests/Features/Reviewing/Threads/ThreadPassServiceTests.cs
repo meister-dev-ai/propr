@@ -7,7 +7,6 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
-using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Threads;
@@ -643,7 +642,7 @@ public sealed class ThreadPassServiceTests
         var harness = new Harness();
         harness.WithReviewerThread(observedNonReviewerComments: 0);
         harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
-        harness.WithLatestIteration(IterationId + 1);
+        harness.WithLaterRevision();
 
         await harness.RunAsync();
 
@@ -657,6 +656,32 @@ public sealed class ThreadPassServiceTests
             Arg.Any<bool>());
         await harness.ThreadPassJobs.Received(1)
             .SetSkippedAsync(harness.Job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_LatestRevisionUnreadable_JudgesTheThreadAtTheQueuedRevision()
+    {
+        // Not knowing whether the pull request moved is no reason to leave the conversation unanswered, so the pass
+        // runs at the revision it was queued at.
+        var harness = new Harness();
+        harness.WithReviewerThread(observedNonReviewerComments: 0);
+        harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
+        harness.WithUnreadableLatestRevision();
+
+        await harness.RunAsync();
+
+        await harness.ResolutionCore.Received(1).EvaluateCodeChangeAsync(
+            Arg.Any<PrCommentThread>(),
+            Arg.Any<PullRequest>(),
+            Arg.Any<IChatClient>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(),
+            Arg.Any<bool>(),
+            Arg.Any<ThreadEvidenceAccess?>());
+        await harness.ThreadPassJobs.DidNotReceive()
+            .SetSkippedAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await harness.ThreadPassJobs.Received(1).SetCompletedAsync(harness.Job.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1136,8 +1161,7 @@ public sealed class ThreadPassServiceTests
         private readonly IAiRuntimeResolver _aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
         private readonly BudgetScopeAccessor _budgetScopeAccessor = new();
 
-        private readonly IPullRequestIterationResolver _iterationResolver =
-            Substitute.For<IPullRequestIterationResolver>();
+        private readonly ILatestRevisionReader _latestRevisionReader = Substitute.For<ILatestRevisionReader>();
 
         private readonly ReviewPrScan _scan;
         private readonly List<PrCommentThread> _threads = [];
@@ -1189,14 +1213,10 @@ public sealed class ThreadPassServiceTests
                     Arg.Any<CancellationToken>())
                 .Returns(true);
             this.ThreadPassJobs.SetCompletedAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
-            this._iterationResolver.GetLatestIterationIdAsync(
-                    ClientId,
-                    ScopePath,
-                    ProjectKey,
-                    RepositoryId,
-                    PullRequestId,
-                    Arg.Any<CancellationToken>())
-                .Returns(IterationId);
+
+            // The pull request is still at the revision the pass was queued at unless a test says otherwise.
+            this._providerRegistry.GetLatestRevisionReader(ScmProvider.AzureDevOps).Returns(this._latestRevisionReader);
+            this._latestRevisionReader.HasMovedPastAsync(this.Job, Arg.Any<CancellationToken>()).Returns(false);
 
             this.OriginStore.GetJobIdsForPullRequestAsync(
                     Arg.Any<Guid>(),
@@ -1419,16 +1439,16 @@ public sealed class ThreadPassServiceTests
         }
 
         /// <summary>Puts the pull request at a later revision than the one the pass was queued at.</summary>
-        public void WithLatestIteration(int iterationId)
+        public void WithLaterRevision()
         {
-            this._iterationResolver.GetLatestIterationIdAsync(
-                    ClientId,
-                    ScopePath,
-                    ProjectKey,
-                    RepositoryId,
-                    PullRequestId,
-                    Arg.Any<CancellationToken>())
-                .Returns(iterationId);
+            this._latestRevisionReader.HasMovedPastAsync(this.Job, Arg.Any<CancellationToken>()).Returns(true);
+        }
+
+        /// <summary>Has the provider fail to report the latest revision of the pull request.</summary>
+        public void WithUnreadableLatestRevision()
+        {
+            this._latestRevisionReader.HasMovedPastAsync(this.Job, Arg.Any<CancellationToken>())
+                .ThrowsAsync(new InvalidOperationException("The provider could not be reached."));
         }
 
         /// <summary>
@@ -1600,7 +1620,6 @@ public sealed class ThreadPassServiceTests
                 this.ProtocolRecorder,
                 NullLogger<ThreadPassService>.Instance,
                 this._aiRuntimeResolver,
-                iterationResolver: this._iterationResolver,
                 postedCommentOriginStore: this.OriginStore,
                 budgetCapsProvider: this.BudgetCapsProvider,
                 spendAccumulator: this.SpendAccumulator,

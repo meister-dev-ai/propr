@@ -26,7 +26,8 @@ internal sealed class ScmProviderRegistry(
     IEnumerable<IScmIdentityPolicy>? identityPolicies = null,
     IEnumerable<ICodeReviewPreparationPolicy>? preparationPolicies = null,
     IEnumerable<IWebhookIngressPolicy>? webhookIngressPolicies = null,
-    IScmProviderCompatibilityCodec? compatibilityCodec = null) : IScmProviderRegistry
+    IScmProviderCompatibilityCodec? compatibilityCodec = null,
+    IEnumerable<ILatestRevisionReader>? latestRevisionReaders = null) : IScmProviderRegistry
 {
     public IScmProviderCompatibilityCodec CompatibilityCodec => compatibilityCodec
                                                                 ?? throw new InvalidOperationException("The stored provider evidence codec is unavailable.");
@@ -86,6 +87,9 @@ internal sealed class ScmProviderRegistry(
 
     private readonly IReadOnlyDictionary<ScmProvider, ICodeReviewQueryService> _codeReviewQueryServicesByProvider =
         codeReviewQueryServices.ToDictionary(provider => provider.Provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, ILatestRevisionReader> _latestRevisionReadersByProvider =
+        (latestRevisionReaders ?? []).ToDictionary(reader => reader.Provider);
 
     private readonly IReadOnlyDictionary<ScmProvider, IProviderAdminDiscoveryService>
         _providerAdminDiscoveryServicesByProvider =
@@ -180,6 +184,16 @@ internal sealed class ScmProviderRegistry(
     public ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider)
     {
         return GetRequired(this._codeReviewQueryServicesByProvider, provider, nameof(ICodeReviewQueryService));
+    }
+
+    public ILatestRevisionReader GetLatestRevisionReader(ScmProvider provider)
+    {
+        // GitHub, GitLab and Forgejo identify a revision by its head commit and register no reader. For them the
+        // registry reads the head commit through the review query adapter of the provider. Azure DevOps registers a
+        // reader of its own, because it numbers the iterations of a pull request.
+        return this._latestRevisionReadersByProvider.TryGetValue(provider, out var reader)
+            ? reader
+            : new CommitLatestRevisionReader(this.GetCodeReviewQueryService(provider));
     }
 
     public ICodeReviewPublicationService GetCodeReviewPublicationService(ScmProvider provider)
