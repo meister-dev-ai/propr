@@ -35,7 +35,7 @@ import {
 } from '@/components/usageDashboardFormatters'
 
 export function useUsageDashboard(props: { clientId: string }) {
-  const { getAccessToken } = useSession()
+  const { getAccessToken, isProCursorConfigured } = useSession()
 
   const fromDate = ref(daysAgoStr(29))
   const toDate = ref(todayStr())
@@ -178,8 +178,9 @@ export function useUsageDashboard(props: { clientId: string }) {
     }
   }
 
+  // An installation without ProCursor has no ProCursor usage, so the dashboard neither requests nor shows it.
   async function handleRefresh(): Promise<void> {
-    await Promise.all([loadReviewUsage(), loadProCursorUsage()])
+    await Promise.all([loadReviewUsage(), ...(isProCursorConfigured.value ? [loadProCursorUsage()] : [])])
   }
 
   async function handleExportProCursor(): Promise<void> {
@@ -214,6 +215,7 @@ export function useUsageDashboard(props: { clientId: string }) {
   })
 
   return {
+    isProCursorConfigured,
     fromDate,
     toDate,
     loadingReview,

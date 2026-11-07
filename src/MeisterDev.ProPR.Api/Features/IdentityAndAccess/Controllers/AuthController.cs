@@ -186,7 +186,9 @@ public sealed class AuthController(
     [HttpGet("me")]
     [ProducesResponseType(typeof(AuthenticatedSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<AuthenticatedSessionDto>> GetMe(CancellationToken ct = default)
+    public async Task<ActionResult<AuthenticatedSessionDto>> GetMe(
+        [FromServices] IProCursorGateway proCursorGateway,
+        CancellationToken ct = default)
     {
         var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
         if (auth is ObjectResult objectResult)
@@ -222,7 +224,8 @@ public sealed class AuthController(
                 kvp => (int)kvp.Value),
             hasLocalPassword,
             licensingSummary.Edition,
-            licensingSummary.Capabilities);
+            licensingSummary.Capabilities,
+            proCursorGateway.IsConfigured);
     }
 
     private static LicensingSummaryDto CreateCommunityFallbackSummary()

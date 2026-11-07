@@ -862,6 +862,10 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 services.AddSingleton(Substitute.For<IJobRepository>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
+                // The session endpoint needs these, and a host without a database registers neither.
+                services.AddSingleton(Substitute.For<IRefreshTokenRepository>());
+                services.AddSingleton(Substitute.For<IAccountLockoutService>());
+
                 var embeddingModelId = Guid.NewGuid();
                 var embeddingModel = new AiConfiguredModelDto(
                     embeddingModelId,

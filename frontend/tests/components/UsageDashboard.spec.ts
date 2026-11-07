@@ -9,12 +9,17 @@ const getProCursorClientTokenUsageMock = vi.fn()
 const getProCursorTopSourcesMock = vi.fn()
 const exportProCursorTokenUsageCsvMock = vi.fn()
 const anchorClickMock = vi.fn()
+const sessionState = vi.hoisted(() => ({ proCursorConfigured: true }))
 
-vi.mock('@/composables/useSession', () => ({
-  useSession: () => ({
-    getAccessToken: () => 'test-token',
-  }),
-}))
+vi.mock('@/composables/useSession', async () => {
+  const { computed } = await import('vue')
+  return {
+    useSession: () => ({
+      getAccessToken: () => 'test-token',
+      isProCursorConfigured: computed(() => sessionState.proCursorConfigured),
+    }),
+  }
+})
 
 vi.mock('@/services/clientTokenUsageService', () => ({
   getClientTokenUsage: getClientTokenUsageMock,
@@ -48,6 +53,7 @@ vi.mock('chart.js', () => ({
 describe('UsageDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    sessionState.proCursorConfigured = true
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(anchorClickMock)
     getClientTokenUsageMock.mockResolvedValue({
       clientId: 'client-1',
@@ -191,6 +197,28 @@ describe('UsageDashboard', () => {
     expect(text).toContain('900')
     expect(text).toContain('300')
     expect(text).toContain('60')
+  })
+
+  it('shows no ProCursor usage and requests none while the installation runs without ProCursor', async () => {
+    sessionState.proCursorConfigured = false
+    const { default: UsageDashboard } = await import('@/components/UsageDashboard.vue')
+    const wrapper = mount(UsageDashboard, {
+      props: { clientId: 'client-1' },
+      global: {
+        stubs: {
+          ProgressOrb: { template: '<div class="orb-stub" />' },
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.dashboard-surface--procursor').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('ProCursor')
+    expect(wrapper.text()).toContain('Input Tokens')
+    expect(getClientTokenUsageMock).toHaveBeenCalled()
+    expect(getProCursorClientTokenUsageMock).not.toHaveBeenCalled()
+    expect(getProCursorTopSourcesMock).not.toHaveBeenCalled()
   })
 
   it('exports the selected ProCursor range as CSV', async () => {

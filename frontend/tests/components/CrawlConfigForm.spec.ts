@@ -16,6 +16,7 @@ const listOrganizationScopesMock = vi.fn()
 const listProjectsMock = vi.fn()
 const listCrawlFiltersMock = vi.fn()
 const listProCursorSourcesMock = vi.fn()
+const sessionState = vi.hoisted(() => ({ proCursorConfigured: true }))
 
 vi.mock('@/services/api', () => ({
   createAdminClient: vi.fn(() => ({ POST: mockPost, PATCH: mockPatch })),
@@ -70,9 +71,14 @@ vi.mock('@/services/promptOverridesService', () => ({
   deleteOverride: vi.fn(),
 }))
 
-vi.mock('@/composables/useSession', () => ({
-  useSession: () => ({}),
-}))
+vi.mock('@/composables/useSession', async () => {
+  const { computed } = await import('vue')
+  return {
+    useSession: () => ({
+      isProCursorConfigured: computed(() => sessionState.proCursorConfigured),
+    }),
+  }
+})
 
 async function mountForm() {
   const { default: CrawlConfigForm } = await import('@/components/CrawlConfigForm.vue')
@@ -118,6 +124,7 @@ function findButtonByText(wrapper: Awaited<ReturnType<typeof mountForm>>, text: 
 describe('CrawlConfigForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    sessionState.proCursorConfigured = true
 
     listOrganizationScopesMock.mockResolvedValue([
       {
@@ -531,6 +538,64 @@ describe('CrawlConfigForm', () => {
         }),
       }),
     )
+  })
+
+  it('offers no ProCursor source scope and loads no sources while the installation runs without ProCursor', async () => {
+    sessionState.proCursorConfigured = false
+
+    const wrapper = await mountForm()
+    await flushPromises()
+    await wrapper.get('#crawl-scope').setValue('https://dev.azure.com/example')
+    await flushPromises()
+    await wrapper.get('#crawl-project').setValue('project-1')
+    await flushPromises()
+
+    expect(listProCursorSourcesMock).not.toHaveBeenCalled()
+    expect(wrapper.find('.source-scope-section').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('ProCursor')
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/admin/crawl-configurations',
+      expect.objectContaining({
+        body: expect.objectContaining({ proCursorSourceScopeMode: 'allClientSources', proCursorSourceIds: [] }),
+      }),
+    )
+  })
+
+  // The update leaves out the ProCursor source scope, so the server keeps the saved scope, including sources that are no
+  // longer eligible.
+  it('keeps the saved ProCursor source scope when it saves an edit without ProCursor', async () => {
+    sessionState.proCursorConfigured = false
+    const wrapper = await mountEditForm({
+      id: 'config-1',
+      clientId: CLIENT_ID,
+      organizationScopeId: SCOPE_ID,
+      providerScopePath: 'https://dev.azure.com/example',
+      providerProjectKey: 'project-1',
+      crawlIntervalSeconds: 60,
+      isActive: true,
+      repoFilters: [],
+      proCursorSourceScopeMode: 'selectedSources',
+      proCursorSourceIds: [INVALID_SOURCE_ID],
+      invalidProCursorSourceIds: [INVALID_SOURCE_ID],
+    })
+    await flushPromises()
+
+    expect(listProCursorSourcesMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).not.toContain('ProCursor')
+
+    await wrapper.get('#crawlIntervalSeconds').setValue(120)
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(mockPatch).toHaveBeenCalledTimes(1)
+    const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
+    expect(body.crawlIntervalSeconds).toBe(120)
+    expect(body.proCursorSourceScopeMode).toBeUndefined()
+    expect(body.proCursorSourceIds).toBeUndefined()
   })
 
   it('shows ProCursor source load errors while keeping selected-source controls available', async () => {

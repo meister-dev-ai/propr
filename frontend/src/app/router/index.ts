@@ -263,6 +263,9 @@ const router = createRouter({
       name: 'client-procursor-source-events',
       component: () => import('@/features/procursor/views/ProCursorSourceEventsView.vue'),
       meta: { requiresAuth: true, requiresClientAdmin: true, idParamIsClient: true },
+      // An installation without ProCursor has no source events, so a link to them opens the client page.
+      beforeEnter: (to) =>
+        useSession().isProCursorConfigured.value || { name: 'client-detail', params: { id: to.params.id } },
     },
   ],
 })

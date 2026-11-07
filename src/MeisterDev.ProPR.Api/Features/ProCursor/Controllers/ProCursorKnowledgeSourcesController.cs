@@ -16,6 +16,11 @@ namespace MeisterDev.ProPR.Api.Features.ProCursor.Controllers;
 /// <summary>
 ///     Client-scoped admin endpoints for managing ProCursor knowledge sources and tracked branches.
 /// </summary>
+/// <remarks>
+///     An installation without ProCursor composes a gateway that is not configured. Every endpoint then answers <c>404</c>
+///     with the code <c>procursor_not_configured</c>. When ProCursor is configured and its service cannot be reached, the
+///     endpoints answer <c>503</c>.
+/// </remarks>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/procursor/sources")]
 [TenantData(TenantDataAccess.Metadata)]
@@ -40,6 +45,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (!proCursorGateway.IsConfigured)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         try
@@ -82,6 +92,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (!proCursorGateway.IsConfigured)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         var validation = this.ValidateCreateRequest(request);
@@ -142,6 +157,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return auth;
         }
 
+        if (!proCursorGateway.IsConfigured)
+        {
+            return ProCursorNotConfigured.Answer(this);
+        }
+
         try
         {
             var job = await proCursorGateway.QueueRefreshAsync(
@@ -182,6 +202,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return auth;
         }
 
+        if (!proCursorGateway.IsConfigured)
+        {
+            return ProCursorNotConfigured.Answer(this);
+        }
+
         try
         {
             var branches = await proCursorGateway.ListTrackedBranchesAsync(clientId, sourceId, ct);
@@ -218,6 +243,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (!proCursorGateway.IsConfigured)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         if (!this.ModelState.IsValid || string.IsNullOrWhiteSpace(request.BranchName))
@@ -279,6 +309,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return auth;
         }
 
+        if (!proCursorGateway.IsConfigured)
+        {
+            return ProCursorNotConfigured.Answer(this);
+        }
+
         try
         {
             var branch = await proCursorGateway.UpdateTrackedBranchAsync(
@@ -323,6 +358,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (!proCursorGateway.IsConfigured)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         try

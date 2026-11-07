@@ -53,7 +53,8 @@ An installation that turns off the password sign-in answers `POST /api/auth/logi
 authenticate with a personal access token.
 
 `GET /api/auth/me` returns the caller's global role, per-client and per-tenant roles, the installation
-edition, and the state of every licensed capability.
+edition, and the state of every licensed capability. Its `proCursorConfigured` field is `false` while the
+installation runs [without ProCursor](../operate/deploy.md#running-without-procursor).
 
 ### Personal access tokens
 
@@ -522,6 +523,12 @@ curl -k -X POST https://localhost:5443/api/admin/clients/<client-id>/procursor/s
 `sourceKind` must be declared by the selected connection descriptor. Knowledge-source creation requires
 its knowledge-source capability. Azure DevOps supports `repository` and `adoWiki`; other native adapters
 do not register knowledge-source materializers. `refreshTriggerMode` is `manual` or `branchUpdate`.
+
+While the installation runs [without ProCursor](../operate/deploy.md#running-without-procursor), the
+endpoints below `/api/admin/clients/{clientId}/procursor` answer a caller with the required role on the
+client with `404` and `procursor_not_configured` in `code`. This covers the knowledge sources, the
+ProCursor token usage and the rebuild of its rollups. When ProCursor is configured and ProPR cannot
+reach the service, the knowledge source endpoints answer `503`.
 
 ## Crawl configurations
 

@@ -7,7 +7,9 @@ import type {
   ProCursorRefreshResponse,
 } from '@/services/proCursorService'
 import {
+  ProCursorNotConfiguredError,
   createProCursorSource,
+  getProCursorTopSources,
   listProCursorSources,
   queueProCursorRefresh,
 } from '@/services/proCursorService'
@@ -128,6 +130,35 @@ describe('proCursorService', () => {
       params: { path: { clientId: 'client-1' } },
     })
     expect(result).toEqual(expectedSources)
+  })
+
+  it('reports the answer of an installation without ProCursor as its own error', async () => {
+    getMock.mockResolvedValue({
+      data: undefined,
+      error: {
+        type: 'https://tools.ietf.org/html/rfc9110#section-15.5.5',
+        title: 'ProCursor is not configured in this installation.',
+        status: 404,
+        code: 'procursor_not_configured',
+      },
+      response: { ok: false, status: 404 },
+    })
+
+    await expect(listProCursorSources('client-1')).rejects.toBeInstanceOf(ProCursorNotConfiguredError)
+    await expect(getProCursorTopSources('client-1', '30d', 5)).rejects.toBeInstanceOf(ProCursorNotConfiguredError)
+  })
+
+  it('reports a 404 without the code as a failed request', async () => {
+    getMock.mockResolvedValue({
+      data: undefined,
+      error: { title: 'Not Found', status: 404 },
+      response: { ok: false, status: 404 },
+    })
+
+    const failure = getProCursorTopSources('client-1', '30d', 5)
+
+    await expect(failure).rejects.not.toBeInstanceOf(ProCursorNotConfiguredError)
+    await expect(failure).rejects.toThrow('Not Found')
   })
 
   it('surfaces API error details when creating a source fails', async () => {

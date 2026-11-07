@@ -197,7 +197,7 @@
         <p v-else-if="projectId" class="filters-empty-hint">No filters selected — all repositories are crawled.</p>
       </div>
 
-      <div class="form-group full-width source-scope-section">
+      <div v-if="isProCursorConfigured" class="form-group full-width source-scope-section">
         <div class="repo-filters-header">
           <div>
             <span class="field-section-label">Review Knowledge Scope</span>
@@ -389,6 +389,7 @@ const emit = defineEmits<{
 }>()
 
 const {
+  isProCursorConfigured,
   discovery,
   editMode,
   provider,

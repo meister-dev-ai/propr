@@ -192,6 +192,24 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
         Assert.Contains("/docs/intro.md", csv, StringComparison.Ordinal);
     }
 
+    // The export answers its refusals with JSON. Only its successful answer is CSV.
+    [Fact]
+    public async Task Export_WithAnInvalidRange_ReturnsAJsonProblem()
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/procursor/token-usage/export?from=not-a-date&to=2026-04-04");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
     [Fact]
     public async Task GetSourceUsage_ClientAdministrator_ReturnsSourceAggregate()
     {

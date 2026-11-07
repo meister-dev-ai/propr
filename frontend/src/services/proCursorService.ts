@@ -31,7 +31,31 @@ export type ProCursorTrackedBranchDto = components['schemas']['ProCursorTrackedB
 export type ProCursorTrackedBranchPatchRequest = components['schemas']['ProCursorTrackedBranchPatchRequest']
 export type ProCursorTrackedBranchRequest = components['schemas']['ProCursorTrackedBranchRequest']
 
+/**
+ * The code with which ProPR answers every ProCursor request of a client while the installation runs without
+ * ProCursor. The answer has the status 404 and carries the code in `code`.
+ */
+export const PROCURSOR_NOT_CONFIGURED_CODE = 'procursor_not_configured'
+
+/** Thrown by a ProCursor request that the server refused because the installation runs without ProCursor. */
+export class ProCursorNotConfiguredError extends Error {
+  constructor() {
+    super('ProCursor is not configured in this installation.')
+    this.name = 'ProCursorNotConfiguredError'
+  }
+}
+
+function isProCursorNotConfigured(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === PROCURSOR_NOT_CONFIGURED_CODE
+}
+
 function createRequestError(error: unknown, fallback: string): Error {
+  if (isProCursorNotConfigured(error)) {
+    return new ProCursorNotConfiguredError()
+  }
+
   return new Error(getErrorMessage(error, fallback))
 }
 

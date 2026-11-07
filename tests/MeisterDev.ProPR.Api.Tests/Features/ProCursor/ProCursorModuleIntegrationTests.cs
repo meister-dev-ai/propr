@@ -74,6 +74,20 @@ public sealed class ProCursorModuleIntegrationTests(ProCursorKnowledgeSourcesCon
         Assert.Equal("Knowledge Repo", items[0].GetProperty("displayName").GetString());
     }
 
+    // The console reads from the session whether to show the ProCursor tab and the ProCursor usage of a client.
+    [Fact]
+    public async Task Session_WithProCursor_ReportsThatProCursorIsConfigured()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/auth/me");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+
+        using var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var session = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(session.RootElement.GetProperty("proCursorConfigured").GetBoolean());
+    }
+
     [Fact]
     public async Task Healthz_WhenRemoteProCursorIsConfigured_ReportsRemoteDependencyFailure()
     {

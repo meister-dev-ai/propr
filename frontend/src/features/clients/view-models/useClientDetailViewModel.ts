@@ -135,6 +135,7 @@ export interface ClientDetailViewModel {
   isCodeInsightsAvailable: ComputedRef<boolean>
   codeInsightsUpgradeMessage: ComputedRef<string>
   isUsageTabAvailable: ComputedRef<boolean>
+  isProCursorAvailable: ComputedRef<boolean>
   loadClient: () => Promise<void>
   saveDisplayName: () => Promise<void>
   toggleStatus: () => Promise<void>
@@ -400,7 +401,7 @@ export function severitySetsEqual(left: CommentSeverity[], right: CommentSeverit
 export function useClientDetailViewModel(options: UseClientDetailViewModelOptions = {}): ClientDetailViewModel {
   const router = useRouter()
   const route = useRoute()
-  const { getCapability, hasClientRole } = useSession()
+  const { getCapability, hasClientRole, isProCursorConfigured } = useSession()
   const clientId = route.params.id as string
   const getClientFn = options.clientDetailService?.getClient ?? defaultGetClient
   const patchClientFn = options.clientDetailService?.patchClient ?? defaultPatchClient
@@ -478,11 +479,13 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   )
   const codeInsightsUpgradeMessage = computed(() => codeInsightsCapability.value?.message ?? '')
   const isUsageTabAvailable = computed(() => isProCursorTokenUsageReportingEnabled)
+  // An installation without ProCursor has no ProCursor tab. A link to that tab opens the default tab of the page.
+  const isProCursorAvailable = computed(() => isProCursorConfigured.value)
   const availableTabs = computed<DetailTab[]>(() => {
     const tabs: DetailTab[] = ['history']
 
     if (canManageClient.value) {
-      return [...detailTabs]
+      return detailTabs.filter((tab) => tab !== 'procursor' || isProCursorAvailable.value)
     }
 
     if (isUsageTabAvailable.value) {
@@ -550,7 +553,38 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       return
     }
 
+    // A link to a tab the page does not offer, such as the ProCursor tab of an installation without ProCursor, opens
+    // the default tab, and the address then names the tab that is shown.
     activeTab.value = defaultDetailTab.value
+    if (requestedTab) {
+      syncRouteToTab(activeTab.value)
+    }
+  }
+
+  // Writes the shown tab into the address. The System tab has no query parameter. Replacing the address adds no
+  // history entry.
+  function syncRouteToTab(tab: DetailTab) {
+    const nextTab = tab === 'config' ? undefined : tab
+    const currentTab =
+      typeof route.query?.tab === 'string' ? route.query.tab : undefined
+
+    if (currentTab === nextTab) {
+      return
+    }
+
+    const nextQuery = { ...(route.query ?? {}) }
+    if (nextTab) {
+      nextQuery.tab = nextTab
+    } else {
+      delete nextQuery.tab
+    }
+
+    if (typeof router.replace === 'function') {
+      router.replace({ query: nextQuery })
+      return
+    }
+
+    router.push({ query: nextQuery })
   }
 
   syncActiveTabFromRoute()
@@ -613,29 +647,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     }
   })
 
-  watch(activeTab, (tab) => {
-    const nextTab = tab === 'config' ? undefined : tab
-    const currentTab =
-      typeof route.query?.tab === 'string' ? route.query.tab : undefined
-
-    if (currentTab === nextTab) {
-      return
-    }
-
-    const nextQuery = { ...(route.query ?? {}) }
-    if (nextTab) {
-      nextQuery.tab = nextTab
-    } else {
-      delete nextQuery.tab
-    }
-
-    if (typeof router.replace === 'function') {
-      router.replace({ query: nextQuery })
-      return
-    }
-
-    router.push({ query: nextQuery })
-  })
+  watch(activeTab, syncRouteToTab)
 
   function handleOverviewNavigate(tab: string) {
     if (!isDetailTab(tab)) {
@@ -1032,6 +1044,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     codeInsightsUpgradeMessage,
     budgetingUpgradeMessage,
     isUsageTabAvailable,
+    isProCursorAvailable,
     loadClient,
     saveDisplayName,
     toggleStatus,

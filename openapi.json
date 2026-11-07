@@ -19990,6 +19990,26 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "The installation runs without ProCursor. The answer carries the code `procursor_not_configured`.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -20093,6 +20113,26 @@
           },
           "403": {
             "description": "Caller does not have administrator access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The installation runs without ProCursor. The answer carries the code `procursor_not_configured`.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -20257,7 +20297,7 @@
             }
           },
           "404": {
-            "description": "The requested source was not found for the client.",
+            "description": "The requested source was not found for the client, or the installation runs without ProCursor. The answer for\nan installation without ProCursor carries the code `procursor_not_configured`.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -20399,7 +20439,7 @@
             }
           },
           "404": {
-            "description": "The requested source was not found for the client.",
+            "description": "The requested source was not found for the client, or the installation runs without ProCursor. The answer for\nan installation without ProCursor carries the code `procursor_not_configured`.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -20479,7 +20519,17 @@
           "400": {
             "description": "The query parameters were invalid.",
             "content": {
-              "text/csv": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
@@ -20489,7 +20539,17 @@
           "401": {
             "description": "Missing or invalid credentials.",
             "content": {
-              "text/csv": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
@@ -20499,7 +20559,27 @@
           "403": {
             "description": "Caller does not have administrator access to the client.",
             "content": {
-              "text/csv": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The installation runs without ProCursor. The answer carries the code `procursor_not_configured`.",
+            "content": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
@@ -20570,6 +20650,26 @@
           },
           "403": {
             "description": "Caller does not have administrator access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The installation runs without ProCursor. The answer carries the code `procursor_not_configured`.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -20692,6 +20792,26 @@
           },
           "403": {
             "description": "Caller does not have administrator access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The installation runs without ProCursor. The answer carries the code `procursor_not_configured`.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -35261,6 +35381,7 @@
         "properties": {
           "globalRole": {
             "type": "string",
+            "description": "The global role of the caller, `Admin` or `User`.",
             "nullable": true
           },
           "clientRoles": {
@@ -35269,6 +35390,7 @@
               "type": "integer",
               "format": "int32"
             },
+            "description": "The role of the caller on each client, keyed by the client id.",
             "nullable": true
           },
           "tenantRoles": {
@@ -35277,10 +35399,12 @@
               "type": "integer",
               "format": "int32"
             },
+            "description": "The role of the caller in each tenant, keyed by the tenant id.",
             "nullable": true
           },
           "hasLocalPassword": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether the account of the caller has a password for the password sign-in."
           },
           "edition": {
             "$ref": "#/components/schemas/InstallationEdition"
@@ -35290,7 +35414,12 @@
             "items": {
               "$ref": "#/components/schemas/PremiumCapabilityDto"
             },
+            "description": "The licensed capabilities and their state.",
             "nullable": true
+          },
+          "proCursorConfigured": {
+            "type": "boolean",
+            "description": "Whether the installation runs with ProCursor. While it runs without ProCursor, the console hides the ProCursor tab\nand the ProCursor usage of each client, and the ProCursor endpoints of a client answer `404` with the code\n`procursor_not_configured`."
           }
         },
         "additionalProperties": false,

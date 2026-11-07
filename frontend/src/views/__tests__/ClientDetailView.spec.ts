@@ -52,6 +52,7 @@ vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     hasClientRole: hasClientRoleMock,
     getCapability: getCapabilityMock,
+    isProCursorConfigured: { value: true },
   }),
 }))
 

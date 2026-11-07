@@ -4,6 +4,7 @@
 using System.Globalization;
 using System.Text;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Api.Features.ProCursor;
 using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -15,10 +16,14 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>
 ///     Read-only admin endpoints for ProCursor token usage reporting.
 /// </summary>
+/// <remarks>
+///     An installation without ProCursor registers no read repository. Every endpoint then answers <c>404</c> with the
+///     code <c>procursor_not_configured</c>.
+/// </remarks>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/procursor")]
 [TenantData(TenantDataAccess.Metadata)]
-public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadRepository readRepository) : ControllerBase
+public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadRepository? readRepository = null) : ControllerBase
 {
     private const int MaxTopSourcesLimit = 1000;
 
@@ -35,11 +40,13 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
     /// <response code="400">The query parameters were invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
+    /// <response code="404">The installation runs without ProCursor. The answer carries the code <c>procursor_not_configured</c>.</response>
     [HttpGet("token-usage")]
     [ProducesResponseType(typeof(ProCursorTokenUsageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetClientUsage(
         Guid clientId,
         [FromQuery] string from,
@@ -52,6 +59,11 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (readRepository is null)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         if (!TryParseRange(from, to, out var startDate, out var endDate, out var rangeError))
@@ -95,11 +107,13 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
     /// <response code="400">The period or limit was invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
+    /// <response code="404">The installation runs without ProCursor. The answer carries the code <c>procursor_not_configured</c>.</response>
     [HttpGet("token-usage/top-sources")]
     [ProducesResponseType(typeof(ProCursorTopSourcesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTopSources(
         Guid clientId,
         [FromQuery] string period,
@@ -110,6 +124,11 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (readRepository is null)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         if (!TryParsePeriod(period, out var from, out var to))
@@ -148,7 +167,10 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
     /// <response code="400">The query parameters were invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
-    /// <response code="404">The requested source was not found for the client.</response>
+    /// <response code="404">
+    ///     The requested source was not found for the client, or the installation runs without ProCursor. The answer for
+    ///     an installation without ProCursor carries the code <c>procursor_not_configured</c>.
+    /// </response>
     [HttpGet("sources/{sourceId:guid}/token-usage")]
     [ProducesResponseType(typeof(ProCursorSourceTokenUsageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -168,6 +190,11 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (readRepository is null)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         if (!TryResolveRange(period, from, to, out var startDate, out var endDate, out var rangeError))
@@ -203,7 +230,10 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
     /// <response code="400">The limit was invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
-    /// <response code="404">The requested source was not found for the client.</response>
+    /// <response code="404">
+    ///     The requested source was not found for the client, or the installation runs without ProCursor. The answer for
+    ///     an installation without ProCursor carries the code <c>procursor_not_configured</c>.
+    /// </response>
     [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the ProCursor usage events of a knowledge source")]
     [HttpGet("sources/{sourceId:guid}/token-usage/events")]
     [ProducesResponseType(typeof(ProCursorTokenUsageEventsResponse), StatusCodes.Status200OK)]
@@ -221,6 +251,11 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (readRepository is null)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         if (limit <= 0)
@@ -245,13 +280,14 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
     /// <response code="400">The query parameters were invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
+    /// <response code="404">The installation runs without ProCursor. The answer carries the code <c>procursor_not_configured</c>.</response>
     [TenantData(TenantDataAccess.Content, Scope = ContentScopeSource.ClientRoute, Resource = "the ProCursor usage export")]
     [HttpGet("token-usage/export")]
-    [Produces("text/csv")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK, "text/csv")]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
     public async Task<IActionResult> Export(
         Guid clientId,
         [FromQuery] string from,
@@ -263,6 +299,11 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (readRepository is null)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         if (!TryParseRange(from, to, out var startDate, out var endDate, out var rangeError))
@@ -287,16 +328,23 @@ public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadReposi
     /// <response code="200">Freshness metadata returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
+    /// <response code="404">The installation runs without ProCursor. The answer carries the code <c>procursor_not_configured</c>.</response>
     [HttpGet("token-usage/freshness")]
     [ProducesResponseType(typeof(ProCursorTokenUsageFreshnessResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetFreshness(Guid clientId, CancellationToken ct = default)
     {
         var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (readRepository is null)
+        {
+            return ProCursorNotConfigured.Answer(this);
         }
 
         return this.Ok(await readRepository.GetFreshnessAsync(clientId, ct));

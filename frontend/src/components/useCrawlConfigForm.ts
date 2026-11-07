@@ -4,6 +4,7 @@
 
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useConnectionDiscovery } from '@/composables/useConnectionDiscovery'
+import { useSession } from '@/composables/useSession'
 import type { DiscoveryBranch, DiscoveryFilter } from '@/services/providerDiscoveryService'
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import { createOverride, deleteOverride, listOverrides } from '@/services/promptOverridesService'
@@ -71,6 +72,9 @@ type CrawlConfigFormEmit = (event: 'config-saved', config: CrawlConfigResponse) 
  * helpers live in ./crawlConfigFormatters. `emit` is passed in from the SFC.
  */
 export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfigFormEmit) {
+  // An installation without ProCursor offers no ProCursor source scope. The form then neither loads the sources nor
+  // validates or sends the scope, so a saved configuration keeps the scope it has.
+  const { isProCursorConfigured } = useSession()
   const editMode = computed(() => !!props.config && (!props.clientId || props.config.clientId === props.clientId))
   const clientId = ref(props.clientId ?? props.config?.clientId ?? '')
   const effectiveClientId = computed(() => (props.clientId ?? props.config?.clientId ?? clientId.value).trim())
@@ -183,7 +187,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   }
 
   async function loadProCursorSources(): Promise<void> {
-    if (!canLoadOrganizationScopes.value) {
+    if (!canLoadOrganizationScopes.value || !isProCursorConfigured.value) {
       return
     }
 
@@ -464,7 +468,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   }
 
   function validateProCursorSourceScope(): string {
-    return usesSelectedProCursorSources.value && serializeProCursorSourceIds().length === 0
+    return isProCursorConfigured.value && usesSelectedProCursorSources.value && serializeProCursorSourceIds().length === 0
       ? 'Select at least one enabled ProCursor source or switch to all client sources.'
       : ''
   }
@@ -500,8 +504,9 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
         repoFilters: canEditRepoFilters.value && JSON.stringify(serializeRepoFilters()) !== initialRepoFilters ? serializeRepoFilters() : undefined,
         connectionId: discovery.ready.value ? discovery.state.connectionId : undefined,
         scopeKey: discovery.ready.value ? discovery.state.scopeKey : undefined,
-        proCursorSourceScopeMode: proCursorSourceScopeMode.value,
-        proCursorSourceIds: serializeProCursorSourceIds(),
+        // Without these fields the server keeps the saved ProCursor source scope.
+        proCursorSourceScopeMode: isProCursorConfigured.value ? proCursorSourceScopeMode.value : undefined,
+        proCursorSourceIds: isProCursorConfigured.value ? serializeProCursorSourceIds() : undefined,
         reviewTemperature,
       },
     })
@@ -599,6 +604,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   let initialRepoFilters = JSON.stringify(serializeRepoFilters())
 
   return {
+    isProCursorConfigured,
     discovery,
     // identity / mode
     editMode,

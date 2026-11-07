@@ -50,7 +50,7 @@
                             @click="activeTab = 'providers'">
                             <i class="fi fi-rr-plug-connection"></i> SCM Providers
                         </button>
-                        <button class="sidebar-nav-link"
+                        <button v-if="isProCursorAvailable" class="sidebar-nav-link"
                             :class="{ active: activeTab === 'procursor' }" @click="activeTab = 'procursor'">
                             <i class="fi fi-rr-books"></i> ProCursor
                         </button>
@@ -158,7 +158,7 @@
                         @update:isDetailOpen="isProviderDetailOpen = $event" />
                 </div>
 
-                <div v-if="canManageClient" v-show="activeTab === 'procursor'">
+                <div v-if="canManageClient && isProCursorAvailable" v-show="activeTab === 'procursor'">
                     <ClientProCursorTab :clientId="client.id" />
                 </div>
 
@@ -266,6 +266,7 @@ const {
     isBudgetingAvailable,
     isCodeInsightsAvailable,
     isUsageTabAvailable,
+    isProCursorAvailable,
 } = vm;
 
 // Text Viewer Modal

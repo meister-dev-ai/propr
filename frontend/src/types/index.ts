@@ -13922,6 +13922,17 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description The installation runs without ProCursor. The answer carries the code `procursor_not_configured`. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         put?: never;
@@ -13992,6 +14003,17 @@ export interface paths {
                 };
                 /** @description Caller does not have administrator access to the client. */
                 403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation runs without ProCursor. The answer carries the code `procursor_not_configured`. */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -14086,7 +14108,10 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description The requested source was not found for the client. */
+                /**
+                 * @description The requested source was not found for the client, or the installation runs without ProCursor. The answer for
+                 *     an installation without ProCursor carries the code `procursor_not_configured`.
+                 */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -14176,7 +14201,10 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description The requested source was not found for the client. */
+                /**
+                 * @description The requested source was not found for the client, or the installation runs without ProCursor. The answer for
+                 *     an installation without ProCursor carries the code `procursor_not_configured`.
+                 */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -14239,7 +14267,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/csv": components["schemas"]["ProblemDetails"];
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Missing or invalid credentials. */
@@ -14248,7 +14278,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/csv": components["schemas"]["ProblemDetails"];
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Caller does not have administrator access to the client. */
@@ -14257,7 +14289,18 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/csv": components["schemas"]["ProblemDetails"];
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation runs without ProCursor. The answer carries the code `procursor_not_configured`. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
             };
@@ -14314,6 +14357,17 @@ export interface paths {
                 };
                 /** @description Caller does not have administrator access to the client. */
                 403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation runs without ProCursor. The answer carries the code `procursor_not_configured`. */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -14397,6 +14451,17 @@ export interface paths {
                 };
                 /** @description Caller does not have administrator access to the client. */
                 403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The installation runs without ProCursor. The answer carries the code `procursor_not_configured`. */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -24273,16 +24338,27 @@ export interface components {
         };
         /** @description Authenticated session snapshot shared with the admin UI after sign-in. */
         AuthenticatedSessionDto: {
+            /** @description The global role of the caller, `Admin` or `User`. */
             globalRole?: string | null;
+            /** @description The role of the caller on each client, keyed by the client id. */
             clientRoles?: {
                 [key: string]: number;
             } | null;
+            /** @description The role of the caller in each tenant, keyed by the tenant id. */
             tenantRoles?: {
                 [key: string]: number;
             } | null;
+            /** @description Whether the account of the caller has a password for the password sign-in. */
             hasLocalPassword?: boolean;
             edition?: components["schemas"]["InstallationEdition"];
+            /** @description The licensed capabilities and their state. */
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+            /**
+             * @description Whether the installation runs with ProCursor. While it runs without ProCursor, the console hides the ProCursor tab
+             *     and the ProCursor usage of each client, and the ProCursor endpoints of a client answer `404` with the code
+             *     `procursor_not_configured`.
+             */
+            proCursorConfigured?: boolean;
         };
         /** @description An instruction to erase one developer's identity from the review records of a tenant. */
         AuthorErasureRequest: {

@@ -139,7 +139,7 @@
       </template>
     </section>
 
-    <section class="dashboard-surface dashboard-surface--procursor">
+    <section v-if="isProCursorConfigured" class="dashboard-surface dashboard-surface--procursor">
       <div class="panel-header panel-header--procursor">
         <div>
           <p class="panel-kicker">ProCursor Usage</p>
@@ -308,6 +308,7 @@ const props = defineProps<{
 }>()
 
 const {
+  isProCursorConfigured,
   fromDate,
   toDate,
   loadingReview,

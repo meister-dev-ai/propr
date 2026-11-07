@@ -15,6 +15,7 @@ const EDITION_KEY = 'meisterpropr_installation_edition'
 const CAPABILITIES_KEY = 'meisterpropr_capabilities'
 const TENANT_ROLES_KEY = 'meisterpropr_tenant_roles'
 const LOCAL_PASSWORD_KEY = 'meisterpropr_has_local_password'
+const PROCURSOR_CONFIGURED_KEY = 'meisterpropr_procursor_configured'
 
 type InstallationEdition = components['schemas']['InstallationEdition']
 type PremiumCapabilityDto = components['schemas']['PremiumCapabilityDto']
@@ -25,6 +26,7 @@ type SessionSnapshot = {
   hasLocalPassword?: boolean
   edition?: InstallationEdition
   capabilities?: PremiumCapabilityDto[] | null
+  proCursorConfigured?: boolean
 }
 
 type JwtPayload = {
@@ -111,6 +113,10 @@ const tenantRoles = ref<Record<string, number>>(readStoredJsonObject(TENANT_ROLE
 
 const hasLocalPassword = ref(sessionStorage.getItem(LOCAL_PASSWORD_KEY) === 'true')
 
+// Whether the installation runs with ProCursor, as reported by `/auth/me`. Until the profile has loaded, and for a
+// profile without the field, the console treats ProCursor as configured and shows the ProCursor tab and usage.
+const proCursorConfigured = ref(sessionStorage.getItem(PROCURSOR_CONFIGURED_KEY) !== 'false')
+
 function getSessionApiBaseUrl(): string {
   return getActiveRuntime().apiBaseUrl
 }
@@ -130,12 +136,14 @@ export function useSession() {
     sessionStorage.removeItem(CAPABILITIES_KEY)
     sessionStorage.removeItem(TENANT_ROLES_KEY)
     sessionStorage.removeItem(LOCAL_PASSWORD_KEY)
+    sessionStorage.removeItem(PROCURSOR_CONFIGURED_KEY)
     accessToken.value = null
     clientRoles.value = {}
     tenantRoles.value = {}
     hasLocalPassword.value = false
     edition.value = 'community'
     capabilities.value = []
+    proCursorConfigured.value = true
   }
 
   // The refresh token is handled by the httpOnly cookie; only the access token is passed in.
@@ -233,6 +241,14 @@ export function useSession() {
 
   const isCommercialEdition = computed(() => edition.value === 'commercial')
 
+  function setProCursorConfigured(value: boolean): void {
+    sessionStorage.setItem(PROCURSOR_CONFIGURED_KEY, String(value))
+    proCursorConfigured.value = value
+  }
+
+  /** Whether the installation runs with ProCursor. The console hides the ProCursor tab and usage while it does not. */
+  const isProCursorConfigured = computed(() => proCursorConfigured.value)
+
   function setTenantRoles(roles: Record<string, number>): void {
     sessionStorage.setItem(TENANT_ROLES_KEY, JSON.stringify(roles))
     tenantRoles.value = roles
@@ -284,6 +300,7 @@ export function useSession() {
         setTenantRoles(data.tenantRoles ?? {})
         setHasLocalPassword(data.hasLocalPassword === true)
         setLicensingState(data.edition ?? 'community', (data.capabilities ?? []).map(normalizeCapability))
+        setProCursorConfigured(data.proCursorConfigured !== false)
         return true
       }
 
@@ -328,6 +345,7 @@ export function useSession() {
     edition,
     capabilities,
     isCommercialEdition,
+    isProCursorConfigured,
     tenantRoles,
     hasLocalPassword,
     setClientRoles,

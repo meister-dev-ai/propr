@@ -148,6 +148,39 @@ describe('useSession', () => {
     expect(sessionStorage.getItem(LOCAL_PASSWORD_KEY)).toBe('true')
   })
 
+  it('loadClientRoles stores that the installation runs without ProCursor', async () => {
+    const useSession = await loadUseSession()
+    const session = useSession()
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      globalRole: 'User',
+      clientRoles: { 'client-1': 1 },
+      proCursorConfigured: false,
+    }), { status: 200 }))
+
+    session.setAccessToken(createJwt('User'))
+    await session.loadClientRoles()
+
+    expect(session.isProCursorConfigured.value).toBe(false)
+
+    session.clearTokens()
+
+    expect(session.isProCursorConfigured.value).toBe(true)
+  })
+
+  it('treats ProCursor as configured when the session profile does not report it', async () => {
+    sessionStorage.setItem('meisterpropr_procursor_configured', 'false')
+    const useSession = await loadUseSession()
+    const session = useSession()
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ globalRole: 'User' }), { status: 200 }))
+
+    expect(session.isProCursorConfigured.value).toBe(false)
+
+    session.setAccessToken(createJwt('User'))
+    await session.loadClientRoles()
+
+    expect(session.isProCursorConfigured.value).toBe(true)
+  })
+
   it('loadClientRoles clears stale roles when auth/me fails', async () => {
     const useSession = await loadUseSession()
     const session = useSession()

@@ -6,6 +6,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 const getMock = vi.fn()
 let capabilityState: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }> = []
+const sessionState = vi.hoisted(() => ({ proCursorConfigured: true }))
 
 vi.mock('@/services/api', () => ({
   createAdminClient: vi.fn(() => ({ GET: getMock, DELETE: vi.fn() })),
@@ -18,11 +19,15 @@ vi.mock('@/composables/useNotification', () => ({
   }),
 }))
 
-vi.mock('@/composables/useSession', () => ({
-  useSession: () => ({
-    getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
-  }),
-}))
+vi.mock('@/composables/useSession', async () => {
+  const { computed } = await import('vue')
+  return {
+    useSession: () => ({
+      getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
+      isProCursorConfigured: computed(() => sessionState.proCursorConfigured),
+    }),
+  }
+})
 
 async function mountTab() {
   const { default: ClientCrawlConfigsTab } = await import('@/features/clients/components/ClientCrawlConfigsTab.vue')
@@ -54,6 +59,7 @@ describe('ClientCrawlConfigsTab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     capabilityState = []
+    sessionState.proCursorConfigured = true
     setCapabilities([{ key: 'crawl-configs', isAvailable: true }])
     getMock.mockResolvedValue({ data: [], response: { ok: true } })
   })
@@ -94,5 +100,34 @@ describe('ClientCrawlConfigsTab', () => {
 
     expect(wrapper.text()).toContain('Paused')
     expect(wrapper.text()).toContain('Paused project')
+  })
+
+  it('shows the ProCursor source scope of each configuration only while ProCursor is configured', async () => {
+    getMock.mockResolvedValue({
+      data: [{
+        id: 'config-1',
+        clientId: 'client-1',
+        provider: 'azureDevOps',
+        providerProjectKey: 'Scoped project',
+        providerScopePath: 'https://dev.azure.com/testorg',
+        repoFilters: [],
+        crawlIntervalSeconds: 120,
+        isActive: true,
+        proCursorSourceScopeMode: 'selectedSources',
+        proCursorSourceIds: ['source-1', 'source-2'],
+        invalidProCursorSourceIds: [],
+      }],
+      response: { ok: true },
+    })
+
+    const withProCursor = await mountTab()
+    await flushPromises()
+    expect(withProCursor.text()).toContain('2 selected sources')
+
+    sessionState.proCursorConfigured = false
+    const withoutProCursor = await mountTab()
+    await flushPromises()
+    expect(withoutProCursor.text()).toContain('Scoped project')
+    expect(withoutProCursor.text()).not.toContain('selected sources')
   })
 })

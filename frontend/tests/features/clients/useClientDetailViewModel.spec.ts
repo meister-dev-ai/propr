@@ -17,6 +17,7 @@ const mockRoute = {
 }
 const hasClientRoleMock = vi.fn((_clientId: string, minRole: 0 | 1) => minRole <= 1)
 const getCapabilityMock = vi.fn((key: string) => ({ key, isAvailable: true, message: null }))
+const sessionState = vi.hoisted(() => ({ proCursorConfigured: true }))
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
@@ -31,6 +32,11 @@ vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     hasClientRole: hasClientRoleMock,
     getCapability: getCapabilityMock,
+    isProCursorConfigured: {
+      get value() {
+        return sessionState.proCursorConfigured
+      },
+    },
   }),
 }))
 
@@ -68,6 +74,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockRoute.query = {}
+    sessionState.proCursorConfigured = true
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: 0 | 1) => minRole <= 1)
     getCapabilityMock.mockImplementation((key: string) => ({ key, isAvailable: true, message: null }))
     mockGet.mockReset()
@@ -105,6 +112,30 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     const vm = useClientDetailViewModel({ autoLoad: false })
 
     expect(vm.activeTab.value).toBe('procursor')
+  })
+
+  it('offers no ProCursor tab and opens the default tab for a ProCursor link while ProCursor is not configured', async () => {
+    sessionState.proCursorConfigured = false
+    mockRoute.query = { tab: 'procursor' }
+    const vm = useClientDetailViewModel({ autoLoad: false })
+
+    expect(vm.isProCursorAvailable.value).toBe(false)
+    expect(vm.availableTabs.value).not.toContain('procursor')
+    expect(vm.availableTabs.value).toContain('providers')
+    expect(vm.activeTab.value).toBe('config')
+    // The System tab has no query parameter, so the address loses the tab and gains no history entry.
+    expect(mockRouterReplace).toHaveBeenCalledWith({ query: {} })
+    expect(mockRouterPush).not.toHaveBeenCalled()
+  })
+
+  it('names the shown tab in the address when a link names a tab the caller is not offered', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: 0 | 1) => minRole === 0)
+    mockRoute.query = { tab: 'config' }
+    const vm = useClientDetailViewModel({ autoLoad: false })
+
+    expect(vm.activeTab.value).toBe('history')
+    expect(mockRouterReplace).toHaveBeenCalledWith({ query: { tab: 'history' } })
+    expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
   it('limits available tabs for read-only client users', async () => {

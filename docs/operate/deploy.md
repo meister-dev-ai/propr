@@ -343,6 +343,11 @@ To deploy ProPR without the code-knowledge service, set `PROCURSOR_REMOTE_MODE=d
 tools, and the `procursor-remote` check drops out of `/healthz`. Reviews still run - for what they lose,
 see [ProCursor](../concepts/how-it-works.md#procursor).
 
+The console then hides the ProCursor tab and the ProCursor usage of each client, and the ProCursor
+source scope of each crawl configuration. A crawl configuration keeps the source scope it was saved
+with. The API answers the ProCursor requests of a client with `404` and `procursor_not_configured`, as
+listed under [ProCursor source management](../reference/api.md#procursor-source-management).
+
 **This applies to a deployment you assemble yourself, not to the bundled compose stack.** That stack
 always defines the ProCursor service and will not start without it: the API waits for ProCursor to
 report healthy, and ProCursor itself will not start without the shared key it

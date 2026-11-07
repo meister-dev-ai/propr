@@ -75,7 +75,7 @@
                   <i class="fi fi-rr-folder"></i>
                   {{ describeFilters(config.repoFilters) }}
                 </div>
-                <div class="scope-pill" :class="{ 'scope-pill-warning': hasInvalidSourceScope(config) }">
+                <div v-if="isProCursorConfigured" class="scope-pill" :class="{ 'scope-pill-warning': hasInvalidSourceScope(config) }">
                   <i class="fi fi-rr-books"></i>
                   {{ describeSourceScope(config) }}
                 </div>
@@ -136,7 +136,7 @@ const editingConfig = ref<CrawlConfigResponse | undefined>(undefined)
 const deletingConfig = ref<CrawlConfigResponse | null>(null)
 
 const { notify } = useNotification()
-const { getCapability } = useSession()
+const { getCapability, isProCursorConfigured } = useSession()
 const crawlConfigsCapability = computed(() => getCapability('crawl-configs'))
 const isCrawlConfigsAvailable = computed(() => crawlConfigsCapability.value?.isAvailable === true)
 const unavailableMessage = computed(() =>

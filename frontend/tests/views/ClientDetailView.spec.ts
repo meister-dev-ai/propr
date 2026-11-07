@@ -20,6 +20,7 @@ const mockRoute = {
 }
 const hasClientRoleMock = vi.fn((_clientId: string, minRole: 0 | 1) => minRole <= 1)
 let capabilityState: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }> = []
+const sessionState = vi.hoisted(() => ({ proCursorConfigured: true }))
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
@@ -27,18 +28,22 @@ vi.mock('vue-router', () => ({
   RouterLink: { props: ['to'], template: '<a :data-to="JSON.stringify(to)"><slot /></a>' },
 }))
 
-vi.mock('@/composables/useSession', () => ({
-  useSession: () => ({
-    hasClientRole: hasClientRoleMock,
-    getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
-    setLicensingState: (_edition: string, capabilities: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }>) => {
-      capabilityState = capabilities
-    },
-    clearTokens: () => {
-      capabilityState = []
-    },
-  }),
-}))
+vi.mock('@/composables/useSession', async () => {
+  const { computed } = await import('vue')
+  return {
+    useSession: () => ({
+      hasClientRole: hasClientRoleMock,
+      getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
+      isProCursorConfigured: computed(() => sessionState.proCursorConfigured),
+      setLicensingState: (_edition: string, capabilities: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }>) => {
+        capabilityState = capabilities
+      },
+      clearTokens: () => {
+        capabilityState = []
+      },
+    }),
+  }
+})
 
 vi.mock('@/components/dialogs/ConfirmDialog.vue', () => ({
   default: {
@@ -185,6 +190,7 @@ describe('ClientDetailView', () => {
     mockRouterReplace.mockReset()
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: 0 | 1) => minRole <= 1)
     capabilityState = []
+    sessionState.proCursorConfigured = true
     setCapabilities([
       { key: 'crawl-configs', isAvailable: true },
       { key: 'multiple-scm-providers', isAvailable: true },
@@ -441,6 +447,35 @@ describe('ClientDetailView', () => {
 
     expect(wrapper.find('.client-procursor-tab-stub').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('Add Source')
+  })
+
+  it('hides the ProCursor tab while the installation runs without ProCursor', async () => {
+    sessionState.proCursorConfigured = false
+    mockGet.mockResolvedValue({ data: sampleClient })
+
+    const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const navTexts = wrapper.findAll('button.sidebar-nav-link').map((button) => button.text())
+    expect(navTexts.some((text) => text.includes('ProCursor'))).toBe(false)
+    expect(navTexts.some((text) => text.includes('SCM Providers'))).toBe(true)
+    expect(wrapper.find('.client-procursor-tab-stub').exists()).toBe(false)
+  })
+
+  it('opens the System tab for a link to the ProCursor tab while the installation runs without ProCursor', async () => {
+    sessionState.proCursorConfigured = false
+    mockRoute.query = { tab: 'procursor' }
+    mockGet.mockResolvedValue({ data: sampleClient })
+
+    const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    expect(wrapper.find('.client-procursor-tab-stub').exists()).toBe(false)
+    expect(wrapper.get('button.sidebar-nav-link.active').text()).toContain('System')
+    expect(mockRouterReplace).toHaveBeenCalledWith({ query: {} })
+    expect(mockRouterPush).not.toHaveBeenCalled()
   })
 
   it('hides the usage analytics tab when the rollout flag is disabled', async () => {
