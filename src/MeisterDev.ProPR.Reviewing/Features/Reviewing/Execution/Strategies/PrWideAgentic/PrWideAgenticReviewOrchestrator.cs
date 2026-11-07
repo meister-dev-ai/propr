@@ -1356,7 +1356,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         return verified;
     }
 
-    // The evidence judge decides PR-wide findings as it decides file findings: on the low-effort model, with the review
+    // The evidence judge decides PR-wide findings as it decides file findings: on the verification model, with the review
     // tools of this strategy for its lookups and the pull request text as statements of intent.
     private ReviewVerificationContext BuildVerificationContext(ReviewSystemContext baseContext, PullRequest pr, Guid clientId)
     {

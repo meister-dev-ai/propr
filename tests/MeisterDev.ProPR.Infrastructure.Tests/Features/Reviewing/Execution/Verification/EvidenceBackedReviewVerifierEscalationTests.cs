@@ -15,15 +15,15 @@ public sealed partial class EvidenceBackedReviewVerifierTests
     [Fact]
     public async Task ConfirmationThatWouldPublishAtMedium_IsHeldBackWhenTheEscalationCheckFindsItNotActionable()
     {
-        var lowEffort = ClientAnswering(LookupConfirmation("medium"));
+        var verification = ClientAnswering(LookupConfirmation("medium"));
         var highEffort = ClientAnswering("""{"verdict":"not_actionable","reason":"Every caller validates the key first."}""");
 
-        var outcome = await VerifyOnEffortTiersAsync(CommentSeverity.Warning, FindingConfidence.High, lowEffort, highEffort);
+        var outcome = await VerifyOnEffortTiersAsync(CommentSeverity.Warning, FindingConfidence.High, verification, highEffort);
 
         Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, outcome.RecommendedDisposition);
         Assert.Equal("withheld", outcome.ContradictionCheckStatus);
         Assert.Equal("ReviewHighEffort", outcome.ContradictionCheckRuntime!.Purpose);
-        await lowEffort.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        await verification.Received(2).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         await highEffort.Received(1).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
     }
 
@@ -36,10 +36,10 @@ public sealed partial class EvidenceBackedReviewVerifierTests
     public async Task OnlyAnErrorOrWarningThatWouldPublishAtMediumOrBelow_IsEscalated(
         CommentSeverity severity, string level, FindingConfidence? proposed, bool escalated)
     {
-        var lowEffort = ClientAnswering(LookupConfirmation(level));
+        var verification = ClientAnswering(LookupConfirmation(level));
         var highEffort = ClientAnswering(LookupConfirmation(level));
 
-        var outcome = await VerifyOnEffortTiersAsync(severity, proposed, lowEffort, highEffort);
+        var outcome = await VerifyOnEffortTiersAsync(severity, proposed, verification, highEffort);
 
         Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
         await highEffort.Received(escalated ? 1 : 0).GetResponseAsync(
@@ -54,15 +54,15 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         return client;
     }
 
-    // The judge and the independent check resolve the low-effort purpose; only the escalation check resolves the
+    // The judge and the independent check resolve the verification purpose; only the escalation check resolves the
     // high-effort purpose.
     private static async Task<VerificationOutcome> VerifyOnEffortTiersAsync(
-        CommentSeverity severity, FindingConfidence? proposed, IChatClient lowEffort, IChatClient highEffort)
+        CommentSeverity severity, FindingConfidence? proposed, IChatClient verification, IChatClient highEffort)
     {
-        var lowEffortRuntime = RuntimeFor(lowEffort, "low-effort-model");
+        var verificationRuntime = RuntimeFor(verification, "verification-model");
         var highEffortRuntime = RuntimeFor(highEffort, "high-effort-model");
         var resolver = Substitute.For<IAiRuntimeResolver>();
-        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewLowEffort, Arg.Any<CancellationToken>()).Returns(lowEffortRuntime);
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewVerification, Arg.Any<CancellationToken>()).Returns(verificationRuntime);
         resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewHighEffort, Arg.Any<CancellationToken>()).Returns(highEffortRuntime);
 
         return Assert.Single(

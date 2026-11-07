@@ -10,7 +10,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 ///     Per-run context an evidence-gathering verifier needs to independently substantiate a claim:
 ///     the review-context tools used to read the anchor code, the source branch to resolve them
 ///     against, and a chat client + model for the bounded judging call. When <see cref="Resolver" /> and
-///     <see cref="ClientId" /> are supplied the verifier uses the model resolved for <c>AiPurpose.ReviewLowEffort</c>,
+///     <see cref="ClientId" /> are supplied the verifier uses the model resolved for <c>AiPurpose.ReviewVerification</c>,
 ///     and uses the reviewer's own (<see cref="ChatClient" />) model only when that resolution fails. Any
 ///     field may be <see langword="null" /> when the hosting path cannot supply it; an evidence-backed
 ///     verifier must then degrade to the conservative deterministic outcome.

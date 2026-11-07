@@ -36,7 +36,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         var runtime = RuntimeFor(chat, modelId);
         var configuredModel = runtime.Model with { SupportsReasoning = true };
         runtime.Model.Returns(configuredModel);
-        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), MeisterDev.ProPR.Domain.Enums.AiPurpose.ReviewLowEffort, Arg.Any<CancellationToken>())
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), MeisterDev.ProPR.Domain.Enums.AiPurpose.ReviewVerification, Arg.Any<CancellationToken>())
             .Returns(runtime);
 
         var outcomes = await new EvidenceBackedReviewVerifier().VerifyAsync(
@@ -81,7 +81,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         var runtime = RuntimeFor(chat, "gpt-5");
         runtime.SupportsLowReasoningEffort.Returns(true);
         var resolver = Substitute.For<IAiRuntimeResolver>();
-        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), MeisterDev.ProPR.Domain.Enums.AiPurpose.ReviewLowEffort, Arg.Any<CancellationToken>())
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), MeisterDev.ProPR.Domain.Enums.AiPurpose.ReviewVerification, Arg.Any<CancellationToken>())
             .Returns(runtime);
 
         var outcomes = await new EvidenceBackedReviewVerifier().VerifyAsync(

@@ -198,7 +198,7 @@ carry no resolution at all.
 
 **Verification.** ProPR checks findings against the code before publication, once per file and again
 across the whole pull request for anything that spans files. Both checks use the same judge, and a finding the judge
-does not confirm is not posted. Per file, a judge on the low-effort model reads
+does not confirm is not posted. Per file, a judge on the model of the Verification purpose reads
 the code at each finding, together with short excerpts that contain the symbols the finding names: from the files the
 reviewing pass read, and from the same file outside the shown code. It decides four things: whether the finding is true, whether it leads to a concrete wrong
 outcome, failure or maintainability defect that the author would fix, whether the pull request states the behaviour as

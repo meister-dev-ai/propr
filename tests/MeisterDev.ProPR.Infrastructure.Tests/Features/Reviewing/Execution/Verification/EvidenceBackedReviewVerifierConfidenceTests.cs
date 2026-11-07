@@ -173,7 +173,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.Contains("replacementText", calls[0].User);
         Assert.DoesNotContain("RequiresCertaintyCheck", calls[0].User);
         Assert.Equal("local-replay", outcome.Runtime!.ModelId);
-        Assert.Equal("ReviewLowEffort", outcome.ContradictionCheckRuntime!.Purpose);
+        Assert.Equal("ReviewVerification", outcome.ContradictionCheckRuntime!.Purpose);
         await ExportPromptsAsync("correct-update", calls, "not_confirmed");
     }
 

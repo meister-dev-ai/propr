@@ -127,7 +127,7 @@ Character limits retain partial boundary lines in the judge's context and exclud
 `ConfidenceSource` identifies its producer separately from the impact and likelihood `Source`.
 Generated Certain, a confirmed Error or Warning, a confirmation after the judge's last repository lookup and a claim
 that states its trigger is not established request an additional contradiction check without exposing the producer's
-confidence to the judge. The check resolves `reviewLowEffort`, has the judge's repository lookups and its own claim
+confidence to the judge. The check resolves `reviewVerification`, has the judge's repository lookups and its own claim
 deadline. A confirmed Error or Warning whose published confidence would be Medium or below, or Unassessed, goes to a
 second check that resolves `reviewHighEffort` the same way. A confirmation after the last lookup and a claim with an
 open trigger keep that condition as an assumption, which bounds confidence at Medium. The producer's proposed confidence

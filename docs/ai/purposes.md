@@ -15,8 +15,8 @@ screen; extra [review passes](../concepts/reviews.md#review-passes) pick a logic
 | Review default | `reviewDefault` | Primary review generation, and answering @-mentions |
 | Embedding default | `embeddingDefault` | Embeddings for thread memory and ProCursor similarity |
 | Triage | `reviewTriage` | Cheap per-file complexity classification |
-| Verification | `reviewVerification` | The AI duplicate judge and the acceptance forecast |
-| Low effort / Medium effort / High effort | `reviewLowEffort`, `reviewMediumEffort`, `reviewHighEffort` | Per-file review uses the assigned complexity tier. High effort also runs synthesis, the rewrite of a summary that describes a finding the gate dropped, and the escalation check for Errors and Warnings that verification leaves at Medium or below. Low effort runs the initial finding judge and the bounded confidence contradiction check. A runner uses the job manifest's available runtime when a requested purpose is unavailable. |
+| Verification | `reviewVerification` | The evidence judge that decides every finding and its contradiction check, the AI duplicate judge and the acceptance forecast |
+| Low effort / Medium effort / High effort | `reviewLowEffort`, `reviewMediumEffort`, `reviewHighEffort` | Per-file review uses the assigned complexity tier. High effort also runs synthesis, the rewrite of a summary that describes a finding the gate dropped, and the escalation check for Errors and Warnings that verification leaves at Medium or below. A runner uses the job manifest's available runtime when a requested purpose is unavailable. |
 | Memory reconsideration | `memoryReconsideration` | Re-judging an existing comment thread on a re-review |
 | ProRV prefilter | `proRvPrefilter` | Not used by the review path - see below |
 
@@ -47,7 +47,7 @@ When no lookup yields a model, behavior depends on the requested purpose. Most d
 | Embedding default | Thread memory is neither stored nor retrieved, and ProCursor indexing and search fail |
 | Low / Medium / High effort | The file is reviewed on the Review default model instead. For High effort, synthesis runs there too |
 | Triage | The deterministic size heuristic classifies the file - no model judges complexity |
-| Verification | The AI duplicate judge keeps both findings |
+| Verification | The evidence judge and its contradiction check run on the model of the reviewing pass, and the AI duplicate judge keeps both findings |
 | Memory reconsideration | Reconsideration is skipped and the draft findings stand |
 | ProRV prefilter | Nothing - see below |
 
@@ -123,9 +123,9 @@ The evidence judge requests `low` effort, including on its bounded output-budget
 catalog advertises that effort for the exact model and the selected transport supports it. This call
 setting overrides the selected logical model's effort. On any other model, the judge runs with the effort `none`,
 and both contradiction checks run with the effort `none` on every model. These calls follow the rule above, also
-when the judge runs on the reviewer's own model because no Low effort model is bound. The value `low`, `medium` or
-`high` in `AI_VERIFICATION_REASONING_EFFORT` replaces both rules with that effort on every model. Selecting the Low
-effort purpose chooses a model; the supported call setting controls its reasoning effort. The effort of these calls
+when the judge runs on the reviewer's own model because no model resolves for the Verification purpose. The value `low`, `medium` or
+`high` in `AI_VERIFICATION_REASONING_EFFORT` replaces both rules with that effort on every model. Selecting the
+Verification purpose chooses a model; the supported call setting controls its reasoning effort. The effort of these calls
 reaches each transport as described above, also in runner jobs, so Chat Completions receives only `none`. See
 [verification](../concepts/reviews.md#what-happens-during-a-review) and
 [judge budgets](../operate/configuration.md#evidence-judge-budgets).

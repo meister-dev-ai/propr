@@ -21,9 +21,10 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verificat
 
 /// <summary>
 ///     Evidence-gathering judge for claims the deterministic verifier can only withhold for lack of bounded evidence.
-///     On the file-by-file path this is every finding that no invariant fact contradicts. The judge runs on the model
-///     resolved for <see cref="AiPurpose.ReviewLowEffort" />, because it makes one call per finding. For each work item
-///     it reads the anchor file through the review-context tools and asks whether the asserted defect is present in the
+///     On the file-by-file path this is every finding that no invariant fact contradicts. The judge makes one call per
+///     finding and runs on the model resolved for <see cref="AiPurpose.ReviewVerification" />, so a client can decide
+///     findings on another model than the one that reviews low-complexity files. Without a model of its own, the purpose
+///     falls back to the triage model and then to the low-effort model. For each work item it reads the anchor file through the review-context tools and asks whether the asserted defect is present in the
 ///     code, whether it leads to a concrete consequence that a reviewer would act on, whether the behaviour is what the
 ///     implementer intended according to the pull request, its linked work items
 ///     and the code comments, and whether intended behaviour contradicts a stated requirement or other functionality. A
@@ -140,12 +141,12 @@ public sealed partial class EvidenceBackedReviewVerifier(
         _ = invariantFacts;
         ArgumentNullException.ThrowIfNull(workItems);
 
-        // Resolve the judging runtime once for the whole work-item set: the low-effort model, or the reviewer's own tier
-        // client when no resolver is available or resolving the low-effort purpose fails, for example because no model
-        // is bound to it. The contradiction check resolves the same purpose and the escalation check the high-effort
-        // purpose, each when the first claim needs it.
+        // Resolve the judging runtime once for the whole work-item set: the verification model, or the reviewer's own tier
+        // client when no resolver is available or resolving the verification purpose fails, for example because no model
+        // is bound to it or to a purpose it falls back to. The contradiction check resolves the same purpose and the
+        // escalation check the high-effort purpose, each when the first claim needs it.
         var judge = await this.ResolveJudgeRuntimeAsync(verificationContext, ct).ConfigureAwait(false);
-        var contradictionJudge = new Lazy<Task<JudgeRuntime>>(() => this.ResolveJudgeRuntimeAsync(verificationContext, ct, AiPurpose.ReviewLowEffort));
+        var contradictionJudge = new Lazy<Task<JudgeRuntime>>(() => this.ResolveJudgeRuntimeAsync(verificationContext, ct, AiPurpose.ReviewVerification));
         var escalationJudge = new Lazy<Task<JudgeRuntime>>(() => this.ResolveJudgeRuntimeAsync(verificationContext, ct, AiPurpose.ReviewHighEffort));
 
         // The claims are judged a few at a time. Each outcome is stored at the index of its work item, so the order of
@@ -179,7 +180,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
     private async Task<JudgeRuntime> ResolveJudgeRuntimeAsync(
         ReviewVerificationContext? context,
         CancellationToken ct,
-        AiPurpose purpose = AiPurpose.ReviewLowEffort)
+        AiPurpose purpose = AiPurpose.ReviewVerification)
     {
         if (context?.Resolver is not null && context.ClientId != Guid.Empty)
         {

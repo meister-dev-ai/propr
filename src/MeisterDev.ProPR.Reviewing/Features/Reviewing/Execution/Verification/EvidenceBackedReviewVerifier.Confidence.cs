@@ -132,9 +132,9 @@ public sealed partial class EvidenceBackedReviewVerifier
 
     internal static string BuildContradictionSystemPrompt() => ContradictionSystemText.Value;
 
-    // Runs an independent contradiction check on the runtime that contradictionJudge resolves: the low-effort model of the
-    // first judge for the check that every confirmed Error and Warning receives, because its cost grows with the number of
-    // findings, or the high-effort model for an escalation. Its prompt asks it to disprove the claim, and it does not see
+    // Runs an independent contradiction check on the runtime that contradictionJudge resolves: the verification model of
+    // the first judge for the check that every confirmed Error and Warning receives, because its cost grows with the
+    // number of findings, or the high-effort model for an escalation. Its prompt asks it to disprove the claim, and it does not see
     // the first verdict. It has the same repository lookups as the first judge, so it can
     // open the caller, guard, registration or test that decides the claim, and it gets its own time window, because it
     // starts after the first judgment has used part of the claim's limit. A finding the check does not confirm takes the

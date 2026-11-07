@@ -522,17 +522,17 @@ public sealed partial class EvidenceBackedReviewVerifierTests
     }
 
     [Fact]
-    public async Task Judge_RunsOnTheLowEffortModel_EvenWhenAVerificationModelIsBound()
+    public async Task Judge_RunsOnTheVerificationModel_EvenWhenALowEffortModelIsBound()
     {
-        // The verification purpose is bound to a model that would refuse every claim. The judge must use the
-        // low-effort model, which confirms, and its tokens must be recorded under the low-effort category.
+        // The low-effort purpose is bound to a model that would refuse every claim. The judge must use the
+        // verification model, which confirms, and its tokens are recorded with that model under the low-effort category.
         var protocolId = Guid.NewGuid();
         var recorder = Substitute.For<IProtocolRecorder>();
         var tools = Substitute.For<IReviewContextTools>();
         tools.GetFileContentAsync(Arg.Any<string>(), "source", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("public string Lookup(string? key)\n{\n    return _map[key].ToString();\n}");
-        var lowEffortJudge = JudgeAnswering("{\"verdict\":\"confirmed\",\"reason\":\"line 3\"}", 300, 20);
-        var verificationJudge = JudgeAnswering("{\"verdict\":\"not_confirmed\",\"reason\":\"refused\"}", 900, 90);
+        var verificationJudge = JudgeAnswering("{\"verdict\":\"confirmed\",\"reason\":\"line 3\"}", 300, 20);
+        var lowEffortJudge = JudgeAnswering("{\"verdict\":\"not_confirmed\",\"reason\":\"refused\"}", 900, 90);
         var lowEffortRuntime = RuntimeFor(lowEffortJudge, "low-effort-model");
         var verificationRuntime = RuntimeFor(verificationJudge, "verification-model");
         var resolver = Substitute.For<IAiRuntimeResolver>();
@@ -549,18 +549,18 @@ public sealed partial class EvidenceBackedReviewVerifierTests
             CancellationToken.None);
 
         Assert.Equal(FinalGateDecision.PublishDisposition, Assert.Single(outcomes).RecommendedDisposition);
-        await verificationJudge.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
+        await lowEffortJudge.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
         await reviewerClient.DidNotReceiveWithAnyArgs().GetResponseAsync(default!, default, default);
-        await lowEffortJudge.Received(1).GetResponseAsync(
+        await verificationJudge.Received(1).GetResponseAsync(
             Arg.Any<IEnumerable<ChatMessage>>(),
-            Arg.Is<ChatOptions?>(options => options != null && options.ModelId == "low-effort-model" && options.MaxOutputTokens == 4000),
+            Arg.Is<ChatOptions?>(options => options != null && options.ModelId == "verification-model" && options.MaxOutputTokens == 4000),
             Arg.Any<CancellationToken>());
         await recorder.Received(1).AddTokensAsync(
             protocolId,
             300,
             20,
             AiConnectionModelCategory.LowEffort,
-            "low-effort-model",
+            "verification-model",
             Arg.Any<CancellationToken>(),
             Arg.Any<long>(),
             Arg.Any<long>(),
@@ -648,7 +648,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
     }
 
     [Fact]
-    public async Task AFailedLowEffortResolution_IsRecordedWithTheModelTheJudgeFallsBackTo()
+    public async Task AFailedVerificationResolution_IsRecordedWithTheModelTheJudgeFallsBackTo()
     {
         var protocolId = Guid.NewGuid();
         var recorder = Substitute.For<IProtocolRecorder>();
@@ -656,8 +656,8 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         tools.GetFileContentAsync(Arg.Any<string>(), "source", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("public string Lookup(string? key)\n{\n    return _map[key].ToString();\n}");
         var resolver = Substitute.For<IAiRuntimeResolver>();
-        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewLowEffort, Arg.Any<CancellationToken>())
-            .Returns<IResolvedAiChatRuntime>(_ => throw new InvalidOperationException("no low-effort binding"));
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewVerification, Arg.Any<CancellationToken>())
+            .Returns<IResolvedAiChatRuntime>(_ => throw new InvalidOperationException("no verification binding"));
         var reviewerClient = JudgeAnswering("{\"verdict\":\"confirmed\",\"reason\":\"line 3\"}", 500, 30);
 
         var outcomes = await new EvidenceBackedReviewVerifier(recorder).VerifyAsync(
@@ -674,7 +674,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
                                        && details.Contains("judge_model_resolution", StringComparison.Ordinal)
                                        && details.Contains("high-effort-model", StringComparison.Ordinal)),
             Arg.Any<string?>(),
-            Arg.Is<string?>(error => error != null && error.Contains("no low-effort binding", StringComparison.Ordinal)),
+            Arg.Is<string?>(error => error != null && error.Contains("no verification binding", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
         await recorder.Received(1).AddTokensAsync(
             protocolId,

@@ -149,16 +149,16 @@ public sealed class FileReviewerInventoryLensTests
         Assert.All(this._persistedResult.Comments, comment => Assert.Equal(customId, Assert.Single(comment.FindingClassification!.CustomTags).Id));
     }
 
-    // A resolver that also binds the low-effort purpose to the given judge client, so the evidence verifier judges on
-    // the low-effort model and never on the pass model.
-    private static IAiRuntimeResolver ResolverWithLowEffortJudge(string passModelId, IChatClient judge)
+    // A resolver that also binds the verification purpose to the given judge client, so the evidence verifier judges on
+    // the verification model and never on the pass model.
+    private static IAiRuntimeResolver ResolverWithVerificationJudge(string passModelId, IChatClient judge)
     {
         var resolver = ResolverForModel(passModelId);
         var verificationRuntime = Substitute.For<IResolvedAiChatRuntime>();
         verificationRuntime.ChatClient.Returns(judge);
         verificationRuntime.Model.Returns(
-            new AiConfiguredModelDto(Guid.NewGuid(), "low-effort-model", "low-effort-model", [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));
-        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewLowEffort, Arg.Any<CancellationToken>())
+            new AiConfiguredModelDto(Guid.NewGuid(), "verification-model", "verification-model", [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewVerification, Arg.Any<CancellationToken>())
             .Returns(verificationRuntime);
         return resolver;
     }
@@ -222,7 +222,7 @@ public sealed class FileReviewerInventoryLensTests
         return decisions;
     }
 
-    // The judge and the independent check run on the same low-effort client. A check call carries the check's system
+    // The judge and the independent check run on the same verification client. A check call carries the check's system
     // prompt, so a count of judge calls leaves it out.
     private static bool IsJudgeCall(IEnumerable<ChatMessage> messages) =>
         messages.First().Text != EvidenceBackedReviewVerifier.BuildContradictionSystemPrompt();
@@ -319,7 +319,7 @@ public sealed class FileReviewerInventoryLensTests
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"visible at line 3\"}")));
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", judge),
+            ResolverWithVerificationJudge("inventory-model", judge),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = IntentFixture(file);
@@ -353,7 +353,7 @@ public sealed class FileReviewerInventoryLensTests
     {
         var decisions = this.CaptureLocalDecisions();
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", JudgeReturning(verdictJson)),
+            ResolverWithVerificationJudge("inventory-model", JudgeReturning(verdictJson)),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = IntentFixture(file);
@@ -445,7 +445,7 @@ public sealed class FileReviewerInventoryLensTests
         var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
         var tools = ToolsWithAnchorSource();
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", judge),
+            ResolverWithVerificationJudge("inventory-model", judge),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
@@ -454,11 +454,11 @@ public sealed class FileReviewerInventoryLensTests
 
         // The inventory review call itself still ran without tools.
         Assert.Equal(new[] { true, false }, this._observedHasTools.ToArray());
-        // One judge call per pass: the baseline finding and the inventory finding were both judged on the low-effort
+        // One judge call per pass: the baseline finding and the inventory finding were both judged on the verification
         // model.
         await judge.Received(2).GetResponseAsync(
             Arg.Is<IEnumerable<ChatMessage>>(messages => IsJudgeCall(messages)),
-            Arg.Is<ChatOptions?>(o => o != null && o.ModelId == "low-effort-model"),
+            Arg.Is<ChatOptions?>(o => o != null && o.ModelId == "verification-model"),
             Arg.Any<CancellationToken>());
         await tools.Received(2).GetFileContentAsync("Program.cs", "feature/x", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
         Assert.NotNull(this._persistedResult);
@@ -468,7 +468,7 @@ public sealed class FileReviewerInventoryLensTests
     [Fact]
     public async Task InventoryLens_NoVerificationModelConfigured_JudgesOnBaselineClient()
     {
-        // Without a low-effort binding the judge falls back to the baseline file context's client, as for
+        // Without a verification binding the judge falls back to the baseline file context's client, as for
         // baseline findings, and never to the client of the inventory pass model.
         var baselineClient = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
         var passClient = Substitute.For<IChatClient>();
@@ -494,7 +494,7 @@ public sealed class FileReviewerInventoryLensTests
     public async Task OrdinaryResamplePass_NoVerificationModelConfigured_JudgesOnBaselineClient()
     {
         // An ordinary resample pass keeps the repository tools and reviews on its own pass client. Without a
-        // low-effort binding its findings are still judged on the baseline client, so verification never
+        // verification binding its findings are still judged on the baseline client, so verification never
         // runs on the pass model.
         var baselineClient = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
         var passClient = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"confirmed\"}");
@@ -526,7 +526,7 @@ public sealed class FileReviewerInventoryLensTests
         // keeps its withheld disposition and does not enter the union.
         var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"key is checked at line 1\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", judge),
+            ResolverWithVerificationJudge("inventory-model", judge),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
@@ -556,7 +556,7 @@ public sealed class FileReviewerInventoryLensTests
             Arg.Any<CancellationToken>());
         var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"not present\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", judge),
+            ResolverWithVerificationJudge("inventory-model", judge),
             this.CreateEvidenceVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
@@ -580,7 +580,7 @@ public sealed class FileReviewerInventoryLensTests
         var decisions = this.CaptureLocalDecisions();
         var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"line 3 dereferences a possibly-null lookup\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", judge),
+            ResolverWithVerificationJudge("inventory-model", judge),
             this.CreateProductionVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
@@ -603,7 +603,7 @@ public sealed class FileReviewerInventoryLensTests
     {
         var judge = JudgeReturning("{\"verdict\":\"not_confirmed\",\"reason\":\"key is checked at line 1\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", judge),
+            ResolverWithVerificationJudge("inventory-model", judge),
             this.CreateProductionVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
@@ -636,7 +636,7 @@ public sealed class FileReviewerInventoryLensTests
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"verdict\":\"confirmed\",\"reason\":\"visible\"}")));
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", judge),
+            ResolverWithVerificationJudge("inventory-model", judge),
             this.CreateProductionVerificationExecutor());
         this._aiCore
             .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -686,7 +686,7 @@ public sealed class FileReviewerInventoryLensTests
         var decisions = this.CaptureLocalDecisions();
         var judge = JudgeReturning("{\"verdict\":\"insufficient_context\",\"reason\":\"the body of createEvent is not shown\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("inventory-model", judge),
+            ResolverWithVerificationJudge("inventory-model", judge),
             this.CreateProductionVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
@@ -714,7 +714,7 @@ public sealed class FileReviewerInventoryLensTests
     {
         var judge = JudgeReturning("{\"verdict\":\"insufficient_context\",\"reason\":\"the caller is in another file\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("resample-model", judge),
+            ResolverWithVerificationJudge("resample-model", judge),
             this.CreateProductionVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
@@ -734,7 +734,7 @@ public sealed class FileReviewerInventoryLensTests
         // baseline finding does, and both are published once the judge confirms them.
         var judge = JudgeReturning("{\"verdict\":\"confirmed\",\"reason\":\"present at line 3\"}");
         var reviewer = this.CreateReviewer(
-            ResolverWithLowEffortJudge("resample-model", judge),
+            ResolverWithVerificationJudge("resample-model", judge),
             this.CreateProductionVerificationExecutor());
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
