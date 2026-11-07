@@ -1362,7 +1362,8 @@ public sealed partial class ClientAiConnectionsController(
             requestModel.CacheWriteCostPer1MUsd,
             requestModel.SupportsReasoning,
             requestModel.SupportsPromptCaching,
-            string.IsNullOrWhiteSpace(requestModel.ReasoningContentField) ? null : requestModel.ReasoningContentField.Trim());
+            string.IsNullOrWhiteSpace(requestModel.ReasoningContentField) ? null : requestModel.ReasoningContentField.Trim(),
+            requestModel.SupportsReasoningEffortNone);
     }
 
     // An embedding model may leave its tokenizer, input limit and width out, and the save fills them in. A stated
@@ -1612,7 +1613,8 @@ public sealed partial class ClientAiConnectionsController(
             model.CacheWriteCostPer1MUsd,
             model.SupportsReasoning,
             model.SupportsPromptCaching,
-            model.ReasoningContentField);
+            model.ReasoningContentField,
+            model.SupportsReasoningEffortNone);
     }
 
     private static AiPurposeBindingRequest ToBindingRequest(AiPurposeBindingDto binding)
@@ -1764,6 +1766,12 @@ public sealed record AiConnectionAuthRequest(
 }
 
 /// <summary>Configured model payload item for create, update, and discovery flows.</summary>
+/// <param name="SupportsReasoningEffortNone">
+///     Whether ProPR sends the reasoning effort <c>none</c> to this model. For a review pass, an evidence judge call
+///     or a contradiction check with the effort None, ProPR sends <c>none</c> to a model with this flag and leaves
+///     the effort out for any other model, which then uses its own default. Set it when the provider documents
+///     the effort <c>none</c> for the model.
+/// </param>
 public sealed record AiConfiguredModelRequest(
     Guid? Id,
     string RemoteModelId,
@@ -1784,7 +1792,8 @@ public sealed record AiConfiguredModelRequest(
     decimal? CacheWriteCostPer1MUsd = null,
     bool SupportsReasoning = false,
     bool SupportsPromptCaching = false,
-    string? ReasoningContentField = null);
+    string? ReasoningContentField = null,
+    bool SupportsReasoningEffortNone = false);
 
 /// <summary>Purpose binding payload item for create and update flows.</summary>
 public sealed record AiPurposeBindingRequest(

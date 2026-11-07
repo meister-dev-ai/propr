@@ -97,8 +97,17 @@
               <input v-model="model.maxInputTokens" type="number" min="1" class="form-input-sm" placeholder="Max input" aria-label="Max input tokens" />
               <input v-model="model.embeddingDimensions" type="number" min="64" class="form-input-sm" placeholder="Dimensions" aria-label="Embedding dimensions" />
             </template>
+            <label v-else class="tenant-conn-model-flag">
+              <input v-model="model.supportsReasoningEffortNone" type="checkbox" :data-testid="`tenant-conn-model-effort-none-${index}`" />
+              <span>Accepts reasoning effort none</span>
+            </label>
             <button class="btn-danger btn-xs" type="button" aria-label="Remove model" @click="draft.models.splice(index, 1)">Remove</button>
           </div>
+          <p v-if="draft.models.some(model => model.capability === 'chat')" class="muted-hint" data-testid="tenant-conn-model-effort-none-hint">
+            With "Accepts reasoning effort none" selected, ProPR sends the reasoning effort none to the model for a
+            review pass with the effort None. Without it, ProPR leaves the effort out, and the model uses its own
+            default. Turn it on when the provider documents the effort none for the model.
+          </p>
         </div>
 
         </form>
@@ -156,6 +165,8 @@ interface ModelDraft {
   tokenizerName: string
   maxInputTokens: string
   embeddingDimensions: string
+  // Whether ProPR sends the reasoning effort none to this chat model for a call with the effort None.
+  supportsReasoningEffortNone: boolean
 }
 
 const connections = ref<AiConnectionDto[]>([])
@@ -253,7 +264,15 @@ function singleKeyMode(provider: { authModes?: ({ value?: string | null } | null
 }
 
 function addModel(): void {
-  draft.models.push({ remoteModelId: '', displayName: '', capability: 'chat', tokenizerName: '', maxInputTokens: '', embeddingDimensions: '' })
+  draft.models.push({
+    remoteModelId: '',
+    displayName: '',
+    capability: 'chat',
+    tokenizerName: '',
+    maxInputTokens: '',
+    embeddingDimensions: '',
+    supportsReasoningEffortNone: false,
+  })
 }
 
 async function create(): Promise<void> {
@@ -275,6 +294,7 @@ async function create(): Promise<void> {
       tokenizerName: model.capability === 'embedding' ? model.tokenizerName.trim() || undefined : undefined,
       maxInputTokens: model.capability === 'embedding' && model.maxInputTokens ? Number(model.maxInputTokens) : undefined,
       embeddingDimensions: model.capability === 'embedding' && model.embeddingDimensions ? Number(model.embeddingDimensions) : undefined,
+      supportsReasoningEffortNone: model.capability === 'chat' && model.supportsReasoningEffortNone,
     })),
   }
 
@@ -412,6 +432,15 @@ defineExpose({ load })
 
 .tenant-conn-model-row .btn-xs {
   flex: 0 0 auto;
+}
+
+.tenant-conn-model-flag {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 @media (max-width: 720px) {

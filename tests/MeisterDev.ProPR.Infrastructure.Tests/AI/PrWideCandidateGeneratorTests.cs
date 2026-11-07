@@ -348,6 +348,58 @@ public sealed class PrWideCandidateGeneratorTests
             Arg.Any<long?>());
     }
 
+    // A PR-wide pass configured for no reasoning sends the effort none to every stage only when the pass's own model
+    // accepts it, and records on its trace what it sent.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GenerateCandidatesAsync_WithNoReasoning_SendsNoneOnlyToAModelThatAcceptsIt(bool accepted)
+    {
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var protocolId = Guid.NewGuid();
+        recorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPassKind?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>())
+            .Returns(protocolId);
+        var sent = new List<ChatOptions?>();
+        var chat = Substitute.For<IChatClient>();
+        chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Do<ChatOptions?>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")));
+        var runtime = Runtime(chat);
+        var model = runtime.Model with { SupportsReasoningEffortNone = accepted };
+        runtime.Model.Returns(model);
+        var context = new ReviewSystemContext(null, [], Substitute.For<IReviewContextTools>()) { ProtocolRecorder = recorder };
+
+        await CreateSut().GenerateCandidatesAsync(
+            CreateJob(),
+            CreatePr(),
+            context,
+            runtime,
+            new PrWideGenerationBudget(1, 1, 1),
+            unionPassIndex: 2,
+            shadow: false,
+            reasoningEffort: ReviewReasoningEffort.None,
+            CancellationToken.None);
+
+        Assert.NotEmpty(sent);
+        Assert.All(sent, options => Assert.Equal(accepted ? ReasoningEffort.None : null, options?.Reasoning?.Effort));
+        var recorded = Assert.Single(
+            recorder.ReceivedCalls(),
+            call => call.GetMethodInfo().Name == nameof(IProtocolRecorder.RecordReviewStrategyEventAsync)
+                    && Equals(call.GetArguments()[1], ReviewProtocolEventNames.ReasoningEffortSent));
+        Assert.Equal(protocolId, recorded.GetArguments()[0]);
+        using var output = JsonDocument.Parse(Assert.IsType<string>(recorded.GetArguments()[3]));
+        Assert.Equal(accepted ? "sent" : "omitted", output.RootElement.GetProperty("reasoningParameter").GetString());
+    }
+
     [Fact]
     public async Task GenerateCandidatesAsync_CapsInvestigationsToBudget()
     {

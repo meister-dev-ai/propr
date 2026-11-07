@@ -159,8 +159,13 @@ public sealed partial class RelayChatClient(
 
         // The options argument is nullable by contract, and a call that sent none is governed by the tenant's
         // answer like any other, so the request is built for it here. A provider request the pipeline did not
-        // shape is replaced, because the resolved answer is what reaches the provider.
-        return (options?.Clone() ?? new ChatOptions()).ApplyResolvedReasoning(capturesReasoning, reasoningEffort);
+        // shape is replaced, because the resolved answer is what reaches the provider. A pass that asked a model
+        // accepting the effort none for no reasoning keeps that effort, as it does over the HTTP binding.
+        var statesNone = reasoningEffort == ReviewReasoningEffort.None
+                         && options?.CarriesAReasoningRequest() == true
+                         && options.Reasoning?.Effort == ReasoningEffort.None;
+
+        return (options?.Clone() ?? new ChatOptions()).ApplyResolvedReasoning(capturesReasoning, reasoningEffort, statesNone);
     }
 
     [LoggerMessage(

@@ -4186,6 +4186,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("supports_reasoning");
 
+                    b.Property<bool>("SupportsReasoningEffortNone")
+                        .HasColumnType("boolean")
+                        .HasColumnName("supports_reasoning_effort_none");
+
                     b.Property<bool>("SupportsStructuredOutput")
                         .HasColumnType("boolean")
                         .HasColumnName("supports_structured_output");

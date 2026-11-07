@@ -37,9 +37,10 @@ Effort is a property of the logical-model name, so you can spend it unevenly acr
 
 All of them are mapped on one screen - see [purposes](../ai/purposes.md).
 
-Baseline reasoning effort is a separate per-client setting whose default leaves cost unchanged. Leave it
-there unless you have measured a reason not to - see
-[what you can tune](../concepts/reviews.md#what-you-can-tune).
+Baseline reasoning effort is a separate per-client setting. Its default, `None`, switches reasoning off for a
+model with **Accepts Reasoning Effort None**, and any other model uses its own default - see
+[reasoning effort](../ai/purposes.md#reasoning-effort). Leave the setting at `None` unless you have measured a
+reason not to - see [what you can tune](../concepts/reviews.md#what-you-can-tune).
 
 ## 4. Count your passes
 

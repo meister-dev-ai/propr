@@ -167,11 +167,10 @@ public sealed partial class EvidenceBackedReviewVerifier
 
             var claim = workItem.Claim;
             var system = BuildContradictionSystemPrompt();
+            // The check runs with the configured verification effort. Without one it runs with the effort None, which
+            // sends none to a model that accepts it and no effort to any other model.
             var options = new ChatOptions { ModelId = runtime.ModelId, MaxOutputTokens = this._outputBudgets.Initial };
-            if (this._verificationReasoningEffort != ReviewReasoningEffort.None)
-            {
-                options.ApplyResolvedReasoning(false, this._verificationReasoningEffort);
-            }
+            ApplyJudgeReasoning(options, this._verificationReasoningEffort, runtime);
 
             var checkSources = new List<JudgeExcerpt>();
             var result = await EvidenceJudgeToolLoop.RunAsync(

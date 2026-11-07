@@ -143,6 +143,17 @@ describe('applyCatalogEntryToModel', () => {
     supportsReasoning: false,
     supportsPromptCaching: false,
     reasoningContentField: '',
+    supportsReasoningEffortNone: false,
+  })
+
+  // The catalog states nothing about the reasoning effort none, so the operator's setting survives a catalog pick.
+  it('keeps whether the model accepts the reasoning effort none', () => {
+    const target = model()
+    target.supportsReasoningEffortNone = true
+
+    applyCatalogEntryToModel(target, entry())
+
+    expect(target.supportsReasoningEffortNone).toBe(true)
   })
 
   it('fills the fields the catalog states', () => {

@@ -125,6 +125,11 @@
               </option>
             </select>
           </label>
+          <p class="muted-hint tenant-lm-field-wide tenant-lm-effort-hint" data-testid="tenant-logical-model-effort-hint">
+            With the reasoning effort none, ProPR sends none to a model that has "Accepts reasoning effort none"
+            selected on its AI connection. For any other model, ProPR leaves the effort out, and the model uses its
+            own default.
+          </p>
         </form>
         <template #footer>
           <button class="btn-secondary btn-sm" type="button" @click="showCreate = false">Cancel</button>
@@ -311,6 +316,10 @@ defineExpose({ load })
 
 .tenant-lm-field-wide {
   grid-column: 1 / -1;
+}
+
+.tenant-lm-effort-hint {
+  margin: 0;
 }
 
 @media (max-width: 640px) {

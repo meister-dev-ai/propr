@@ -25,6 +25,8 @@ export type EditableModel = {
   supportsPromptCaching: boolean
   /** Field this model needs echoed back to preserve its chain of thought; empty when it has no such requirement. */
   reasoningContentField: string
+  /** Whether ProPR sends the reasoning effort none to this model for a call with the effort None. */
+  supportsReasoningEffortNone: boolean
 }
 
 export type EditableBinding = {

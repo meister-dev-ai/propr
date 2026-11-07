@@ -54,6 +54,23 @@ public sealed class RunnerJobManifestResolverTests
         Assert.Equal(supported, resolution.Manifest!.DefaultModel.SupportsLowReasoningEffort);
     }
 
+    // A runner decides from its manifest whether a pass configured for no reasoning sends the effort none, so the
+    // binding has to carry what the configured model states.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheManifest_CarriesWhetherTheModelAcceptsTheReasoningEffortNone(bool accepted)
+    {
+        var runtime = Runtime("reviewer-default");
+        var model = runtime.Model with { SupportsReasoningEffortNone = accepted };
+        runtime.Model.Returns(model);
+        this._runtimes.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>()).Returns(runtime);
+
+        var resolution = await this.CreateResolver().ResolveAsync(RequestFor(JobWithRevision()));
+
+        Assert.Equal(accepted, resolution.Manifest!.DefaultModel.SupportsReasoningEffortNone);
+    }
+
     private readonly IClientRegistry _clients = Substitute.For<IClientRegistry>();
     private readonly IRepositoryExclusionFetcher _exclusions = Substitute.For<IRepositoryExclusionFetcher>();
     private readonly IRepositoryInstructionFetcher _instructions = Substitute.For<IRepositoryInstructionFetcher>();

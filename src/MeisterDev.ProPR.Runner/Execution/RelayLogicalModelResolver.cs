@@ -135,7 +135,8 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
             MaxContextTokens: binding.MaxContextTokens,
             SupportsStructuredOutput: binding.SupportsStructuredOutput,
             SupportsToolUse: binding.SupportsToolUse,
-            SupportsPromptCaching: binding.SupportsPromptCaching);
+            SupportsPromptCaching: binding.SupportsPromptCaching,
+            SupportsReasoningEffortNone: binding.SupportsReasoningEffortNone);
 
         this.Connection = new AiConnectionDto(
             binding.ConnectionId ?? Guid.Empty,
@@ -213,7 +214,14 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
     ///     all-false here labelled every remote cache hit as provider_unsupported on the trace.
     /// </summary>
     public AgentReviewRuntimeCapabilities Capabilities =>
-        new(false, false, false, false, SupportsPromptCaching: this._binding.SupportsPromptCaching, SupportsPromptCacheRouting: false);
+        new(
+            false,
+            false,
+            false,
+            false,
+            SupportsPromptCaching: this._binding.SupportsPromptCaching,
+            SupportsPromptCacheRouting: false,
+            SupportsReasoningEffortNone: this._binding.SupportsReasoningEffortNone);
 
     public string? LogicalModelName => this._binding.LogicalModelName;
 }

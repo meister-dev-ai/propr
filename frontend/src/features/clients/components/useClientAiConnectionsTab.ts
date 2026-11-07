@@ -447,6 +447,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       supportsReasoning: model.supportsReasoning ?? false,
       supportsPromptCaching: model.supportsPromptCaching ?? false,
       reasoningContentField: model.reasoningContentField ?? '',
+      supportsReasoningEffortNone: model.supportsReasoningEffortNone ?? false,
     }))
     const modelLookup = new Map<string, string>()
     for (const model of editor.models) {
@@ -521,6 +522,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       supportsReasoning: false,
       supportsPromptCaching: false,
       reasoningContentField: '',
+      supportsReasoningEffortNone: false,
     })
     editingModelId.value = newModelId
   }
@@ -576,6 +578,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     supportsReasoning: discovered.supportsReasoning ?? false,
     supportsPromptCaching: discovered.supportsPromptCaching ?? false,
     reasoningContentField: discovered.reasoningContentField ?? '',
+    supportsReasoningEffortNone: discovered.supportsReasoningEffortNone ?? false,
   })
 
   const mergeDiscoveredModels = (discoveredModels: AiConfiguredModelDto[]) => {
@@ -705,6 +708,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       supportsReasoning: model.supportsReasoning,
       supportsPromptCaching: model.supportsPromptCaching,
       reasoningContentField: model.reasoningContentField.trim() || undefined,
+      supportsReasoningEffortNone: model.kind === 'chat' ? model.supportsReasoningEffortNone : false,
       source: 'manual',
     }))
   }

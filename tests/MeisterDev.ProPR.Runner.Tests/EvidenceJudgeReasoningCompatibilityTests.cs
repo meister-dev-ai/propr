@@ -59,6 +59,43 @@ public sealed class EvidenceJudgeReasoningCompatibilityTests
             });
     }
 
+    // Where the judge has no low effort to ask for, it runs with the effort None, and both checks always do. On a model
+    // the manifest marks as accepting the effort none, every one of these calls then names none on the relay.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheRunnerJudgeAndChecks_SendNoneToAModelThatAcceptsIt(bool supportsLow)
+    {
+        var manifest = RunnerManifests.Sample() with
+        {
+            DefaultModel = RunnerManifests.Model("reviewer-default", "None") with
+            {
+                RemoteModelId = "gpt-6-luna",
+                SupportsLowReasoningEffort = supportsLow,
+                SupportsReasoningEffortNone = true,
+            },
+        };
+        using var handler = new JudgeRelayEndpoint(supportsLow, acceptsNone: true);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://control-plane.invalid/runners/execution/") };
+        var chat = new RelayChatClient(http, manifest.JobId, manifest.LeaseGeneration, manifest.DefaultModel.LogicalModelName);
+        var resolver = new RelayAiRuntimeResolver(manifest, _ => chat);
+        var tools = Substitute.For<IReviewContextTools>();
+        tools.GetFileContentAsync(Arg.Any<string>(), "source", Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns("return lookup(key);");
+
+        var outcomes = await new EvidenceBackedReviewVerifier().VerifyAsync(
+            [WorkItem()], [], new ReviewVerificationContext(tools, "source", chat, "gpt-6-luna", Guid.NewGuid(), resolver));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, Assert.Single(outcomes).RecommendedDisposition);
+        var efforts = handler.Requests
+            .Select(request =>
+            {
+                using var sent = JsonDocument.Parse(request);
+                return sent.RootElement.GetProperty("options").GetProperty("reasoningEffort").GetString();
+            })
+            .ToList();
+        Assert.Equal([supportsLow ? "low" : "none", "none", "none"], efforts);
+    }
+
     [Fact]
     public void AManifestWithoutTheOptionalCapability_KeepsProviderDefaults()
     {
@@ -82,7 +119,8 @@ public sealed class EvidenceJudgeReasoningCompatibilityTests
             ClaimDescriptor.LocalStage, VerificationWorkItem.AnchorOnlyScope, false);
     }
 
-    private sealed class JudgeRelayEndpoint(bool supportsLow) : HttpMessageHandler
+    // Refuses an effort the model does not accept, as a provider answers a reasoning parameter it does not know.
+    private sealed class JudgeRelayEndpoint(bool supportsLow, bool acceptsNone = false) : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];
 
@@ -91,7 +129,13 @@ public sealed class EvidenceJudgeReasoningCompatibilityTests
             this.Requests.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
             using var sent = JsonDocument.Parse(this.Requests[^1]);
             var effort = sent.RootElement.GetProperty("options").GetProperty("reasoningEffort").GetString();
-            if (!supportsLow && effort is not null)
+            var refused = effort switch
+            {
+                null => false,
+                "none" => !acceptsNone,
+                _ => !supportsLow,
+            };
+            if (refused)
             {
                 return new HttpResponseMessage(HttpStatusCode.BadRequest)
                 {

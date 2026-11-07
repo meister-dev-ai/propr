@@ -71,6 +71,7 @@ function chatModel(costs: Pick<EditableModel, 'inputCostPer1MUsd' | 'outputCostP
     supportsReasoning: false,
     supportsPromptCaching: false,
     reasoningContentField: '',
+    supportsReasoningEffortNone: false,
     ...costs,
   }
 }

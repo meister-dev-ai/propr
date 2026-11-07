@@ -377,7 +377,8 @@ public sealed partial class RunnerJobManifestResolver(
             runtime.Model.SupportsPromptCaching,
             runtime.Model.SupportsToolUse,
             runtime.Model.SupportsStructuredOutput,
-            runtime.SupportsLowReasoningEffort, runtime.Connection.Id, runtime.Model.Id);
+            runtime.SupportsLowReasoningEffort, runtime.Connection.Id, runtime.Model.Id,
+            runtime.Model.SupportsReasoningEffortNone);
     }
 
     /// <summary>

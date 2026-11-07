@@ -1640,7 +1640,8 @@ internal sealed partial class FileReviewer(
             // The review context of the pass, not the verification source: an inventory pass reviews without
             // repository tools although its findings are verified through the baseline evidence channel.
             PassReviewedWithRepositoryTools: state.FileContext.ReviewTools is not null,
-            ReviewerReads: state.FileContext.ReviewerFileReads);
+            ReviewerReads: state.FileContext.ReviewerFileReads,
+            SupportsReasoningEffortNone: verificationSource.RuntimeCapabilities.SupportsReasoningEffortNone);
 
         return await localReviewVerificationExecutor.ApplyAsync(
             result,

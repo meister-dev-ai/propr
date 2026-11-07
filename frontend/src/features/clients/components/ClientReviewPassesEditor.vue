@@ -167,6 +167,11 @@
               </option>
             </select>
           </label>
+          <p class="muted review-pass-reasoning-hint" data-testid="review-pass-reasoning-hint">
+            With None, ProPR sends the reasoning effort none to a model that has "Accepts Reasoning Effort None"
+            selected on its AI connection. For any other model, ProPR leaves the effort out, and the model uses
+            its own default.
+          </p>
         </template>
         <p v-else class="muted review-pass-from-logical" data-testid="review-pass-from-logical">
           Connection, model &amp; reasoning come from the logical model.
@@ -247,9 +252,9 @@ const SCOPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'pr_wide', label: 'PR-wide' },
 ]
 
-// The reasoning-effort levels offered per pass. 'none' (default) sends no effort so behavior/cost stay
-// unchanged; low/medium/high enable reasoning at the corresponding level. Mirrors the backend
-// ReviewReasoningEffort enum.
+// The reasoning-effort levels offered per pass. With 'none' (default), ProPR sends the effort none to a model that
+// accepts it and leaves the effort out for any other model, which then uses its own default.
+// low/medium/high ask for reasoning at the corresponding level. Mirrors the backend ReviewReasoningEffort enum.
 const REASONING_EFFORT_OPTIONS: { value: string; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'low', label: 'Low' },
@@ -647,11 +652,13 @@ const onDraftLogicalModelChange = (): void => {
 }
 
 .review-pass-from-logical,
+.review-pass-reasoning-hint,
 .review-pass-shadow-field {
   grid-column: 1 / -1;
 }
 
-.review-pass-from-logical {
+.review-pass-from-logical,
+.review-pass-reasoning-hint {
   margin: 0;
   font-size: 0.85rem;
 }

@@ -1457,7 +1457,8 @@ public sealed partial class AiConnectionRepository(
             record.CacheWriteCostPer1MUsd,
             record.SupportsReasoning,
             record.SupportsPromptCaching,
-            record.ReasoningContentField);
+            record.ReasoningContentField,
+            record.SupportsReasoningEffortNone);
     }
 
     private AiPurposeBindingDto ToBindingDto(
@@ -1569,6 +1570,7 @@ public sealed partial class AiConnectionRepository(
                     ReasoningContentField = string.IsNullOrWhiteSpace(model.ReasoningContentField)
                         ? null
                         : model.ReasoningContentField.Trim(),
+                    SupportsReasoningEffortNone = model.SupportsReasoningEffortNone,
                 };
             })
             .ToList();
@@ -1743,7 +1745,8 @@ public sealed partial class AiConnectionRepository(
                 || existing.CacheWriteCostPer1MUsd != model.CacheWriteCostPer1MUsd
                 || existing.SupportsReasoning != model.SupportsReasoning
                 || existing.SupportsPromptCaching != model.SupportsPromptCaching
-                || existing.ReasoningContentField != model.ReasoningContentField)
+                || existing.ReasoningContentField != model.ReasoningContentField
+                || existing.SupportsReasoningEffortNone != model.SupportsReasoningEffortNone)
             {
                 return false;
             }

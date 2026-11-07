@@ -293,7 +293,7 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 |---|---|---|
 | Logical model per purpose | Tenant or client | Which model does review generation, triage, verification and embeddings - see [purposes, effort and protocol](../ai/purposes.md) |
 | Reasoning effort | Per logical model | Default effort for calls using that model; the evidence judge uses `low` when support is established - see [reasoning effort](../ai/purposes.md#reasoning-effort) |
-| Baseline reasoning effort | Per client | Reasoning effort for the baseline review pass. `None` by default, which sends no reasoning effort at all and leaves cost unchanged |
+| Baseline reasoning effort | Per client | Reasoning effort for the baseline review pass, `None` by default. With `None`, ProPR sends the reasoning effort `none` to a model with **Accepts Reasoning Effort None** and leaves the effort out for any other model, which then uses its own default - see [reasoning effort](../ai/purposes.md#reasoning-effort) |
 | Review aggressiveness | Per client | `Calm`, `Balanced` or `Assertive`. Calm keeps only what passes the strictest certainty gate; Balanced adds design-level observations; Assertive keeps those and lets less certain findings through |
 | Review temperature | Crawl and webhook configurations | More deterministic or more creative than the model default, `0.0`–`2.0` |
 | Multi-pass union | Per client | Review higher-complexity files across several independent passes and union the findings before deduplication. Costs more per file |

@@ -185,9 +185,10 @@
                         </select>
                         <p class="muted review-publication-copy">
                             How much reasoning the model spends on the baseline (tier) review pass.
-                            <strong>None</strong> (default) sends no reasoning effort, so behavior and cost
-                            are unchanged. Per-additional-pass effort is set in the AI Providers tab under
-                            "Review passes".
+                            With <strong>None</strong> (default), ProPR sends the reasoning effort none to a model
+                            that has "Accepts Reasoning Effort None" selected on its AI connection. For any other
+                            model, ProPR leaves the effort out, and the model uses its own default.
+                            The effort of each additional pass is set in the AI Providers tab under "Review passes".
                         </p>
                     </div>
                     <button :disabled="!isAdvancedSettingsButtonEnabled()"
@@ -273,9 +274,10 @@ const COMMENT_RESOLUTION_OPTIONS: { value: string; label: string }[] = [
 ];
 
 // The reasoning-effort levels offered for the baseline (tier) pass. Mirrors the backend
-// ReviewReasoningEffort enum; 'none' (default) sends no effort so behavior/cost stay unchanged.
+// ReviewReasoningEffort enum. With 'none' (default), ProPR sends the effort none to a model that accepts it and
+// leaves the effort out for any other model, which then uses its own default.
 const REASONING_EFFORT_OPTIONS: { value: string; label: string }[] = [
-    { value: "none", label: "None (off)" },
+    { value: "none", label: "None" },
     { value: "low", label: "Low" },
     { value: "medium", label: "Medium" },
     { value: "high", label: "High" },

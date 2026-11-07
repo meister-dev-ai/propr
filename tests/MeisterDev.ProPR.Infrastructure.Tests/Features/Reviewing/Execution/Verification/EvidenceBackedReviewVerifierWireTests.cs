@@ -66,10 +66,12 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.False(request.RootElement.TryGetProperty(responsesApi ? "reasoning" : "reasoning_effort", out _));
     }
 
+    // The judge asks a model with low effort support for low effort. The Responses API receives it, and Chat
+    // Completions receives no effort, as for a review pass.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RealOpenAiAdapters_SendLowJudgeEffortAndRecoverTheWireOutputLimit(bool responsesApi)
+    public async Task RealOpenAiAdapters_SendLowJudgeEffortToResponsesOnlyAndRecoverTheWireOutputLimit(bool responsesApi)
     {
         using var wire = new JudgeWireEndpoint(responsesApi, true);
         using var http = new HttpClient(wire);
@@ -98,7 +100,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task RelayedJudgeOptions_SendLowEffortToBothRealOpenAiAdapters(bool responsesApi, bool resolvedPolicy)
+    public async Task RelayedJudgeOptions_SendLowEffortToTheResponsesApiOnly(bool responsesApi, bool resolvedPolicy)
     {
         using var wire = new JudgeWireEndpoint(responsesApi, false);
         using var http = new HttpClient(wire);
@@ -144,6 +146,8 @@ public sealed partial class EvidenceBackedReviewVerifierTests
 #pragma warning restore OPENAI001
     }
 
+    // The Responses API receives the low judge effort. Chat Completions receives no low effort, because OpenAI refuses
+    // function tools there with any effort other than none from GPT-5.4 on.
     private static void AssertWireJudgeOptions(string body, bool responsesApi, int outputBudget)
     {
         using var request = JsonDocument.Parse(body);
@@ -156,7 +160,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         }
         else
         {
-            Assert.Equal("low", root.GetProperty("reasoning_effort").GetString());
+            Assert.False(root.TryGetProperty("reasoning_effort", out _));
             var budget = root.TryGetProperty("max_completion_tokens", out var completionTokens) ? completionTokens : root.GetProperty("max_tokens");
             Assert.Equal(outputBudget, budget.GetInt32());
         }

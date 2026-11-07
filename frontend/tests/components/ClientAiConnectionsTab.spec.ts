@@ -282,6 +282,7 @@ describe('ClientAiConnectionsTab', () => {
             supportsToolUse: true,
             supportsReasoning: false,
             supportsPromptCaching: false,
+            supportsReasoningEffortNone: false,
             source: 'manual',
           },
           {
@@ -297,6 +298,7 @@ describe('ClientAiConnectionsTab', () => {
             supportsToolUse: false,
             supportsReasoning: false,
             supportsPromptCaching: false,
+            supportsReasoningEffortNone: false,
             source: 'manual',
           },
         ],

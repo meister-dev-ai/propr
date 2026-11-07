@@ -1599,6 +1599,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
                         supportsReasoning = true,
                         supportsPromptCaching = true,
                         reasoningContentField = "reasoning_content",
+                        supportsReasoningEffortNone = true,
                     },
                     BuildConfiguredModel("text-embedding-3-large", true),
                 },
@@ -1616,6 +1617,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.True(model.SupportsReasoning);
         Assert.True(model.SupportsPromptCaching);
         Assert.Equal("reasoning_content", model.ReasoningContentField);
+        Assert.True(model.SupportsReasoningEffortNone);
     }
 
     // An update that names no models restates the stored ones from the response shape. Anything the restatement
@@ -1649,6 +1651,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
                         cacheWriteCostPer1MUsd = 0.25m,
                         supportsReasoning = true,
                         reasoningContentField = "reasoning_content",
+                        supportsReasoningEffortNone = true,
                     },
                     BuildConfiguredModel("text-embedding-3-large", true),
                 },
@@ -1670,6 +1673,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.Equal(0.25m, model.CacheWriteCostPer1MUsd);
         Assert.True(model.SupportsReasoning);
         Assert.Equal("reasoning_content", model.ReasoningContentField);
+        Assert.True(model.SupportsReasoningEffortNone);
     }
 
     // A client that selects its models through logical models binds no purpose to the connection itself, so its

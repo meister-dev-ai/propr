@@ -232,7 +232,10 @@ internal sealed partial class ToolAwareAiReviewCore(
             ModelId = effectiveModelId,
             Temperature = systemContext.Temperature,
             Tools = transportTools.Count > 0 ? [.. transportTools] : null,
-        }.ApplyReasoning(systemContext.CapturesReasoning(opts), systemContext.ActiveReasoningEffort);
+        }.ApplyReasoning(
+            systemContext.CapturesReasoning(opts),
+            systemContext.ActiveReasoningEffort,
+            systemContext.RuntimeCapabilities.SupportsReasoningEffortNone);
 
         // Pre-flight context-window budgeting: estimate the assembled payload against the model's context
         // window and degrade to diff-only, or skip, rather than send the provider a context that is too large.
@@ -258,6 +261,9 @@ internal sealed partial class ToolAwareAiReviewCore(
         {
             return new TransportSetup(default!, default!, default!, default!, default!, skipped);
         }
+
+        // Recorded once the pass is certain to call the model, because a file skipped for its size sends nothing.
+        await ReviewReasoningTrace.RecordAsync(systemContext, cancellationToken);
 
         if (preflight.Classification == ContextBudgetClassification.DegradedDiffOnly)
         {
@@ -731,7 +737,10 @@ internal sealed partial class ToolAwareAiReviewCore(
                 "The response must start with '{' and end with '}'."));
         var finalOptions = new ChatOptions
                 { MaxOutputTokens = setup.ChatOptions.MaxOutputTokens, ModelId = setup.EffectiveModelId, Temperature = systemContext.Temperature }
-            .ApplyReasoning(systemContext.CapturesReasoning(opts), systemContext.ActiveReasoningEffort);
+            .ApplyReasoning(
+                systemContext.CapturesReasoning(opts),
+                systemContext.ActiveReasoningEffort,
+                systemContext.RuntimeCapabilities.SupportsReasoningEffortNone);
         ChatResponse finalResponse;
         try
         {
@@ -841,7 +850,10 @@ internal sealed partial class ToolAwareAiReviewCore(
 
         var correctionOptions = new ChatOptions
                 { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature }
-            .ApplyReasoning(systemContext.CapturesReasoning(options.Value), systemContext.ActiveReasoningEffort);
+            .ApplyReasoning(
+                systemContext.CapturesReasoning(options.Value),
+                systemContext.ActiveReasoningEffort,
+                systemContext.RuntimeCapabilities.SupportsReasoningEffortNone);
 
         // Apply the same context-window budget to the schema-repair call, which sends the accumulated transcript
         // directly rather than through the loop's choke point.

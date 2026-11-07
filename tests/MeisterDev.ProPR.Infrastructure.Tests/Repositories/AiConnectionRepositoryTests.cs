@@ -218,6 +218,36 @@ public sealed class AiConnectionRepositoryTests
         Assert.Equal(changeEndpoint ? original.ConfigurationRevision + 1 : original.ConfigurationRevision, stored.ConfigurationRevision);
     }
 
+    // Whether a model accepts the reasoning effort none decides what a pass configured for no reasoning sends, so
+    // the flag is stored with the model it describes and read back with it.
+    [Fact]
+    public async Task UpdateAsync_StoresWhetherAModelAcceptsTheReasoningEffortNone()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true, true);
+        profile.AuthMode = "ApiKey";
+        db.Add(profile);
+        await db.SaveChangesAsync();
+        var repository = CreateRepository(db);
+        var original = (await repository.GetByIdAsync(profile.Id))!;
+        Assert.All(original.ConfiguredModels, model => Assert.False(model.SupportsReasoningEffortNone));
+        var models = original.ConfiguredModels
+            .Select(model => model.RemoteModelId == "gpt-4o" ? model with { SupportsReasoningEffortNone = true } : model)
+            .ToList();
+        var request = new AiConnectionWriteRequestDto(
+            original.DisplayName, original.ProviderKind, original.BaseUrl,
+            original.AuthMode, original.DiscoveryMode, models, original.PurposeBindings);
+
+        Assert.True(await repository.UpdateAsync(profile.Id, request));
+
+        var stored = (await repository.GetByIdAsync(profile.Id))!;
+        Assert.True(stored.ConfiguredModels.Single(model => model.RemoteModelId == "gpt-4o").SupportsReasoningEffortNone);
+        Assert.All(
+            stored.ConfiguredModels.Where(model => model.RemoteModelId != "gpt-4o"),
+            model => Assert.False(model.SupportsReasoningEffortNone));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

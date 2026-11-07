@@ -308,6 +308,11 @@ public sealed record RunnerReviewPass(
 /// <param name="SupportsToolUse">Whether the reviewer may offer this model tools.</param>
 /// <param name="SupportsStructuredOutput">Whether findings can be requested as a structured response.</param>
 /// <param name="SupportsLowReasoningEffort">Whether the resolved model and transport support low reasoning effort.</param>
+/// <param name="SupportsReasoningEffortNone">
+///     Whether the configured model accepts the reasoning effort <c>none</c>. A review pass, an evidence judge call
+///     or a contradiction check with the effort None then sends the effort <c>none</c>. Without the flag, the call
+///     leaves the effort out, and the model uses its own default.
+/// </param>
 public sealed record RunnerModelBinding(
     string LogicalModelName,
     string RemoteModelId,
@@ -321,7 +326,8 @@ public sealed record RunnerModelBinding(
     bool SupportsStructuredOutput,
     bool SupportsLowReasoningEffort = false,
     Guid? ConnectionId = null,
-    Guid? ConfiguredModelId = null);
+    Guid? ConfiguredModelId = null,
+    bool SupportsReasoningEffortNone = false);
 
 /// <summary>Prompt configuration for this review, resolved from client configuration at dispatch.</summary>
 /// <param name="Language">The output language contract for findings, when the client sets one.</param>

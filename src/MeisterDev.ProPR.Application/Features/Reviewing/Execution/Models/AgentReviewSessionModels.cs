@@ -65,13 +65,18 @@ public enum SessionContinuationHandleType
 /// <summary>
 ///     Runtime capability flags relevant to session-aware review execution.
 /// </summary>
+/// <param name="SupportsReasoningEffortNone">
+///     Whether the bound model accepts the reasoning effort <c>none</c>. A call with the effort None sends
+///     <c>none</c> to such a model. Any other model receives no reasoning parameter and uses its own default.
+/// </param>
 public sealed record AgentReviewRuntimeCapabilities(
     bool SupportsProviderManagedSessions,
     bool SupportsManagedRemoteConversation,
     bool SupportsBackgroundResponses,
     bool PrefersResponsesApi,
     bool SupportsPromptCaching = false,
-    bool SupportsPromptCacheRouting = false);
+    bool SupportsPromptCacheRouting = false,
+    bool SupportsReasoningEffortNone = false);
 
 /// <summary>
 ///     Opaque continuation metadata carried across review turns.

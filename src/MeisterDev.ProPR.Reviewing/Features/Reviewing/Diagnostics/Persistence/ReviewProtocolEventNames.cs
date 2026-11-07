@@ -82,4 +82,10 @@ public static class ReviewProtocolEventNames
     public const string ContextBudgetTrimmed = "context_budget_trimmed";
     public const string ContextBudgetFileDegraded = "context_budget_file_degraded";
     public const string ContextBudgetFileSkipped = "context_budget_file_skipped";
+
+    /// <summary>
+    ///     Whether a review pass with the reasoning effort None sent the effort none to its model or left the
+    ///     reasoning parameter out.
+    /// </summary>
+    public const string ReasoningEffortSent = "reasoning_effort_sent";
 }

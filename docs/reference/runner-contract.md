@@ -135,7 +135,18 @@ end-to-end retention requires both the runner and control plane to support them.
 
 Each model binding has an optional `supportsLowReasoningEffort` flag. The control plane sets it only
 when the exact model advertises low effort and the selected transport supports it. Missing or false
-leaves automatic judge effort at provider defaults. The output budgets and bounded recovery still apply.
+runs the automatic judge with the effort `none`. The output budgets and bounded recovery still apply.
+
+Each model binding also has an optional `supportsReasoningEffortNone` flag. The control plane copies it from the
+setting **Accepts Reasoning Effort None** of the configured model. A review pass, an evidence judge call or a
+contradiction check with the effort `none` on such a model sends the chat option `reasoningEffort: "none"`, and the
+relay sends `none` to the provider on Chat Completions and on the Responses API. Without the flag, the runner
+leaves the effort out, and the model uses its own default. A control plane without support for `none`
+reads the value as no reasoning effort.
+
+The relay sends a chat option `reasoningEffort` of `low`, `medium` or `high` to the provider on the Responses API
+and on native protocols. On Chat Completions, the relay sends no effort for these values, as a review on the control
+plane does - see [reasoning effort](../ai/purposes.md#reasoning-effort).
 
 Chat options carry optional `toolMode: "none"` when tool declarations must remain present but no further
 lookups are allowed. An omitted mode preserves provider defaults. Prior-result responses use the

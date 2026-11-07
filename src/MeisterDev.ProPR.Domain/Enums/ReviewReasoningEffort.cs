@@ -5,15 +5,14 @@ namespace MeisterDev.ProPR.Domain.Enums;
 
 /// <summary>
 ///     How much reasoning effort a review pass asks the model to spend. Configured per pass at the client level and
-///     applied to the outbound chat request. <see cref="None" /> is the default and leaves the request without an
-///     effort level, so the provider keeps its own default (no reasoning) — behavior and cost stay unchanged until a
-///     user opts in. The remaining levels map to the provider's low/medium/high reasoning-effort settings.
+///     applied to the outbound chat request. <see cref="None" /> is the default. The remaining levels map to the
+///     provider's low/medium/high reasoning-effort settings.
 /// </summary>
 public enum ReviewReasoningEffort
 {
     /// <summary>
-    ///     (Default) No effort level is set on the request, so the provider keeps its own default — the reasoning
-    ///     models on the deployments in use then perform no reasoning. Behavior and cost stay unchanged.
+    ///     (Default) A model that accepts the reasoning effort none is sent none. Any other model receives no effort
+    ///     level and uses its own default.
     /// </summary>
     None = 0,
 

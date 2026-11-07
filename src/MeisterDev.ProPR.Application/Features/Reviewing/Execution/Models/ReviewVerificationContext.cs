@@ -24,6 +24,9 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 ///     <see cref="VerificationWorkItem.ProducedWithRepositoryTools" /> overrides this value for its own claim.
 ///     <see cref="ReviewerReads" /> lists the file ranges
 ///     that pass read; the judge receives bounded excerpts of those that contain a symbol the claim names.
+///     <see cref="SupportsReasoningEffortNone" /> states whether the model of <see cref="ChatClient" /> accepts the
+///     reasoning effort <c>none</c>. A judge that falls back to that model and runs with the effort None sends
+///     <c>none</c> only when it is set.
 /// </summary>
 public sealed record ReviewVerificationContext(
     IReviewContextTools? Tools,
@@ -35,4 +38,5 @@ public sealed record ReviewVerificationContext(
     ReviewVerificationIntent? Intent = null,
     Guid? ProtocolId = null,
     bool PassReviewedWithRepositoryTools = false,
-    IReadOnlyList<ReviewerFileRead>? ReviewerReads = null);
+    IReadOnlyList<ReviewerFileRead>? ReviewerReads = null,
+    bool SupportsReasoningEffortNone = false);

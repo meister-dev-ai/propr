@@ -23555,6 +23555,13 @@ export interface components {
             supportsReasoning?: boolean;
             supportsPromptCaching?: boolean;
             reasoningContentField?: string | null;
+            /**
+             * @description Whether ProPR sends the reasoning effort `none` to this model. For a review pass, an evidence judge call
+             *     or a contradiction check with the effort None, ProPR sends `none` to a model with this flag and leaves
+             *     the effort out for any other model, which then uses its own default. An operator sets the flag when the
+             *     provider documents the effort `none` for the model, because some reasoning models refuse it.
+             */
+            supportsReasoningEffortNone?: boolean;
             /** @description Returns true when the model supports chat workloads. */
             readonly supportsChat?: boolean;
             /** @description Returns true when the model supports embeddings. */
@@ -23591,6 +23598,13 @@ export interface components {
             supportsReasoning?: boolean;
             supportsPromptCaching?: boolean;
             reasoningContentField?: string | null;
+            /**
+             * @description Whether ProPR sends the reasoning effort `none` to this model. For a review pass, an evidence judge call
+             *     or a contradiction check with the effort None, ProPR sends `none` to a model with this flag and leaves
+             *     the effort out for any other model, which then uses its own default. Set it when the provider documents
+             *     the effort `none` for the model.
+             */
+            supportsReasoningEffortNone?: boolean;
         };
         /**
          * @description Origin of a configured model entry.
@@ -29342,9 +29356,8 @@ export interface components {
         ReviewProfileSource: "systemDefault" | "clientDefault";
         /**
          * @description How much reasoning effort a review pass asks the model to spend. Configured per pass at the client level and
-         *     applied to the outbound chat request. MeisterDev.ProPR.Domain.Enums.ReviewReasoningEffort.None is the default and leaves the request without an
-         *     effort level, so the provider keeps its own default (no reasoning) — behavior and cost stay unchanged until a
-         *     user opts in. The remaining levels map to the provider's low/medium/high reasoning-effort settings.
+         *     applied to the outbound chat request. MeisterDev.ProPR.Domain.Enums.ReviewReasoningEffort.None is the default. The remaining levels map to the
+         *     provider's low/medium/high reasoning-effort settings.
          * @enum {string}
          */
         ReviewReasoningEffort: "none" | "low" | "medium" | "high";
@@ -29772,8 +29785,9 @@ export interface components {
             /** @description The tools the model may call, as declarations. Invocation stays with the runner. */
             tools?: components["schemas"]["RunnerChatToolDefinition"][] | null;
             /**
-             * @description The reasoning effort level (`low` / `medium` / `high`), or null to leave the provider
-             *     at its default. Carried as text so the contract stays free of library enums.
+             * @description The reasoning effort level (`low` / `medium` / `high`), `none` to ask a model that
+             *     accepts it for no reasoning, or null to leave the provider at its default. Carried as text so the contract
+             *     stays free of library enums.
              */
             reasoningEffort?: string | null;
             /** @description Whether the call asks the model to return a reasoning summary. */
@@ -30364,6 +30378,12 @@ export interface components {
             connectionId?: string | null;
             /** Format: uuid */
             configuredModelId?: string | null;
+            /**
+             * @description Whether the configured model accepts the reasoning effort `none`. A review pass, an evidence judge call
+             *     or a contradiction check with the effort None then sends the effort `none`. Without the flag, the call
+             *     leaves the effort out, and the model uses its own default.
+             */
+            supportsReasoningEffortNone?: boolean;
         };
         /** @description One file this job has already had reviewed, reduced to what the pipeline reads back. */
         RunnerPriorFileResult: {

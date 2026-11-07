@@ -32,6 +32,25 @@ public sealed class RelayLogicalModelResolverTests
         Assert.Equal(supported, resolved.Runtime.SupportsLowReasoningEffort);
     }
 
+    // A pass configured for no reasoning sends the effort none only to a model the manifest marks as accepting it,
+    // so the capability has to reach the runtime the pass reads it from.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AResolvedModel_CarriesWhetherItAcceptsTheReasoningEffortNone(bool accepted)
+    {
+        var manifest = RunnerManifests.Sample() with
+        {
+            DefaultModel = RunnerManifests.Model("reviewer-default", "None") with { SupportsReasoningEffortNone = accepted },
+        };
+        var resolver = CreateResolver(manifest, _ => Substitute.For<IChatClient>());
+
+        var resolved = await resolver.ResolveChatRuntimeAsync(Guid.NewGuid(), "reviewer-default");
+
+        Assert.Equal(accepted, resolved.Runtime.Capabilities.SupportsReasoningEffortNone);
+        Assert.Equal(accepted, resolved.Runtime.Model.SupportsReasoningEffortNone);
+    }
+
     [Fact]
     public async Task APassModel_ResolvesToItsOwnRelayAndItsOwnEffort()
     {

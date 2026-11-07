@@ -21,15 +21,32 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 /// </summary>
 public sealed class RunnerRelayedChatOptionsTests
 {
+    // A relayed Low, Medium or High is rebuilt for the Responses API and left out of the standard setting that Chat
+    // Completions reads, as on a review run in process.
     [Theory]
-    [InlineData("low", ReasoningEffort.Low)]
-    [InlineData("medium", ReasoningEffort.Medium)]
-    [InlineData("high", ReasoningEffort.High)]
-    public void RelayedEffort_IsRebuiltForBothOpenAiTransportModes(string wireEffort, ReasoningEffort expected)
+    [InlineData("low")]
+    [InlineData("medium")]
+    [InlineData("high")]
+    public void RelayedEffort_IsRebuiltForTheResponsesApiOnly(string wireEffort)
     {
         var options = RunnerRelayedChatOptions.ToChatOptions(new RunnerChatOptions(ReasoningEffort: wireEffort));
 
-        Assert.Equal(expected, options!.Reasoning!.Effort);
+        Assert.Null(options!.Reasoning);
+#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
+        var createOptions = Assert.IsType<CreateResponseOptions>(options.RawRepresentationFactory!(null!));
+        Assert.Equal(new ResponseReasoningEffortLevel(wireEffort), createOptions.ReasoningOptions!.ReasoningEffortLevel);
+#pragma warning restore OPENAI001
+    }
+
+    // A runner names the effort none only for a model its manifest marks as accepting it. The rebuilt request asks
+    // for no reasoning and keeps the sampling temperature, because a model told not to reason samples like any other.
+    [Fact]
+    public void TheEffortNone_IsRebuiltAsAnExplicitNone()
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(new RunnerChatOptions(Temperature: 0.4f, ReasoningEffort: "none"));
+
+        Assert.Equal(ReasoningEffort.None, options!.Reasoning!.Effort);
+        Assert.Equal(0.4f, options.Temperature);
     }
 
     [Fact]

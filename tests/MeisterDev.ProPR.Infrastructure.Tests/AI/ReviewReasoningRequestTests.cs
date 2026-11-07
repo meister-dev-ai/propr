@@ -10,20 +10,69 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 public class ReviewReasoningRequestTests
 {
-    [Fact]
-    public void OrdinaryReviewReasoning_DoesNotChangeItsStandardTransportOptions()
+    // Chat Completions reads the effort from the standard setting only. An ordinary review pass leaves a configured
+    // Low, Medium or High out of it, because OpenAI refuses function tools there with any effort other than none from
+    // GPT-5.4 on.
+    [Theory]
+    [InlineData(ReviewReasoningEffort.Low)]
+    [InlineData(ReviewReasoningEffort.Medium)]
+    [InlineData(ReviewReasoningEffort.High)]
+    public void OrdinaryReviewReasoning_DoesNotChangeItsStandardTransportOptions(ReviewReasoningEffort effort)
     {
-        var options = new ChatOptions().ApplyReasoning(false, ReviewReasoningEffort.Low);
+        var options = new ChatOptions().ApplyReasoning(false, effort, supportsReasoningEffortNone: true);
 
         Assert.Null(options.Reasoning);
     }
 
-    [Fact]
-    public void ResolvedReasoning_StatesLowEffortForBothOpenAiTransports()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NoReasoning_StatesTheEffortNoneForAModelThatAcceptsIt(bool resolved)
     {
-        var options = new ChatOptions().ApplyResolvedReasoning(false, ReviewReasoningEffort.Low);
+        var options = new ChatOptions { Temperature = 0.2f };
 
-        Assert.Equal(ReasoningEffort.Low, options.Reasoning!.Effort);
+        if (resolved)
+        {
+            options.ApplyResolvedReasoning(false, ReviewReasoningEffort.None, supportsReasoningEffortNone: true);
+        }
+        else
+        {
+            options.ApplyReasoning(false, ReviewReasoningEffort.None, supportsReasoningEffortNone: true);
+        }
+
+        Assert.Equal(ReasoningEffort.None, options.Reasoning!.Effort);
+#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
+        var raw = Assert.IsType<CreateResponseOptions>(options.RawRepresentationFactory!(null!));
+        Assert.Equal(ResponseReasoningEffortLevel.None, raw.ReasoningOptions!.ReasoningEffortLevel);
+        Assert.Null(raw.ReasoningOptions.ReasoningSummaryVerbosity);
+#pragma warning restore OPENAI001
+
+        // A model told not to reason samples like any other model, so the configured temperature stays.
+        Assert.Equal(0.2f, options.Temperature);
+    }
+
+    // A client that speaks its provider's own protocol reads the neutral request, in which no reasoning is the
+    // provider's default and needs no separate word.
+    [Fact]
+    public void NoReasoning_ReachesANativeProtocolClientAsTheNeutralNone()
+    {
+        var options = new ChatOptions().ApplyReasoning(true, ReviewReasoningEffort.None, supportsReasoningEffortNone: true);
+
+        var raw = options.RawRepresentationFactory!(new NativeProtocolClient());
+
+        var request = Assert.IsType<MeisterDev.Ai.Providers.Contracts.ProviderReasoningRequest>(raw);
+        Assert.Equal(MeisterDev.Ai.Providers.Enums.ProviderReasoningEffort.None, request.Effort);
+        Assert.True(request.CaptureReasoning);
+    }
+
+    // A resolved decision, which relayed calls and the verification calls use, states a configured effort for the
+    // Responses API and leaves it out of the standard setting that Chat Completions reads, as an ordinary pass does.
+    [Fact]
+    public void ResolvedReasoning_StatesLowEffortForTheResponsesApiOnly()
+    {
+        var options = new ChatOptions().ApplyResolvedReasoning(false, ReviewReasoningEffort.Low, supportsReasoningEffortNone: true);
+
+        Assert.Null(options.Reasoning);
 #pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
         var raw = Assert.IsType<CreateResponseOptions>(options.RawRepresentationFactory!(null!));
         Assert.Equal(ResponseReasoningEffortLevel.Low, raw.ReasoningOptions!.ReasoningEffortLevel);
@@ -31,12 +80,17 @@ public class ReviewReasoningRequestTests
 #pragma warning restore OPENAI001
     }
 
-    [Fact]
-    public void AResolvedDefaultEffort_ClearsPreviouslyStatedStandardEffort()
+    // A resolved decision replaces what the options carried, so an effort stated there earlier does not reach Chat
+    // Completions.
+    [Theory]
+    [InlineData(ReviewReasoningEffort.None)]
+    [InlineData(ReviewReasoningEffort.Low)]
+    [InlineData(ReviewReasoningEffort.High)]
+    public void AResolvedDecision_ClearsPreviouslyStatedStandardEffort(ReviewReasoningEffort effort)
     {
         var options = new ChatOptions { Reasoning = new ReasoningOptions { Effort = ReasoningEffort.High } };
 
-        options.ApplyResolvedReasoning(false, ReviewReasoningEffort.None);
+        options.ApplyResolvedReasoning(false, effort);
 
         Assert.Null(options.Reasoning);
     }
@@ -164,5 +218,26 @@ public class ReviewReasoningRequestTests
         var second = options.RawRepresentationFactory!(null!);
 
         Assert.NotSame(first, second);
+    }
+
+    private sealed class NativeProtocolClient : MeisterDev.Ai.Providers.Contracts.INativeProtocolChatClient
+    {
+        public string NativeProtocol => "test/native:Messages";
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
     }
 }

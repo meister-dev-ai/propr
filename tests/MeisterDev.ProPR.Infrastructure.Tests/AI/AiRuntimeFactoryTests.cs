@@ -45,6 +45,24 @@ public sealed class AiRuntimeFactoryTests
         Assert.Equal(expected, runtime.SupportsLowReasoningEffort);
     }
 
+    // Whether a model accepts the reasoning effort none is stated per model on the connection, so the capability the
+    // review reads comes from the configured model and not from the family.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReasoningEffortNoneCapability_ComesFromTheConfiguredModel(bool accepted)
+    {
+        var (registry, _, _, connection, model, binding) = SetupChat();
+
+        var runtime = new AiRuntimeFactory(registry).CreateChatRuntime(
+            connection,
+            model with { SupportsReasoningEffortNone = accepted },
+            binding);
+
+        Assert.Equal(accepted, runtime.Capabilities.SupportsReasoningEffortNone);
+        Assert.True(runtime.Capabilities.SupportsProviderManagedSessions);
+    }
+
     // Retry is not optional: a review that dies on one throttled call is not shippable, so the client is wrapped
     // even when nothing else contributes a stage. The resolved runtime still describes what it was built from.
     [Fact]

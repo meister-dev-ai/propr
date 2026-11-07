@@ -21,8 +21,9 @@ namespace MeisterDev.ProPR.Runner.Contracts;
 /// <param name="MaxOutputTokens">The output ceiling for this call, when the caller resolved one.</param>
 /// <param name="Tools">The tools the model may call, as declarations. Invocation stays with the runner.</param>
 /// <param name="ReasoningEffort">
-///     The reasoning effort level (<c>low</c> / <c>medium</c> / <c>high</c>), or null to leave the provider
-///     at its default. Carried as text so the contract stays free of library enums.
+///     The reasoning effort level (<c>low</c> / <c>medium</c> / <c>high</c>), <c>none</c> to ask a model that
+///     accepts it for no reasoning, or null to leave the provider at its default. Carried as text so the contract
+///     stays free of library enums.
 /// </param>
 /// <param name="CaptureReasoning">Whether the call asks the model to return a reasoning summary.</param>
 /// <param name="ToolMode">

@@ -350,7 +350,8 @@ public sealed partial class RunnerJobExecutor(
                 SupportsManagedRemoteConversation: false,
                 SupportsBackgroundResponses: false,
                 PrefersResponsesApi: false,
-                SupportsPromptCaching: manifest.DefaultModel.SupportsPromptCaching),
+                SupportsPromptCaching: manifest.DefaultModel.SupportsPromptCaching,
+                SupportsReasoningEffortNone: manifest.DefaultModel.SupportsReasoningEffortNone),
             OutputLanguage = manifest.Prompts.Language,
             FindingTypeVocabulary = manifest.Prompts.FindingTypeVocabulary is { Version: FindingTypeTaxonomy.Version, CustomTypes: not null } vocabulary
                 ? new FindingTypeVocabulary(

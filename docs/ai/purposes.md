@@ -98,15 +98,35 @@ A Community installation has no tenant-catalog layer at all, so every name is a 
 A logical model can carry a reasoning effort of `none`, `low`, `medium` or `high`. Because it is a property of the
 name, you can reason hard on the name mapped to High effort and not at all on the one mapped to Triage. ProPR
 translates it to whatever the provider expresses - an OpenAI reasoning effort, an Anthropic thinking budget, a
-Gemini thinking configuration - so the same setting means the same thing across providers. `none` sends no
-reasoning effort at all and leaves the provider at its own default.
+Gemini thinking configuration - so the same setting means the same thing across providers.
+
+The Responses API and the Anthropic, Google Vertex and Amazon Bedrock protocols receive `low`, `medium` and `high`.
+On Chat Completions, ProPR sends none of these three efforts, also in runner jobs, and the model uses its own
+default. OpenAI refuses function tools on Chat Completions from GPT-5.4 on with any effort other than
+`none`, and an OpenAI-compatible server whose model does not know the field can refuse the request.
+
+Each chat model on a connection has the setting **Accepts Reasoning Effort None**. For a review pass with the
+effort `none`, ProPR sends the reasoning effort `none` to a model with this setting, on Chat Completions and on the
+Responses API. For a model without it, ProPR leaves the effort out, and the model uses its own default. A
+model that reasons by default then still reasons and bills reasoning tokens.
+
+Turn the setting on when the provider documents the effort `none` for the model. OpenAI lists the accepted efforts
+on the page of each model, and a model that does not accept `none` refuses the request with HTTP 400. Discovery and
+the model catalog leave the setting off.
+
+The effort of a logical model, the client's baseline reasoning effort and the effort of a review pass follow this
+rule. A review pass with the effort `none` records the event `reasoning_effort_sent` in its trace. The event holds
+`"reasoningParameter": "sent"` when ProPR sent `none`, and `"reasoningParameter": "omitted"` when ProPR left the
+effort out.
 
 The evidence judge requests `low` effort, including on its bounded output-budget retry, when the bundled
 catalog advertises that effort for the exact model and the selected transport supports it. This call
-setting overrides the selected logical model's effort. Other models, unknown aliases and raw fallback
-clients use provider defaults. Selecting the Low effort purpose chooses a model; the supported call
-setting controls its reasoning effort. Chat Completions, Responses and runner relay requests carry
-the setting. See
+setting overrides the selected logical model's effort. On any other model, the judge runs with the effort `none`,
+and both contradiction checks run with the effort `none` on every model. These calls follow the rule above, also
+when the judge runs on the reviewer's own model because no Low effort model is bound. The value `low`, `medium` or
+`high` in `AI_VERIFICATION_REASONING_EFFORT` replaces both rules with that effort on every model. Selecting the Low
+effort purpose chooses a model; the supported call setting controls its reasoning effort. The effort of these calls
+reaches each transport as described above, also in runner jobs, so Chat Completions receives only `none`. See
 [verification](../concepts/reviews.md#what-happens-during-a-review) and
 [judge budgets](../operate/configuration.md#evidence-judge-budgets).
 

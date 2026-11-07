@@ -691,10 +691,15 @@ Which files land in which complexity tier is decided per review - see
 ## Evidence judge budgets
 
 The evidence judge requests `low` reasoning effort when the bundled catalog advertises it for the exact
-model and the selected transport supports it. Unknown or incompatible bindings use provider defaults.
+model and the selected transport supports it. On any other model, the judge runs with the effort `none`, and
+both contradiction checks run with the effort `none` on every model. For these calls, ProPR sends `none` to a
+model with **Accepts Reasoning Effort None** and leaves the effort out for any other model, which then uses its
+own default.
 `AI_VERIFICATION_REASONING_EFFORT` sets one effort for the judge and both contradiction checks on every
 model. Set it only for models that accept a reasoning effort, because a model that does not accept one
-rejects the request, and the output ceilings include the reasoning tokens.
+rejects the request, and the output ceilings include the reasoning tokens. A `low`, `medium` or `high` effort
+reaches the Responses API and the native protocols, and Chat Completions receives none of them - see
+[reasoning effort](../ai/purposes.md#reasoning-effort).
 The output ceiling includes reasoning tokens. An output-limit response, or an unusable verdict at the
 measured ceiling, receives one larger retry. Completed tool results remain available; the retry permits
 no further lookups and shares the claim's 120-second deadline. Both attempts are recorded and charged.

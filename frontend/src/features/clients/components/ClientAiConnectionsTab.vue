@@ -455,7 +455,20 @@
                       <input v-model="model.supportsToolUse" type="checkbox" />
                       <span>Tool Use</span>
                     </label>
+                    <label class="checkbox-field">
+                      <input
+                        v-model="model.supportsReasoningEffortNone"
+                        type="checkbox"
+                        :data-testid="`ai-model-effort-none-${index}`"
+                      />
+                      <span>Accepts Reasoning Effort None</span>
+                    </label>
                   </div>
+                  <p v-if="model.kind === 'chat'" class="muted ai-model-toggle-hint" :data-testid="`ai-model-effort-none-hint-${index}`">
+                    With "Accepts Reasoning Effort None" selected, ProPR sends the reasoning effort none to this model
+                    for a review pass with the effort None. Without it, ProPR leaves the effort out, and the model
+                    uses its own default. Turn it on when the provider documents the effort none for this model.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1068,6 +1081,11 @@ const storedSecretNote = (field: AiDeclaredFieldDto): string | null =>
 
 .checkbox-field span {
   font-weight: 500;
+}
+
+.ai-model-toggle-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
 }
 
 .ai-subsection {

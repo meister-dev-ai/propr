@@ -57,10 +57,15 @@ public sealed class AiRuntimeFactory(
         // credential the client started with expires before then.
         var endpoint = connection.ToProviderEndpoint(hostContexts?.ForConnection(connection));
         var client = driver.CreateChatClient(endpoint, model.ToProviderModel(), binding.ProtocolMode);
+        // Whether the model accepts the reasoning effort none is stated per model on the connection, because the
+        // provider documents the accepted effort values per model and the family does not decide them.
         var capabilities = driver.GetChatRuntimeCapabilities(
-            endpoint,
-            model.ToProviderModel(),
-            binding.ProtocolMode).ToReviewCapabilities();
+                endpoint,
+                model.ToProviderModel(),
+                binding.ProtocolMode).ToReviewCapabilities() with
+            {
+                SupportsReasoningEffortNone = model.SupportsReasoningEffortNone,
+            };
         var wrapped = this.WrapChatClient(client, driver, connection, model, logicalModelName, capabilities.SupportsPromptCacheRouting);
         return new ResolvedAiChatRuntime(connection, model, binding, wrapped, capabilities)
         {

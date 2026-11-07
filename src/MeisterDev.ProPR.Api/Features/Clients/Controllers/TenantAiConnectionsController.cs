@@ -516,7 +516,8 @@ public sealed class TenantAiConnectionsController(
                     model.CacheWriteCostPer1MUsd,
                     model.SupportsReasoning,
                     model.SupportsPromptCaching,
-                    string.IsNullOrWhiteSpace(model.ReasoningContentField) ? null : model.ReasoningContentField.Trim()));
+                    string.IsNullOrWhiteSpace(model.ReasoningContentField) ? null : model.ReasoningContentField.Trim(),
+                    model.SupportsReasoningEffortNone));
         }
 
         return models.AsReadOnly();

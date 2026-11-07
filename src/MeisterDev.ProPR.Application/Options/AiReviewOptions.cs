@@ -122,7 +122,9 @@ public sealed class AiReviewOptions : IValidatableObject
 
     /// <summary>
     ///     Reasoning effort that the evidence judge and both contradiction checks request on every model. With None, the
-    ///     judge requests low effort where the model supports it and the checks keep the provider's default.
+    ///     judge requests low effort where the model supports it and otherwise runs with the effort None, and the checks
+    ///     always run with the effort None. The effort None sends none to a model that accepts it and no effort to any
+    ///     other model. Chat Completions receives no low, medium or high effort.
     ///     Bound to <c>AI_VERIFICATION_REASONING_EFFORT</c>.
     /// </summary>
     public ReviewReasoningEffort VerificationReasoningEffort { get; set; } = ReviewReasoningEffort.None;

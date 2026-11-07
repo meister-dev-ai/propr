@@ -58,6 +58,12 @@ public sealed class AiConfiguredModelRecord
     /// </summary>
     public string? ReasoningContentField { get; set; }
 
+    /// <summary>
+    ///     Whether the model accepts the reasoning effort none. A call with the effort None sends none to such a model
+    ///     and leaves the effort out for any other model.
+    /// </summary>
+    public bool SupportsReasoningEffortNone { get; set; }
+
     public AiConnectionProfileRecord? ConnectionProfile { get; set; }
 
     public ICollection<AiPurposeBindingRecord> PurposeBindings { get; set; } = [];

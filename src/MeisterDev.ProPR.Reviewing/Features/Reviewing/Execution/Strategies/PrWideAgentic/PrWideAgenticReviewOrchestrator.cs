@@ -78,6 +78,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         var (ownsProtocolPass, prWideContextWithProtocol) =
             await this.BeginProtocolIfNeededAsync(job, prWideContext, overrideClient, ct);
         prWideContext = prWideContextWithProtocol;
+        await ReviewReasoningTrace.RecordAsync(prWideContext, ct);
 
         var tokens = new TokenAccumulator();
         try
@@ -251,8 +252,13 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         passContext.ConfiguredModelId = runtime.Model.Id;
         this.AttachGenerationCapture(job, pr, passContext, unionPassIndex, shadow);
         // The pass's configured reasoning effort is applied to every stage's chat request unconditionally; CloneContext
-        // carries it forward if the protocol re-clone below runs.
+        // carries it forward if the protocol re-clone below runs. Whether the pass's model accepts the effort none
+        // comes from the pass's own model, because the effort None is sent as none only to such a model.
         passContext.ActiveReasoningEffort = reasoningEffort;
+        passContext.RuntimeCapabilities = passContext.RuntimeCapabilities with
+        {
+            SupportsReasoningEffortNone = runtime.Model.SupportsReasoningEffortNone,
+        };
         var overrideClient = runtime.ChatClient;
 
         var ownsProtocolPass = false;
@@ -285,6 +291,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 LogProtocolBeginFailed(this._logger, job.Id, ex);
             }
         }
+
+        await ReviewReasoningTrace.RecordAsync(passContext, ct);
 
         try
         {
@@ -459,7 +467,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 var response = await effectiveClient.GetResponseAsync(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
-                        baseContext.CapturesReasoning(this._options), baseContext.ActiveReasoningEffort), ct);
+                        baseContext.CapturesReasoning(this._options),
+                        baseContext.ActiveReasoningEffort,
+                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_planning", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;
@@ -692,7 +702,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 var response = await effectiveClient.GetResponseAsync(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
-                        baseContext.CapturesReasoning(this._options), baseContext.ActiveReasoningEffort), ct);
+                        baseContext.CapturesReasoning(this._options),
+                        baseContext.ActiveReasoningEffort,
+                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, $"pr_wide_investigation_{task.Id}", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;
@@ -1054,7 +1066,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 var response = await effectiveClient.GetResponseAsync(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
-                        baseContext.CapturesReasoning(this._options), baseContext.ActiveReasoningEffort), ct);
+                        baseContext.CapturesReasoning(this._options),
+                        baseContext.ActiveReasoningEffort,
+                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_synthesis", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;
@@ -1355,7 +1369,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             this._aiRuntimeResolver,
             new ReviewVerificationIntent(pr.Title, pr.Description, pr.LinkedItems ?? [], null, null),
             baseContext.ActiveProtocolId,
-            PassReviewedWithRepositoryTools: baseContext.ReviewTools is not null);
+            PassReviewedWithRepositoryTools: baseContext.ReviewTools is not null,
+            SupportsReasoningEffortNone: baseContext.RuntimeCapabilities.SupportsReasoningEffortNone);
     }
 
     private async Task<CandidateReviewFinding> VerifySingleFindingAsync(

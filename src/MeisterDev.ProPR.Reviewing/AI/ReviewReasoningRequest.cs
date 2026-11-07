@@ -13,9 +13,11 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 ///     Configures the outbound reasoning options for a review chat request. Two independent knobs: the reasoning
 ///     SUMMARY opt-in (so reasoning-capable models return <c>TextReasoningContent</c> the assistant-turn recorder
 ///     can capture) and the reasoning EFFORT level (how much the model actually reasons). The
-///     Microsoft.Extensions.AI OpenAI adapter builds its request on top of the instance returned by
-///     <see cref="ChatOptions.RawRepresentationFactory" /> and leaves a pre-set <c>ReasoningOptions</c> untouched, so
-///     this is the mechanism that reaches the wire as <c>reasoning: { … }</c>.
+///     Microsoft.Extensions.AI OpenAI adapter for the Responses API builds its request on top of the instance
+///     returned by <see cref="ChatOptions.RawRepresentationFactory" /> and leaves a pre-set <c>ReasoningOptions</c>
+///     untouched, so this is the mechanism that reaches the wire as <c>reasoning: { … }</c>. The adapter for Chat
+///     Completions accepts no Responses options and reads the effort from <see cref="ChatOptions.Reasoning" />. Every
+///     request states only the effort <c>none</c> there, for a model that accepts it.
 /// </summary>
 /// <remarks>
 ///     That mechanism is per-client by design — the factory is handed the client it is building for — which 
@@ -30,16 +32,26 @@ internal static class ReviewReasoningRequest
     ///     <paramref name="captureReasoning" /> (asks for <c>summary: "auto"</c> when enabled). The effort level is
     ///     governed by <paramref name="reasoningEffort" /> and applied UNCONDITIONALLY from config — independent of the
     ///     summary opt-in — so a configured effort reaches the wire even when reasoning capture is off. A
-    ///     <see cref="ReviewReasoningEffort.None" /> effort leaves the level unset, so the provider keeps its default
-    ///     (no reasoning). When neither knob is active this is a no-op: byte-identical to sending no reasoning options,
-    ///     and harmless for non-OpenAI clients (they ignore <see cref="ChatOptions.RawRepresentationFactory" />).
+    ///     <see cref="ReviewReasoningEffort.None" /> effort sends <c>none</c> to a model that accepts it, on the
+    ///     Responses API and on Chat Completions. Any other model receives no effort level and uses its own
+    ///     default, because some reasoning models refuse a request that names <c>none</c>. A configured Low, Medium or
+    ///     High reaches the Responses API and native protocols. Chat Completions receives no effort for it, because
+    ///     OpenAI refuses function tools there with any effort other than <c>none</c> from GPT-5.4 on, and an
+    ///     OpenAI-compatible server whose model does not know the field can refuse the request. When neither knob is
+    ///     active this is a no-op: byte-identical to sending no reasoning options, and harmless for non-OpenAI clients
+    ///     (they ignore <see cref="ChatOptions.RawRepresentationFactory" />).
     /// </summary>
+    /// <param name="chatOptions">The options to shape.</param>
+    /// <param name="captureReasoning">Whether the model is asked to return a summary of its reasoning.</param>
+    /// <param name="reasoningEffort">How hard the model is asked to reason.</param>
+    /// <param name="supportsReasoningEffortNone">Whether the bound model accepts the effort <c>none</c>.</param>
     public static ChatOptions ApplyReasoning(
         this ChatOptions chatOptions,
         bool captureReasoning,
-        ReviewReasoningEffort reasoningEffort)
+        ReviewReasoningEffort reasoningEffort,
+        bool supportsReasoningEffortNone = false)
     {
-        return Apply(chatOptions, captureReasoning, reasoningEffort, stateWhenNothingIsAsked: false);
+        return Apply(chatOptions, captureReasoning, reasoningEffort, supportsReasoningEffortNone, stateWhenNothingIsAsked: false);
     }
 
     /// <summary>
@@ -51,17 +63,20 @@ internal static class ReviewReasoningRequest
     ///     decision was read. An absent reasoning request there is not the same as a stated refusal, because the
     ///     opt-in those options carried would otherwise stand, so the resolved answer is written out either way.
     ///     A refusal with no effort reaches the provider as the request it would have sent with no reasoning
-    ///     options at all.
+    ///     options at all. The effort reaches the transports as described on <see cref="ApplyReasoning" />, so Chat
+    ///     Completions receives only the effort <c>none</c>, for a model that accepts it.
     /// </remarks>
     /// <param name="chatOptions">The options to shape.</param>
     /// <param name="captureReasoning">Whether this job may keep the model's reasoning.</param>
     /// <param name="reasoningEffort">How hard the model is asked to reason.</param>
+    /// <param name="supportsReasoningEffortNone">Whether the bound model accepts the effort <c>none</c>.</param>
     public static ChatOptions ApplyResolvedReasoning(
         this ChatOptions chatOptions,
         bool captureReasoning,
-        ReviewReasoningEffort reasoningEffort)
+        ReviewReasoningEffort reasoningEffort,
+        bool supportsReasoningEffortNone = false)
     {
-        return Apply(chatOptions, captureReasoning, reasoningEffort, stateWhenNothingIsAsked: true);
+        return Apply(chatOptions, captureReasoning, reasoningEffort, supportsReasoningEffortNone, stateWhenNothingIsAsked: true);
     }
 
     /// <summary>Whether these options already carry a reasoning request this shaping produced.</summary>
@@ -81,19 +96,21 @@ internal static class ReviewReasoningRequest
         ChatOptions chatOptions,
         bool captureReasoning,
         ReviewReasoningEffort reasoningEffort,
+        bool supportsReasoningEffortNone,
         bool stateWhenNothingIsAsked)
     {
-        var effortLevel = MapEffortLevel(reasoningEffort);
+        var effortLevel = MapEffortLevel(reasoningEffort, supportsReasoningEffortNone);
 
-        // Nothing to send: no summary requested and no effort configured. Leave the request exactly as it would have
-        // been without any reasoning options — this is the default-none path and keeps current behavior byte-identical.
-        // A resolved decision is stated even here, because it has to replace whatever the options already carried.
+        // Nothing to send: no summary requested and no effort to state. The request stays exactly as it would have
+        // been without any reasoning options. This is the path of the effort None on a model that does not accept
+        // the effort none, and its request stays byte-identical. A resolved decision is stated even here, because it
+        // has to replace whatever the options already carried.
         if (!captureReasoning && effortLevel is null && !stateWhenNothingIsAsked)
         {
             return chatOptions;
         }
 
-        if (effortLevel is not null)
+        if (reasoningEffort != ReviewReasoningEffort.None)
         {
             // A model asked to reason does not take a sampling temperature, and OpenAI rejects the whole request
             // rather than ignoring the parameter: "Unsupported parameter: 'temperature' is not supported with this
@@ -104,22 +121,17 @@ internal static class ReviewReasoningRequest
             chatOptions.Temperature = null;
         }
 
-        if (stateWhenNothingIsAsked)
+        // Chat Completions reads the effort from the standard setting, because its adapter accepts no Responses
+        // options. Every request states only the effort none there, for a model that accepts it, and leaves a
+        // configured Low, Medium or High off Chat Completions for the reasons given on ApplyReasoning. A resolved
+        // decision replaces what the options carried there; an ordinary request leaves it as the caller made it.
+        if (reasoningEffort == ReviewReasoningEffort.None && supportsReasoningEffortNone)
         {
-            // Resolved and relayed requests must carry effort to both OpenAI transports. Chat Completions
-            // reads the standard setting because its adapter does not accept Responses options.
-            chatOptions.Reasoning = effortLevel is null
-                ? null
-                : new ReasoningOptions
-                {
-                    Effort = reasoningEffort switch
-                    {
-                        ReviewReasoningEffort.Low => ReasoningEffort.Low,
-                        ReviewReasoningEffort.Medium => ReasoningEffort.Medium,
-                        ReviewReasoningEffort.High => ReasoningEffort.High,
-                        _ => (ReasoningEffort?)null,
-                    },
-                };
+            chatOptions.Reasoning = new ReasoningOptions { Effort = ReasoningEffort.None };
+        }
+        else if (stateWhenNothingIsAsked)
+        {
+            chatOptions.Reasoning = null;
         }
 
         chatOptions.RawRepresentationFactory =
@@ -140,8 +152,11 @@ internal static class ReviewReasoningRequest
         };
     }
 
-    // Maps the configured effort to the provider effort level, or null for None (the provider keeps its own default).
-    private static ResponseReasoningEffortLevel? MapEffortLevel(ReviewReasoningEffort reasoningEffort)
+    // Maps the configured effort to the Responses effort level, or null when the request carries no effort and the
+    // provider keeps its own default.
+    private static ResponseReasoningEffortLevel? MapEffortLevel(
+        ReviewReasoningEffort reasoningEffort,
+        bool supportsReasoningEffortNone)
     {
 #pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
         // The null arm is explicitly typed: ResponseReasoningEffortLevel has an implicit string conversion, so a
@@ -151,7 +166,7 @@ internal static class ReviewReasoningRequest
             ReviewReasoningEffort.Low => ResponseReasoningEffortLevel.Low,
             ReviewReasoningEffort.Medium => ResponseReasoningEffortLevel.Medium,
             ReviewReasoningEffort.High => ResponseReasoningEffortLevel.High,
-            _ => (ResponseReasoningEffortLevel?)null,
+            _ => supportsReasoningEffortNone ? ResponseReasoningEffortLevel.None : (ResponseReasoningEffortLevel?)null,
         };
 #pragma warning restore OPENAI001
     }
@@ -163,7 +178,10 @@ internal static class ReviewReasoningRequest
     /// </remarks>
     /// <param name="captureReasoning">Whether the model is asked to return its reasoning.</param>
     /// <param name="reasoningEffort">How hard the model is asked to reason.</param>
-    /// <param name="effortLevel">The same effort in the OpenAI library's vocabulary, or null for the default.</param>
+    /// <param name="effortLevel">
+    ///     The effort in the OpenAI library's vocabulary, <c>none</c> for a model told not to reason, or null for
+    ///     the model's default.
+    /// </param>
 #pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
     private sealed class ShapedReasoningRequest(
         bool captureReasoning,

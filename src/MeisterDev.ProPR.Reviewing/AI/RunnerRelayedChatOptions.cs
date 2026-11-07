@@ -57,10 +57,14 @@ public static class RunnerRelayedChatOptions
 
         var effort = ParseEffort(wire.ReasoningEffort);
 
+        // A runner states the effort none only for a model its manifest marks as accepting it, and the request then
+        // asks the provider for no reasoning.
+        var statesNone = string.Equals(wire.ReasoningEffort, "none", StringComparison.OrdinalIgnoreCase);
+
         return captureReasoning is { } resolved
-            ? options.ApplyResolvedReasoning(resolved, effort)
-            : effort != ReviewReasoningEffort.None
-                ? options.ApplyResolvedReasoning(wire.CaptureReasoning, effort)
+            ? options.ApplyResolvedReasoning(resolved, effort, statesNone)
+            : effort != ReviewReasoningEffort.None || statesNone
+                ? options.ApplyResolvedReasoning(wire.CaptureReasoning, effort, statesNone)
                 : options.ApplyReasoning(wire.CaptureReasoning, effort);
     }
 
@@ -82,7 +86,8 @@ public static class RunnerRelayedChatOptions
     private static ReviewReasoningEffort ParseEffort(string? effort)
     {
         // Unknown values fall back to None rather than failing the call: a newer runner naming a level this
-        // build does not know should still get its completion, at the provider's default effort.
+        // build does not know should still get its completion, at the provider's default effort. The effort none
+        // maps to None as well; the caller reads it separately.
         return effort?.ToLowerInvariant() switch
         {
             "low" => ReviewReasoningEffort.Low,
