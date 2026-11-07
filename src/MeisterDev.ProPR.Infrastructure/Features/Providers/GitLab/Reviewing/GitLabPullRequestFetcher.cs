@@ -31,7 +31,8 @@ internal sealed class GitLabPullRequestFetcher(
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
         ReviewRevision? compareToReviewRevision = null,
-        IReviewRepositoryWorkspace? workspace = null)
+        IReviewRepositoryWorkspace? workspace = null,
+        IReadOnlyCollection<string>? additionalFilePaths = null)
     {
         if (!clientId.HasValue)
         {
@@ -62,12 +63,17 @@ internal sealed class GitLabPullRequestFetcher(
                                compareToReviewRevision,
                                cancellationToken)
                            ?? changesResponse.Changes;
+        var reviewedChanges = DeltaFileAdditions.AddRequestedFiles(
+            deltaChanges,
+            changesResponse.Changes,
+            additionalFilePaths,
+            change => NormalizePath(change.NewPath ?? change.OldPath));
         var changedFiles = await this.BuildChangedFilesAsync(
             context,
             host,
             repositoryId,
             mergeRequest,
-            deltaChanges,
+            reviewedChanges,
             cancellationToken);
         var allChangedFileSummaries = changesResponse.Changes
             .Select(MapSummary)

@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Workspace;
 using Microsoft.Extensions.Logging.Abstractions;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
@@ -8,10 +10,11 @@ using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 
 /// <summary>
-///     The dispatch preparer parses <c>git diff --name-only</c> into the carry-forward set with
-///     <c>core.quotePath</c> disabled. With quoting on, git answers <c>"src/caf\303\251.cs"</c> including the
-///     surrounding quotes, which matches no stored file path, so a file that did change is carried forward
-///     with the previous iteration's comments instead of being reviewed.
+///     Carry-forward compares the head of the baseline with the reviewed head in the mirror and matches the
+///     changed paths against the stored file results. The comparison returns every path as stored. With quoting,
+///     git answers <c>"src/caf\303\251.cs"</c> including the surrounding quotes, which matches no stored file path,
+///     so a file that did change would be carried forward with the previous iteration's comments instead of being
+///     reviewed.
 /// </summary>
 [Collection("GitCommandLine")]
 public sealed class MirrorDeltaQuotingTests : IDisposable
@@ -30,15 +33,17 @@ public sealed class MirrorDeltaQuotingTests : IDisposable
             ["GIT_COMMON_DIR"] = null,
         };
 
-    private readonly string _repoPath = Path.Combine(
+    private readonly string _rootPath = Path.Combine(
         Path.GetTempPath(),
         $"propr-delta-quoting-{Guid.NewGuid():N}");
+
+    private string RepoPath => Path.Combine(this._rootPath, "repo");
 
     public void Dispose()
     {
         try
         {
-            Directory.Delete(this._repoPath, recursive: true);
+            Directory.Delete(this._rootPath, recursive: true);
         }
         catch (IOException)
         {
@@ -48,40 +53,84 @@ public sealed class MirrorDeltaQuotingTests : IDisposable
     }
 
     [Fact]
-    public async Task ANonAsciiPathInTheDelta_ComesBackUnquoted()
+    public async Task ThePathsChangedSinceABaseline_ComeBackAsStored()
     {
         var git = new GitCommandRunner(NullLogger<GitCommandRunner>.Instance);
-        Directory.CreateDirectory(this._repoPath);
+        await this.InitRepositoryAsync(git);
+
+        Directory.CreateDirectory(Path.Combine(this.RepoPath, "src"));
+        await File.WriteAllTextAsync(Path.Combine(this.RepoPath, "src", "café.cs"), "class A;");
+        await File.WriteAllTextAsync(Path.Combine(this.RepoPath, "src", "with space.cs"), "class B;");
+        await File.WriteAllTextAsync(Path.Combine(this.RepoPath, "src", "same.cs"), "class C;");
+        var baseline = await this.CommitAsync(git, "baseline");
+
+        await File.WriteAllTextAsync(Path.Combine(this.RepoPath, "src", "café.cs"), "class A { }");
+        await File.WriteAllTextAsync(Path.Combine(this.RepoPath, "src", "with space.cs"), "class B { }");
+        var current = await this.CommitAsync(git, "change");
+
+        var changed = await this.CreateWorkspace(current).GetPathsChangedSinceAsync(baseline, CancellationToken.None);
+
+        Assert.NotNull(changed);
+        Assert.Equal(["src/café.cs", "src/with space.cs"], changed!.Order(StringComparer.Ordinal));
+    }
+
+    // Without a comparison, the caller cannot show any file to be unchanged, and carries nothing forward.
+    [Fact]
+    public async Task ARevisionTheMirrorDoesNotHold_IsAnsweredWithNull()
+    {
+        var git = new GitCommandRunner(NullLogger<GitCommandRunner>.Instance);
+        await this.InitRepositoryAsync(git);
+        await File.WriteAllTextAsync(Path.Combine(this.RepoPath, "file.cs"), "class A;");
+        var current = await this.CommitAsync(git, "only");
+
+        var changed = await this.CreateWorkspace(current)
+            .GetPathsChangedSinceAsync("0123456789abcdef0123456789abcdef01234567", CancellationToken.None);
+
+        Assert.Null(changed);
+    }
+
+    private GitReviewRepositoryWorkspace CreateWorkspace(string headSha)
+    {
+        var lease = new ReviewRepositoryWorkspaceLease(
+            Guid.NewGuid(),
+            "delta",
+            this.RepoPath,
+            this.RepoPath,
+            headSha,
+            headSha,
+            headSha,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            "Active");
+        var cleanupService = new ReviewWorkspaceCleanupService(
+            Microsoft.Extensions.Options.Options.Create(new ReviewWorkspaceOptions { RootPath = this._rootPath }),
+            NullLogger<ReviewWorkspaceCleanupService>.Instance);
+        return new GitReviewRepositoryWorkspace(
+            lease,
+            new GitCommandRunner(NullLogger<GitCommandRunner>.Instance),
+            NullLogger.Instance,
+            cleanupService);
+    }
+
+    private async Task InitRepositoryAsync(GitCommandRunner git)
+    {
+        Directory.CreateDirectory(this.RepoPath);
         await this.RunGitAsync(git, "init", "-q");
         await this.RunGitAsync(git, "config", "user.email", "test@test.invalid");
         await this.RunGitAsync(git, "config", "user.name", "Test");
+        await this.RunGitAsync(git, "config", "commit.gpgsign", "false");
+    }
 
-        Directory.CreateDirectory(Path.Combine(this._repoPath, "src"));
-        var filePath = Path.Combine(this._repoPath, "src", "café.cs");
-        await File.WriteAllTextAsync(filePath, "class A;");
+    private async Task<string> CommitAsync(GitCommandRunner git, string message)
+    {
         await this.RunGitAsync(git, "add", ".");
-        await this.RunGitAsync(git, "commit", "-q", "-m", "baseline");
-        var baseline = (await this.RunGitAsync(git, "rev-parse", "HEAD")).StandardOutput.Trim();
-
-        await File.WriteAllTextAsync(filePath, "class A { }");
-        await this.RunGitAsync(git, "add", ".");
-        await this.RunGitAsync(git, "commit", "-q", "-m", "change");
-        var current = (await this.RunGitAsync(git, "rev-parse", "HEAD")).StandardOutput.Trim();
-
-        // The exact invocation the preparer's delta uses.
-        var diff = await git.RunAsync(
-            this._repoPath,
-            ["-c", "core.quotePath=false", "diff", "--name-only", baseline, current],
-            IsolatedGitEnvironment,
-            CancellationToken.None);
-
-        Assert.Equal(0, diff.ExitCode);
-        Assert.Equal("src/café.cs", diff.StandardOutput.Trim());
+        await this.RunGitAsync(git, "commit", "-q", "-m", message);
+        return (await this.RunGitAsync(git, "rev-parse", "HEAD")).StandardOutput.Trim();
     }
 
     private async Task<GitCommandResult> RunGitAsync(GitCommandRunner git, params string[] args)
     {
-        var result = await git.RunAsync(this._repoPath, args, IsolatedGitEnvironment, CancellationToken.None);
+        var result = await git.RunAsync(this.RepoPath, args, IsolatedGitEnvironment, CancellationToken.None);
         Assert.Equal(0, result.ExitCode);
         return result;
     }

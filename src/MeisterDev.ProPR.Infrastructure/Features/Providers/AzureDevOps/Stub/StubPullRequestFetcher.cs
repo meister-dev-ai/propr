@@ -44,7 +44,8 @@ public sealed partial class StubPullRequestFetcher(ILogger<StubPullRequestFetche
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
         ReviewRevision? compareToReviewRevision = null,
-        IReviewRepositoryWorkspace? workspace = null)
+        IReviewRepositoryWorkspace? workspace = null,
+        IReadOnlyCollection<string>? additionalFilePaths = null)
     {
         LogStubFetch(logger, pullRequestId);
 

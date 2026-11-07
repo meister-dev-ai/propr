@@ -79,18 +79,11 @@ public sealed partial class AdoPrFetcher(
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
         ReviewRevision? compareToReviewRevision = null,
-        IReviewRepositoryWorkspace? workspace = null)
+        IReviewRepositoryWorkspace? workspace = null,
+        IReadOnlyCollection<string>? additionalFilePaths = null)
     {
-        var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
-            connectionRepository,
-            clientId,
-            organizationUrl,
-            cancellationToken);
-        var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
-        await connection.ConnectAsync(cancellationToken);
-        var authorizedIdentityId = connection.AuthorizedIdentity?.Id;
+        var (gitClient, authorizedIdentityId) = await this.ResolveReviewClientAsync(organizationUrl, clientId, cancellationToken);
         var host = new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl);
-        var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         // Get PR metadata
         var pr = await gitClient.GetPullRequestAsync(
@@ -128,8 +121,32 @@ public sealed partial class AdoPrFetcher(
                 cancellationToken: ct),
             cancellationToken);
 
+        // Build the full PR manifest (paths + change types only, no content download) when
+        // we're doing a delta review.  On a first-pass fetch compareTo is null and the two
+        // lists are identical, so we skip the extra API call. The files the review covers in
+        // addition to the delta are taken from this listing, because the iteration comparison
+        // does not contain a file that did not change since the compared iteration.
+        IReadOnlyList<GitPullRequestChange>? allChanges = null;
+        if (compareToIterationId.HasValue)
+        {
+            allChanges = await AdoPullRequestIterationChangePager.LoadAllAsync(
+                (top, skip, ct) => gitClient.GetPullRequestIterationChangesAsync(
+                    projectId,
+                    repositoryId,
+                    pullRequestId,
+                    iterationId,
+                    top,
+                    skip,
+                    cancellationToken: ct),
+                cancellationToken);
+        }
+
+        var reviewedChanges = allChanges is null
+            ? deltaChanges
+            : DeltaFileAdditions.AddRequestedFiles(deltaChanges, allChanges, additionalFilePaths, GetChangedFilePath);
+
         var changedFiles = new List<ChangedFile>();
-        foreach (var change in deltaChanges)
+        foreach (var change in reviewedChanges)
         {
             var changedFile = await this.CreateChangedFileFromChangeAsync(
                 gitClient,
@@ -147,29 +164,11 @@ public sealed partial class AdoPrFetcher(
             }
         }
 
-        // Build the full PR manifest (paths + change types only, no content download) when
-        // we're doing a delta review.  On a first-pass fetch compareTo is null and the two
-        // lists are identical, so we skip the extra API call.
-        IReadOnlyList<ChangedFileSummary>? allChangedFileSummaries = null;
-        if (compareToIterationId.HasValue)
-        {
-            var allChanges = await AdoPullRequestIterationChangePager.LoadAllAsync(
-                (top, skip, ct) => gitClient.GetPullRequestIterationChangesAsync(
-                    projectId,
-                    repositoryId,
-                    pullRequestId,
-                    iterationId,
-                    top,
-                    skip,
-                    cancellationToken: ct),
-                cancellationToken);
-
-            allChangedFileSummaries = allChanges
-                .Select(CreateSummaryFromChange)
-                .OfType<ChangedFileSummary>()
-                .ToList()
-                .AsReadOnly();
-        }
+        var allChangedFileSummaries = allChanges?
+            .Select(CreateSummaryFromChange)
+            .OfType<ChangedFileSummary>()
+            .ToList()
+            .AsReadOnly();
 
         var existingThreads = await this.FetchExistingThreadsAsync(
             gitClient,
@@ -368,6 +367,24 @@ public sealed partial class AdoPrFetcher(
         return await this.FetchExistingThreadsAsync(gitClient, projectId, repositoryId, pullRequestId, cancellationToken);
     }
 
+    // A test that replaces the thread client replaces the client of the review fetch as well. The authorized
+    // identity is then unknown.
+    private async Task<(GitHttpClient Client, Guid? AuthorizedIdentityId)> ResolveReviewClientAsync(
+        string organizationUrl,
+        Guid? clientId,
+        CancellationToken ct)
+    {
+        if (this.GitClientResolver is not null)
+        {
+            return (await this.GitClientResolver(organizationUrl, ct), null);
+        }
+
+        var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(connectionRepository, clientId, organizationUrl, ct);
+        var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
+        await connection.ConnectAsync(ct);
+        return (await connection.GetClientAsync<GitHttpClient>(ct), connection.AuthorizedIdentity?.Id);
+    }
+
     private async Task<GitHttpClient> ResolveThreadClientAsync(string organizationUrl, Guid? clientId, CancellationToken ct)
     {
         if (this.GitClientResolver is not null)
@@ -412,6 +429,14 @@ public sealed partial class AdoPrFetcher(
         var login = string.IsNullOrWhiteSpace(createdBy.UniqueName) ? createdBy.DisplayName : createdBy.UniqueName;
 
         return new PullRequestAuthor(host, createdBy.Id, login, createdBy.DisplayName);
+    }
+
+    // The repository-relative path a change contributes to the fetched files, or null for a folder.
+    private static string? GetChangedFilePath(GitPullRequestChange change)
+    {
+        return change.Item?.IsFolder == true || string.IsNullOrEmpty(change.Item?.Path)
+            ? null
+            : ToRepoRelativePath(change.Item.Path);
     }
 
     internal static ChangedFileSummary? CreateSummaryFromChange(GitPullRequestChange change)

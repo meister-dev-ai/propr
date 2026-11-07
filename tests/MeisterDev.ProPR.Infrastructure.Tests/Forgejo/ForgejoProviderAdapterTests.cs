@@ -533,6 +533,89 @@ public sealed class ForgejoPullRequestFetcherTests
             });
     }
 
+    // A file whose review failed in the baseline joins the delta review. The compare between the baseline head
+    // and the current head does not contain it when it did not change, so the fetcher takes it from the listing
+    // of the whole pull request and reads its content like a file of the delta. A requested file that the pull
+    // request no longer contains adds nothing.
+    [Fact]
+    public async Task FetchAsync_DeltaReview_AddsTheRequestedFilesFromTheFullListing()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var baselineRevision = new ReviewRevision("old-head", "base-sha", "base-sha", "old-head", "base-sha...old-head");
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repositories/101" => ForgejoTestHelpers.CreateJsonResponse(new { full_name = "acme/propr" }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42" => ForgejoTestHelpers.CreateJsonResponse(
+                    new
+                    {
+                        title = "Add provider-neutral fetchers",
+                        body = (string?)null,
+                        state = "open",
+                        merged = false,
+                        head = new { @ref = "feature/providers", sha = "new-head" },
+                        @base = new { @ref = "main", sha = "base-sha" },
+                    }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/files?limit=100" => ForgejoTestHelpers.CreateJsonResponse(
+                    new object[]
+                    {
+                        new { filename = "src/Fetcher.cs", status = "modified", previous_filename = (string?)null, patch = "fetcher diff" },
+                        new { filename = "src/Stable.cs", status = "modified", previous_filename = (string?)null, patch = "stable diff" },
+                        new { filename = "src/Other.cs", status = "modified", previous_filename = (string?)null, patch = "other diff" },
+                    }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/compare/old-head...new-head" => ForgejoTestHelpers.CreateJsonResponse(
+                    new
+                    {
+                        files = new object[]
+                        {
+                            new { filename = "src/Fetcher.cs", status = "modified", previous_filename = (string?)null, patch = "fetcher delta" },
+                        },
+                    }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/src%2FFetcher.cs?ref=new-head" => Base64Content("class Fetcher { }"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/src%2FFetcher.cs?ref=base-sha" => Base64Content("class Fetcher;"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/src%2FStable.cs?ref=new-head" => Base64Content("class Stable { }"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/src%2FStable.cs?ref=base-sha" => Base64Content("class Stable;"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews?limit=100" =>
+                    ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new ForgejoPullRequestFetcher(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://codeberg.example.com",
+            "acme",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None,
+            compareToReviewRevision: baselineRevision,
+            additionalFilePaths: ["src/Stable.cs", "src/Removed.cs", "src/Fetcher.cs"]);
+
+        Assert.Collection(
+            result.ChangedFiles,
+            item => Assert.Equal("src/Fetcher.cs", item.Path),
+            item =>
+            {
+                Assert.Equal("src/Stable.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+                Assert.Equal("class Stable { }", item.FullContent);
+                Assert.Equal("stable diff", item.UnifiedDiff);
+            });
+        Assert.Equal(
+            ["src/Fetcher.cs", "src/Stable.cs", "src/Other.cs"],
+            result.AllPrFileSummaries.Select(summary => summary.Path));
+
+        static HttpResponseMessage Base64Content(string content) => ForgejoTestHelpers.CreateJsonResponse(
+            new { content = Convert.ToBase64String(Encoding.UTF8.GetBytes(content)), encoding = "base64" });
+    }
+
     [Fact]
     public async Task FetchAsync_PathBasedRepositoryIdentifier_SkipsRepositoryLookup()
     {

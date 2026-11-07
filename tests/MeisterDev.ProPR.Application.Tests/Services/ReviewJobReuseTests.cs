@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -66,7 +67,7 @@ public sealed class ReviewJobReuseTests
         Assert.Equal(0, await reuse.ResumePriorFileResultsAsync(job, foreign, paths, new HashSet<string>(), CancellationToken.None));
         Assert.Empty(
             await reuse.CarryForwardBaselineResultsAsync(
-                job, foreign, false, paths, ReviewExclusionRules.Default, new HashSet<string>(), CancellationToken.None));
+                job, foreign, false, paths, new HashSet<string>(), ReviewExclusionRules.Default, new HashSet<string>(), CancellationToken.None));
         await this._store.DidNotReceive().AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>());
     }
 
@@ -107,6 +108,112 @@ public sealed class ReviewJobReuseTests
             Arg.Any<CancellationToken>());
     }
 
+    // A failed file review leaves no result to carry forward, and a delta fetch contains only the files that
+    // changed since the baseline. The reuse state names the failed files, so the delta fetch adds them.
+    [Fact]
+    public async Task ADeltaScopedBaseline_NamesTheFilesWhoseReviewFailedInIt()
+    {
+        var job = MakeIterationJob(Guid.NewGuid(), iteration: 2);
+        var baseline = MakeIterationJob(Guid.NewGuid(), iteration: 1);
+        baseline.Status = JobStatus.Completed;
+        WithCompletedRows(baseline, "src/a.cs");
+        WithFailedRow(baseline, "src/c.cs");
+        this.GivenTheBaseline(baseline);
+
+        var state = await this.CreateReuse(job).LoadScanStateAsync(job, CancellationToken.None);
+
+        Assert.True(state.BaselineIsFullCoverage);
+        Assert.Equal(1, state.CompareToIterationId);
+        Assert.Equal(["src/c.cs"], state.FailedBaselineFilePaths);
+    }
+
+    // The review of a partial baseline fetches the whole pull request, which contains the failed files already.
+    [Fact]
+    public async Task APartialBaseline_NamesNoFailedFiles()
+    {
+        var job = MakeIterationJob(Guid.NewGuid(), iteration: 2);
+        var baseline = MakeIterationJob(Guid.NewGuid(), iteration: 1);
+        baseline.Status = JobStatus.Superseded;
+        WithCompletedRows(baseline, "src/a.cs");
+        WithFailedRow(baseline, "src/c.cs");
+        this.GivenTheBaseline(baseline);
+
+        var state = await this.CreateReuse(job).LoadScanStateAsync(job, CancellationToken.None);
+
+        Assert.False(state.BaselineIsFullCoverage);
+        Assert.Null(state.CompareToIterationId);
+        Assert.Empty(state.FailedBaselineFilePaths);
+    }
+
+    private static ReviewJob MakeIterationJob(Guid id, int iteration)
+    {
+        var job = new ReviewJob(id, ClientId, "https://dev.azure.com/org", "project", "repo", 42, iteration);
+        var revision = iteration.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        job.SetReviewRevision(new ReviewRevision($"head-{revision}", "base-sha", null, revision, null));
+        return job;
+    }
+
+    private static void WithFailedRow(ReviewJob job, string path)
+    {
+        var row = new ReviewFileResult(job.Id, path);
+        row.MarkFailed("The model endpoint refused the request.");
+        job.FileReviewResults.Add(row);
+    }
+
+    private void GivenTheBaseline(ReviewJob baseline)
+    {
+        this._store.GetLatestReusableTerminalJobAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(baseline);
+    }
+
+    // Against a partial baseline the review fetches the whole pull request. A reviewed file carries forward when
+    // the pull request still contains it and it did not change since the baseline. A reviewed file that changed
+    // keeps no result from its previous content and is reviewed again.
+    [Fact]
+    public async Task APartialBaseline_CarriesForwardOnlyTheReviewedFilesThatDidNotChange()
+    {
+        var job = MakeJob();
+        var reuse = this.CreateReuse(job);
+        var baseline = WithCompletedRows(MakeJob(Guid.NewGuid()), "src/unchanged.cs", "src/changed.cs", "src/removed.cs");
+
+        var carried = await reuse.CarryForwardBaselineResultsAsync(
+            job,
+            baseline,
+            baselineIsFullCoverage: false,
+            changedPathsSet: new HashSet<string>(["src/unchanged.cs", "src/changed.cs", "src/new.cs"], StringComparer.OrdinalIgnoreCase),
+            pathsChangedSinceBaseline: new HashSet<string>(["src/changed.cs", "src/new.cs", "src/removed.cs"], StringComparer.OrdinalIgnoreCase),
+            ReviewExclusionRules.Default,
+            claimedPaths: new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            CancellationToken.None);
+
+        Assert.Equal(["src/unchanged.cs"], carried);
+    }
+
+    // Without the comparison of the two revisions, no reviewed file can be shown to be unchanged, so none carries
+    // forward and the review covers every file.
+    [Fact]
+    public async Task APartialBaseline_WithoutTheChangedPaths_CarriesNothingForward()
+    {
+        var job = MakeJob();
+        var reuse = this.CreateReuse(job);
+        var baseline = WithCompletedRows(MakeJob(Guid.NewGuid()), "src/unchanged.cs");
+
+        var carried = await reuse.CarryForwardBaselineResultsAsync(
+            job,
+            baseline,
+            baselineIsFullCoverage: false,
+            changedPathsSet: new HashSet<string>(["src/unchanged.cs"], StringComparer.OrdinalIgnoreCase),
+            pathsChangedSinceBaseline: null,
+            ReviewExclusionRules.Default,
+            claimedPaths: new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            CancellationToken.None);
+
+        Assert.Empty(carried);
+        await this._store.DidNotReceive().AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task CarryingForwardOverAJobThatAlreadyHasRows_SkipsThem()
     {
@@ -119,6 +226,7 @@ public sealed class ReviewJobReuseTests
             baseline,
             baselineIsFullCoverage: false,
             changedPathsSet: new HashSet<string>(["src/kept.cs", "src/other.cs"], StringComparer.OrdinalIgnoreCase),
+            pathsChangedSinceBaseline: new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             ReviewExclusionRules.Default,
             claimedPaths: new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             CancellationToken.None);

@@ -583,6 +583,111 @@ public sealed class GitLabPullRequestFetcherTests
                 Assert.Equal(ChangeType.Edit, item.ChangeType);
             });
     }
+
+    // A file whose review failed in the baseline joins the delta review. The compare between the baseline head
+    // and the current head does not contain it when it did not change, so the fetcher takes it from the change
+    // listing of the merge request and reads its content like a file of the delta. A requested file that the
+    // merge request no longer contains adds nothing.
+    [Fact]
+    public async Task FetchAsync_DeltaReview_AddsTheRequestedFilesFromTheFullListing()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var baselineRevision = new ReviewRevision("old-head", "base-sha", "start-sha", "old-head", "base-sha...old-head");
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42" => GitLabTestHelpers.CreateJsonResponse(
+                    new
+                    {
+                        title = "Add provider fetchers",
+                        description = (string?)null,
+                        state = "opened",
+                        source_branch = "feature/providers",
+                        target_branch = "main",
+                        sha = "new-head",
+                        diff_refs = new { base_sha = "base-sha", head_sha = "new-head", start_sha = "start-sha" },
+                        references = new { full = "acme/platform/propr!42", @short = "propr!42" },
+                    }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/changes" => GitLabTestHelpers.CreateJsonResponse(
+                    new
+                    {
+                        changes = new object[]
+                        {
+                            new
+                            {
+                                old_path = "src/Fetcher.cs", new_path = "src/Fetcher.cs", diff = "fetcher diff",
+                                new_file = false, deleted_file = false, renamed_file = false,
+                            },
+                            new
+                            {
+                                old_path = "src/Stable.cs", new_path = "src/Stable.cs", diff = "stable diff",
+                                new_file = false, deleted_file = false, renamed_file = false,
+                            },
+                            new
+                            {
+                                old_path = "src/Other.cs", new_path = "src/Other.cs", diff = "other diff",
+                                new_file = false, deleted_file = false, renamed_file = false,
+                            },
+                        },
+                    }),
+                "https://gitlab.example.com/api/v4/projects/101/repository/compare?from=old-head&to=new-head" =>
+                    GitLabTestHelpers.CreateJsonResponse(
+                        new
+                        {
+                            diffs = new object[]
+                            {
+                                new
+                                {
+                                    old_path = "src/Fetcher.cs", new_path = "src/Fetcher.cs", diff = "fetcher delta",
+                                    new_file = false, deleted_file = false, renamed_file = false,
+                                },
+                            },
+                        }),
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FFetcher.cs/raw?ref=new-head" =>
+                    new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("class Fetcher { }") },
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FFetcher.cs/raw?ref=base-sha" =>
+                    new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("class Fetcher;") },
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FStable.cs/raw?ref=new-head" =>
+                    new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("class Stable { }") },
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FStable.cs/raw?ref=base-sha" =>
+                    new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("class Stable;") },
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions?per_page=100" =>
+                    GitLabTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new GitLabPullRequestFetcher(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://gitlab.example.com",
+            "acme/platform",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None,
+            compareToReviewRevision: baselineRevision,
+            additionalFilePaths: ["src/Stable.cs", "src/Removed.cs", "src/Fetcher.cs"]);
+
+        Assert.Collection(
+            result.ChangedFiles,
+            item => Assert.Equal("src/Fetcher.cs", item.Path),
+            item =>
+            {
+                Assert.Equal("src/Stable.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+                Assert.Equal("class Stable { }", item.FullContent);
+                Assert.Equal("stable diff", item.UnifiedDiff);
+            });
+        Assert.Equal(
+            ["src/Fetcher.cs", "src/Stable.cs", "src/Other.cs"],
+            result.AllPrFileSummaries.Select(summary => summary.Path));
+    }
 }
 
 public sealed class GitLabCodeReviewPublicationServiceTests

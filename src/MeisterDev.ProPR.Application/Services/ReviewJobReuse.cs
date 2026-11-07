@@ -78,7 +78,12 @@ public sealed partial class ReviewJobReuse(
             baselineIsFullCoverage,
             resumeJob,
             compareToIterationId,
-            compareToReviewRevision);
+            compareToReviewRevision)
+        {
+            FailedBaselineFilePaths = baselineIsFullCoverage && baselineJob is not null
+                ? SelectFailedFilePaths(job, baselineJob)
+                : [],
+        };
     }
 
     /// <summary>
@@ -135,17 +140,23 @@ public sealed partial class ReviewJobReuse(
     //
     // Full-coverage baseline: the current scope is delta-scoped against it, so a reviewed file that is NOT
     // in the delta (<paramref name="changedPathsSet" /> holds the delta) is provably unchanged and carries
-    // forward. This is the long-standing behaviour and is unchanged for a completed baseline.
+    // forward. This is the long-standing behaviour and is unchanged for a completed baseline. The delta fetch
+    // also contains the files whose review failed in the baseline. They have no result to carry forward and
+    // are reviewed again.
     //
     // Partial baseline (cancelled/failed/superseded mid per-file review): the current scope is the full PR
-    // (<paramref name="changedPathsSet" /> holds every current file), so carry forward every reviewed file
-    // still present as an AI-skip set and let the dispatcher review the rest fresh. This keeps files that
-    // are unchanged since the baseline, but were never reviewed by it, from being skipped.
+    // (<paramref name="changedPathsSet" /> holds every current file). A reviewed file carries forward when the
+    // pull request still contains it and it did not change since the baseline, which
+    // <paramref name="pathsChangedSinceBaseline" /> answers. The dispatcher reviews the rest fresh: the files the
+    // baseline never reviewed, and the files that changed after the baseline reviewed them. Without that answer
+    // nothing carries forward, because a reviewed file that changed would otherwise keep the result of its
+    // previous content.
     public async Task<List<string>> CarryForwardBaselineResultsAsync(
         ReviewJob job,
         ReviewJob? baselineJob,
         bool baselineIsFullCoverage,
         HashSet<string> changedPathsSet,
+        IReadOnlySet<string>? pathsChangedSinceBaseline,
         ReviewExclusionRules exclusionRules,
         HashSet<string> claimedPaths,
         CancellationToken ct)
@@ -168,7 +179,9 @@ public sealed partial class ReviewJobReuse(
         {
             var shouldCarryForward = baselineIsFullCoverage
                 ? !changedPathsSet.Contains(priorResult.FilePath)
-                : changedPathsSet.Contains(priorResult.FilePath);
+                : changedPathsSet.Contains(priorResult.FilePath)
+                  && pathsChangedSinceBaseline is not null
+                  && !pathsChangedSinceBaseline.Contains(priorResult.FilePath);
             if (!shouldCarryForward)
             {
                 continue;
@@ -276,6 +289,31 @@ public sealed partial class ReviewJobReuse(
     }
 
     /// <summary>
+    ///     The paths whose review failed in a baseline that the current review is delta-scoped against.
+    /// </summary>
+    /// <remarks>
+    ///     A failed file review leaves a failed row and no result. Carry-forward copies results only, and the delta
+    ///     fetch contains only the files that changed since the baseline, so a failed file that did not change
+    ///     would be neither reviewed nor carried forward. The delta fetch adds these paths to the files it fetches,
+    ///     and the current review reviews them again. A file whose review fails again leaves a failed row in the
+    ///     current job, so the review of the next push retries it as well.
+    /// </remarks>
+    private static IReadOnlyList<string> SelectFailedFilePaths(ReviewJob job, ReviewJob baselineJob)
+    {
+        if (baselineJob.ClientId != job.ClientId)
+        {
+            return [];
+        }
+
+        return baselineJob.FileReviewResults
+            .Where(result => result.IsFailed)
+            .Select(result => result.FilePath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+            .AsReadOnly();
+    }
+
+    /// <summary>
     ///     Whether a prior run at this revision was stopped by a budget cap before it had reviewed everything
     ///     in scope.
     /// </summary>
@@ -319,4 +357,12 @@ public sealed record ReviewJobReuseState(
     bool BaselineIsFullCoverage,
     ReviewJob? ResumeJob,
     int? CompareToIterationId,
-    ReviewRevision? CompareToReviewRevision);
+    ReviewRevision? CompareToReviewRevision)
+{
+    /// <summary>
+    ///     The files whose review failed in the baseline, when the review is delta-scoped against it. The delta
+    ///     fetch adds them to the files it fetches. Empty when the review is not delta-scoped, because the review
+    ///     then fetches every file of the pull request.
+    /// </summary>
+    public IReadOnlyList<string> FailedBaselineFilePaths { get; init; } = [];
+}

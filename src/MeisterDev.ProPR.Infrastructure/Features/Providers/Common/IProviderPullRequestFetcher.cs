@@ -27,7 +27,8 @@ internal interface IProviderPullRequestFetcher
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
         ReviewRevision? compareToReviewRevision = null,
-        IReviewRepositoryWorkspace? workspace = null);
+        IReviewRepositoryWorkspace? workspace = null,
+        IReadOnlyCollection<string>? additionalFilePaths = null);
 
     /// <summary>
     ///     Fetches only the pull request's comment threads, without downloading changed-file content.

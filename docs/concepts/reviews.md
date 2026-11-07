@@ -180,9 +180,10 @@ job protocol.
 error, for example when the model endpoint refuses the request. ProPR then runs the job again, up to
 `AI_MAX_FILE_REVIEW_RETRIES` times in total, and each run reviews only the files that have no result yet. If file
 reviews still fail in the last run, ProPR publishes the review of the other files and lists the files whose review
-failed in the summary. If no file was reviewed, ProPR publishes nothing on the pull request and the job fails. The
-error message of the job contains the paths of the failed files and their errors. Restart the job once the cause
-is fixed.
+failed in the summary. ProPR reviews these files again in the next review of the pull request, as described under
+incremental reviews. If no file was reviewed, ProPR publishes nothing on the pull request and the job fails. The
+error message of the job contains the paths of the failed files and their errors. Restart the job once the cause is
+fixed.
 
 **Relevance filtering.** ProPR screens the model's comments before they reach your pull request.
 Deterministic checks run first, and a second model call decides the ambiguous ones. If that call fails,
@@ -235,7 +236,13 @@ On a runner, the judge runs on the default model the job manifest names, because
 binding, and its tokens are reported against the default model.
 
 **Incremental reviews.** On a re-review, files with no new changes carry their previous results forward
-instead of being re-reviewed and re-billed.
+instead of being re-reviewed and re-billed. A file whose review failed in the previous review has no result to
+carry forward, so ProPR reviews it again in the next review, also when the file did not change. ProPR skips the
+file when the pull request no longer contains it or an exclusion pattern matches it. If the review of the file keeps
+failing, ProPR tries it again in every review, and the summary of each review lists it as failed. When the previous
+review stopped before it reviewed every file, for example because a new push superseded it, ProPR reviews every file
+of the pull request except the files that the stopped review reviewed and that did not change since. If ProPR cannot
+compare the two revisions, it reviews every file.
 
 Review history, duplicate detection and incremental result reuse are scoped to each client.
 Manual review of an unchanged completed revision remains available.

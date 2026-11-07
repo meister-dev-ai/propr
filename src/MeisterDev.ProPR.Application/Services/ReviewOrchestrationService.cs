@@ -297,7 +297,8 @@ public sealed partial class ReviewOrchestrationService(
     {
         LogReviewStarted(logger, job.Id, job.PullRequestId);
 
-        var (isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision) =
+        var (isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision,
+                failedBaselineFilePaths) =
             await this.LoadScanStateAsync(job, ct);
 
         // Lightweight fetch: get branch names so the workspace can be prepared before the
@@ -328,11 +329,22 @@ public sealed partial class ReviewOrchestrationService(
                 compareToIterationId,
                 compareToReviewRevision,
                 earlyWorkspace,
+                failedBaselineFilePaths,
                 ct);
             if (pr is null)
             {
                 return null;
             }
+
+            // Azure DevOps anchors an inline comment through the iteration comparison the review was fetched with.
+            // A file whose review failed in the baseline joins the review also when it did not change since the
+            // compared iteration, and that comparison then does not contain the file. When such a file is part of
+            // the review, ProPR anchors the comments to the full diff of the pull request, as for a review without a
+            // baseline. The full diff contains every reviewed file, and the line numbers of a comment refer to the
+            // reviewed iteration in both views.
+            var publicationCompareToIterationId = ReviewsFilesOutsideTheComparison(pr, failedBaselineFilePaths)
+                ? null
+                : compareToIterationId;
 
             var providerCapabilities = providerRegistry.GetRegisteredCapabilities(job.Provider) ?? [];
 
@@ -419,7 +431,7 @@ public sealed partial class ReviewOrchestrationService(
                 return null;
             }
 
-            await this.PublishReviewResultAsync(job, pr, result, compareToIterationId, ct);
+            await this.PublishReviewResultAsync(job, pr, result, publicationCompareToIterationId, ct);
 
             await this.RetainIncrementDiffsAsync(job, pr, ct);
 
@@ -816,7 +828,7 @@ public sealed partial class ReviewOrchestrationService(
 
         // The pull request is fetched here rather than sent by the executor. Publication needs the live
         // thread state to deduplicate against, and an executor's view of it is both stale and unverifiable.
-        var pr = await this.FetchPullRequestAsync(job, null, null, null, ct)
+        var pr = await this.FetchPullRequestAsync(job, null, null, null, [], ct)
                  ?? throw new InvalidOperationException($"Review job {jobId} cannot be published because its pull request could not be read.");
 
         result = ReviewSuggestedFixValidator.Bind(result, pr, job.ReviewRevisionReference?.HeadSha);
@@ -1049,15 +1061,17 @@ public sealed partial class ReviewOrchestrationService(
     }
 
     // Load scan state: whether a new revision exists, the reusable carry-forward baseline
-    // (with whether it covered its full revision), any same-revision resume job, and the provider-neutral
-    // delta-compare handle when the baseline is full-coverage.
+    // (with whether it covered its full revision), any same-revision resume job, the provider-neutral
+    // delta-compare handle when the baseline is full-coverage, and the files whose review failed in that
+    // baseline, which the delta fetch adds to the files it fetches.
     private async Task<(
         bool isNewIteration,
         ReviewJob? baselineJob,
         bool baselineIsFullCoverage,
         ReviewJob? resumeJob,
         int? compareToIterationId,
-        ReviewRevision? compareToReviewRevision)> LoadScanStateAsync(
+        ReviewRevision? compareToReviewRevision,
+        IReadOnlyList<string> failedBaselineFilePaths)> LoadScanStateAsync(
         ReviewJob job,
         CancellationToken ct)
     {
@@ -1071,7 +1085,21 @@ public sealed partial class ReviewOrchestrationService(
             state.BaselineIsFullCoverage,
             state.ResumeJob,
             state.CompareToIterationId,
-            state.CompareToReviewRevision);
+            state.CompareToReviewRevision,
+            state.FailedBaselineFilePaths);
+    }
+
+    // Whether the fetched files contain a file whose review failed in the baseline. The delta fetch adds such a
+    // file from the full listing of the pull request, so it may lie outside the iteration comparison.
+    private static bool ReviewsFilesOutsideTheComparison(PullRequest pr, IReadOnlyList<string> failedBaselineFilePaths)
+    {
+        if (failedBaselineFilePaths.Count == 0)
+        {
+            return false;
+        }
+
+        var failed = new HashSet<string>(failedBaselineFilePaths, StringComparer.OrdinalIgnoreCase);
+        return pr.ChangedFiles.Any(file => failed.Contains(file.Path));
     }
 
     // T072: Fetch PR and guard the active status — returns null if PR is no longer active (job already updated).
@@ -1128,6 +1156,7 @@ public sealed partial class ReviewOrchestrationService(
         int? compareToIterationId,
         ReviewRevision? compareToReviewRevision,
         IReviewRepositoryWorkspace? workspace,
+        IReadOnlyList<string> additionalFilePaths,
         CancellationToken ct)
     {
         var pr = await prFetcher.FetchAsync(
@@ -1140,7 +1169,8 @@ public sealed partial class ReviewOrchestrationService(
             job.ClientId,
             ct,
             compareToReviewRevision,
-            workspace);
+            workspace,
+            additionalFilePaths.Count > 0 ? additionalFilePaths : null);
 
         if (pr.Status == PrStatus.Active)
         {
@@ -1221,8 +1251,15 @@ public sealed partial class ReviewOrchestrationService(
         // carry-forward emit the same logical path in different casing (e.g. src/File.cs vs src/file.cs).
         var claimedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await this.Reuse.ResumePriorFileResultsAsync(job, resumeJob, changedPathsSet, claimedPaths, ct);
+
+        // Against a partial baseline the fetch holds every file of the pull request, and a file the baseline
+        // reviewed carries forward only when it did not change since the baseline. The mirror of the workspace
+        // answers that by comparing the head of the baseline with the reviewed head.
+        var pathsChangedSinceBaseline = baselineJob is not null && !baselineIsFullCoverage
+            ? await LoadPathsChangedSinceAsync(preparedWorkspace.Workspace, baselineJob, ct)
+            : null;
         var carriedForwardPaths = await this.Reuse.CarryForwardBaselineResultsAsync(
-            job, baselineJob, baselineIsFullCoverage, changedPathsSet, exclusionRules, claimedPaths, ct);
+            job, baselineJob, baselineIsFullCoverage, changedPathsSet, pathsChangedSinceBaseline, exclusionRules, claimedPaths, ct);
 
         if (changedFilePaths.Count == 0 && (carriedForwardPaths.Count > 0 || resumeJob is not null))
         {
@@ -1381,6 +1418,18 @@ public sealed partial class ReviewOrchestrationService(
         Level = LogLevel.Information,
         Message = "Linked-item discovery unavailable for job {JobId}; proceeding without linked-item context.")]
     private static partial void LogLinkedItemsSkipped(ILogger logger, Guid jobId, Exception ex);
+
+    // The paths that changed between the head of the baseline and the reviewed head, or null when the workspace
+    // cannot compare the two revisions or the baseline has no recorded head.
+    private static async Task<IReadOnlySet<string>?> LoadPathsChangedSinceAsync(
+        IReviewRepositoryWorkspace? workspace,
+        ReviewJob baselineJob,
+        CancellationToken ct)
+    {
+        return workspace is null || string.IsNullOrWhiteSpace(baselineJob.RevisionHeadSha)
+            ? null
+            : await workspace.GetPathsChangedSinceAsync(baselineJob.RevisionHeadSha, ct);
+    }
 
     // Fetches the repository exclusion rules for the review target branch. IRepositoryExclusionFetcher is
     // contractually non-throwing and returns defaults on failure; the catch is belt-and-suspenders.

@@ -207,6 +207,48 @@ internal sealed class GitReviewRepositoryWorkspace(
         return result.StandardOutputBytes;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    ///     -z prints every path literally and ends it with NUL. A path with a byte outside ASCII then comes back as
+    ///     stored, not C-quoted, and a path with leading or trailing spaces keeps them, so the paths match the stored
+    ///     file results. A failure is logged and answered with null. The callers then carry no result forward and
+    ///     review the files again.
+    /// </remarks>
+    public async Task<IReadOnlySet<string>?> GetPathsChangedSinceAsync(string revision, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(revision))
+        {
+            return null;
+        }
+
+        try
+        {
+            var result = await gitCommandRunner.RunAsync(
+                this.Lease.MirrorPath,
+                ["diff", "--name-only", "-z", revision, this.Lease.HeadSha],
+                authEnvironment,
+                ct,
+                preserveStandardOutput: true);
+            if (result.ExitCode != 0)
+            {
+                logger.LogInformation(
+                    "The mirror could not compare revision {Revision} with the head of the workspace: {Reason}",
+                    revision,
+                    result.StandardError.Trim());
+                return null;
+            }
+
+            return new HashSet<string>(
+                result.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries),
+                StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogInformation(ex, "The mirror could not compare revision {Revision} with the head of the workspace.", revision);
+            return null;
+        }
+    }
+
     // The contract counts each path once: a caller that repeats one would otherwise inflate the change it is
     // measured at and have the review refused for a size it does not have.
     private static IReadOnlyList<string> DistinctPaths(IReadOnlyCollection<string> paths) =>

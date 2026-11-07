@@ -43,7 +43,8 @@ internal sealed class ProviderPullRequestFetcher(
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
         ReviewRevision? compareToReviewRevision = null,
-        IReviewRepositoryWorkspace? workspace = null)
+        IReviewRepositoryWorkspace? workspace = null,
+        IReadOnlyCollection<string>? additionalFilePaths = null)
     {
         var provider = await this.ResolveProviderAsync(organizationUrl, clientId, cancellationToken);
         if (!this._providerFetchersByProvider.TryGetValue(provider, out var fetcher))
@@ -61,7 +62,8 @@ internal sealed class ProviderPullRequestFetcher(
             clientId,
             cancellationToken,
             compareToReviewRevision,
-            workspace);
+            workspace,
+            additionalFilePaths);
     }
 
     public async Task<ChangedFile?> FetchFileDiffAsync(

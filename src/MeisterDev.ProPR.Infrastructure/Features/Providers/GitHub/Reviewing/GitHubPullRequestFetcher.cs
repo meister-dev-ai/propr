@@ -41,7 +41,8 @@ internal sealed class GitHubPullRequestFetcher(
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
         ReviewRevision? compareToReviewRevision = null,
-        IReviewRepositoryWorkspace? workspace = null)
+        IReviewRepositoryWorkspace? workspace = null,
+        IReadOnlyCollection<string>? additionalFilePaths = null)
     {
         if (!clientId.HasValue)
         {
@@ -73,12 +74,17 @@ internal sealed class GitHubPullRequestFetcher(
                                             compareToReviewRevision,
                                             cancellationToken)
                                         ?? changedFilesResponse;
+        var reviewedFilesResponse = DeltaFileAdditions.AddRequestedFiles(
+            deltaChangedFilesResponse,
+            changedFilesResponse,
+            additionalFilePaths,
+            file => NormalizePath(file.FileName));
         var changedFiles = await this.BuildChangedFilesAsync(
             context,
             host,
             repositoryPath,
             pullRequest,
-            deltaChangedFilesResponse,
+            reviewedFilesResponse,
             cancellationToken);
         var allChangedFileSummaries = changedFilesResponse
             .Select(change => new ChangedFileSummary(change.FileName, MapChangeType(change.Status)))

@@ -576,6 +576,85 @@ public sealed class GitHubCodeReviewQueryServiceTests
             });
     }
 
+    // A file whose review failed in the baseline joins the delta review. The compare between the baseline head
+    // and the current head does not contain it when it did not change, so the fetcher takes it from the listing
+    // of the whole pull request and reads its content like a file of the delta. A requested file that the pull
+    // request no longer contains adds nothing.
+    [Fact]
+    public async Task PullRequestFetcher_DeltaReview_AddsTheRequestedFilesFromTheFullListing()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var baselineRevision = new ReviewRevision("old-head", "base-sha", null, "old-head", "base-sha...old-head");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repositories/101" => CreateJsonResponse(new { full_name = "acme/propr" }),
+            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                new
+                {
+                    title = "Add provider-neutral fetchers",
+                    body = (string?)null,
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "feature/providers", sha = "new-head" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                }),
+            "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(
+                new object[]
+                {
+                    new { filename = "src/Fetcher.cs", status = "modified", previous_filename = (string?)null, patch = "fetcher diff" },
+                    new { filename = "src/Stable.cs", status = "modified", previous_filename = (string?)null, patch = "stable diff" },
+                    new { filename = "src/Other.cs", status = "modified", previous_filename = (string?)null, patch = "other diff" },
+                }),
+            "https://api.github.com/repos/acme/propr/compare/old-head...new-head?per_page=100" => CreateJsonResponse(
+                new
+                {
+                    files = new object[]
+                    {
+                        new { filename = "src/Fetcher.cs", status = "modified", previous_filename = (string?)null, patch = "fetcher delta" },
+                    },
+                }),
+            "https://api.github.com/repos/acme/propr/contents/src%2FFetcher.cs?ref=new-head" => CreateContentResponse("class Fetcher { }"),
+            "https://api.github.com/repos/acme/propr/contents/src%2FFetcher.cs?ref=base-sha" => CreateContentResponse("class Fetcher;"),
+            "https://api.github.com/repos/acme/propr/contents/src%2FStable.cs?ref=new-head" => CreateContentResponse("class Stable { }"),
+            "https://api.github.com/repos/acme/propr/contents/src%2FStable.cs?ref=base-sha" => CreateContentResponse("class Stable;"),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new { data = new { repository = new { pullRequest = new { reviewThreads = new { nodes = Array.Empty<object>() } } } } }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None,
+            compareToReviewRevision: baselineRevision,
+            additionalFilePaths: ["src/Stable.cs", "src/Removed.cs", "src/Fetcher.cs"]);
+
+        Assert.Collection(
+            result.ChangedFiles,
+            item => Assert.Equal("src/Fetcher.cs", item.Path),
+            item =>
+            {
+                Assert.Equal("src/Stable.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+                Assert.Equal("class Stable { }", item.FullContent);
+                Assert.Equal("stable diff", item.UnifiedDiff);
+            });
+        Assert.Equal(
+            ["src/Fetcher.cs", "src/Stable.cs", "src/Other.cs"],
+            result.AllPrFileSummaries.Select(summary => summary.Path));
+    }
+
     [Fact]
     public async Task PullRequestFetcher_AppInstallation_UsesInstallationTokenAcrossRuntimeCalls()
     {

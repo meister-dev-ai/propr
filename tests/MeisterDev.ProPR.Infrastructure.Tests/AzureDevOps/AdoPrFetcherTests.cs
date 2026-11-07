@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -61,6 +62,91 @@ public class AdoPrFetcherTests
             "https://dev.azure.com/testorg", "p", "r", 1, Guid.NewGuid(), cancellation.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.FetchFeedbackThreadsAsync(
             "https://dev.azure.com/testorg", "p", "r", 1, Guid.NewGuid(), cancellation.Token));
+    }
+
+    // A file whose review failed in the baseline joins the delta review. The iteration comparison does not
+    // contain it when it did not change since the compared iteration, so the fetcher takes it from the change
+    // listing of the whole pull request and reads its content like a file of the delta. A requested file that
+    // the pull request no longer contains adds nothing.
+    [Fact]
+    public async Task FetchAsync_DeltaReview_AddsTheRequestedFilesFromTheFullListing()
+    {
+        var git = Substitute.For<GitHttpClient>(new Uri("https://dev.azure.com/testorg"), new VssCredentials());
+        git.GetPullRequestAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(
+                new GitPullRequest
+                {
+                    PullRequestId = 42,
+                    Title = "Add fetchers",
+                    SourceRefName = "refs/heads/feature",
+                    TargetRefName = "refs/heads/main",
+                    Repository = new GitRepository { Name = "repo" },
+                });
+        git.GetPullRequestIterationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new GitPullRequestIteration
+                {
+                    SourceRefCommit = new GitCommitRef { CommitId = "head-sha" },
+                    CommonRefCommit = new GitCommitRef { CommitId = "base-sha" },
+                });
+
+        // The comparison with iteration 2 lists the changed file, the listing without a comparison every file.
+        git.GetPullRequestIterationChangesAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<int?>(),
+                Arg.Any<int?>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(
+                new GitPullRequestIterationChanges
+                {
+                    ChangeEntries = call.ArgAt<int?>(6) is null
+                        ? new List<GitPullRequestChange> { EditOf("/src/Fetcher.cs"), EditOf("/src/Stable.cs"), EditOf("/src/Other.cs") }
+                        : new List<GitPullRequestChange> { EditOf("/src/Fetcher.cs") },
+                }));
+        git.GetThreadsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(new List<GitPullRequestCommentThread>());
+
+        var workspace = Substitute.For<IReviewRepositoryWorkspace>();
+        workspace.ReadFileAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => $"{call.ArgAt<string>(1)} {call.ArgAt<string>(0)}");
+        workspace.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => $"diff {call.ArgAt<string>(0)}");
+
+        var sut = new AdoPrFetcher(
+            new VssConnectionFactory(Substitute.For<TokenCredential>()),
+            Substitute.For<IClientScmConnectionRepository>(), NullLogger<AdoPrFetcher>.Instance)
+        {
+            GitClientResolver = (_, _) => Task.FromResult(git),
+        };
+
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/testorg",
+            "project",
+            "repo",
+            42,
+            3,
+            compareToIterationId: 2,
+            clientId: Guid.NewGuid(),
+            workspace: workspace,
+            additionalFilePaths: ["src/Stable.cs", "src/Removed.cs", "src/Fetcher.cs"]);
+
+        Assert.Collection(
+            result.ChangedFiles,
+            item => Assert.Equal("src/Fetcher.cs", item.Path),
+            item =>
+            {
+                Assert.Equal("src/Stable.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+                Assert.Equal("source /src/Stable.cs", item.FullContent);
+                Assert.Equal("diff /src/Stable.cs", item.UnifiedDiff);
+            });
+        Assert.Equal(
+            ["src/Fetcher.cs", "src/Stable.cs", "src/Other.cs"],
+            result.AllPrFileSummaries.Select(summary => summary.Path));
+    }
+
+    private static GitPullRequestChange EditOf(string path)
+    {
+        return new GitPullRequestChange { ChangeType = VersionControlChangeType.Edit, Item = new GitItem { Path = path } };
     }
 
     private static readonly ProviderHostRef AdoHost =

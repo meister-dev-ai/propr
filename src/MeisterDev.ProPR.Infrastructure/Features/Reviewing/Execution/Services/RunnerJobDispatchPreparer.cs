@@ -122,7 +122,7 @@ public sealed partial class RunnerJobDispatchPreparer(
         // leaves: the executor's prior-results read returns them, so a resumed or superseding-iteration
         // job leased to a runner neither re-pays finished work nor synthesizes over a different set than
         // the in-process path would have.
-        await this.AdoptPriorWorkAsync(job, workspaceLease, targetBranch, changedPaths, ct);
+        await this.AdoptPriorWorkAsync(job, workspace, targetBranch, changedPaths, ct);
 
         // Both execution paths converge here: the workspace is prepared, prior work is adopted, and nothing has
         // been spent. What the review would take on is measured against the bounds the client set before the
@@ -234,13 +234,15 @@ public sealed partial class RunnerJobDispatchPreparer(
     ///         Fail-soft in the one place the two paths cannot be identical: the in-process path
     ///         delta-scopes a full-coverage baseline through the provider, and this path computes the same
     ///         delta from the mirror. A delta the mirror cannot answer falls back to the partial-baseline
-    ///         rule rather than to a guess. That is the same fallback the in-process path uses when the
-    ///         provider's compare handle is unusable.
+    ///         rule, not to a guess. That is the same fallback the in-process path uses when the provider's
+    ///         compare handle is unusable. The partial-baseline rule carries forward only the reviewed files that
+    ///         the delta does not contain, so without a delta nothing carries forward and the runner reviews every
+    ///         file.
     ///     </para>
     /// </summary>
     private async Task AdoptPriorWorkAsync(
         ReviewJob job,
-        ReviewRepositoryWorkspaceLease workspaceLease,
+        IReviewRepositoryWorkspace workspace,
         string targetBranch,
         IReadOnlyList<ChangedFileSummary> changedPaths,
         CancellationToken ct)
@@ -274,72 +276,20 @@ public sealed partial class RunnerJobDispatchPreparer(
             return;
         }
 
-        var carrySet = changedPathsSet;
-        var fullCoverage = false;
-        if (state.BaselineIsFullCoverage)
+        // The delta since the baseline decides what carries forward from a baseline of either kind.
+        var delta = string.IsNullOrWhiteSpace(state.BaselineJob.RevisionHeadSha)
+            ? null
+            : await workspace.GetPathsChangedSinceAsync(state.BaselineJob.RevisionHeadSha, ct);
+        if (delta is null)
         {
-            var delta = await this.TryComputeDeltaSinceBaselineAsync(
-                workspaceLease.MirrorPath,
-                state.BaselineJob.RevisionHeadSha,
-                job.RevisionHeadSha,
-                ct);
-            if (delta is not null)
-            {
-                carrySet = delta;
-                fullCoverage = true;
-            }
+            LogDeltaUnavailable(logger, state.BaselineJob.Id);
         }
+
+        var fullCoverage = state.BaselineIsFullCoverage && delta is not null;
+        var carrySet = fullCoverage ? new HashSet<string>(delta!, StringComparer.OrdinalIgnoreCase) : changedPathsSet;
 
         var exclusionRules = await this.FetchExclusionRulesAsync(job, targetBranch, ct);
-        await reuse.CarryForwardBaselineResultsAsync(job, state.BaselineJob, fullCoverage, carrySet, exclusionRules, claimedPaths, ct);
-    }
-
-    /// <summary>
-    ///     The files changed between the baseline's head and this revision's head, read from the mirror the
-    ///     workspace was just prepared from. This is the provider-neutral version of the compare the
-    ///     in-process fetch asks the provider for. Null when the mirror cannot answer, which the caller
-    ///     treats as the partial-baseline fallback.
-    /// </summary>
-    private async Task<HashSet<string>?> TryComputeDeltaSinceBaselineAsync(
-        string mirrorPath,
-        string? baselineHeadSha,
-        string? currentHeadSha,
-        CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(baselineHeadSha) || string.IsNullOrWhiteSpace(currentHeadSha))
-        {
-            return null;
-        }
-
-        try
-        {
-            var git = new Workspace.GitCommandRunner(Microsoft.Extensions.Logging.Abstractions.NullLogger<Workspace.GitCommandRunner>.Instance);
-
-            // quotePath is off because otherwise any path with a byte outside ASCII comes back C-quoted,
-            // for example "src/caf\303\251.cs" with the quotes included. Such a path matches nothing in
-            // the stored rows, so a file that did change is carried forward with the previous iteration's
-            // comments instead of being reviewed.
-            var diff = await git.RunAsync(
-                mirrorPath,
-                ["-c", "core.quotePath=false", "diff", "--name-only", baselineHeadSha, currentHeadSha],
-                null,
-                ct);
-
-            if (diff.ExitCode != 0)
-            {
-                LogDeltaUnavailable(logger, baselineHeadSha, diff.StandardError.Trim());
-                return null;
-            }
-
-            return new HashSet<string>(
-                diff.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-                StringComparer.OrdinalIgnoreCase);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogDeltaUnavailable(logger, baselineHeadSha, ex.Message);
-            return null;
-        }
+        await reuse.CarryForwardBaselineResultsAsync(job, state.BaselineJob, fullCoverage, carrySet, delta, exclusionRules, claimedPaths, ct);
     }
 
     /// <summary>Fail-soft, like the in-process fetch: no rules beats no dispatch.</summary>
@@ -498,12 +448,11 @@ public sealed partial class RunnerJobDispatchPreparer(
         }
     }
 
-    private static void LogDeltaUnavailable(ILogger? logger, string baselineHeadSha, string reason)
+    private static void LogDeltaUnavailable(ILogger? logger, Guid baselineJobId)
     {
         logger?.LogInformation(
-            "The mirror could not answer the delta since baseline {BaselineHeadSha}; carrying forward under the partial-baseline rule instead: {Reason}",
-            baselineHeadSha,
-            reason);
+            "The mirror could not answer the delta since baseline job {BaselineJobId}; no file result of that job carries forward",
+            baselineJobId);
     }
 
     private static void LogExclusionRulesUnavailable(ILogger? logger, Guid jobId, string reason)

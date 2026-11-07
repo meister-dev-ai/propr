@@ -56,4 +56,14 @@ public interface IReviewRepositoryWorkspace : IAsyncDisposable
     /// <param name="paths">The paths to measure, each distinct path counting once.</param>
     /// <param name="ct">The cancellation token.</param>
     Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct);
+
+    /// <summary>
+    ///     Returns the repository-relative paths of the files whose content differs between
+    ///     <paramref name="revision" /> and the prepared head revision, compared without regard to case. Returns
+    ///     <see langword="null" /> when the mirror cannot compare the two revisions, for example because it does not
+    ///     hold <paramref name="revision" />.
+    /// </summary>
+    /// <param name="revision">The commit to compare the prepared head revision with.</param>
+    /// <param name="ct">The cancellation token.</param>
+    Task<IReadOnlySet<string>?> GetPathsChangedSinceAsync(string revision, CancellationToken ct);
 }

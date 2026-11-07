@@ -4108,7 +4108,9 @@ public partial class ReviewOrchestrationServiceTests
             reviewerManager,
             clientRegistry,
             prScanRepository,
-            logger);
+            logger,
+            // The mirror reports no change between the head of the baseline and the reviewed head.
+            workspaceManager: CreateWorkspaceManager(new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
 
         await sut.ProcessAsync(job, CancellationToken.None);
 
@@ -4125,7 +4127,7 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>(),
                 Arg.Is<ReviewRevision?>(r => r == null),
                 Arg.Any<IReviewRepositoryWorkspace?>());
-        // The baseline's reviewed file carries forward (AI-skip)…
+        // The baseline's reviewed file, unchanged since the baseline, carries forward (AI-skip)…
         await jobs.Received(1)
             .AddFileResultAsync(
                 Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/AlreadyReviewed.cs"),

@@ -135,6 +135,114 @@ public sealed class RunnerJobDispatchPreparerTests
             Arg.Any<CancellationToken>());
     }
 
+    // A file review that failed in the baseline leaves no result to carry forward. The runner reviews every file
+    // of the pull request that has no adopted row, so the failed file stays in the scope of the manifest and is
+    // reviewed again, also when it did not change.
+    [Fact]
+    public async Task PreparingAJob_AgainstABaselineWithAFailedFileReview_LeavesTheFailedFileToTheRunner()
+    {
+        var clientId = Guid.NewGuid();
+        var job = new ReviewJob(JobId, clientId, "https://forge.invalid/org", "project", "repo", 42, 2);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "2", null));
+        this.GivenAPreparedWorkspace(changedPaths: ["src/a.cs", "src/b.cs", "src/c.cs"]);
+        this.GivenTheMirrorComparesWithTheBaseline("old-head-sha", "src/b.cs");
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+
+        var baseline = new ReviewJob(Guid.NewGuid(), clientId, job.OrganizationUrl, "project", "repo", 42, 1);
+        baseline.SetReviewRevision(new ReviewRevision("old-head-sha", "base-sha", null, "1", null));
+        baseline.Status = JobStatus.Completed;
+        var reviewed = new ReviewFileResult(baseline.Id, "src/a.cs");
+        reviewed.MarkCompleted("looks fine", [], ["pass-1"]);
+        baseline.FileReviewResults.Add(reviewed);
+        var failed = new ReviewFileResult(baseline.Id, "src/c.cs");
+        failed.MarkFailed("The model endpoint refused the request.");
+        baseline.FileReviewResults.Add(failed);
+
+        var executionStore = Substitute.For<IReviewJobExecutionStore>();
+        executionStore.GetLatestReusableTerminalJobAsync(
+                clientId, job.OrganizationUrl, "project", "repo", 42, job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(baseline);
+        var priorRows = Substitute.For<IReviewFileResultStore>();
+        priorRows.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var preparation = await this.CreatePreparer(
+                reuse: new ReviewJobReuse(
+                    executionStore,
+                    Substitute.For<IReviewPrScanWatermarkStore>(),
+                    NullLogger.Instance,
+                    MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry),
+                priorRows: priorRows)
+            .PrepareAsync(job, MakeLease());
+
+        Assert.True(preparation.Succeeded);
+        Assert.Contains("src/c.cs", preparation.Request!.ChangedPaths);
+        await executionStore.Received(1).AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(row => row.FilePath == "src/a.cs" && row.IsCarriedForward),
+            Arg.Any<CancellationToken>());
+        await executionStore.DidNotReceive().AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(row => row.FilePath == "src/c.cs"),
+            Arg.Any<CancellationToken>());
+    }
+
+    // A partial baseline reviewed a.cs and b.cs before the next push changed b.cs. The runner reviews the whole
+    // pull request, so only a.cs, which did not change, carries forward. Without a comparison from the mirror,
+    // nothing carries forward.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PreparingAJob_AgainstAPartialBaseline_AdoptsOnlyTheReviewedFilesThatDidNotChange(bool mirrorCompares)
+    {
+        var clientId = Guid.NewGuid();
+        var job = new ReviewJob(JobId, clientId, "https://forge.invalid/org", "project", "repo", 42, 2);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "2", null));
+        this.GivenAPreparedWorkspace(changedPaths: ["src/a.cs", "src/b.cs", "src/c.cs"]);
+        if (mirrorCompares)
+        {
+            this.GivenTheMirrorComparesWithTheBaseline("old-head-sha", "src/b.cs");
+        }
+        else
+        {
+            this._preparedWorkspace!.GetPathsChangedSinceAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<IReadOnlySet<string>?>(null));
+        }
+
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+
+        var baseline = new ReviewJob(Guid.NewGuid(), clientId, job.OrganizationUrl, "project", "repo", 42, 1);
+        baseline.SetReviewRevision(new ReviewRevision("old-head-sha", "base-sha", null, "1", null));
+        baseline.Status = JobStatus.Superseded;
+        foreach (var path in new[] { "src/a.cs", "src/b.cs" })
+        {
+            var row = new ReviewFileResult(baseline.Id, path);
+            row.MarkCompleted("looks fine", [], ["pass-1"]);
+            baseline.FileReviewResults.Add(row);
+        }
+
+        var executionStore = Substitute.For<IReviewJobExecutionStore>();
+        executionStore.GetLatestReusableTerminalJobAsync(
+                clientId, job.OrganizationUrl, "project", "repo", 42, job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(baseline);
+        var priorRows = Substitute.For<IReviewFileResultStore>();
+        priorRows.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var preparation = await this.CreatePreparer(
+                reuse: new ReviewJobReuse(
+                    executionStore,
+                    Substitute.For<IReviewPrScanWatermarkStore>(),
+                    NullLogger.Instance,
+                    MeisterDev.ProPR.TestSupport.LocalScmPolicies.Registry),
+                priorRows: priorRows)
+            .PrepareAsync(job, MakeLease());
+
+        Assert.True(preparation.Succeeded);
+        await executionStore.Received(mirrorCompares ? 1 : 0).AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(row => row.FilePath == "src/a.cs" && row.IsCarriedForward),
+            Arg.Any<CancellationToken>());
+        await executionStore.DidNotReceive().AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(row => row.FilePath == "src/b.cs"),
+            Arg.Any<CancellationToken>());
+    }
+
     // Adoption happens once. A job re-dispatched after a lost claim already has its rows, and writing
     // them again would violate the one-row-per-file invariant the store enforces.
     [Fact]
@@ -476,6 +584,12 @@ public sealed class RunnerJobDispatchPreparerTests
         this._workspaces
             .PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ReviewRepositoryWorkspacePreparationResult(workspace, null)));
+    }
+
+    private void GivenTheMirrorComparesWithTheBaseline(string baselineHeadSha, params string[] changedPaths)
+    {
+        this._preparedWorkspace!.GetPathsChangedSinceAsync(baselineHeadSha, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlySet<string>?>(new HashSet<string>(changedPaths, StringComparer.OrdinalIgnoreCase)));
     }
 
     /// <summary>

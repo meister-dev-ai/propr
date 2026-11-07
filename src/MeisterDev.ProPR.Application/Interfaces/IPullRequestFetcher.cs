@@ -48,6 +48,13 @@ public interface IPullRequestFetcher
     ///     When provided, file content is read from the local git workspace instead of downloading
     ///     it from the remote SCM API. Pass <c>null</c> to use the remote API (default behaviour).
     /// </param>
+    /// <param name="additionalFilePaths">
+    ///     Paths of files that the review covers in addition to the delta. On a delta fetch, every file of the
+    ///     full pull request listing whose path is in this set is fetched with its content and added to
+    ///     <c>ChangedFiles</c>, like a file of the delta. A path that is not part of the pull request at the
+    ///     fetched revision adds nothing. A full fetch contains every file of the pull request and ignores the
+    ///     set. Pass <c>null</c> to fetch the delta alone.
+    /// </param>
     /// <returns>A task that represents the asynchronous operation, containing the fetched pull request.</returns>
     Task<PullRequest> FetchAsync(
         string organizationUrl,
@@ -59,7 +66,8 @@ public interface IPullRequestFetcher
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
         ReviewRevision? compareToReviewRevision = null,
-        IReviewRepositoryWorkspace? workspace = null);
+        IReviewRepositoryWorkspace? workspace = null,
+        IReadOnlyCollection<string>? additionalFilePaths = null);
 
     /// <summary>
     ///     Fetches the diff for a single file within a pull request, avoiding the cost of a full PR fetch.

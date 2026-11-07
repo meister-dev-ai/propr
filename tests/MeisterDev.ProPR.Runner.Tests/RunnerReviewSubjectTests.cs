@@ -337,6 +337,9 @@ public sealed class RunnerReviewSubjectTests
         public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
             Task.FromResult(this.DiffBytes);
 
+        public Task<IReadOnlySet<string>?> GetPathsChangedSinceAsync(string revision, CancellationToken ct) =>
+            Task.FromResult<IReadOnlySet<string>?>(null);
+
 
         public Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct) =>
             Task.FromResult(this.Diffs.GetValueOrDefault(path));
