@@ -517,6 +517,26 @@ public class AdoCommentPosterTests
         Assert.Contains("src/NotReached.cs", summary);
     }
 
+    // ProPR lists the files whose review failed in the Azure DevOps summary, as it does for the plain-markdown
+    // providers.
+    [Fact]
+    public async Task PostResolvedThreadsAsync_ListsTheFilesWhoseReviewFailedInTheSummary()
+    {
+        var messages = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            messages.Add(message);
+            return Task.FromResult(CreatedThread(messages.Count, message));
+        };
+        var result = new ReviewResult("The review covered the service layer.", []) { FailedReviewFilePaths = ["src/Failed.cs"] };
+
+        await PostAsync(result, factory);
+
+        var summary = Assert.Single(messages, message => message.StartsWith(SummaryPrefix, StringComparison.Ordinal));
+        Assert.Contains("Review failed for 1 file.", summary);
+        Assert.Contains("- src/Failed.cs", summary);
+    }
+
     [Theory]
     [InlineData(FindingBadgeStyle.ShieldsIo)]
     [InlineData(FindingBadgeStyle.Plain)]

@@ -9,23 +9,35 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 
 /// <summary>
-///     Renders the plain-markdown budgeting-visibility sections that make context-window and USD-spend budgeting
-///     decisions visible in a review summary, shared by the plain-markdown providers.
+///     Renders the plain-markdown sections of a review summary that list the files a review did not cover in full:
+///     failed file reviews, the budgeting decisions on the context window and on USD spend, and the maximum review
+///     duration. The plain-markdown providers share these sections.
 /// </summary>
 public static class ContextBudgetSummarySections
 {
     /// <summary>
-    ///     Appends a note when the review was stopped early by the per-increment budget soft cap or by the maximum
-    ///     review duration of its tenant, a section for files reviewed diff-only, and a section for files skipped
-    ///     because they exceeded the model context window, when the result contains any. No output when none
-    ///     apply.
+    ///     Appends a note and a list for files whose review failed, a note when the review was stopped early by the
+    ///     per-increment budget soft cap or by the maximum review duration of its tenant, a section for files
+    ///     reviewed diff-only, and a section for files skipped because they exceeded the model context window, when
+    ///     the result contains any. No output when none apply.
     /// </summary>
     /// <param name="builder">The summary builder to append to.</param>
-    /// <param name="result">The review result carrying the budget, time-limit and context-window outcomes.</param>
+    /// <param name="result">The review result carrying the failed file reviews and the budget, time-limit and context-window outcomes.</param>
     /// <param name="renderText">The provider's safe rendering of file paths.</param>
     public static void Append(StringBuilder builder, ReviewResult result, Func<string, string>? renderText = null)
     {
         renderText ??= ReviewFindingTextFormatter.RenderPlainText;
+        if (result.FailedReviewFilePaths.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine(FormatFailedReviewsNote(result));
+            builder.AppendLine();
+            foreach (var path in result.FailedReviewFilePaths)
+            {
+                builder.AppendLine($"- {renderText(path.ReplaceLineEndings(" "))}");
+            }
+        }
+
         if (result.BudgetSoftCapped)
         {
             builder.AppendLine();
@@ -76,6 +88,22 @@ public static class ContextBudgetSummarySections
                 builder.AppendLine($"- {renderText(path.ReplaceLineEndings(" "))}");
             }
         }
+    }
+
+    /// <summary>
+    ///     Formats the note for a review in which the review of one or more files failed, with the number of those
+    ///     files. The paths of the files follow the note as a list.
+    /// </summary>
+    public static string FormatFailedReviewsNote(ReviewResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        var failed = result.FailedReviewFilePaths.Count;
+        return failed == 1
+            ? "**Review failed for 1 file.** ProPR could not review the following file and reports no findings for it."
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"**Review failed for {failed} files.** ProPR could not review the following files and reports no findings for them.");
     }
 
     /// <summary>

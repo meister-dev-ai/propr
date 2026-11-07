@@ -99,6 +99,35 @@ public sealed class ContextBudgetSummarySectionsTests
         Assert.EndsWith(expectedOutcome, note);
     }
 
+    // ProPR lists the files whose review failed, so a reader can tell a review that left files out from a review
+    // that found nothing in them.
+    [Fact]
+    public void Append_ListsTheFilesWhoseReviewFailed()
+    {
+        var result = new ReviewResult("summary", []) { FailedReviewFilePaths = ["src/a.cs", "src/b.cs"] };
+
+        var builder = new StringBuilder();
+        ContextBudgetSummarySections.Append(builder, result);
+        var output = builder.ToString();
+
+        Assert.Contains("Review failed for 2 files", output);
+        Assert.Contains("- src/a.cs", output);
+        Assert.Contains("- src/b.cs", output);
+    }
+
+    [Fact]
+    public void Append_UsesSingularFileWord_ForOneFailedFileReview()
+    {
+        var result = new ReviewResult("summary", []) { FailedReviewFilePaths = ["src/only.cs"] };
+
+        var builder = new StringBuilder();
+        ContextBudgetSummarySections.Append(builder, result);
+        var output = builder.ToString();
+
+        Assert.Contains("Review failed for 1 file.", output);
+        Assert.Contains("- src/only.cs", output);
+    }
+
     [Fact]
     public void Append_WritesNothing_WhenNotBudgetSoftCappedAndNoContextOutcomes()
     {

@@ -1518,8 +1518,22 @@ public sealed partial class ReviewOrchestrationService(
 
         if (job.RetryCount >= this._opts.MaxFileReviewRetries)
         {
-            // On the final retry, post any partial results from the files that succeeded
-            // rather than silently discarding them.
+            // When no file was reviewed, ProPR has no review to report. A published summary would read as a review that
+            // found nothing, so ProPR publishes nothing and fails the job. The error message lists the files whose
+            // review failed, and the failed job can be restarted once the cause is fixed.
+            if (ex.ReviewedFileCount == 0)
+            {
+                LogNoFileReviewed(logger, job.Id, ex.FailedCount);
+                await jobs.SetFailedAsync(
+                    job.Id,
+                    $"Max retries reached. No file was reviewed, so ProPR published nothing on the pull request. {ex.Message}",
+                    ct);
+                return;
+            }
+
+            // On the final retry, post the partial result of the files that were reviewed, so their findings are not
+            // discarded. The partial result carries the files whose review failed, and ProPR lists them in the
+            // published summary.
             if (ex.PartialResult is { } partial &&
                 (!string.IsNullOrWhiteSpace(partial.Summary) || partial.Comments.Count > 0))
             {

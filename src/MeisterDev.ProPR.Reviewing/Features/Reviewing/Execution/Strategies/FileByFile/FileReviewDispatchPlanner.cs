@@ -124,10 +124,11 @@ internal sealed class FileReviewDispatchPlanner(
         ];
 
         var exceptions = new List<Exception>();
+        var failedReviewFilePaths = new List<string>();
         var budgetSoftCapSkippedFiles = new List<string>();
         if (filesToReview.Count == 0)
         {
-            return new FileReviewDispatchResult(existingResults, exceptions, BudgetSoftCapSummary.None);
+            return new FileReviewDispatchResult(existingResults, exceptions, failedReviewFilePaths, BudgetSoftCapSummary.None);
         }
 
         var semaphore = new SemaphoreSlim(await this.ResolveFileReviewConcurrencyAsync(ct));
@@ -202,6 +203,7 @@ internal sealed class FileReviewDispatchPlanner(
                 lock (exceptions)
                 {
                     exceptions.Add(ex);
+                    failedReviewFilePaths.Add(file.Path);
                 }
             }
             finally
@@ -242,7 +244,7 @@ internal sealed class FileReviewDispatchPlanner(
         try
         {
             await Task.WhenAll(tasks);
-            return new FileReviewDispatchResult(existingResults, exceptions, BuildBudgetSoftCapSummary(budgetSoftCapSkippedFiles));
+            return new FileReviewDispatchResult(existingResults, exceptions, failedReviewFilePaths, BuildBudgetSoftCapSummary(budgetSoftCapSkippedFiles));
         }
         finally
         {
@@ -359,9 +361,15 @@ internal sealed class FileReviewDispatchPlanner(
         return deduped;
     }
 
+    /// <summary>The outcome of one dispatch of the file reviews of a job.</summary>
+    /// <param name="ExistingResults">The file results the job had when the dispatch started, by path.</param>
+    /// <param name="Exceptions">The exceptions of the file reviews that failed.</param>
+    /// <param name="FailedReviewFilePaths">The paths of the files whose review failed, in the order of <paramref name="Exceptions" />.</param>
+    /// <param name="BudgetSoftCap">Whether the per-increment budget soft cap stopped the dispatch, and the files it left out.</param>
     internal sealed record FileReviewDispatchResult(
         IReadOnlyDictionary<string, ReviewFileResult> ExistingResults,
         IReadOnlyList<Exception> Exceptions,
+        IReadOnlyList<string> FailedReviewFilePaths,
         BudgetSoftCapSummary BudgetSoftCap);
 
     /// <summary>

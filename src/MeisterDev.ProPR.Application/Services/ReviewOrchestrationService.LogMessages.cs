@@ -17,6 +17,11 @@ public sealed partial class ReviewOrchestrationService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
+        Message = "Review job {JobId} reviewed no file in its last attempt ({FailedCount} file reviews failed); failing it without publishing")]
+    private static partial void LogNoFileReviewed(ILogger logger, Guid jobId, int failedCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
         Message =
             "Review job {JobId} reached the {Scope} hard budget cap of {ThresholdUsd} USD (spent {SpentUsd} USD) — stopping and marking budget-exceeded")]
     private static partial void LogBudgetHardCapReached(ILogger logger, Guid jobId, BudgetScopeKind? scope, decimal? thresholdUsd, decimal? spentUsd);

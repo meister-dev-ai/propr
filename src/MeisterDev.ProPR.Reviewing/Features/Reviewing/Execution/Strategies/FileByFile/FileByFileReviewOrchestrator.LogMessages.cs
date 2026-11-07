@@ -23,6 +23,11 @@ internal sealed partial class FileByFileReviewOrchestrator
 
     [LoggerMessage(
         Level = LogLevel.Warning,
+        Message = "Job {JobId} reviewed no file because {FailedCount} file reviews failed; it runs no pull-request-wide pass and no synthesis")]
+    private static partial void LogNoFileReviewed(ILogger logger, Guid jobId, int failedCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
         Message = "Synthesis for job {JobId} returned invalid JSON — requesting one repair pass")]
     private static partial void LogSynthesisJsonRepairStarted(ILogger logger, Guid jobId);
 

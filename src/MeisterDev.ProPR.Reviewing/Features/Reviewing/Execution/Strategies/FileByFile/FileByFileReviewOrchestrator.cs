@@ -133,6 +133,27 @@ internal sealed partial class FileByFileReviewOrchestrator(
         var dispatchResult = await this.GetDispatchPlanner().ExecuteAsync(job, pr, baseContext, effectiveClient, ct);
         var budgetSoftCap = dispatchResult.BudgetSoftCap;
 
+        // When no file was reviewed, there is nothing to synthesize. A synthesis over no file still writes a summary
+        // that states that no findings remained, and a reader takes it for a review that found nothing. The attempt
+        // therefore ends here, without the pull-request-wide passes and without a synthesis, and the exception
+        // carries the files whose review failed.
+        int? reviewedFileCount = null;
+        if (dispatchResult.Exceptions.Count > 0)
+        {
+            reviewedFileCount = await this.CountReviewedFilesAsync(job, ct);
+            if (reviewedFileCount == 0)
+            {
+                LogNoFileReviewed(logger, job.Id, dispatchResult.Exceptions.Count);
+                throw new PartialReviewFailureException(
+                    dispatchResult.Exceptions.Count,
+                    pr.ChangedFiles.Count,
+                    dispatchResult.Exceptions,
+                    null,
+                    dispatchResult.FailedReviewFilePaths,
+                    reviewedFileCount);
+            }
+        }
+
         // Job-level PR-wide-scope pass entries run once over the whole change set here — after the per-file fan-out
         // and before synthesis — and their candidates are threaded into synthesis so they flow through the shared
         // verify -> gate -> publish path alongside the synthesized cross-cutting findings. When the per-increment
@@ -147,18 +168,26 @@ internal sealed partial class FileByFileReviewOrchestrator(
         {
             // Attempt synthesis for the files that did succeed before propagating the partial failure.
             // This ensures that results from successfully-reviewed files are available (e.g. for posting
-            // on the final retry) even when some files could not be reviewed.
+            // on the final retry) even when some files could not be reviewed. The result carries the files whose
+            // review failed, and ProPR lists them in the published summary.
             ReviewResult? partialResult = null;
             try
             {
-                partialResult = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
+                var synthesized = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
+                partialResult = synthesized with { FailedReviewFilePaths = dispatchResult.FailedReviewFilePaths };
             }
             catch (Exception ex)
             {
                 LogSynthesisFailed(logger, job.Id, ex);
             }
 
-            throw new PartialReviewFailureException(dispatchResult.Exceptions.Count, pr.ChangedFiles.Count, dispatchResult.Exceptions, partialResult);
+            throw new PartialReviewFailureException(
+                dispatchResult.Exceptions.Count,
+                pr.ChangedFiles.Count,
+                dispatchResult.Exceptions,
+                partialResult,
+                dispatchResult.FailedReviewFilePaths,
+                reviewedFileCount);
         }
 
         return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
@@ -292,6 +321,21 @@ internal sealed partial class FileByFileReviewOrchestrator(
         // A scan the tenant's maximum review duration cut short carries the files and passes it left out, so the
         // summary can name them and the job can record why it ended early.
         return baseContext.TimeLimit?.ApplyTo(result) ?? result;
+    }
+
+    /// <summary>
+    ///     Counts the files this job reviewed, in this attempt and in the attempts before it. A file counts when its
+    ///     review completed for this job. An excluded file, a file skipped for the model context window and a file
+    ///     carried forward from an earlier iteration do not count, because the synthesis reads no review of them.
+    /// </summary>
+    private async Task<int> CountReviewedFilesAsync(ReviewJob job, CancellationToken ct)
+    {
+        var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct) ?? job;
+        return jobWithResults.FileReviewResults.Count(result =>
+            result.IsComplete
+            && !result.IsExcluded
+            && !result.IsCarriedForward
+            && result.ContextBudgetOutcome != ReviewContextBudgetOutcome.Skipped);
     }
 
     private async Task RecordReviewProfileSelectedEventAsync(

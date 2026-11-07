@@ -59,6 +59,7 @@ If you have not had a successful review yet, start from
 | The review stays pending while another review runs | Only one review at a time without a license | [editions](../reference/editions.md) |
 | The review stays pending with nothing else running | The review worker is not running | [what the health checks mean](observability.md#what-the-health-checks-mean) |
 | The review fails immediately | A purpose the review needs resolves to no model | [purposes](../ai/purposes.md) |
+| The review fails and the pull request shows no review | The review of every file failed, for example because the model endpoint refused the requests. The error message of the job contains the files and their errors | [what happens during a review](../concepts/reviews.md#what-happens-during-a-review) |
 | An AI connection will not verify | Credentials, endpoint reachability, or the wrong family for that endpoint | [verification failures](../ai/credentials.md#verification-failures) |
 | No comments on the pull request, or fewer than the summary suggests | Comment posting is off for the client, or the gate and the minimum severity to post filtered them | [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted) |
 | A finding you expected never appeared | Exclusion patterns, the context budget, or the gate - all of which the protocol records | [what happens during a review](../concepts/reviews.md#what-happens-during-a-review) |

@@ -90,4 +90,10 @@ public sealed record ReviewResult(
 
     /// <summary>True when the pull-request-wide passes did not run because the maximum review duration was reached first.</summary>
     public bool TimeLimitSkippedPrWidePasses { get; init; }
+
+    /// <summary>
+    ///     File paths whose review failed, so the review contains no findings for them. ProPR lists them in the review
+    ///     summary, so a review with failed file reviews is not taken for a complete one.
+    /// </summary>
+    public IReadOnlyList<string> FailedReviewFilePaths { get; init; } = [];
 }

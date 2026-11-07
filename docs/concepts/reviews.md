@@ -176,6 +176,14 @@ the model. It skips files matched by the repository's [exclusion patterns](repos
 and files whose estimated input would not fit the model's context budget. Both skips are recorded in the
 job protocol.
 
+**Failed file reviews.** The review of a file fails when a model call or a later step of that review returns an
+error, for example when the model endpoint refuses the request. ProPR then runs the job again, up to
+`AI_MAX_FILE_REVIEW_RETRIES` times in total, and each run reviews only the files that have no result yet. If file
+reviews still fail in the last run, ProPR publishes the review of the other files and lists the files whose review
+failed in the summary. If no file was reviewed, ProPR publishes nothing on the pull request and the job fails. The
+error message of the job contains the paths of the failed files and their errors. Restart the job once the cause
+is fixed.
+
 **Relevance filtering.** ProPR screens the model's comments before they reach your pull request.
 Deterministic checks run first, and a second model call decides the ambiguous ones. If that call fails,
 the filter keeps the comment and records that it ran degraded.

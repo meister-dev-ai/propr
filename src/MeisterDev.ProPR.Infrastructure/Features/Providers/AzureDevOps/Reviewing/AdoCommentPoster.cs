@@ -603,8 +603,8 @@ public sealed class AdoCommentPoster(
 
     /// <summary>
     ///     Builds the summary comment text from a <see cref="ReviewResult" />.
-    ///     When the result includes carried-forward file paths, a section listing those files
-    ///     is appended to the summary. All content is HTML-sanitized to prevent injection.
+    ///     When the result includes files whose review failed or carried-forward file paths, a section listing
+    ///     those files is appended to the summary. All content is HTML-sanitized to prevent injection.
     /// </summary>
     internal static string BuildSummaryText(ReviewResult result, IPostedCommentComposer composer)
     {
@@ -614,6 +614,16 @@ public sealed class AdoCommentPoster(
         sb.Append(ReviewFindingPriority.FormatLead(result, AdoFindingCommentRenderer.RenderText));
         sb.Append(ReviewFindingTextFormatter.CloseOpenFences(HtmlSanitizer.RenderForDisplay(result.Summary, ReviewBodyRenderingMode.Summary).RenderedText));
         sb.Append("\n\n").Append(ReviewSummaryTextFormatter.Format(result));
+
+        if (result.FailedReviewFilePaths.Count > 0)
+        {
+            sb.Append($"\n\n{ContextBudgetSummarySections.FormatFailedReviewsNote(result)}\n\n");
+            foreach (var path in result.FailedReviewFilePaths)
+            {
+                var renderedPath = AdoFindingCommentRenderer.RenderText(path.ReplaceLineEndings(" "));
+                sb.Append($"- {renderedPath}\n");
+            }
+        }
 
         if (result.CarriedForwardFilePaths.Count > 0)
         {
