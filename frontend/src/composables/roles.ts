@@ -3,9 +3,11 @@
 
 /**
  * Role levels used by the client- and tenant-scoped role-gating helpers.
- * Values mirror the backend ClientRole/TenantRole enums: 0 = User, 1 = Administrator.
+ * Values mirror the backend ClientRole/TenantRole enums: -1 = Viewer (clients only), 0 = User, 1 = Administrator.
+ * A viewer reads a client's reviews and starts none; a user also starts and restarts reviews.
  */
 export const RoleLevel = {
+  Viewer: -1,
   User: 0,
   Administrator: 1,
 } as const

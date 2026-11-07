@@ -362,14 +362,15 @@ account by its email address. ProPR refuses the sign-in with the message that th
 installation in these cases: the platform provisioned no user for the subject, the user holds no membership, the
 account is disabled, or the account holds platform administrator rights.
 
-A membership makes the user a tenant user with the role `ClientUser` on the clients that the platform names. The user
-reads the reviews, the results and the execution traces of these clients, and creates personal access tokens under
-**Settings**. The account has no password.
+A membership makes the user a tenant user with the client role that the platform names, `ClientViewer` or
+`ClientUser`, on the clients that the platform names. Both roles read the reviews, the results and the execution traces
+of these clients and create personal access tokens under **Settings**; a `ClientUser` also starts and restarts reviews.
+The account has no password.
 
 | What the platform does | What ProPR does |
 |---|---|
 | The platform creates the user. | ProPR creates an account without a password and keeps it disabled until the user holds a membership. |
-| The platform sets a membership. | ProPR sets the role `TenantUser` in the tenant and the role `ClientUser` on exactly the listed clients, and removes the roles of the user on the other clients of the tenant. It enables the account, unless a platform administrator disabled the account under **Administration → Users**. |
+| The platform sets a membership. | ProPR sets the role `TenantUser` in the tenant and the requested client role on exactly the listed clients (`ClientUser` when the platform names no role), and removes the roles of the user on the other clients of the tenant. It enables the account, unless a platform administrator disabled the account under **Administration → Users**. |
 | The platform removes a membership. | ProPR removes the membership and the roles on the clients of the tenant. From the next request on, the access tokens and personal access tokens of the user reach none of these clients. |
 | The platform removes the last membership. | ProPR also disables the account and revokes its refresh tokens and personal access tokens. ProPR refuses every request of a disabled account, also with an access token that is still valid. |
 
@@ -452,6 +453,15 @@ Creating a local user account does not grant tenant access until a membership is
 
 Every client-scoped operation is authorized against the specific client in the request, so access to
 one client never confers access to another.
+
+An assignment gives a user one of three roles on a client. Each role includes the rights of the roles
+listed before it.
+
+| Client role | Rights on the client |
+|---|---|
+| `ClientViewer` | The user reads the reviews, results, execution traces and pull-request views of the client, also through ProPR Lens and personal access tokens. A viewer starts, restarts and stops no review and changes nothing. |
+| `ClientUser` | The user also starts and restarts reviews of the client. |
+| `ClientAdministrator` | The user also manages the configuration of the client, stops running reviews, dismisses findings and blocks pull requests. |
 
 ## Platform administrator access to tenant content
 

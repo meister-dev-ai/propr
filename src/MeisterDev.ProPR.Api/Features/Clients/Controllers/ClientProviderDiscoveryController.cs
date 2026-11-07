@@ -42,7 +42,7 @@ public sealed partial class ClientProviderDiscoveryController(
 
         var auth = AuthHelpers.RequireClientRole(
             this.HttpContext, clientId,
-            normalizedPurpose == "mention" ? ClientRole.ClientAdministrator : ClientRole.ClientUser);
+            normalizedPurpose == "mention" ? ClientRole.ClientAdministrator : ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;

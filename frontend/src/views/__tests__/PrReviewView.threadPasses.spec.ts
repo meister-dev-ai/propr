@@ -77,10 +77,13 @@ async function mountView() {
 }
 
 describe('PrReviewView thread passes', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     routeQuery.value = { ...identityQuery }
     restartJobMock.mockResolvedValue({ jobId: 'pass-1', sourceJobId: 'pass-1', status: 'pending' })
+    // Restarting a pass starts AI work, which the client-user role grants.
+    const { useSession } = await import('@/composables/useSession')
+    useSession().setClientRoles({ [identityQuery.clientId]: 0 })
   })
 
   it('lists what each thread pass handled and spent, and links to its trace', async () => {
@@ -145,6 +148,37 @@ describe('PrReviewView thread passes', () => {
 
     expect(restartJobMock).toHaveBeenCalledWith('pass-1')
     expect(getPrViewMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('offers no restart to a client viewer', async () => {
+    const { useSession } = await import('@/composables/useSession')
+    useSession().setClientRoles({ [identityQuery.clientId]: -1 })
+    getPrViewMock.mockResolvedValue(prView(
+      [
+        {
+          threadPassId: 'pass-1',
+          status: 5,
+          createdAt: '2026-08-03T10:00:00Z',
+          completedAt: null,
+          threadCount: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalEstimatedCostUsd: null,
+          costIsApproximate: false,
+          budgetBlockScope: 2,
+          budgetBlockCapKind: 0,
+          budgetBlockThresholdUsd: 5,
+          budgetBlockSpentUsd: 6,
+        },
+      ],
+      null,
+    ))
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Budget held')
+    expect(wrapper.findAll('button').some(button => button.text().startsWith('Restart'))).toBe(false)
   })
 
   it('says the cap details are unavailable for a pass stopped by a cap nothing named', async () => {

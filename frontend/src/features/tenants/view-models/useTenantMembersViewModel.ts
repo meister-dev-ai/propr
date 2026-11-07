@@ -91,7 +91,14 @@ function formatRole(role: TenantRole): string {
 }
 
 function formatClientRole(role: ClientRole): string {
-  return role === 'clientAdministrator' ? 'Client Administrator' : 'Client User'
+  switch (role) {
+    case 'clientAdministrator':
+      return 'Client Administrator'
+    case 'clientViewer':
+      return 'Client Viewer'
+    default:
+      return 'Client User'
+  }
 }
 
 export function useTenantMembersViewModel(options: UseTenantMembersViewModelOptions = {}): TenantMembersViewModel {

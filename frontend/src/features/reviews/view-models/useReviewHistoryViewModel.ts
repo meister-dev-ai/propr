@@ -78,6 +78,7 @@ export interface ReviewHistoryViewModel {
   refresh: () => Promise<void>
   visibleItems: (group: PrGroup) => JobListItem[]
   canInspectClient: (clientId: string | null | undefined) => boolean
+  canStartReviews: (clientId: string | null | undefined) => boolean
   canManageClient: (clientId: string | null | undefined) => boolean
   isRestartable: (item: JobListItem) => boolean
   restartingJobs: Ref<Set<string>>
@@ -425,7 +426,12 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   }
 
   function canInspectClient(targetClientId: string | null | undefined): boolean {
-    return typeof targetClientId === 'string' && targetClientId.length > 0 && hasClientRole(targetClientId, 0)
+    return typeof targetClientId === 'string' && targetClientId.length > 0 && hasClientRole(targetClientId, RoleLevel.Viewer)
+  }
+
+  // A client viewer reads the history but restarts no review; the backend refuses the restart as well.
+  function canStartReviews(targetClientId: string | null | undefined): boolean {
+    return typeof targetClientId === 'string' && targetClientId.length > 0 && hasClientRole(targetClientId, RoleLevel.User)
   }
 
   function canManageClient(targetClientId: string | null | undefined): boolean {
@@ -466,6 +472,7 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     refresh,
     visibleItems,
     canInspectClient,
+    canStartReviews,
     canManageClient,
     isRestartable,
     restartingJobs,

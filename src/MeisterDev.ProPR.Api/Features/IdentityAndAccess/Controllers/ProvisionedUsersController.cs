@@ -5,6 +5,7 @@
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Web;
 using Microsoft.AspNetCore.Mvc;
 
@@ -87,16 +88,18 @@ public sealed class ProvisionedUsersController(IProvisionedUserService provision
     }
 
     /// <summary>
-    ///     Sets the membership of a provisioned user in the tenant: the tenant role <c>TenantUser</c> and the role
-    ///     <c>ClientUser</c> on exactly the clients of the request. ProPR removes the roles of the user on the other
-    ///     clients of the tenant, and enables a user that it kept inactive for the lack of a membership.
+    ///     Sets the membership of a provisioned user in the tenant: the tenant role <c>TenantUser</c> and the client role
+    ///     of the request on exactly the clients of the request. The client role is <c>ClientViewer</c>, which reads
+    ///     reviews and starts none, or <c>ClientUser</c>, which also starts and restarts reviews; a request without a role
+    ///     grants <c>ClientUser</c>. ProPR removes the roles of the user on the other clients of the tenant, and enables a
+    ///     user that it kept inactive for the lack of a membership.
     /// </summary>
     /// <param name="tenantId">The tenant.</param>
     /// <param name="subject">The subject of the person at the identity provider for provisioned users.</param>
-    /// <param name="request">The clients of the tenant that the user reads.</param>
+    /// <param name="request">The clients of the tenant that the user reads, and the role on them.</param>
     /// <param name="ct">Cancellation token for the operation.</param>
     /// <response code="200">The membership as ProPR stored it.</response>
-    /// <response code="400">The subject is not accepted, or a client does not belong to the tenant.</response>
+    /// <response code="400">The subject or the role is not accepted, or a client does not belong to the tenant.</response>
     /// <response code="401">The caller is not authenticated.</response>
     /// <response code="403">The caller is not a platform administrator.</response>
     /// <response code="404">The tenant or the user does not exist, or the installation configured no identity provider for provisioned users.</response>
@@ -125,6 +128,7 @@ public sealed class ProvisionedUsersController(IProvisionedUserService provision
                 subject ?? string.Empty,
                 request.ClientIds,
                 AuthHelpers.GetUserId(this.HttpContext),
+                request.Role ?? ClientRole.ClientUser,
                 ct));
     }
 
@@ -183,6 +187,9 @@ public sealed class ProvisionedUsersController(IProvisionedUserService provision
 /// <param name="DisplayName">The display name of the person, or <see langword="null" />.</param>
 public sealed record ProvisionedUserRequest([property: JsonRequired] string Email, string? DisplayName);
 
-/// <summary>The clients of a tenant that a provisioned user reads.</summary>
+/// <summary>The clients of a tenant that a provisioned user reads, and the role of the user on them.</summary>
 /// <param name="ClientIds">The clients; an empty list keeps the membership without any client.</param>
-public sealed record ProvisionedMembershipRequest([property: JsonRequired] IReadOnlyList<Guid> ClientIds);
+/// <param name="Role">
+///     The role on the clients: <c>ClientViewer</c> or <c>ClientUser</c>. Without a role, ProPR grants <c>ClientUser</c>.
+/// </param>
+public sealed record ProvisionedMembershipRequest([property: JsonRequired] IReadOnlyList<Guid> ClientIds, ClientRole? Role = null);

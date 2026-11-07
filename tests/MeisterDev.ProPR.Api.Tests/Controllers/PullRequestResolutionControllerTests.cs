@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.ResolvePullRequest;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -64,6 +65,34 @@ public sealed class PullRequestResolutionControllerTests(ControllerSmokeTests.Sm
         Assert.Equal("https://dev.azure.com/meister-dev", match.ProviderScopePath);
         Assert.Equal("5cda05b9-bbfa-4c44-88e9-16aa900515d2", match.ProviderProjectKey);
         Assert.Equal("c39fd3f3-e84b-4d01-84df-57964de91bc8", match.RepositoryId);
+        Assert.Equal(182, match.PullRequestId);
+    }
+
+    [Fact]
+    public async Task Resolve_AsClientViewer_FindsThePullRequestOfItsClient()
+    {
+        // ProPR Lens finds the review of a pull request through this endpoint, so a viewer has to reach its client here.
+        this.StubCrawlConfigurations(AdoConfiguration());
+        var userId = Guid.NewGuid();
+        var viewer = new AppUser { Id = userId, Username = "viewer", GlobalRole = AppUserRole.User, IsActive = true };
+        viewer.ClientAssignments.Add(new UserClientRole { UserId = userId, ClientId = ClientId, Role = ClientRole.ClientViewer });
+        var users = factory.Services.GetRequiredService<IUserRepository>();
+        users.GetByIdWithAssignmentsAsync(userId, Arg.Any<CancellationToken>()).Returns(viewer);
+        users.GetUserClientRolesAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, ClientRole> { [ClientId] = ClientRole.ClientViewer });
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            "/pull-requests/resolve?hostBaseUrl=https://dev.azure.com&scopePath=meister-dev"
+            + "&repositoryName=meister-propr&pullRequestNumber=182");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(userId));
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ResolvePullRequestResultDto>(ResponseJson);
+        var match = Assert.Single(payload!.Matches);
+        Assert.Equal(ClientId, match.ClientId);
         Assert.Equal(182, match.PullRequestId);
     }
 

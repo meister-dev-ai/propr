@@ -4,7 +4,7 @@
 
 import { tenantApiRequest } from '@/services/tenantApiClient'
 
-export type ClientRole = 'clientUser' | 'clientAdministrator'
+export type ClientRole = 'clientViewer' | 'clientUser' | 'clientAdministrator'
 
 export interface TenantClientSummaryDto {
   id: string

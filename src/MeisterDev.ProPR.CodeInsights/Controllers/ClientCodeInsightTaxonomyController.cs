@@ -34,7 +34,7 @@ public sealed class ClientCodeInsightTaxonomyController(ICodeInsightTaxonomyServ
     public async Task<IActionResult> GetTaxonomy(Guid clientId, CancellationToken ct)
     {
         // Reading the vocabulary needs client access only; changing it needs administration.
-        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (denied is not null)
         {
             return denied;

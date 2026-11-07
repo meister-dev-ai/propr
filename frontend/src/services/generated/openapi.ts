@@ -15140,9 +15140,11 @@ export interface paths {
         };
         get?: never;
         /**
-         * Sets the membership of a provisioned user in the tenant: the tenant role `TenantUser` and the role
-         *     `ClientUser` on exactly the clients of the request. ProPR removes the roles of the user on the other
-         *     clients of the tenant, and enables a user that it kept inactive for the lack of a membership.
+         * Sets the membership of a provisioned user in the tenant: the tenant role `TenantUser` and the client role
+         *     of the request on exactly the clients of the request. The client role is `ClientViewer`, which reads
+         *     reviews and starts none, or `ClientUser`, which also starts and restarts reviews; a request without a role
+         *     grants `ClientUser`. ProPR removes the roles of the user on the other clients of the tenant, and enables a
+         *     user that it kept inactive for the lack of a membership.
          */
         put: {
             parameters: {
@@ -15156,7 +15158,7 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            /** @description The clients of the tenant that the user reads. */
+            /** @description The clients of the tenant that the user reads, and the role on them. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["ProvisionedMembershipRequest"];
@@ -15176,7 +15178,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProvisionedMemberDto"];
                     };
                 };
-                /** @description The subject is not accepted, or a client does not belong to the tenant. */
+                /** @description The subject or the role is not accepted, or a client does not belong to the tenant. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -24925,10 +24927,11 @@ export interface components {
             updatedAt?: string;
         };
         /**
-         * @description Role a user holds within a specific client.
+         * @description Role a user holds within a specific client. Each role holds the rights of the roles with a lower value, so a
+         *     check that asks for a minimum role refuses every role below it.
          * @enum {string}
          */
-        ClientRole: "clientUser" | "clientAdministrator";
+        ClientRole: "clientUser" | "clientAdministrator" | "clientViewer";
         /** @description Client-scoped SCM provider connection metadata returned by admin APIs. */
         ClientScmConnectionDto: {
             /** Format: uuid */
@@ -28579,6 +28582,15 @@ export interface components {
             connections?: components["schemas"]["ProviderConnectionOperationalStatusDto"][] | null;
             providerFamilies?: components["schemas"]["ProviderFamilyOperationalStatusDto"][] | null;
         };
+        /** @description The role of a provisioned user on one client of a tenant. */
+        ProvisionedClientRoleDto: {
+            /**
+             * Format: uuid
+             * @description The client.
+             */
+            clientId?: string;
+            role?: components["schemas"]["ClientRole"];
+        };
         /** @description The membership of a provisioned user in a tenant. */
         ProvisionedMemberDto: {
             /** @description The subject of the person at the identity provider for provisioned users. */
@@ -28597,11 +28609,14 @@ export interface components {
             role?: components["schemas"]["TenantRole"];
             /** @description The clients of the tenant on which the user holds a role. */
             clientIds?: string[] | null;
+            /** @description The role of the user on each of these clients, ordered by client. */
+            clientRoles?: components["schemas"]["ProvisionedClientRoleDto"][] | null;
         };
-        /** @description The clients of a tenant that a provisioned user reads. */
+        /** @description The clients of a tenant that a provisioned user reads, and the role of the user on them. */
         ProvisionedMembershipRequest: {
             /** @description The clients; an empty list keeps the membership without any client. */
             clientIds: string[] | null;
+            role?: components["schemas"]["ClientRole"];
         };
         /** @description A user that a hosting platform provisioned. */
         ProvisionedUserDto: {

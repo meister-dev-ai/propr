@@ -40,7 +40,7 @@ public sealed partial class ReviewJobsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetClientReview(Guid clientId, Guid jobId, CancellationToken ct)
     {
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;
@@ -78,7 +78,7 @@ public sealed partial class ReviewJobsController(
             return this.NotFound();
         }
 
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, status.ClientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, status.ClientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;

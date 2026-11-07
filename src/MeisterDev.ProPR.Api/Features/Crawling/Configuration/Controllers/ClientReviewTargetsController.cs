@@ -128,7 +128,7 @@ public sealed class ClientReviewTargetsController(
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> GetOverview(Guid clientId, [FromBody] ClientPullRequestOverviewRequest request, CancellationToken ct = default)
     {
-        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (denied is not null)
         {
             return denied;
@@ -180,7 +180,7 @@ public sealed class ClientReviewTargetsController(
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GetManagementTarget(Guid clientId, Guid targetId, CancellationToken ct = default)
     {
-        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (denied is not null)
         {
             return denied;
@@ -220,7 +220,7 @@ public sealed class ClientReviewTargetsController(
         [FromQuery] string? provider = null, [FromQuery] string? status = null, [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25, CancellationToken ct = default)
     {
-        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (denied is not null)
         {
             return denied;
@@ -408,7 +408,7 @@ public sealed class ClientReviewTargetsController(
     [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GetTargets(Guid clientId, CancellationToken ct = default)
     {
-        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (denied is not null)
         {
             return denied;
@@ -454,7 +454,7 @@ public sealed class ClientReviewTargetsController(
         [FromQuery] Guid connectionId,
         CancellationToken ct = default)
     {
-        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (denied is not null)
         {
             return denied;
@@ -569,7 +569,7 @@ public sealed class ClientReviewTargetsController(
     public async Task<IActionResult> GetOpenReviewMetadata(
         Guid clientId, Guid targetId, int number, [FromQuery] Guid connectionId, CancellationToken ct = default)
     {
-        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var denied = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (denied is not null)
         {
             return denied;

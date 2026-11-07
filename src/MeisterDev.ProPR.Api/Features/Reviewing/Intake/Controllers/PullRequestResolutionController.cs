@@ -64,7 +64,7 @@ public sealed class PullRequestResolutionController(ResolvePullRequestHandler re
         var accessibleClientIds = AuthHelpers.IsAdmin(this.HttpContext)
             ? null
             : AuthHelpers.GetClientRoles(this.HttpContext)
-                .Where(role => role.Value >= ClientRole.ClientUser)
+                .Where(role => role.Value >= ClientRole.ClientViewer)
                 .Select(role => role.Key)
                 .ToList();
 

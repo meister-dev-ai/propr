@@ -6,6 +6,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, typ
 import { useRoute, useRouter } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { useSession } from '@/composables/useSession'
+import { RoleLevel } from '@/composables/roles'
 import type { components } from '@/services/generated/openapi'
 
 const detailTabs = [
@@ -458,7 +459,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
   const canManageClient = computed(() => hasClientRole(clientId, 1))
-  const canViewClient = computed(() => hasClientRole(clientId, 0))
+  const canViewClient = computed(() => hasClientRole(clientId, RoleLevel.Viewer))
   const isProCursorTokenUsageReportingEnabled =
     import.meta.env.VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING !== 'false'
   const providerUpgradeMessage = computed(

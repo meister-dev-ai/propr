@@ -208,6 +208,7 @@
                         <select v-model="assignRole" class="assign-select">
                           <option value="ClientAdministrator">ClientAdministrator</option>
                           <option value="ClientUser">ClientUser</option>
+                          <option value="ClientViewer">ClientViewer</option>
                         </select>
                         <button :disabled="assigning || !assignClientId" @click="handleAddAssignment(user.id)">
                           {{ assigning ? '…' : 'Assign' }}
@@ -299,7 +300,7 @@ const currentAssignments = ref<AssignmentItem[]>([])
 const assignmentsLoading = ref(false)
 const clients = ref<ClientItem[]>([])
 const assignClientId = ref('')
-const assignRole = ref<'ClientAdministrator' | 'ClientUser'>('ClientUser')
+const assignRole = ref<'ClientAdministrator' | 'ClientUser' | 'ClientViewer'>('ClientUser')
 const assigning = ref(false)
 const removingAssignment = ref<string | null>(null)
 const assignError = ref('')

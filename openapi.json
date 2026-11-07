@@ -21796,7 +21796,7 @@
         "tags": [
           "ProvisionedUsers"
         ],
-        "summary": "Sets the membership of a provisioned user in the tenant: the tenant role `TenantUser` and the role\n`ClientUser` on exactly the clients of the request. ProPR removes the roles of the user on the other\nclients of the tenant, and enables a user that it kept inactive for the lack of a membership.",
+        "summary": "Sets the membership of a provisioned user in the tenant: the tenant role `TenantUser` and the client role\nof the request on exactly the clients of the request. The client role is `ClientViewer`, which reads\nreviews and starts none, or `ClientUser`, which also starts and restarts reviews; a request without a role\ngrants `ClientUser`. ProPR removes the roles of the user on the other clients of the tenant, and enables a\nuser that it kept inactive for the lack of a membership.",
         "parameters": [
           {
             "name": "tenantId",
@@ -21819,7 +21819,7 @@
           }
         ],
         "requestBody": {
-          "description": "The clients of the tenant that the user reads.",
+          "description": "The clients of the tenant that the user reads, and the role on them.",
           "content": {
             "application/json": {
               "schema": {
@@ -21860,7 +21860,7 @@
             }
           },
           "400": {
-            "description": "The subject is not accepted, or a client does not belong to the tenant.",
+            "description": "The subject or the role is not accepted, or a client does not belong to the tenant.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -36589,10 +36589,11 @@
       "ClientRole": {
         "enum": [
           "clientUser",
-          "clientAdministrator"
+          "clientAdministrator",
+          "clientViewer"
         ],
         "type": "string",
-        "description": "Role a user holds within a specific client."
+        "description": "Role a user holds within a specific client. Each role holds the rights of the roles with a lower value, so a\ncheck that asks for a minimum role refuses every role below it."
       },
       "ClientScmConnectionDto": {
         "type": "object",
@@ -44237,6 +44238,21 @@
         "additionalProperties": false,
         "description": "Operator-facing provider operational status response."
       },
+      "ProvisionedClientRoleDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client.",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ClientRole"
+          }
+        },
+        "additionalProperties": false,
+        "description": "The role of a provisioned user on one client of a tenant."
+      },
       "ProvisionedMemberDto": {
         "type": "object",
         "properties": {
@@ -44275,6 +44291,14 @@
             },
             "description": "The clients of the tenant on which the user holds a role.",
             "nullable": true
+          },
+          "clientRoles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProvisionedClientRoleDto"
+            },
+            "description": "The role of the user on each of these clients, ordered by client.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -44294,10 +44318,13 @@
             },
             "description": "The clients; an empty list keeps the membership without any client.",
             "nullable": true
+          },
+          "role": {
+            "$ref": "#/components/schemas/ClientRole"
           }
         },
         "additionalProperties": false,
-        "description": "The clients of a tenant that a provisioned user reads."
+        "description": "The clients of a tenant that a provisioned user reads, and the role of the user on them."
       },
       "ProvisionedUserDto": {
         "type": "object",

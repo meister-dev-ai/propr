@@ -67,7 +67,7 @@ public sealed class JobCodeInsightsController(
         }
 
         // Same scoping as the review result this sits beside: whoever may read the findings may read their tags.
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;

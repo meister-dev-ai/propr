@@ -34,7 +34,7 @@ public sealed class ReviewsController(IJobRepository jobRepository, ICustomerDas
         Guid clientId, [FromServices] ICustomerReviewHistoryReader reader,
         CancellationToken ct, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, [FromQuery] string? status = null)
     {
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;
@@ -73,7 +73,7 @@ public sealed class ReviewsController(IJobRepository jobRepository, ICustomerDas
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetDashboard(Guid clientId, CancellationToken ct)
     {
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;
@@ -129,7 +129,7 @@ public sealed class ReviewsController(IJobRepository jobRepository, ICustomerDas
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public IActionResult ListReviews(Guid clientId, CancellationToken ct)
     {
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;

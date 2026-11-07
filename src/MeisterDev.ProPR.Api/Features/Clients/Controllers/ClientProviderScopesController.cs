@@ -65,7 +65,7 @@ public sealed partial class ClientProviderScopesController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetProviderScopes(Guid clientId, Guid connectionId, CancellationToken ct = default)
     {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;
@@ -101,7 +101,7 @@ public sealed partial class ClientProviderScopesController(
         Guid scopeId,
         CancellationToken ct = default)
     {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;

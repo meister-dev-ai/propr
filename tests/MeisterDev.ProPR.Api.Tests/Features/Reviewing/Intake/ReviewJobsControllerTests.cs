@@ -131,6 +131,24 @@ public sealed class ReviewJobsControllerTests
     }
 
     [Fact]
+    public async Task GetReview_AsClientViewer_ReturnsTheStatus()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1) { Status = JobStatus.Completed });
+        var controller = CreateController(store, clientId, ClientRole.ClientViewer);
+
+        var result = await controller.GetReview(jobId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var payload = Assert.IsType<ReviewStatusResponse>(ok.Value);
+        Assert.Equal(jobId, payload.JobId);
+        Assert.Equal(JobStatus.Completed, payload.Status);
+    }
+
+    [Fact]
     public async Task SubmitReview_AzureDevOpsRequestWithoutAdoToken_ReturnsAccepted()
     {
         var clientId = Guid.NewGuid();
@@ -325,6 +343,32 @@ public sealed class ReviewJobsControllerTests
     }
 
     [Fact]
+    public async Task RestartReview_FailedJob_AsClientViewer_ReturnsForbiddenWithoutQueueing()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1));
+        var jobRepository = Substitute.For<IJobRepository>();
+        jobRepository.GetById(jobId)
+            .Returns(
+                new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1)
+                {
+                    Status = JobStatus.Failed,
+                });
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var controller = CreateController(store, clientId, ClientRole.ClientViewer, queue, jobRepository);
+
+        var result = await controller.RestartReview(jobId, Substitute.For<IThreadPassJobRepository>(), CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, objectResult.StatusCode);
+        await jobRepository.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RestartReview_BudgetHeldThreadPass_QueuesItAgainUnderItsOwnIdentity()
     {
         var passId = Guid.NewGuid();
@@ -511,6 +555,30 @@ public sealed class ReviewJobsControllerTests
         var payload = Assert.IsType<ReviewByCoordinatesResponse>(accepted.Value);
         Assert.Equal(SubmitReviewByCoordinatesOutcome.Submitted, payload.Outcome);
         Assert.Equal(jobId, payload.JobId);
+    }
+
+    [Fact]
+    public async Task SubmitReviewByCoordinates_AsClientViewer_ReturnsForbiddenWithoutTriggeringAReview()
+    {
+        var clientId = Guid.NewGuid();
+        var synchronization = SubstituteSynchronization(SubmittedOutcome(Guid.NewGuid()));
+        var controller = CreateController(
+            Substitute.For<IReviewJobIntakeStore>(),
+            clientId,
+            ClientRole.ClientViewer,
+            synchronization: synchronization);
+
+        var result = await controller.SubmitReviewByCoordinates(
+            clientId,
+            CreateCoordinatesRequest(),
+            CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, objectResult.StatusCode);
+        var payload = Assert.IsType<ReviewByCoordinatesResponse>(objectResult.Value);
+        Assert.Equal(SubmitReviewByCoordinatesOutcome.NotAuthorized, payload.Outcome);
+        await synchronization.DidNotReceive()
+            .SynchronizeAsync(Arg.Any<PullRequestSynchronizationRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]

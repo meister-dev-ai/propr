@@ -312,7 +312,8 @@ function resolveRequiredClientRole(to: RouteLocationNormalizedGeneric): RoleLeve
   if (to.meta.requiresClientAdmin) {
     return RoleLevel.Administrator
   }
-  return to.meta.requiresClientAccess ? RoleLevel.User : null
+  // The pages that require client access only read, so a client viewer opens them; their actions check the role again.
+  return to.meta.requiresClientAccess ? RoleLevel.Viewer : null
 }
 
 /**

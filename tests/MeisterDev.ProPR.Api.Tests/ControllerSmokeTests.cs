@@ -100,6 +100,26 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
             return handler.WriteToken(handler.CreateToken(descriptor));
         }
 
+        /// <summary>Signs a website access token of a user without global administrator rights.</summary>
+        public string GenerateUserToken(Guid userId)
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(
+                [
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", "User"),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");

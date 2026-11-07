@@ -92,6 +92,15 @@ describe('job protocol route access', () => {
     await router.push(`/${CLIENT_ID}`)
 
     expect(router.currentRoute.value.name).toBe('client-detail')
-    expect(hasClientRole).toHaveBeenCalledWith(CLIENT_ID, RoleLevel.User)
+    expect(hasClientRole).toHaveBeenCalledWith(CLIENT_ID, RoleLevel.Viewer)
+  })
+
+  it('opens the pages of a client for a client viewer', async () => {
+    clientRoles.value = { [CLIENT_ID]: RoleLevel.Viewer }
+    const router = await importRouter()
+
+    await router.push(`/${CLIENT_ID}`)
+
+    expect(router.currentRoute.value.name).toBe('client-detail')
   })
 })

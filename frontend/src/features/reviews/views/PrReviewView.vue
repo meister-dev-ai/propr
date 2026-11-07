@@ -413,8 +413,13 @@ const canManage = computed(() =>
     typeof clientId.value === 'string' && clientId.value.length > 0 && hasClientRole(clientId.value, RoleLevel.Administrator),
 )
 
-// Any viewer who can inspect the client sees the blocked badge; only administrators can toggle the block.
+// Anyone who can read the client sees the blocked badge; only administrators can toggle the block.
 const canInspect = computed(() =>
+    typeof clientId.value === 'string' && clientId.value.length > 0 && hasClientRole(clientId.value, RoleLevel.Viewer),
+)
+
+// A client viewer reads the review but starts and restarts none; the backend refuses those requests as well.
+const canStartReviews = computed(() =>
     typeof clientId.value === 'string' && clientId.value.length > 0 && hasClientRole(clientId.value, RoleLevel.User),
 )
 
@@ -452,7 +457,7 @@ async function loadBlockedState() {
 // and the browser extension offer the action on the same terms.
 const pendingReview = computed(() => data.value?.pendingReview ?? null)
 
-const canRequestReview = computed(() => canInspect.value && !isBlocked.value)
+const canRequestReview = computed(() => canStartReviews.value && !isBlocked.value)
 
 const pendingReviewDescription = computed(() => {
     const pending = pendingReview.value
@@ -703,7 +708,7 @@ function threadPassBadgeClass(status: number): string {
 
 /** A budget-blocked or exhausted pass waits on an operator; nothing resumes it on its own. */
 function canRestartThreadPass(status: number): boolean {
-    return status === 3 || status === 5 || status === 6
+    return canStartReviews.value && (status === 3 || status === 5 || status === 6)
 }
 
 function threadPassBlockReason(pass: PrThreadPassSummaryDto): string {

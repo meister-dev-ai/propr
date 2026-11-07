@@ -81,6 +81,19 @@ public sealed class PrReviewViewControllerSummaryTests
     }
 
     [Fact]
+    public async Task GetPrView_AsClientViewer_ReturnsTheView()
+    {
+        // ProPR Lens shows a review through this view, so a client viewer has to read it.
+        var job = CreateJob(10, 1, new TokenBreakdownEntry(AiConnectionModelCategory.HighEffort, "model", 10, 1));
+        var (controller, _, _) = CreateController(new PrReviewViewData([job], [], [], null));
+        controller.HttpContext.Items["ClientRoles"] = new Dictionary<Guid, ClientRole> { [ClientId] = ClientRole.ClientViewer };
+
+        var dto = await GetViewAsync(controller);
+
+        Assert.Equal(job, Assert.Single(dto.Jobs));
+    }
+
+    [Fact]
     public async Task GetPrView_ClampsPagingAndPassesTheRequestCancellationToken()
     {
         var (controller, reader, _) = CreateController(new PrReviewViewData([], [], [], null));

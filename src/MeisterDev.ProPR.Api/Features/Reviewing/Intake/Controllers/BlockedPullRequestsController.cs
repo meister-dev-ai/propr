@@ -14,7 +14,7 @@ namespace MeisterDev.ProPR.Api.Features.Reviewing.Intake.Controllers;
 ///     Manages the set of pull requests blocked from review processing for a client. A block prevents new
 ///     review jobs from being created on future pushes or submissions; it does not stop a job that is
 ///     already running (use the stop action for that). Reading the list requires
-///     <see cref="ClientRole.ClientUser" />; blocking and unblocking require
+///     <see cref="ClientRole.ClientViewer" />; blocking and unblocking require
 ///     <see cref="ClientRole.ClientAdministrator" />.
 /// </summary>
 [ApiController]
@@ -35,7 +35,7 @@ public sealed partial class BlockedPullRequestsController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetBlockedPullRequests(Guid clientId, CancellationToken ct)
     {
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;

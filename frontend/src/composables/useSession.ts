@@ -208,7 +208,7 @@ export function useSession() {
 
   /**
    * Stores per-client roles received from `/auth/me` into sessionStorage and reactive state.
-   * Values: 0 = ClientUser, 1 = ClientAdministrator.
+   * Values: -1 = ClientViewer, 0 = ClientUser, 1 = ClientAdministrator.
    */
   function setClientRoles(roles: Record<string, number>): void {
     sessionStorage.setItem(CLIENT_ROLES_KEY, JSON.stringify(roles))

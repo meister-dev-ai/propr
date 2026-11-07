@@ -72,7 +72,7 @@ public sealed class CodeInsightScopeResolver(
             return await this.ResolveForAdministratorAsync(httpContext, requestedClientId, contentResource, ct);
         }
 
-        if (AuthHelpers.RequireAnyClientRole(httpContext, ClientRole.ClientUser) is { } roleCheck)
+        if (AuthHelpers.RequireAnyClientRole(httpContext, ClientRole.ClientViewer) is { } roleCheck)
         {
             return new CodeInsightScope([], roleCheck);
         }

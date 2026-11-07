@@ -143,7 +143,7 @@ public sealed partial class ClientReviewerIdentitiesController(
         Guid connectionId,
         CancellationToken ct = default)
     {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;

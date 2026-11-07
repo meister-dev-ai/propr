@@ -332,7 +332,7 @@ public sealed class JobsController(
             return this.NotFound();
         }
 
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;
@@ -420,7 +420,7 @@ public sealed class JobsController(
             return this.NotFound();
         }
 
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;
@@ -491,7 +491,7 @@ public sealed class JobsController(
             return this.NotFound();
         }
 
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, protocolResult.ClientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, protocolResult.ClientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;
@@ -543,7 +543,7 @@ public sealed class JobsController(
             return this.NotFound();
         }
 
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;
@@ -592,7 +592,7 @@ public sealed class JobsController(
             return this.NotFound();
         }
 
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;

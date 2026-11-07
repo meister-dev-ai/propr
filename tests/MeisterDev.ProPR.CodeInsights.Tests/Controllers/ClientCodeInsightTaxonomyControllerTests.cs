@@ -18,11 +18,13 @@ public sealed class ClientCodeInsightTaxonomyControllerTests
     private static readonly CodeInsightCustomTagWriteRequest Request =
         new("domain-rule", "Domain rule", "Violates one of our business rules.");
 
-    [Fact]
-    public async Task ReadingTheVocabulary_NeedsClientAccessOnly()
+    [Theory]
+    [InlineData(ClientRole.ClientViewer)]
+    [InlineData(ClientRole.ClientUser)]
+    public async Task ReadingTheVocabulary_NeedsClientAccessOnly(ClientRole role)
     {
         var service = CreateService();
-        var controller = CreateController(service, ClientRole.ClientUser);
+        var controller = CreateController(service, role);
 
         var result = await controller.GetTaxonomy(ClientId, CancellationToken.None);
 
@@ -54,13 +56,15 @@ public sealed class ClientCodeInsightTaxonomyControllerTests
         await service.DidNotReceive().GetTaxonomyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task APlainClientUser_CannotCreateUpdateOrRetireACustomTag()
+    [Theory]
+    [InlineData(ClientRole.ClientViewer)]
+    [InlineData(ClientRole.ClientUser)]
+    public async Task ARoleBelowClientAdministrator_CannotCreateUpdateOrRetireACustomTag(ClientRole role)
     {
         // The vocabulary decides how every finding is labelled from now on, so changing it is an
         // administrative act even though reading it is not.
         var service = CreateService();
-        var controller = CreateController(service, ClientRole.ClientUser);
+        var controller = CreateController(service, role);
 
         var create = await controller.CreateCustomTag(ClientId, Request, CancellationToken.None);
         var update = await controller.UpdateCustomTag(ClientId, TagId, Request, CancellationToken.None);

@@ -36,7 +36,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ListSources(Guid clientId, CancellationToken ct = default)
     {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;
@@ -176,7 +176,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ListTrackedBranches(Guid clientId, Guid sourceId, CancellationToken ct = default)
     {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;

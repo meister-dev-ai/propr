@@ -128,6 +128,62 @@ public sealed class ProvisionedUsersApiTests(ProvisionedUserApiFactory factory) 
             role => Assert.Equal((int)ClientRole.ClientUser, role.Value.GetInt32()));
     }
 
+    [Fact]
+    public async Task PutMembership_WithTheRoleClientViewer_GivesViewerAccessAndKeepsItAcrossTheNextSync()
+    {
+        this.Reset();
+        using var platform = await this.PlatformAdministratorAsync();
+        var tenant = await this.TenantWithClientsAsync(2);
+        var subject = NewSubject();
+        var userId = await this.ProvisionAsync(platform, subject);
+        Assert.Equal(HttpStatusCode.OK, (await PutMembershipAsync(platform, tenant.Id, subject, tenant.Clients[0])).StatusCode);
+
+        var response = await platform.PutAsJsonAsync(
+            $"/admin/tenants/{tenant.Id}/provisioned-members/{Uri.EscapeDataString(subject)}",
+            new { clientIds = tenant.Clients, role = "clientViewer" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await ReadJsonAsync(response);
+        Assert.All(
+            body.GetProperty("clientRoles").EnumerateArray(),
+            role => Assert.Equal("clientViewer", role.GetProperty("role").GetString()));
+        using var person = factory.CreateClientWithAccessToken(factory.GenerateToken(userId, AppUserRole.User));
+        var me = await ReadJsonAsync(await person.GetAsync("/auth/me"));
+        Assert.All(
+            me.GetProperty("clientRoles").EnumerateObject(),
+            role => Assert.Equal((int)ClientRole.ClientViewer, role.Value.GetInt32()));
+        var members = await ReadJsonAsync(await platform.GetAsync($"/admin/tenants/{tenant.Id}/provisioned-members"));
+        var member = members.EnumerateArray().Single(item => item.GetProperty("subject").GetString() == subject);
+        Assert.Equal(
+            Sorted([.. tenant.Clients]),
+            member.GetProperty("clientRoles").EnumerateArray().Select(role => role.GetProperty("clientId").GetGuid()).ToArray());
+        Assert.All(
+            member.GetProperty("clientRoles").EnumerateArray(),
+            role => Assert.Equal("clientViewer", role.GetProperty("role").GetString()));
+    }
+
+    [Fact]
+    public async Task PutMembership_WithTheRoleClientAdministrator_IsRefusedAndChangesNothing()
+    {
+        this.Reset();
+        using var platform = await this.PlatformAdministratorAsync();
+        var tenant = await this.TenantWithClientsAsync(1);
+        var subject = NewSubject();
+        var userId = await this.ProvisionAsync(platform, subject);
+        Assert.Equal(HttpStatusCode.OK, (await PutMembershipAsync(platform, tenant.Id, subject, tenant.Clients[0])).StatusCode);
+
+        var response = await platform.PutAsJsonAsync(
+            $"/admin/tenants/{tenant.Id}/provisioned-members/{Uri.EscapeDataString(subject)}",
+            new { clientIds = tenant.Clients, role = "clientAdministrator" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_request", (await ReadJsonAsync(response)).GetProperty("error").GetString());
+        await using var scope = this.Database(out var database);
+        Assert.Equal(
+            ClientRole.ClientUser,
+            (await database.UserClientRoles.AsNoTracking().SingleAsync(r => r.UserId == userId)).Role);
+    }
+
     /// <summary>
     ///     An administrator of the installation raised the membership to tenant administrator and the role on a client to
     ///     client administrator. The platform decides the roles of its members, so the next membership it sets brings both

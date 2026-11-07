@@ -169,7 +169,7 @@
 
                         <div class="list-action-col">
                             <button
-                                v-if="isRestartable(item) && item.id && canInspectClient(props.clientId || item.clientId)"
+                                v-if="isRestartable(item) && item.id && canStartReviews(props.clientId || item.clientId)"
                                 class="btn-ghost restart-btn"
                                 :disabled="restartingJobs.has(item.id)"
                                 :title="restartTitle(item.status)"
@@ -284,6 +284,7 @@ const {
     refresh,
     visibleItems,
     canInspectClient,
+    canStartReviews,
     canManageClient,
     isRestartable,
     restartingJobs,

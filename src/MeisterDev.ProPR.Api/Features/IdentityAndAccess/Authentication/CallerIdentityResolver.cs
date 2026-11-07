@@ -364,6 +364,13 @@ public static class CallerIdentityResolver
             return;
         }
 
+        // The blanket member projection fills in clients without an assignment. An explicit assignment on a client
+        // decides for a regular member, so a ClientViewer assignment in the System tenant stays a viewer.
+        if (tenantRole < TenantRole.TenantAdministrator && explicitClientRoles.ContainsKey(clientId))
+        {
+            return;
+        }
+
         var derivedRole = tenantRole >= TenantRole.TenantAdministrator
             ? ClientRole.ClientAdministrator
             : ClientRole.ClientUser;

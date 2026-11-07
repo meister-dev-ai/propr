@@ -180,7 +180,7 @@ public sealed partial class ClientProviderConnectionsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetProviderConnections(Guid clientId, CancellationToken ct = default)
     {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;
@@ -213,7 +213,7 @@ public sealed partial class ClientProviderConnectionsController(
         Guid connectionId,
         CancellationToken ct = default)
     {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;
@@ -244,7 +244,7 @@ public sealed partial class ClientProviderConnectionsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetProviderOperationalStatus(Guid clientId, CancellationToken ct = default)
     {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;
@@ -278,7 +278,7 @@ public sealed partial class ClientProviderConnectionsController(
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> GetProviderFamilies(Guid clientId, CancellationToken ct = default)
     {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;
@@ -315,7 +315,7 @@ public sealed partial class ClientProviderConnectionsController(
         [FromQuery] int take = 20,
         CancellationToken ct = default)
     {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;

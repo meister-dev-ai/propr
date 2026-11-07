@@ -87,6 +87,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useSession } from '@/composables/useSession'
+import { RoleLevel } from '@/composables/roles'
 import { useUsageStatistics } from '@/composables/useUsageStatistics'
 import icon from '@/assets/logo_standalone.png'
 import githubMark from '@/assets/icons/github.svg?raw'
@@ -103,7 +104,7 @@ const {
 
 /** True for global admins or users with any visible client role. */
 const canViewClients = computed(
-  () => isAdmin.value || Object.values(clientRoles.value).some((r) => r >= 0),
+  () => isAdmin.value || Object.values(clientRoles.value).some((r) => r >= RoleLevel.Viewer),
 )
 
 /**

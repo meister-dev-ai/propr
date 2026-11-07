@@ -126,6 +126,7 @@
                     :data-testid="`client-access-role-${membership.id}`"
                     v-model="vm.draftRole[membership.id]"
                   >
+                    <option value="clientViewer">Client Viewer</option>
                     <option value="clientUser">Client User</option>
                     <option value="clientAdministrator">Client Administrator</option>
                   </select>

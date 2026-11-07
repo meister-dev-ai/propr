@@ -315,6 +315,18 @@ public sealed class CallerIdentityResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsync_RegularMemberOfSystemTenantWithViewerAssignment_StaysAViewer()
+    {
+        var clientId = Guid.NewGuid();
+        var user = CreateUserWithTenantMembership(TenantCatalog.SystemTenantId, TenantRole.TenantUser);
+        user.ClientAssignments.Add(new UserClientRole { UserId = user.Id, ClientId = clientId, Role = ClientRole.ClientViewer });
+
+        var clientRoles = await ResolveEffectiveClientRolesAsync(user, TenantCatalog.SystemTenantId, clientId);
+
+        Assert.Equal(ClientRole.ClientViewer, clientRoles[clientId]);
+    }
+
+    [Fact]
     public async Task ResolveAsync_DatabaseHostWithoutLicensingService_HidesRealTenantClients()
     {
         var tenantId = Guid.NewGuid();

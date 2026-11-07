@@ -10,6 +10,7 @@ import type { components } from '@/types'
 type JobListItem = components['schemas']['JobListItem']
 
 const groups = ref<unknown[]>([])
+const startsReviews = ref(true)
 
 vi.mock('vue-router', () => ({
   RouterLink: { props: ['to'], template: '<a class="router-link"><slot /></a>' },
@@ -37,6 +38,7 @@ vi.mock('@/features/reviews/view-models/useReviewHistoryViewModel', () => ({
     refresh: vi.fn(),
     visibleItems: (group: { items: JobListItem[] }) => group.items,
     canInspectClient: () => true,
+    canStartReviews: () => startsReviews.value,
     canManageClient: () => false,
     // Every row in this file stands for a status the restart button is offered for, including one the
     // view-model does not accept today, so the neutral default is reachable.
@@ -139,5 +141,48 @@ describe('ReviewHistorySection restart button title', () => {
     const titles = restartTitles(['cancelled'])
 
     expect(titles.cancelled).toBe('Restart this review')
+  })
+})
+
+describe('ReviewHistorySection restart button for a client viewer', () => {
+  it('offers no restart to a caller who reads the client but starts no reviews', () => {
+    startsReviews.value = false
+    try {
+      groups.value = [
+        {
+          key: 'group-1',
+          pullRequestId: 42,
+          providerScopePath: 'https://dev.azure.com/org',
+          providerProjectKey: 'proj',
+          repositoryId: 'repo-1',
+          prTitle: 'A pull request',
+          prRepositoryName: 'repo',
+          prSourceBranch: 'feature',
+          prTargetBranch: 'main',
+          prUrl: 'https://example.invalid/pr/42',
+          latestActivityAt: '2026-07-15T10:00:00Z',
+          totalInTokens: 0,
+          totalOutTokens: 0,
+          totalEstimatedCostUsd: null,
+          costIsApproximate: false,
+          clientId: 'client-1',
+          items: [item('failed')],
+        },
+      ]
+
+      const wrapper = mount(ReviewHistorySection, {
+        global: {
+          stubs: {
+            ModalDialog: { template: '<div />' },
+            OverflowMenu: { template: '<div />' },
+            ProgressOrb: { template: '<div />' },
+          },
+        },
+      })
+
+      expect(wrapper.findAll('.restart-btn')).toHaveLength(0)
+    } finally {
+      startsReviews.value = true
+    }
   })
 })

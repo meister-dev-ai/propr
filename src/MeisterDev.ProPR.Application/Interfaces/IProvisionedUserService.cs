@@ -33,19 +33,24 @@ public interface IProvisionedUserService
 
     /// <summary>
     ///     Sets the membership of the user of <paramref name="subject" /> in the tenant: the tenant role tenant user and
-    ///     the client-user role on exactly the clients of <paramref name="clientIds" />. A role on another client of the
-    ///     tenant is removed.
+    ///     the client role <paramref name="clientRole" /> on exactly the clients of <paramref name="clientIds" />. A role on
+    ///     another client of the tenant is removed.
     /// </summary>
     /// <param name="tenantId">The tenant.</param>
     /// <param name="subject">The subject of the person at the identity provider for provisioned users.</param>
     /// <param name="clientIds">The clients of the tenant that the user reads.</param>
     /// <param name="actorUserId">The platform administrator who calls the operation, when the caller is an account.</param>
+    /// <param name="clientRole">
+    ///     The role on the clients: <see cref="ClientRole.ClientViewer" /> or <see cref="ClientRole.ClientUser" />. A
+    ///     provisioned membership never grants <see cref="ClientRole.ClientAdministrator" />.
+    /// </param>
     /// <param name="ct">Cancellation token for the operation.</param>
     Task<ProvisioningResult<ProvisionedMemberDto>> PutMembershipAsync(
         Guid tenantId,
         string subject,
         IReadOnlyCollection<Guid> clientIds,
         Guid? actorUserId,
+        ClientRole clientRole = ClientRole.ClientUser,
         CancellationToken ct = default);
 
     /// <summary>
@@ -138,6 +143,7 @@ public sealed record ProvisionedUserDto(
 /// <param name="IsActive">Whether the account can sign in and use its personal access tokens.</param>
 /// <param name="Role">The role of the user in the tenant.</param>
 /// <param name="ClientIds">The clients of the tenant on which the user holds a role.</param>
+/// <param name="ClientRoles">The role of the user on each of these clients, ordered by client.</param>
 public sealed record ProvisionedMemberDto(
     string Subject,
     Guid UserId,
@@ -145,4 +151,10 @@ public sealed record ProvisionedMemberDto(
     string? DisplayName,
     bool IsActive,
     TenantRole Role,
-    IReadOnlyList<Guid> ClientIds);
+    IReadOnlyList<Guid> ClientIds,
+    IReadOnlyList<ProvisionedClientRoleDto> ClientRoles);
+
+/// <summary>The role of a provisioned user on one client of a tenant.</summary>
+/// <param name="ClientId">The client.</param>
+/// <param name="Role">The role of the user on the client.</param>
+public sealed record ProvisionedClientRoleDto(Guid ClientId, ClientRole Role);

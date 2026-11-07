@@ -113,9 +113,9 @@ idempotent. Who signs in, and when the access of a user ends, is described under
 | Operation | Request | Outcome |
 |---|---|---|
 | Create or update a user | `PUT /api/admin/provisioned-users/{subject}` with `email` and an optional `displayName` | ProPR creates the user and answers `201`, or updates the email address and the display name and answers `200`. The answer contains `subject`, `userId`, `username`, `email`, `displayName` and `isActive`. |
-| Set a membership | `PUT /api/admin/tenants/{tenantId}/provisioned-members/{subject}` with `clientIds` | ProPR gives the user the role `TenantUser` in the tenant and the role `ClientUser` on exactly these clients, and answers `200` with the membership. ProPR answers `400` with `client_not_in_tenant` for a client of another tenant, `404` with `provisioned_user_not_found` for a subject without user, and `409` for the System tenant. |
+| Set a membership | `PUT /api/admin/tenants/{tenantId}/provisioned-members/{subject}` with `clientIds` and an optional `role`, `clientViewer` or `clientUser` | ProPR gives the user the role `TenantUser` in the tenant and the client role of the request on exactly these clients, `ClientUser` when the request names none, and answers `200` with the membership. ProPR answers `400` with `invalid_request` for another client role, `400` with `client_not_in_tenant` for a client of another tenant, `404` with `provisioned_user_not_found` for a subject without user, and `409` for the System tenant. |
 | Remove a membership | `DELETE /api/admin/tenants/{tenantId}/provisioned-members/{subject}` | ProPR removes the membership and the roles on the clients of the tenant, and answers `204` also when there was nothing to remove. When the user holds no membership any more, ProPR disables it and revokes its refresh tokens and personal access tokens. |
-| List the members of a tenant | `GET /api/admin/tenants/{tenantId}/provisioned-members` | ProPR returns the provisioned users with a membership in the tenant, ordered by subject, each with `subject`, `userId`, `email`, `displayName`, `isActive`, `role` and `clientIds`. |
+| List the members of a tenant | `GET /api/admin/tenants/{tenantId}/provisioned-members` | ProPR returns the provisioned users with a membership in the tenant, ordered by subject, each with `subject`, `userId`, `email`, `displayName`, `isActive`, `role`, `clientIds` and `clientRoles`, the role of the user on each of these clients. |
 
 ProPR answers a request for a subject whose account holds platform administrator rights with `409` and
 `platform_administrator`, and changes nothing. To delete a provisioned user, delete its account with
@@ -448,9 +448,9 @@ Unmapped purposes cannot perform their workload.
 
 Guided configuration uses `/admin/clients/{clientId}/connections/{connectionId}/discovery`.
 Every request requires an explicit `purpose`: `crawl`, `webhook`, `mention` or `procursor`.
-Crawl discovery requires `ClientUser` and the `crawl-configs` capability. Mention discovery requires
+Crawl discovery requires `ClientViewer` and the `crawl-configs` capability. Mention discovery requires
 `ClientAdmin`, the `mention-answering` capability and native mention capabilities. Webhook and
-ProCursor discovery require `ClientUser`. These read permissions do not grant configuration writes.
+ProCursor discovery require `ClientViewer`. These read permissions do not grant configuration writes.
 
 Read `descriptor` for the native scope label, optional project stage, source kinds and supported
 operations. Read `scopes`, then `projects` when the descriptor declares a project stage.
@@ -748,7 +748,7 @@ Duplicate jobs and superseded jobs belong to the submitting client. Other client
 pull request retain their jobs and results. Resumption and incremental result reuse also select only
 the submitting client's history.
 
-`ClientUser` is enough here, as it is for restart. Every response to a complete request carries a named
+`ClientUser` is enough here, as it is for restart; a `ClientViewer` is refused. Every response to a complete request carries a named
 `outcome`:
 
 | `outcome` | Status | Means |
@@ -771,8 +771,8 @@ queueing with the current source scope and temperature. Provider revision failur
 
 | Job operation | Access and outcome |
 |---|---|
-| `GET /api/reviewing/jobs/{jobId}/status` | ClientUser can read status and result. |
-| `POST /api/reviewing/jobs/{jobId}/restart` | ClientUser can explicitly restart a failed review; failed jobs do not resume automatically. |
+| `GET /api/reviewing/jobs/{jobId}/status` | ClientViewer and the higher roles read status and result. |
+| `POST /api/reviewing/jobs/{jobId}/restart` | ClientUser can explicitly restart a failed review; failed jobs do not resume automatically. A ClientViewer is refused. |
 | `POST /api/reviewing/jobs/{jobId}/stop` | ClientAdministrator can stop a job. Stopping is terminal and does not requeue it. |
 
 ## Blocking and dismissing
@@ -794,7 +794,7 @@ curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/blocked
 ```
 
 `GET` the same path to list current blocks, and `POST` the same body without `reason` to
-`.../blocked-prs/unblock` to lift one. Listing needs `ClientUser`; blocking and unblocking need
+`.../blocked-prs/unblock` to lift one. Listing needs `ClientViewer`; blocking and unblocking need
 `ClientAdministrator`.
 
 Dismiss a finding so later reviews suppress similar ones:

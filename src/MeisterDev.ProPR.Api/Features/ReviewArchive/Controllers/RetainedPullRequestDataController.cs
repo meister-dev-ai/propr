@@ -12,7 +12,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 /// <summary>
 ///     Read endpoints that serve the opt-in-retained raw pull-request data (archived discussion threads
 ///     and per-file diffs) for the in-app pull-request view. Authorized like the other review-read
-///     endpoints: the caller needs at least read (<see cref="ClientRole.ClientUser" />) access to the
+///     endpoints: the caller needs at least read (<see cref="ClientRole.ClientViewer" />) access to the
 ///     owning client, and a global admin passes for any client. All data is read from the review-archive
 ///     store; an empty result simply means nothing is retained for the pull request, so the caller can
 ///     degrade gracefully.
@@ -184,9 +184,9 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     private IActionResult? ValidateLookup(Guid clientId, string repositoryId)
     {
         // Retained pull-request data is part of viewing a review, so any caller with at least read
-        // (ClientUser) access to the owning client may read it — the same authorization the other
+        // (ClientViewer) access to the owning client may read it — the same authorization the other
         // review-read endpoints use — while a global admin passes for any client.
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (auth is not null)
         {
             return auth;

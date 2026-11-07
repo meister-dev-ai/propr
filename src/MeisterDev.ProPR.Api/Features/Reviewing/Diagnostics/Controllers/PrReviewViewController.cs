@@ -56,7 +56,7 @@ public sealed class PrReviewViewController(
             return auth;
         }
 
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;

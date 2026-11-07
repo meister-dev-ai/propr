@@ -44,7 +44,7 @@ public sealed partial class ClientTokenUsageController(
         [FromQuery] string? to,
         CancellationToken ct = default)
     {
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientViewer);
         if (roleCheck is not null)
         {
             return roleCheck;

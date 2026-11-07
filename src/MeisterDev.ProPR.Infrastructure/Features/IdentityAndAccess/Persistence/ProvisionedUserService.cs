@@ -75,9 +75,16 @@ public sealed class ProvisionedUserService(
         string subject,
         IReadOnlyCollection<Guid> clientIds,
         Guid? actorUserId,
+        ClientRole clientRole = ClientRole.ClientUser,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(clientIds);
+        if (clientRole is not (ClientRole.ClientViewer or ClientRole.ClientUser))
+        {
+            return new ProvisioningResult<ProvisionedMemberDto>(
+                ProvisioningOutcome.InvalidRequest,
+                Message: "A provisioned membership grants the client role ClientViewer or ClientUser.");
+        }
 
         var precondition = await this.CheckTenantRequestAsync<ProvisionedMemberDto>(tenantId, subject, ct);
         if (precondition.Refusal is { } refusal)
@@ -102,7 +109,7 @@ public sealed class ProvisionedUserService(
 
         var clientNames = tenantClients.ToDictionary(client => client.Id, client => client.DisplayName);
         return await this.RetryOnceOnUniqueViolationAsync(() => this.PutMembershipOnceAsync(
-            tenantId, precondition.Issuer!, subject, requested, clientNames, actorUserId, ct));
+            tenantId, precondition.Issuer!, subject, requested, clientNames, actorUserId, clientRole, ct));
     }
 
     /// <inheritdoc />
@@ -241,23 +248,33 @@ public sealed class ProvisionedUserService(
         var assignments = await dbContext.UserClientRoles
             .AsNoTracking()
             .Where(role => userIds.Contains(role.UserId) && tenantClientIds.Contains(role.ClientId))
-            .Select(role => new { role.UserId, role.ClientId })
+            .Select(role => new { role.UserId, role.ClientId, role.Role })
             .ToListAsync(ct);
 
         // The clients are grouped by user once, so the answer for a tenant with many members takes time in proportion to
         // its members and roles.
-        var clientIdsByUser = assignments
+        var rolesByUser = assignments
             .GroupBy(role => role.UserId)
-            .ToDictionary(group => group.Key, group => (IReadOnlyList<Guid>)group.Select(role => role.ClientId).Order().ToList());
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<ProvisionedClientRoleDto>)group
+                    .OrderBy(role => role.ClientId)
+                    .Select(role => new ProvisionedClientRoleDto(role.ClientId, role.Role))
+                    .ToList());
         IReadOnlyList<ProvisionedMemberDto> result = members
-            .Select(member => new ProvisionedMemberDto(
-                member.Subject,
-                member.UserId,
-                member.Email,
-                member.DisplayName,
-                member.IsActive,
-                member.Role,
-                clientIdsByUser.GetValueOrDefault(member.UserId, [])))
+            .Select(member =>
+            {
+                var clientRoles = rolesByUser.GetValueOrDefault(member.UserId, []);
+                return new ProvisionedMemberDto(
+                    member.Subject,
+                    member.UserId,
+                    member.Email,
+                    member.DisplayName,
+                    member.IsActive,
+                    member.Role,
+                    clientRoles.Select(role => role.ClientId).ToList(),
+                    clientRoles);
+            })
             .ToList();
         return new ProvisioningResult<IReadOnlyList<ProvisionedMemberDto>>(ProvisioningOutcome.Succeeded, result);
     }
@@ -372,6 +389,7 @@ public sealed class ProvisionedUserService(
         IReadOnlyList<Guid> requested,
         IReadOnlyDictionary<Guid, string> clientNames,
         Guid? actorUserId,
+        ClientRole clientRole,
         CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
@@ -450,7 +468,7 @@ public sealed class ProvisionedUserService(
             foreach (var clientId in requested)
             {
                 var assignment = assignments.FirstOrDefault(existing => existing.ClientId == clientId);
-                if (assignment is not null && assignment.Role == ClientRole.ClientUser)
+                if (assignment is not null && assignment.Role == clientRole)
                 {
                     continue;
                 }
@@ -463,21 +481,21 @@ public sealed class ProvisionedUserService(
                             Id = Guid.NewGuid(),
                             UserId = account.Id,
                             ClientId = clientId,
-                            Role = ClientRole.ClientUser,
+                            Role = clientRole,
                             AssignedAt = now,
                         });
                 }
                 else
                 {
-                    assignment.Role = ClientRole.ClientUser;
+                    assignment.Role = clientRole;
                 }
 
                 this.Audit(
                     tenantId,
                     actorUserId,
                     "tenant.client-access.assigned",
-                    $"Granted {ClientRole.ClientUser} on client {clientNames[clientId]} to user {account.Id}.",
-                    $"membershipId={membership.Id}; userId={account.Id}; clientId={clientId}; role={ClientRole.ClientUser}; provisionedSubject={subject}",
+                    $"Granted {clientRole} on client {clientNames[clientId]} to user {account.Id}.",
+                    $"membershipId={membership.Id}; userId={account.Id}; clientId={clientId}; role={clientRole}; provisionedSubject={subject}",
                     now);
             }
 
@@ -511,7 +529,8 @@ public sealed class ProvisionedUserService(
                 provisioned.DisplayName,
                 account.IsActive,
                 membership.Role,
-                requested.Order().ToList()));
+                requested.Order().ToList(),
+                requested.Order().Select(clientId => new ProvisionedClientRoleDto(clientId, clientRole)).ToList()));
     }
 
     /// <summary>
