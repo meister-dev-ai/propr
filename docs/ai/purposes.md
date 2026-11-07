@@ -113,7 +113,16 @@ the setting. See
 ## Protocol mode
 
 Leave this on **Auto** unless you know your endpoint only implements one shape. Auto lets ProPR pick what the
-provider and model support.
+provider and model support. For a chat model, the API that Auto picks depends on the family:
+
+- `meisterdev/openAi` calls the Responses API, unless the model's
+  [protocol modes](../reference/api.md#per-model-inputs) include Chat Completions and not Responses.
+- `meisterdev/azureOpenAi` calls the Responses API for every model.
+- `meisterdev/liteLlm` calls the Responses API when the model's protocol modes include Responses, and Chat
+  Completions otherwise.
+- `meisterdev/openAiCompatible` calls Chat Completions.
+- `meisterdev/anthropic`, `meisterdev/awsBedrock` and `meisterdev/googleVertex` call their native APIs: Anthropic
+  Messages, Bedrock Converse and Google generateContent.
 
 Set on a purpose binding on the connection form, an unspeakable mode is refused at save time with a message naming
 what the provider does speak. Set on a logical model it is **not** checked, so it saves cleanly and the review

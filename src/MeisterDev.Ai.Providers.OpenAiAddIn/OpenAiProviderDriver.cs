@@ -205,9 +205,9 @@ public sealed class OpenAiProviderDriver : IAiProviderDriver
             return DriverFailureMapper.DiscoveryFailed(listing.Status, listing.Detail);
         }
 
-        // The vendor lists more than the models a chat or an embedding client can call. An image, a speech or a
-        // moderation model offered here is a binding an operator can pick and a review then fails on, so they
-        // are left out and counted rather than described as something they are not.
+        // The vendor lists more than the models a review can call. An image, speech, moderation, realtime, audio or
+        // search model offered here is a binding an operator can pick and a review then fails on, so these models
+        // are left out and counted.
         var servable = listing.Models.Where(OpenAiModels.IsServable).ToList();
         var skipped = listing.Models.Count - servable.Count;
 
@@ -220,8 +220,8 @@ public sealed class OpenAiProviderDriver : IAiProviderDriver
         if (skipped > 0)
         {
             warnings.Add(
-                $"{skipped} listed model(s) are not offered: they are image, speech, transcription or moderation "
-                + "models, which this host binds to no operation.");
+                $"{skipped} listed model(s) are not offered: they are image, video, speech, transcription, "
+                + "moderation, realtime, audio or search models, which a review cannot call.");
         }
 
         return new ProviderModelDiscoveryResult(
@@ -273,9 +273,10 @@ public sealed class OpenAiProviderDriver : IAiProviderDriver
 
     /// <inheritdoc />
     /// <remarks>
-    ///     Provider-managed sessions, background responses and the preference for the Responses API all follow
-    ///     from the protocol mode the client was built on: they are affordances of that surface and the Chat
-    ///     Completions surface has no equivalent for any of them.
+    ///     Provider-managed sessions, background responses and the preference for the Responses API are reported
+    ///     from the decision that selects the API in <see cref="CreateChatClient" />, so they match the client that
+    ///     method builds. They are affordances of the Responses API, and Chat Completions has no equivalent for any
+    ///     of them.
     /// </remarks>
     public ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
         ProviderEndpoint endpoint,
@@ -346,11 +347,38 @@ public sealed class OpenAiProviderDriver : IAiProviderDriver
         return AzureAiHostSuffixes.Any(suffix => normalized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Whether a chat call for this binding goes out on the Responses API.</summary>
+    /// <param name="protocolMode">The protocol mode of the binding.</param>
+    /// <param name="model">The bound model, with the protocol modes it lists.</param>
+    /// <remarks>
+    ///     <para>
+    ///         An explicit protocol mode is followed as written. In auto mode the call goes out on the Responses API
+    ///         unless the model lists this family's Chat Completions mode and not its Responses mode. OpenAI
+    ///         recommends the Responses API, and from GPT-5.4 on, its Chat Completions endpoint refuses function
+    ///         tools when a reasoning effort other than none applies. Some models, such as GPT-6.1 Terra, accept
+    ///         function tools only on the Responses API. A file review sends function tools, so a model registered
+    ///         with auto alone is reached on the Responses API.
+    ///     </para>
+    ///     <para>
+    ///         OpenAI serves a few models, such as its audio models, on Chat Completions alone, and discovery leaves
+    ///         them out. An operator who enters such a model by hand keeps it on Chat Completions by listing that
+    ///         mode without Responses, or by binding it with the Chat Completions mode.
+    ///     </para>
+    /// </remarks>
     private static bool UsesResponsesApi(string protocolMode, ProviderModelDescriptor model)
     {
-        return ProviderVocabulary.ValuesEqual(protocolMode, ResponsesProtocol)
-               || (ProviderVocabulary.ValuesEqual(protocolMode, ProviderDeclaredProtocolModes.Auto)
-                   && ProviderVocabulary.Names(model.SupportedProtocolModes, ResponsesProtocol));
+        if (ProviderVocabulary.ValuesEqual(protocolMode, ResponsesProtocol))
+        {
+            return true;
+        }
+
+        if (!ProviderVocabulary.ValuesEqual(protocolMode, ProviderDeclaredProtocolModes.Auto))
+        {
+            return false;
+        }
+
+        return ProviderVocabulary.Names(model.SupportedProtocolModes, ResponsesProtocol)
+               || !ProviderVocabulary.Names(model.SupportedProtocolModes, ChatCompletionsProtocol);
     }
 
     private static ApiKeyCredential Credential(ProviderEndpoint endpoint)

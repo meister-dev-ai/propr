@@ -80,28 +80,36 @@ internal static class OpenAiModels
         return new Listing(response.StatusCode, models, null);
     }
 
-    // The families the vendor lists that neither this host nor this family serves: images, speech, transcription
-    // and moderation. The listing carries an id and nothing else, so they are told apart by the id, which is how
-    // the embedding models are told apart too.
+    // The families the vendor lists that neither this host nor this family serves: images, video, speech,
+    // transcription and moderation. The listing carries an id and nothing else, so they are told apart by the id,
+    // which is how the embedding models are told apart too. The speech models are named tts-1 and tts-1-hd, or
+    // carry -tts after the name of the model they are built on, as gpt-4o-mini-tts does.
     private static readonly string[] NonConversationalFamilies =
-        ["dall-e", "gpt-image", "tts-", "whisper", "moderation", "sora", "omni-moderation"];
+        ["dall-e", "gpt-image", "tts-", "-tts", "whisper", "transcribe", "moderation", "sora", "omni-moderation"];
+
+    // The conversational families OpenAI serves outside the Responses API, told apart by the id in the same way.
+    // OpenAI serves its audio models and its search model gpt-5-search-api on Chat Completions alone, and its
+    // realtime models and gpt-live-1 on its Realtime and Live APIs alone. A chat model discovered here lists the
+    // Responses mode, so a review in auto mode sends it to the Responses API, and OpenAI refuses the call.
+    private static readonly string[] FamiliesTheResponsesApiRefuses = ["audio", "search-api", "realtime", "gpt-live"];
 
     /// <summary>
     ///     Whether the id names a model this host can bind to an operation.
     /// </summary>
     /// <remarks>
-    ///     A vendor's model list holds more than the models a chat client can call. Offered as chat models, an
-    ///     image or a speech model is a binding an operator can pick and a review then fails on, and the
-    ///     capabilities the description asserts for a chat model are wrong for every one of them.
+    ///     A vendor's model list holds more than the models a review can call. Offered as a chat model, an image,
+    ///     speech, moderation, realtime, audio or search model is a binding an operator can pick and a review then
+    ///     fails on. The capabilities the description asserts for a chat model are also wrong for the image, speech
+    ///     and moderation models.
     /// </remarks>
     /// <param name="remoteModelId">The identifier the endpoint listed.</param>
     internal static bool IsServable(string remoteModelId)
     {
         var normalized = remoteModelId.Trim();
 
-        return !Array.Exists(
-            NonConversationalFamilies,
-            family => normalized.Contains(family, StringComparison.OrdinalIgnoreCase));
+        return !NonConversationalFamilies
+            .Concat(FamiliesTheResponsesApiRefuses)
+            .Any(family => normalized.Contains(family, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

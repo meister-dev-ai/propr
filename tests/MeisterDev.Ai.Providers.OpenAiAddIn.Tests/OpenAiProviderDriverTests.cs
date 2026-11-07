@@ -39,6 +39,18 @@ public sealed class OpenAiProviderDriverTests
 
     private const string VendorEndpoint = "https://api.openai.com/v1";
 
+    private const string ResponsesPath = "/v1/responses";
+
+    private const string ChatCompletionsPath = "/v1/chat/completions";
+
+    // The protocol modes discovery lists for a chat model of this family.
+    private static readonly string[] EveryChatMode =
+    [
+        ProviderDeclaredProtocolModes.Auto,
+        OpenAiProviderDriver.ResponsesProtocol,
+        OpenAiProviderDriver.ChatCompletionsProtocol,
+    ];
+
     [Theory]
     [InlineData("https://api.openai.com/v1")]
     [InlineData("https://api.openai.com/")]
@@ -175,6 +187,57 @@ public sealed class OpenAiProviderDriverTests
         Assert.Equal("succeeded", discovered.DiscoveryStatus);
         Assert.Equal(["gpt-5"], discovered.Models.Select(model => model.RemoteModelId));
         Assert.Contains(discovered.Warnings, warning => warning.Contains("5 listed model(s)", StringComparison.Ordinal));
+    }
+
+    // OpenAI serves its audio models and its search model on Chat Completions alone, and its realtime, live,
+    // transcription and speech models on neither chat API. A review in auto mode sends a discovered chat model to the
+    // Responses API, so it would fail on each of them. The identifiers are the ones OpenAI documents, with snapshots
+    // among them.
+    [Theory]
+    [InlineData("gpt-audio-1.5")]
+    [InlineData("gpt-audio-mini-2025-12-15")]
+    [InlineData("gpt-4o-audio-preview")]
+    [InlineData("gpt-5-search-api")]
+    [InlineData("gpt-realtime-2.1")]
+    [InlineData("gpt-realtime-translate")]
+    [InlineData("gpt-4o-mini-realtime-preview")]
+    [InlineData("gpt-live-1")]
+    [InlineData("gpt-transcribe")]
+    [InlineData("gpt-4o-transcribe-diarize")]
+    [InlineData("gpt-4o-mini-tts")]
+    [InlineData("gpt-4o-mini-tts-2025-12-15")]
+    public async Task AModelAReviewCannotCallIsLeftOutAndCounted(string remoteModelId)
+    {
+        var wire = new FakeVendorEndpoint(
+            HttpStatusCode.OK,
+            $$"""{"data":[{"id":"gpt-6-luna"},{"id":"{{remoteModelId}}"}]}""");
+
+        var discovered = await Driver().DiscoverModelsAsync(EndpointOn(wire));
+
+        Assert.Equal(["gpt-6-luna"], discovered.Models.Select(model => model.RemoteModelId));
+        Assert.Contains(discovered.Warnings, warning => warning.Contains("1 listed model(s)", StringComparison.Ordinal));
+    }
+
+    // A family is matched by part of the identifier. The chat models OpenAI documents stay on offer, including the
+    // ones that begin like an audio, realtime, search or speech model, and the ones served on the Responses API alone.
+    [Theory]
+    [InlineData("gpt-6-luna")]
+    [InlineData("gpt-6.1-terra")]
+    [InlineData("gpt-5.5-pro")]
+    [InlineData("gpt-oss-120b")]
+    [InlineData("chat-latest")]
+    [InlineData("gpt-4o")]
+    [InlineData("gpt-4o-mini")]
+    public async Task AChatModelOpenAiDocumentsIsOffered(string remoteModelId)
+    {
+        var wire = new FakeVendorEndpoint(HttpStatusCode.OK, $$"""{"data":[{"id":"{{remoteModelId}}"}]}""");
+
+        var discovered = await Driver().DiscoverModelsAsync(EndpointOn(wire));
+
+        var model = Assert.Single(discovered.Models);
+        Assert.Equal(remoteModelId, model.RemoteModelId);
+        Assert.Equal([AiOperationKind.Chat], model.OperationKinds);
+        Assert.Empty(discovered.Warnings);
     }
 
     // The Responses API is this vendor's own surface, so a chat model discovered here is offered it — which
@@ -314,22 +377,68 @@ public sealed class OpenAiProviderDriverTests
         Assert.Equal("/v1/responses", Assert.Single(wire.Requests).RequestUri!.AbsolutePath);
     }
 
-    // Provider-managed sessions and background responses are affordances of the Responses surface, so the client
-    // built on the other surface claims none of them.
-    [Theory]
-    [InlineData(OpenAiProviderDriver.ResponsesProtocol, true)]
-    [InlineData(ProviderDeclaredProtocolModes.Auto, true)]
-    [InlineData(OpenAiProviderDriver.ChatCompletionsProtocol, false)]
-    public void TheCapabilitiesReportedFollowTheWireShapeTheClientWasBuiltOn(string protocolMode, bool onResponses)
+    /// <summary>
+    ///     The API a chat call goes out on, for the protocol mode of a binding and the protocol modes the bound
+    ///     model lists.
+    /// </summary>
+    /// <remarks>
+    ///     In auto mode a call goes out on the Responses API unless the model lists Chat Completions without
+    ///     Responses. OpenAI's Chat Completions endpoint refuses function tools together with a reasoning effort for
+    ///     its current models, and a file review sends function tools, so a model registered with auto alone is
+    ///     reached on the Responses API. An explicit protocol mode is followed as written.
+    /// </remarks>
+    public static TheoryData<string[], string, string> ApiChoices()
     {
-        var model = new ProviderModelDescriptor(
-            Guid.NewGuid(),
-            "gpt-5",
-            [ProviderDeclaredProtocolModes.Auto, OpenAiProviderDriver.ResponsesProtocol, OpenAiProviderDriver.ChatCompletionsProtocol]);
+        return new TheoryData<string[], string, string>
+        {
+            { [ProviderDeclaredProtocolModes.Auto], ProviderDeclaredProtocolModes.Auto, ResponsesPath },
+            { EveryChatMode, ProviderDeclaredProtocolModes.Auto, ResponsesPath },
+            {
+                [ProviderDeclaredProtocolModes.Auto, OpenAiProviderDriver.ChatCompletionsProtocol],
+                ProviderDeclaredProtocolModes.Auto,
+                ChatCompletionsPath
+            },
+            { [ProviderDeclaredProtocolModes.Auto], OpenAiProviderDriver.ChatCompletionsProtocol, ChatCompletionsPath },
+            { EveryChatMode, OpenAiProviderDriver.ChatCompletionsProtocol, ChatCompletionsPath },
+            { [ProviderDeclaredProtocolModes.Auto], OpenAiProviderDriver.ResponsesProtocol, ResponsesPath },
+        };
+    }
 
-        var capabilities = Driver().GetChatRuntimeCapabilities(EndpointOn(null), model, protocolMode);
+    [Theory]
+    [MemberData(nameof(ApiChoices))]
+    public async Task ACallGoesOutOnTheApiTheProtocolModeAndTheModelSelect(
+        string[] listedModes,
+        string protocolMode,
+        string expectedPath)
+    {
+        var wire = new FakeVendorEndpoint(HttpStatusCode.OK, "{}");
+
+        using var chat = Driver().CreateChatClient(EndpointOn(wire), Model(listedModes), protocolMode);
+
+        await Record.ExceptionAsync(() => chat.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.Equal(expectedPath, Assert.Single(wire.Requests).RequestUri!.AbsolutePath);
+    }
+
+    // Provider-managed sessions and background responses are affordances of the Responses API, so the driver reports
+    // them for a client built on that API and for no other client.
+    [Theory]
+    [MemberData(nameof(ApiChoices))]
+    public void TheCapabilitiesReportedMatchTheApiTheCallGoesOutOn(
+        string[] listedModes,
+        string protocolMode,
+        string expectedPath)
+    {
+        var onResponses = string.Equals(expectedPath, ResponsesPath, StringComparison.Ordinal);
+
+        var capabilities = Driver().GetChatRuntimeCapabilities(EndpointOn(null), Model(listedModes), protocolMode);
 
         Assert.Equal(new ProviderRuntimeCapabilities(onResponses, onResponses, onResponses, onResponses), capabilities);
+    }
+
+    private static ProviderModelDescriptor Model(string[] listedModes)
+    {
+        return new ProviderModelDescriptor(Guid.NewGuid(), "gpt-6-luna", listedModes);
     }
 
     // The transport rides on the endpoint, because the driver is constructed once for the family and every

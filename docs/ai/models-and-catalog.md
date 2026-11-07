@@ -15,7 +15,9 @@ what to enter instead, is per family: see
 Discovery returns model ids. It does not return context windows, capabilities or prices. The catalog holds
 those. A LiteLLM gateway also states what each model is for (`mode`) and its input limit: an embedding model is then
 offered as one whatever its name, and a model for images, speech or reranking is left out. Without a stated mode,
-a model whose id contains `embedding` is offered as an embedding model and every other one as a chat model.
+a model whose id contains `embedding` is offered as an embedding model and every other one as a chat model. On an
+OpenAI connection, ProPR first leaves out image, video, speech, transcription, moderation, realtime, audio and search
+models, recognised by their ids.
 
 Discovery also returns `catalogModels`, the models of the catalog that the provider did not list. An OpenAI,
 Azure OpenAI, Anthropic, Google Vertex or Amazon Bedrock connection gets the models of its own catalog provider. An
