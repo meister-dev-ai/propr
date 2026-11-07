@@ -722,7 +722,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         CancellationToken cancellationToken)
     {
         // If the loop exited without ever capturing a text response (e.g., iteration limit hit
-        // while the AI was still making tool calls), do one final forced call without tools so
+        // while the AI was still making tool calls), do one final forced call that forbids tool calls so
         // the AI can emit its best-effort review from the context gathered so far.
         LogForcingFinalReview(logger, pullRequestId, state.Iteration);
         PrepareForForcedFinalTurn(state);
@@ -735,8 +735,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 "summary, comments, confidence_evaluations, loop_complete (set to true), investigation_complete (set to true). " +
                 "Do NOT use markdown code fences. Do NOT add any text outside the JSON. " +
                 "The response must start with '{' and end with '}'."));
-        var finalOptions = new ChatOptions
-                { MaxOutputTokens = setup.ChatOptions.MaxOutputTokens, ModelId = setup.EffectiveModelId, Temperature = systemContext.Temperature }
+        var finalOptions = CreateTextAnswerOptions(setup.ChatOptions, setup.EffectiveModelId, systemContext.Temperature)
             .ApplyReasoning(
                 systemContext.CapturesReasoning(opts),
                 systemContext.ActiveReasoningEffort,
@@ -848,8 +847,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 "\"loop_complete\": true. " +
                 "The response must start with '{' and end with '}'. No markdown fences. No other keys."));
 
-        var correctionOptions = new ChatOptions
-                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature }
+        var correctionOptions = CreateTextAnswerOptions(chatOptions, effectiveModelId, systemContext.Temperature)
             .ApplyReasoning(
                 systemContext.CapturesReasoning(options.Value),
                 systemContext.ActiveReasoningEffort,
@@ -1379,6 +1377,25 @@ internal sealed partial class ToolAwareAiReviewCore(
         withEvidence.Add(retainedEvidence);
         withEvidence.AddRange(state.Messages.Skip(insertAt));
         return withEvidence;
+    }
+
+    /// <summary>
+    ///     Builds the options of a turn that has to answer in text after the loop called tools: the forced final turn and
+    ///     the schema repair. The turn keeps the tool definitions of the loop and forbids tool calls. Anthropic refuses a
+    ///     transcript that contains tool calls but no tool definitions, and models that bind a thinking block to the request
+    ///     it was created in refuse a replayed block once the tool list differs.
+    /// </summary>
+    private static ChatOptions CreateTextAnswerOptions(ChatOptions loopOptions, string? modelId, float? temperature)
+    {
+        var hasTools = loopOptions.Tools is { Count: > 0 };
+        return new ChatOptions
+        {
+            MaxOutputTokens = loopOptions.MaxOutputTokens,
+            ModelId = modelId,
+            Temperature = temperature,
+            Tools = hasTools ? [.. loopOptions.Tools!] : null,
+            ToolMode = hasTools ? ChatToolMode.None : null,
+        };
     }
 
     private static IList<ChatMessage> BuildMessagesForForcedFinalTurn(ReviewLoopState state)

@@ -2419,6 +2419,62 @@ public class ToolAwareAiReviewCoreTests
     }
 
     [Fact]
+    public async Task ReviewAsync_ForcedFinalAndSchemaRepair_KeepTheLoopToolsAndForbidToolCalls()
+    {
+        // The forced final turn and the schema repair replay a transcript that holds tool calls. Anthropic refuses such a
+        // transcript without tool definitions, and models that bind a thinking block to its request refuse a replayed
+        // block whose tool list differs, so both turns send the loop's tools with tool calls forbidden.
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        const string malformedFinal = "{\"summary\":\"Broken \"json\"\",\"comments\":[]";
+        const string repairedFinal =
+            """
+            {"summary":"Repaired","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}
+            """;
+        var responses = new Queue<ChatResponse>(
+        [
+            CreateFunctionCallResponse("call-1", "get_changed_files", "{}"),
+            new ChatResponse(new ChatMessage(ChatRole.Assistant, malformedFinal)),
+            new ChatResponse(new ChatMessage(ChatRole.Assistant, repairedFinal)),
+        ]);
+        var calls = new List<(AITool[] Tools, ChatToolMode? ToolMode)>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var chatOptions = callInfo.ArgAt<ChatOptions?>(1);
+                calls.Add(([.. chatOptions?.Tools ?? []], chatOptions?.ToolMode));
+                return responses.Dequeue();
+            });
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(1),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        Assert.Equal("Repaired", result.Summary);
+        Assert.Equal(3, calls.Count);
+        Assert.NotEmpty(calls[0].Tools);
+        Assert.All(
+            calls.Skip(1),
+            call =>
+            {
+                // The same tool objects in the same order: a definition whose schema or description changed would also
+                // change the request that the thinking block is bound to.
+                Assert.Equal(calls[0].Tools.Length, call.Tools.Length);
+                Assert.All(calls[0].Tools.Zip(call.Tools), pair => Assert.Same(pair.First, pair.Second));
+                Assert.IsType<NoneChatToolMode>(call.ToolMode);
+            });
+    }
+
+    [Fact]
     public async Task ReviewAsync_WithSearchToolCallAndProtocolRecorder_RecordsStructuredSearchResult()
     {
         var mockClient = Substitute.For<IChatClient>();
