@@ -47,7 +47,7 @@ internal sealed class ForgejoCodeReviewPublicationService(
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
         await this.DeletePendingReviewsAsync(review, reviewer, context.Connection.Secret, ct);
-        var payload = BuildPayload(revision, result, reviewer, composer, publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo);
+        var payload = BuildPayload(revision, result, composer, publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo);
         using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
             ForgejoConnectionVerifier.BuildApiUri(
                 review.Repository.Host,
@@ -208,11 +208,10 @@ internal sealed class ForgejoCodeReviewPublicationService(
     private static ForgejoCreatePullReviewRequest BuildPayload(
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity author,
         IPostedCommentComposer composer, FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo)
     {
         var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {ForgejoFindingCommentRenderer.RenderText(author.DisplayName.ReplaceLineEndings(" "))} Review");
+        summaryBuilder.AppendLine($"## {ReviewSummaryTextFormatter.Heading}");
         summaryBuilder.AppendLine();
         summaryBuilder.Append(ReviewFindingPriority.FormatLead(result, ForgejoFindingCommentRenderer.RenderText));
         summaryBuilder.AppendLine(ReviewFindingTextFormatter.CloseOpenFences(ForgejoFindingCommentRenderer.RenderText(result.Summary)));

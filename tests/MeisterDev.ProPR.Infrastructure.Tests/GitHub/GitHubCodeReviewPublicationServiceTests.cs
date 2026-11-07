@@ -40,7 +40,6 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
         var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
         var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base...head");
-        var reviewer = new ReviewerIdentity(host, "99", "bot", "Bot\n```", true);
         var first = new ReviewComment(null, null, CommentSeverity.Warning, "```\nFirst description.");
         var second = new ReviewComment(null, null, CommentSeverity.Warning, "```\n<details>Hidden</details>\n```")
         {
@@ -50,7 +49,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         };
         var result = new ReviewResult(conclusion, [first, second]) { ContextSkippedFilePaths = ["src/Path\n```\n.cs"] };
 
-        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, reviewer, TestPostedCommentComposer.Default);
+        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, TestPostedCommentComposer.Default);
         var html = Markdown.ToHtml(payload.Body, new MarkdownPipelineBuilder().UsePipeTables(new PipeTableOptions { UseGfmRules = true }).Build());
 
         Assert.DoesNotContain("<details>Hidden</details>", html, StringComparison.Ordinal);
@@ -58,7 +57,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         Assert.Contains("<table>", html, StringComparison.Ordinal);
         Assert.Contains("Findings to report", html, StringComparison.Ordinal);
         Assert.Contains("src/Path ``` .cs", payload.Body, StringComparison.Ordinal);
-        Assert.StartsWith("## Bot ``` Review\n", payload.Body, StringComparison.Ordinal);
+        Assert.StartsWith("## ProPR Review\n", payload.Body, StringComparison.Ordinal);
         Assert.Equal("```\nFirst description.", first.Message);
         TestPostedCommentComposer.AssertMarkedOnce(payload.Body, TestPostedCommentComposer.Default.Text);
     }
@@ -70,12 +69,11 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
         var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
         var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
-        var reviewer = new ReviewerIdentity(host, "99", "bot", "Review Bot", true);
         const string description = "Use `Task<T>` after reading <https://example.com/x> or contact <reviewer@example.com>.";
         var finding = new ReviewComment("src/Work.cs", 7, CommentSeverity.Warning, description);
         var result = new ReviewResult("Conclusion.", [finding, finding.AsPullRequestLevel(description)]);
 
-        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, reviewer, TestPostedCommentComposer.Default);
+        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, TestPostedCommentComposer.Default);
 
         Assert.StartsWith("![Severity: Warning]", Assert.Single(payload.Comments).Body);
         Assert.Contains("\n\n" + description + "\n\n" + TestPostedCommentComposer.Default.Text, Assert.Single(payload.Comments).Body);
@@ -91,7 +89,6 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
         var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
         var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
-        var reviewer = new ReviewerIdentity(host, "99", "bot", "    Bot </details><script>bad</script>", true);
         var finding = new ReviewComment("src/</details>.cs", 7, CommentSeverity.Warning, "Guard `a | b`. </details><script>bad</script>")
         {
             RiskAssessment = new FindingRiskAssessment(
@@ -108,7 +105,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         };
         var composer = TestPostedCommentComposer.With("Generated </details><script>marker</script>.");
 
-        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, reviewer, composer);
+        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, composer);
 
         var inline = Assert.Single(payload.Comments).Body;
         Assert.StartsWith("![Severity: Warning]", inline);
@@ -225,6 +222,55 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         Assert.Contains("head-sha", postedBody, StringComparison.Ordinal);
     }
 
+    // A review is published under the account the pull request fetch authenticated as, which for a GitHub App
+    // connection is the bot login of the app. When the fetch returned no account, the review is published under the
+    // fallback identity, whose login is a key built from the connection. Neither appears in the heading.
+    [Theory]
+    [InlineData("propr-review-meister-dev[bot]")]
+    [InlineData(null)]
+    public async Task PublishReviewAsync_HeadsTheSummaryWithProPRReviewForEveryPublicationIdentity(string? account)
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = TestPublicationIdentity.For(account, clientId, review);
+
+        string? postedBody = null;
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(async request =>
+            {
+                if (request.RequestUri!.AbsoluteUri == UserUri)
+                {
+                    return CreateJsonResponse(new { login = "meister-dev" });
+                }
+
+                if (request.RequestUri.AbsoluteUri == ReviewsUri)
+                {
+                    postedBody = await request.Content!.ReadAsStringAsync();
+                    return CreateJsonResponse(new { id = 1 });
+                }
+
+                return CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound);
+            }));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(CreateConnectionRepository(clientId, host), httpClientFactory),
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
+
+        await sut.PublishReviewAsync(clientId, review, revision, new ReviewResult("Looks solid overall.", []), reviewer);
+
+        Assert.NotNull(postedBody);
+        using var payload = JsonDocument.Parse(postedBody);
+        var summary = payload.RootElement.GetProperty("body").GetString()!;
+        Assert.Equal("## ProPR Review", summary.Split('\n')[0]);
+        Assert.DoesNotContain(reviewer.Login, summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("connection:", summary, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void BuildPayload_LongInlineDescriptionsUseCompactSummaryActionsAndRetainFullComments()
     {
@@ -232,7 +278,6 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
         var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
         var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
-        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
         var comments = Enumerable.Range(1, 8)
             .Select(index => new ReviewComment(
                 $"src/File{index}.cs", index, CommentSeverity.Warning,
@@ -243,9 +288,9 @@ public sealed class GitHubCodeReviewPublicationServiceTests
             ContextSkippedFilePaths = ["src/Huge.cs"],
         };
 
-        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, reviewer, TestPostedCommentComposer.Distinctive);
+        var payload = GitHubLifecyclePublicationService.BuildPayload(review, revision, result, TestPostedCommentComposer.Distinctive);
 
-        Assert.StartsWith("## Meister Review Bot Review\n\n" + result.Summary, payload.Body);
+        Assert.StartsWith("## ProPR Review\n\n" + result.Summary, payload.Body);
         Assert.True(payload.Body.Length < 8000);
         Assert.Contains("| 8 | Unassessed: 8 | Unassessed: 8 |", payload.Body);
         Assert.Contains("src/Huge.cs", payload.Body);

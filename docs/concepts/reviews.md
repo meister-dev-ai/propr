@@ -428,12 +428,12 @@ different languages would otherwise produce a different result on every call.
 
 The fixed text ProPR adds around the model's prose stays English whatever you configure: the classification
 label on each comment (`ERROR:`, `WARNING:`, `SUGGESTION:`, `INFO:`), the risk dimension labels and values,
-the `**AI Review Summary**` heading,
-and the notes about verification, carried-forward files and budget caps. ProPR matches the severity prefix
-and the summary heading as data on pull requests it has already commented on. A re-review uses the prefix
-to recognise its own comment and avoid posting it twice, and the heading to keep ProPR's own summary out
-of its recall measurements. Translating either would break those checks on every pull request that already
-exists.
+the `**AI Review Summary**` heading of the Azure DevOps summary, the `ProPR Review` heading of the GitHub,
+GitLab and Forgejo summary, and the notes about verification, carried-forward files and budget caps. ProPR
+matches the severity prefix and the `**AI Review Summary**` heading as data on pull requests it has already
+commented on. A re-review uses the prefix to recognise its own comment and avoid posting it twice, and the
+heading to keep ProPR's own summary out of its recall measurements. Translating either would break those
+checks on every pull request that already exists.
 
 ### Findings outside your changes
 

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -20,9 +21,6 @@ public sealed partial class ReviewAdmissionNotice(
     IClientRegistry clientRegistry,
     ILogger<ReviewAdmissionNotice> logger) : IReviewAdmissionNotice
 {
-    /// <summary>The name the notice is published under where the client configured no reviewer identity.</summary>
-    private const string FallbackDisplayName = "ProPR";
-
     /// <inheritdoc />
     public async Task PostAsync(
         ReviewJob job,
@@ -87,25 +85,18 @@ public sealed partial class ReviewAdmissionNotice(
     /// <param name="job">The refused job.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <remarks>
-    ///     A review publishes under the identity its connection authenticated as, and a provider puts that
-    ///     display name in the heading of the comment it writes. A refusal is decided before the pull request
-    ///     is fetched, so the authenticated identity the review reads from the pull request is not available
-    ///     here, and the configured reviewer identity names the same account. Where the client configured
-    ///     none, the notice publishes under the product's name and a key that identifies the connection, so
-    ///     the heading stays readable.
+    ///     A review publishes under the identity its connection authenticated as. A refusal is decided before the
+    ///     pull request is fetched, so the authenticated identity the review reads from the pull request is not
+    ///     available here, and the configured reviewer identity belongs to the same account. Where the client
+    ///     configured none, the notice publishes under <see cref="FallbackPublicationIdentity" />, the identity a
+    ///     review uses when its account is not known.
     /// </remarks>
     private async Task<ReviewerIdentity> ResolveIdentityAsync(ReviewJob job, CancellationToken ct)
     {
         var configured = await clientRegistry
             .GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, ct)
             .ConfigureAwait(false);
-        if (configured is not null)
-        {
-            return configured;
-        }
-
-        var connectionKey = $"connection:{job.ClientId:D}:{job.Provider}:{job.RepositoryId}:{job.PullRequestId}";
-        return new ReviewerIdentity(job.ProviderHost, connectionKey, connectionKey, FallbackDisplayName, isBot: false);
+        return configured ?? FallbackPublicationIdentity.For(job);
     }
 
     [LoggerMessage(

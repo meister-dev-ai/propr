@@ -762,6 +762,18 @@ public class AdoCommentPosterDeduplicationTests
         Assert.False(AdoCommentPoster.IsBotAuthor(null, null));
     }
 
+    // A pull request fetch that returned no account leaves ProPR with the fallback identity, which is named by the key of
+    // the connection. A comment of a person's account is not taken for ProPR's own, even when the account is named ProPR.
+    [Theory]
+    [InlineData("ProPR")]
+    [InlineData("propr")]
+    public void IsBotAuthor_AnAccountNamedProPR_IsNotTheFallbackIdentity(string authorName)
+    {
+        var job = new MeisterDev.ProPR.Domain.Entities.ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/acme", "project", "repository-1", 7, 1);
+
+        Assert.False(AdoCommentPoster.IsBotAuthor(UserId, null, authorName, FallbackPublicationIdentity.For(job)));
+    }
+
 
     [Fact]
     public void BuildChangeTrackingIds_DuplicatePathAcrossChanges_DoesNotThrowAndCollapses()

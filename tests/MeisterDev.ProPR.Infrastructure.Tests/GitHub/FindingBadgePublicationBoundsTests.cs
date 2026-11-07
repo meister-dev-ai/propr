@@ -43,7 +43,7 @@ public sealed class FindingBadgePublicationBoundsTests
             body.Split('\n').Where(line => line.StartsWith("![Severity:", StringComparison.Ordinal)), header => Assert.EndsWith("?style=flat-square)", header));
         if (fileless)
         {
-            Assert.StartsWith("## Review Bot Review", body);
+            Assert.StartsWith("## ProPR Review\n", body);
         }
         else
         {
@@ -76,7 +76,7 @@ public sealed class FindingBadgePublicationBoundsTests
         var payload = Payload(findings, composer, style);
 
         Assert.InRange(payload.Body.Length, 1, 65_536);
-        Assert.StartsWith("## Review Bot Review", payload.Body);
+        Assert.StartsWith("## ProPR Review\n", payload.Body);
         Assert.Empty(payload.Comments);
         foreach (var finding in findings)
         {
@@ -158,8 +158,7 @@ public sealed class FindingBadgePublicationBoundsTests
         var repository = new RepositoryRef(host, "1", "org", "org/repo");
         return GitHubLifecyclePublicationService.BuildPayload(
             new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "1", 1), new ReviewRevision("head", "base", null, null, null),
-            new ReviewResult(summary, findings) { ContextSkippedFilePaths = skippedPaths ?? [] },
-            new ReviewerIdentity(host, "bot", "bot", "Review Bot", true), composer, "head", style);
+            new ReviewResult(summary, findings) { ContextSkippedFilePaths = skippedPaths ?? [] }, composer, "head", style);
     }
 
     private static ReviewComment Finding(string message, bool withFix)

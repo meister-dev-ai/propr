@@ -62,7 +62,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
         var badgeStyle = publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo;
         var diffLines = await this.TryReadDiffLinesAsync(context, review, revision, ct);
-        var payload = BuildPayload(review, revision, result, author, composer, publicationContext?.CurrentHeadSha, badgeStyle, diffLines);
+        var payload = BuildPayload(review, revision, result, composer, publicationContext?.CurrentHeadSha, badgeStyle, diffLines);
         if (payload.OutsideDiffCount > 0)
         {
             LogFindingsOutsideDiff(this._logger, review.Number, payload.OutsideDiffCount);
@@ -80,7 +80,7 @@ internal sealed partial class GitHubLifecyclePublicationService(
                 var refusal = await ReadDiagnosticBodyAsync(response, ct);
                 LogInlineCommentsRefused(this._logger, review.Number, payload.Comments.Count, Sanitize(refusal));
                 response.Dispose();
-                payload = BuildPayload(review, revision, result, author, composer, publicationContext?.CurrentHeadSha, badgeStyle, GitHubDiffLines.None);
+                payload = BuildPayload(review, revision, result, composer, publicationContext?.CurrentHeadSha, badgeStyle, GitHubDiffLines.None);
                 response = await this.SendReviewAsync(context, review, payload, ct);
             }
 
@@ -434,7 +434,6 @@ internal sealed partial class GitHubLifecyclePublicationService(
         CodeReviewRef review,
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity author,
         IPostedCommentComposer composer,
         string? currentHeadSha = null, FindingBadgeStyle badgeStyle = FindingBadgeStyle.ShieldsIo,
         GitHubDiffLines? diffLines = null)
@@ -498,10 +497,10 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
         var outsideDiffCount = result.Comments.Count(comment =>
             !string.IsNullOrWhiteSpace(comment.FilePath) && comment.LineNumber is > 0 && !inlineFindings.Contains(comment));
-        var summary = BuildSummaryBody(result, author, includeSuggestedFixes: true, badgeStyle, bodyBudget, inlineFindings, outsideDiffCount);
+        var summary = BuildSummaryBody(result, includeSuggestedFixes: true, badgeStyle, bodyBudget, inlineFindings, outsideDiffCount);
         if (summary.Length > bodyBudget)
         {
-            summary = BuildSummaryBody(result, author, includeSuggestedFixes: false, badgeStyle, bodyBudget, inlineFindings, outsideDiffCount);
+            summary = BuildSummaryBody(result, includeSuggestedFixes: false, badgeStyle, bodyBudget, inlineFindings, outsideDiffCount);
         }
 
         summary = composer.AppendRendered(ReviewFindingTextFormatter.Truncate(summary, bodyBudget), GitHubFindingCommentRenderer.RenderText);
@@ -530,7 +529,6 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
     private static string BuildSummaryBody(
         ReviewResult result,
-        ReviewerIdentity author,
         bool includeSuggestedFixes,
         FindingBadgeStyle badgeStyle,
         int maximumBodyLength,
@@ -544,18 +542,18 @@ internal sealed partial class GitHubLifecyclePublicationService(
             comment => comment,
             comment => GitHubFindingCommentRenderer.Format(includeSuggestedFixes ? comment : comment with { SuggestedFix = null }, badgeStyle: badgeStyle));
         var layout = new SummaryLayout(inlineFindings, outsideDiffCount);
-        var summary = FormatSummary(result, author, layout, comment => rendered[comment]);
+        var summary = FormatSummary(result, layout, comment => rendered[comment]);
         if (summary.Length <= maximumBodyLength)
         {
             return summary;
         }
 
         // Only formatter-owned prefixes are reduced; badge examples in descriptions remain unchanged.
-        var withoutHeaders = FormatSummary(result, author, layout, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], 0));
+        var withoutHeaders = FormatSummary(result, layout, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], 0));
         if (withoutHeaders.Length <= maximumBodyLength && fileless.Length > 0)
         {
             var headerBudget = (maximumBodyLength - withoutHeaders.Length) / fileless.Length;
-            return FormatSummary(result, author, layout, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], headerBudget));
+            return FormatSummary(result, layout, comment => ReviewFindingTextFormatter.LimitBadgeHeader(rendered[comment], headerBudget));
         }
 
         if (includeSuggestedFixes)
@@ -565,11 +563,11 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
         if (fileless.Length == 0)
         {
-            return ReviewFindingTextFormatter.Truncate(FormatSummary(result, author, layout, _ => string.Empty), maximumBodyLength);
+            return ReviewFindingTextFormatter.Truncate(FormatSummary(result, layout, _ => string.Empty), maximumBodyLength);
         }
 
         var shellBudget = maximumBodyLength / 2;
-        var shell = FormatSummary(result, author, layout, _ => string.Empty, shellBudget);
+        var shell = FormatSummary(result, layout, _ => string.Empty, shellBudget);
         if (shell.Length >= maximumBodyLength)
         {
             return ReviewFindingTextFormatter.Truncate(shell, maximumBodyLength);
@@ -577,19 +575,18 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
         var findingBudget = (maximumBodyLength - shell.Length) / fileless.Length;
         return FormatSummary(
-            result, author, layout, comment => ReviewFindingTextFormatter.Truncate(FitFindingMetadata(rendered[comment], findingBudget), findingBudget),
+            result, layout, comment => ReviewFindingTextFormatter.Truncate(FitFindingMetadata(rendered[comment], findingBudget), findingBudget),
             shellBudget);
     }
 
     private static string FormatSummary(
         ReviewResult result,
-        ReviewerIdentity author,
         SummaryLayout layout,
         Func<ReviewComment, string> findingRenderer,
         int? maximumShellLength = null)
     {
         var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {GitHubFindingCommentRenderer.RenderText(author.DisplayName.ReplaceLineEndings(" "))} Review");
+        summaryBuilder.AppendLine($"## {ReviewSummaryTextFormatter.Heading}");
         summaryBuilder.AppendLine();
         summaryBuilder.Append(ReviewFindingPriority.FormatLead(result, GitHubFindingCommentRenderer.RenderText));
         summaryBuilder.AppendLine(ReviewFindingTextFormatter.CloseOpenFences(GitHubFindingCommentRenderer.RenderText(result.Summary)));

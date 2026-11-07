@@ -55,7 +55,7 @@ internal sealed class GitLabCodeReviewPublicationService(
         var client = httpClientFactory.CreateClient("GitLabProvider");
 
         var badgeStyle = publicationContext?.FindingBadgeStyle ?? FindingBadgeStyle.ShieldsIo;
-        var summaryBody = BuildSummaryBody(result, reviewer, composer, badgeStyle);
+        var summaryBody = BuildSummaryBody(result, composer, badgeStyle);
         var inlineComments = result.Comments.Select((comment, ordinal) => (Comment: comment, Ordinal: ordinal))
             .Where(item => IsInlineComment(item.Comment)).ToList();
         var nonInlineCommentCount = result.Comments.Count - inlineComments.Count;
@@ -322,10 +322,10 @@ internal sealed class GitLabCodeReviewPublicationService(
         }
     }
 
-    private static string BuildSummaryBody(ReviewResult result, ReviewerIdentity author, IPostedCommentComposer composer, FindingBadgeStyle badgeStyle)
+    private static string BuildSummaryBody(ReviewResult result, IPostedCommentComposer composer, FindingBadgeStyle badgeStyle)
     {
         var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {GitLabFindingCommentRenderer.RenderText(author.DisplayName.ReplaceLineEndings(" "))} Review");
+        summaryBuilder.AppendLine($"## {ReviewSummaryTextFormatter.Heading}");
         summaryBuilder.AppendLine();
         summaryBuilder.Append(ReviewFindingPriority.FormatLead(result, GitLabFindingCommentRenderer.RenderText));
         summaryBuilder.AppendLine(ReviewFindingTextFormatter.CloseOpenFences(GitLabFindingCommentRenderer.RenderText(result.Summary)));

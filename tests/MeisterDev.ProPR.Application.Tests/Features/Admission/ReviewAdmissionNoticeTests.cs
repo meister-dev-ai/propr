@@ -13,9 +13,8 @@ using NSubstitute;
 namespace MeisterDev.ProPR.Application.Tests.Features.Admission;
 
 /// <summary>
-///     Who the admission notice is published as. A provider writes the publishing identity's display name in
-///     the heading of the comment it posts, so the identity this path resolves is what an author reads on the
-///     pull request.
+///     Who the admission notice is published as: the reviewer identity configured on the client's connection, or the
+///     fallback identity when the client configured none.
 /// </summary>
 public sealed class ReviewAdmissionNoticeTests
 {
@@ -32,20 +31,22 @@ public sealed class ReviewAdmissionNoticeTests
         Assert.Equal("local_admin", identity.DisplayName);
     }
 
-    // The synthetic key naming the connection is an internal identifier. Published, it becomes the heading of
-    // the comment the author reads.
+    // The fallback identity is named by the key of the connection, which matches no account, so a comment of a
+    // person's account is never taken for the notice. The heading of the comment is fixed and does not show the key.
     [Fact]
-    public async Task PostAsync_WithoutAConfiguredReviewerIdentity_PublishesUnderANameAndNotTheConnectionKey()
+    public async Task PostAsync_WithoutAConfiguredReviewerIdentity_PublishesUnderTheConnectionKey()
     {
         var job = CreateJob();
         var publication = Substitute.For<ICodeReviewPublicationService>();
         var clients = CreateClientRegistry(job, identity: null);
+        var connectionKey = $"connection:{job.ClientId:D}:Forgejo:74:1";
 
         await CreateNotice(job, publication, clients).PostAsync(job, "The repository is larger than this client allows.");
 
         var identity = CapturePublishedIdentity(publication);
-        Assert.DoesNotContain("connection:", identity.DisplayName, StringComparison.Ordinal);
-        Assert.DoesNotContain(job.ClientId.ToString("D"), identity.DisplayName, StringComparison.Ordinal);
+        Assert.Equal(connectionKey, identity.Login);
+        Assert.Equal(connectionKey, identity.DisplayName);
+        Assert.False(identity.IsBot);
     }
 
     private static ReviewerIdentity CapturePublishedIdentity(ICodeReviewPublicationService publication)

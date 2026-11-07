@@ -61,7 +61,7 @@ public sealed class ReviewSuggestedFixPublicationTests
 
         var payload = GitHubLifecyclePublicationService.BuildPayload(
             new CodeReviewRef(repo, CodeReviewPlatformKind.PullRequest, "1", 1), new ReviewRevision("head", "base", null, null, null),
-            new ReviewResult("Narrative.", [finding]), new ReviewerIdentity(host, "bot", "bot", "Bot", true), TestPostedCommentComposer.Default, "head", style);
+            new ReviewResult("Narrative.", [finding]), TestPostedCommentComposer.Default, "head", style);
 
         var body = fileless ? payload.Body : Assert.Single(payload.Comments).Body;
         Assert.InRange(body.Length, 1, 65_536);
@@ -94,7 +94,7 @@ public sealed class ReviewSuggestedFixPublicationTests
         var finding = Finding();
         var payload = GitHubLifecyclePublicationService.BuildPayload(
             new CodeReviewRef(repo, CodeReviewPlatformKind.PullRequest, "1", 1), new ReviewRevision(head, "base", null, null, null),
-            new ReviewResult("Narrative.", [finding]), new ReviewerIdentity(host, "bot", "bot", "Bot", true), TestPostedCommentComposer.Default, head, style);
+            new ReviewResult("Narrative.", [finding]), TestPostedCommentComposer.Default, head, style);
         var inline = Assert.Single(payload.Comments);
         Assert.Equal(applicable ? 3 : 2, inline.Line);
         Assert.Equal(applicable ? 2 : null, inline.StartLine);

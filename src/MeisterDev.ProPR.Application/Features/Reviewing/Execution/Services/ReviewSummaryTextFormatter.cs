@@ -12,6 +12,13 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 public static class ReviewSummaryTextFormatter
 {
     /// <summary>
+    ///     The heading of the review summary on GitHub, GitLab and Forgejo. The heading is the same for every
+    ///     publication identity, so neither the account a review is published under nor the key of the fallback
+    ///     publication identity appears in it.
+    /// </summary>
+    public const string Heading = "ProPR Review";
+
+    /// <summary>
     ///     Formats the findings that have no comment of their own and the offered-finding totals, without changing the
     ///     review result. A finding with an inline comment is left out, because its comment already carries it.
     /// </summary>

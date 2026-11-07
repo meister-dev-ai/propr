@@ -422,4 +422,51 @@ public sealed class ForgejoPublicationContextContractTests
             Assert.Contains("\n\nGuard this null case.\n\n" + marker, inlineBody);
         }
     }
+
+    // A review is published under the account the pull request fetch authenticated as, or under the fallback
+    // identity, whose login is a key built from the connection, when the fetch returned no account. Neither appears
+    // in the heading.
+    [Theory]
+    [InlineData("propr-review-bot")]
+    [InlineData(null)]
+    public async Task PublishReviewAsync_HeadsTheSummaryWithProPRReviewForEveryPublicationIdentity(string? account)
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision("aabbccddeeff00112233", "00112233445566778899", null, "aabbccddeeff00112233", "base...head");
+        var reviewer = TestPublicationIdentity.For(account, clientId, review);
+
+        string? postedReview = null;
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(async request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            if (uri == "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews" && request.Method == HttpMethod.Post)
+            {
+                postedReview = await request.Content!.ReadAsStringAsync();
+                return ForgejoTestHelpers.CreateJsonResponse(new { id = 9001L });
+            }
+
+            return uri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews?limit=100" =>
+                    ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+        var sut = new ForgejoCodeReviewPublicationService(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory), httpClientFactory, TestPostedCommentComposer.Distinctive);
+
+        await sut.PublishReviewAsync(clientId, review, revision, new ReviewResult("Looks solid overall.", []), reviewer);
+
+        Assert.NotNull(postedReview);
+        using var payload = JsonDocument.Parse(postedReview);
+        var summary = payload.RootElement.GetProperty("body").GetString()!;
+        Assert.Equal("## ProPR Review", summary.Split('\n')[0]);
+        Assert.DoesNotContain(reviewer.Login, summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("connection:", summary, StringComparison.Ordinal);
+    }
 }

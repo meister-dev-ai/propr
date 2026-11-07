@@ -91,8 +91,9 @@ public sealed class HarvestedThreadEligibilityTests
     [Fact]
     public void ASummaryCarryingTheMarkerIsNotAThreadItFailedToRaise()
     {
-        // GitHub, GitLab and Forgejo open a summary with the reviewer's display name, which differs per
-        // installation. The marker is what identifies the summary as ProPR's on those hosts.
+        // A summary on GitHub, GitLab and Forgejo carries no summary prefix, and a retained summary from before
+        // the heading became fixed opens with the reviewer's display name, which differs per installation. The
+        // marker identifies the summary as ProPR's on those hosts.
         var discussion =
             "0caeb875-08d2-6d69-88fb-302b06d21993: ## Meister Review Bot Review\n"
             + "This PR adds a review history experience to the admin UI.\n"

@@ -85,9 +85,12 @@ public sealed class GitLabPublicationContextContractTests
         }
 
         var summary = postedBodies[0];
-        // The inline finding has its own discussion, so its path does not appear in the summary.
+        // The inline finding has its own discussion, so its path does not appear in the summary. The heading is fixed,
+        // so the display name of the publication identity does not appear either.
+        Assert.StartsWith("## ProPR Review\n", summary);
         Assert.DoesNotContain("script&gt;action", summary);
-        foreach (var field in new[] { "author", "conclusion", "budget", "degraded", "skipped" })
+        Assert.DoesNotContain("script&gt;author", summary);
+        foreach (var field in new[] { "conclusion", "budget", "degraded", "skipped" })
         {
             Assert.Contains($"&lt;/details&gt;&lt;script&gt;{field}&lt;/script&gt;", summary);
         }
@@ -534,7 +537,7 @@ public sealed class GitLabPublicationContextContractTests
             decodedBodies,
             body => TestPostedCommentComposer.AssertMarkedOnce(body, TestPostedCommentComposer.DistinctiveMarker));
 
-        var summary = Assert.Single(decodedBodies, body => body.StartsWith("## Meister Review Bot Review", StringComparison.Ordinal));
+        var summary = Assert.Single(decodedBodies, body => body.StartsWith("## ProPR Review\n", StringComparison.Ordinal));
         Assert.Contains("Looks solid overall.", summary);
         Assert.DoesNotContain("Guard this null case.", summary);
         Assert.Contains(withRisk ? "| 3 | Low: 3 | Unassessed: 3 |" : "| 3 | Unassessed: 3 | Unassessed: 3 |", summary);
@@ -572,5 +575,50 @@ public sealed class GitLabPublicationContextContractTests
             Assert.StartsWith("![Severity: Warning]", inlineBody);
             Assert.Contains("\n\nGuard this null case.\n\n" + TestPostedCommentComposer.DistinctiveMarker, inlineBody);
         }
+    }
+
+    // A review is published under the account the merge request fetch authenticated as, or under the fallback
+    // identity, whose login is a key built from the connection, when the fetch returned no account. Neither appears
+    // in the heading.
+    [Theory]
+    [InlineData("project_101_bot_4f1c2a9e")]
+    [InlineData(null)]
+    public async Task PublishReviewAsync_HeadsTheSummaryWithProPRReviewForEveryPublicationIdentity(string? account)
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "head-sha", "base-sha...head-sha");
+        var reviewer = TestPublicationIdentity.For(account, clientId, review);
+
+        var postedBodies = new List<string>();
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(async request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            if (uri == "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions")
+            {
+                postedBodies.Add(await request.Content!.ReadAsStringAsync());
+                return GitLabTestHelpers.CreateJsonResponse(
+                    new { id = "discussion-abc", notes = new[] { new { id = 9100L } } },
+                    HttpStatusCode.Created);
+            }
+
+            return uri == "https://gitlab.example.com/api/v4/user"
+                ? GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" })
+                : new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+        var sut = new GitLabCodeReviewPublicationService(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory,
+            TestPostedCommentComposer.Distinctive);
+
+        await sut.PublishReviewAsync(clientId, review, revision, new ReviewResult("Looks solid overall.", []), reviewer);
+
+        var summary = GitLabTestHelpers.ReadMultipartField(Assert.Single(postedBodies), "body");
+        Assert.Equal("## ProPR Review", summary.Split('\n')[0]);
+        Assert.DoesNotContain(reviewer.Login, summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("connection:", summary, StringComparison.Ordinal);
     }
 }

@@ -122,10 +122,16 @@ public sealed partial class ReviewOrchestrationService(
 
         ReviewPipelineResult? pipelineResult = null;
 
+        // A failure of the file reviews ends the pipeline with an exception, which carries the partial result but not
+        // the pull request. The pipeline records the pull request it reviews here, and the failure handler publishes
+        // the partial result against it.
+        var reviewedPullRequest = new ReviewedPullRequest();
+
         try
         {
             pipelineResult = await this.RunReviewPipelineAsync(
                 job,
+                reviewedPullRequest,
                 reviewerContext.ConfiguredTriggerReviewer,
                 resolvedReviewRuntime.Value.ChatClient,
                 resolvedReviewRuntime.Value.Capabilities,
@@ -162,7 +168,7 @@ public sealed partial class ReviewOrchestrationService(
                 return;
             }
 
-            await this.HandlePartialReviewFailureAsync(job, pipelineResult?.PullRequest, ex, ct);
+            await this.HandlePartialReviewFailureAsync(job, reviewedPullRequest.PullRequest, ex, ct);
             return;
         }
         catch (Exception ex)
@@ -288,6 +294,7 @@ public sealed partial class ReviewOrchestrationService(
 
     private async Task<ReviewPipelineResult?> RunReviewPipelineAsync(
         ReviewJob job,
+        ReviewedPullRequest reviewedPullRequest,
         ReviewerIdentity? reviewer,
         IChatClient overrideChatClient,
         AgentReviewRuntimeCapabilities runtimeCapabilities,
@@ -399,6 +406,10 @@ public sealed partial class ReviewOrchestrationService(
                 return null;
             }
 
+            // The partial result of failed file reviews is published against this pull request. Its authorized identity
+            // is the account the summary is published under, and its threads are the threads a provider checks for the
+            // comments ProPR already posted.
+            reviewedPullRequest.PullRequest = pr;
             var result = await this.DispatchFileReviewAsync(job, pr, systemContext, overrideChatClient, ct);
             result = ReviewSuggestedFixValidator.Bind(result, pr, job.ReviewRevisionReference?.HeadSha);
 
@@ -2083,16 +2094,31 @@ public sealed partial class ReviewOrchestrationService(
         Message = "Review job {JobId} for pull request {PullRequestId} was refused before it started: {Reason}")]
     private static partial void LogReviewRefusedBySize(ILogger logger, Guid jobId, int pullRequestId, string reason);
 
+    // A review is published under the account the pull request fetch authenticated as. When the fetch returned no
+    // account, the review is published under the fallback identity, which is named by the key of the connection, and
+    // ProPR logs a warning so that an operator can check the connection. The heading of the review summary is the same
+    // for both identities.
     private ReviewerIdentity ResolvePublicationIdentity(ReviewJob job, PullRequest pr)
     {
-        var externalUserId = pr.AuthorizedIdentityName
-                             ?? pr.AuthorizedIdentityId?.ToString("D")
-                             ?? $"connection:{job.ClientId:D}:{job.Provider}:{job.RepositoryId}:{job.PullRequestId}";
-        var login = pr.AuthorizedIdentityName ?? externalUserId;
-        var displayName = pr.AuthorizedIdentityName ?? login;
-        var isBot = providerRegistry.GetIdentityPolicy(job.Provider).IsPublicationBot(login);
-        return new ReviewerIdentity(job.ProviderHost, externalUserId, login, displayName, isBot);
+        var account = !string.IsNullOrWhiteSpace(pr.AuthorizedIdentityName)
+            ? pr.AuthorizedIdentityName
+            : pr.AuthorizedIdentityId?.ToString("D");
+        if (account is null)
+        {
+            var fallback = FallbackPublicationIdentity.For(job);
+            LogPublicationIdentityUnknown(logger, job.Id, job.PullRequestId, fallback.Login, job.Provider);
+            return fallback;
+        }
+
+        var isBot = providerRegistry.GetIdentityPolicy(job.Provider).IsPublicationBot(account);
+        return new ReviewerIdentity(job.ProviderHost, account, account, account, isBot);
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message =
+            "Review job {JobId} is published on pull request {PullRequestId} under the connection key {ConnectionKey}, because the {Provider} fetch of the pull request returned no account for the connection")]
+    private static partial void LogPublicationIdentityUnknown(ILogger logger, Guid jobId, int pullRequestId, string connectionKey, ScmProvider provider);
 
     private ReviewPublicationContext BuildPublicationContext(
         ReviewJob job, PullRequest pr, ReviewRevision revision, ReviewerIdentity publicationIdentity, int? compareToIterationId) =>
@@ -2129,4 +2155,13 @@ public sealed partial class ReviewOrchestrationService(
 
     /// <summary>What a completed pipeline hands back: the pull request it reviewed.</summary>
     private sealed record ReviewPipelineResult(PullRequest PullRequest);
+
+    /// <summary>
+    ///     The pull request a pipeline run hands to the file reviews. The run sets it before the file reviews start,
+    ///     so the handler of a failure of the file reviews can read it after the run ended with an exception.
+    /// </summary>
+    private sealed class ReviewedPullRequest
+    {
+        public PullRequest? PullRequest { get; set; }
+    }
 }
