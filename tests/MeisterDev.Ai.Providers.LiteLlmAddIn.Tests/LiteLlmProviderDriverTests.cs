@@ -301,6 +301,31 @@ public sealed class LiteLlmProviderDriverTests
         Assert.Equal(ProviderRuntimeCapabilities.None, capabilities);
     }
 
+    // The gateway passes on the message of the provider behind it in the error shape of the OpenAI surface. The
+    // verdict carries that message, so the trace shows why the call was refused.
+    [Fact]
+    public async Task ARefusedCallCarriesTheMessageTheGatewayWrote()
+    {
+        var wire = new FakeGateway(
+            HttpStatusCode.BadRequest,
+            """
+            {"error":{"message":"litellm.BadRequestError: OpenAIException - Unsupported parameter: 'temperature' is not supported with this model.",
+            "type":"invalid_request_error","param":"temperature","code":"400"}}
+            """);
+
+        using var chat = Driver().CreateChatClient(
+            EndpointOn(wire),
+            new ProviderModelDescriptor(Guid.NewGuid(), "gpt-5", [LiteLlmProviderDriver.ChatCompletionsProtocol]),
+            LiteLlmProviderDriver.ChatCompletionsProtocol);
+
+        var failure = await Record.ExceptionAsync(() => chat.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.NotNull(failure);
+        Assert.Equal(
+            "litellm.BadRequestError: OpenAIException - Unsupported parameter: 'temperature' is not supported with this model. (parameter: temperature)",
+            Driver().ClassifyRuntimeFailure(failure).ProviderMessage);
+    }
+
     // The transport rides on the endpoint, because the driver is constructed once for the family and every
     // connection of it is reached through the client factory the host attaches to that connection.
     private static ProviderEndpoint EndpointOn(HttpMessageHandler? wire, string baseUrl = Gateway)

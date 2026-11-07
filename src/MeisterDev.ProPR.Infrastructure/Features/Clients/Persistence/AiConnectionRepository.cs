@@ -6,6 +6,7 @@ using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Clients.Contracts;

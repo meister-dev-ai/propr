@@ -3,7 +3,7 @@
 
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Egress;
-using MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;
+using MeisterDev.Ai.Providers.Hosting;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 

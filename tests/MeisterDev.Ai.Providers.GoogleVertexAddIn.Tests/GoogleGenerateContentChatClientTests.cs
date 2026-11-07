@@ -5,6 +5,7 @@ using System.Net;
 using System.Text.Json;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
 using Microsoft.Extensions.AI;
 
@@ -265,10 +266,41 @@ public sealed class GoogleGenerateContentChatClientTests
             HttpStatusCode.TooManyRequests,
             """{"error":{"code":429,"message":"Quota exceeded","status":"RESOURCE_EXHAUSTED"}}""");
 
-        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+        var failure = await Assert.ThrowsAnyAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
 
         Assert.Equal(HttpStatusCode.TooManyRequests, failure.StatusCode);
         Assert.Contains("Quota exceeded", failure.Message, StringComparison.Ordinal);
+    }
+
+    // The driver puts the message Google wrote on the verdict, so the trace shows it beside the status.
+    [Fact]
+    public async Task AProviderRejectionPutsTheMessageGoogleWroteOnTheVerdict()
+    {
+        var endpoint = new FakeGoogleEndpoint().Fails(
+            HttpStatusCode.BadRequest,
+            """{"error":{"code":400,"message":"Unable to submit request because it has an empty text parameter.","status":"INVALID_ARGUMENT"}}""");
+
+        var failure = await Record.ExceptionAsync(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.NotNull(failure);
+        var verdict = new GoogleVertexProviderDriver().ClassifyRuntimeFailure(failure);
+        Assert.Equal(400, verdict.HttpStatus);
+        Assert.Equal("Unable to submit request because it has an empty text parameter.", verdict.ProviderMessage);
+    }
+
+    // A page from a proxy in front of Google holds no message field, so the verdict keeps the message the status
+    // alone produces.
+    [Fact]
+    public async Task AnHtmlPageFromAProxyPutsNoMessageOnTheVerdict()
+    {
+        var endpoint = new FakeGoogleEndpoint().Fails(HttpStatusCode.Forbidden, "<html><body><h1>403 Forbidden</h1></body></html>");
+
+        var failure = await Record.ExceptionAsync(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.NotNull(failure);
+        var verdict = new GoogleVertexProviderDriver().ClassifyRuntimeFailure(failure);
+        Assert.Null(verdict.ProviderMessage);
+        Assert.Equal(DriverFailureMapper.ClassifyStatus(403).Reason, verdict.Reason);
     }
 
     // A gateway in front of Google answers with its own shape, and the error message can then be an object, a
@@ -282,7 +314,7 @@ public sealed class GoogleGenerateContentChatClientTests
     {
         var endpoint = new FakeGoogleEndpoint().Fails(HttpStatusCode.BadGateway, body);
 
-        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+        var failure = await Assert.ThrowsAnyAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
 
         Assert.Equal(HttpStatusCode.BadGateway, failure.StatusCode);
         Assert.Contains(expected, failure.Message, StringComparison.Ordinal);

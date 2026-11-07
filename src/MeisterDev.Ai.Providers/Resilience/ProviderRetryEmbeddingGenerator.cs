@@ -28,6 +28,7 @@ public sealed partial class ProviderRetryEmbeddingGenerator : DelegatingEmbeddin
     private readonly ProviderCallTarget _target;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger? _logger;
+    private readonly IReadOnlyCollection<string> _credentialValues;
 
     /// <summary>Initializes a new instance of the <see cref="ProviderRetryEmbeddingGenerator" /> class.</summary>
     /// <param name="innerGenerator">The generator whose calls are retried.</param>
@@ -36,13 +37,17 @@ public sealed partial class ProviderRetryEmbeddingGenerator : DelegatingEmbeddin
     /// <param name="target">The profile, provider and model being called, for logs and failure messages.</param>
     /// <param name="timeProvider">Clock used for backoff; <see langword="null" /> uses the system clock.</param>
     /// <param name="logger">Optional logger for retry attempts.</param>
+    /// <param name="credentialValues">
+    ///     The credential values the connection holds, which are replaced in the failure this stage reports.
+    /// </param>
     public ProviderRetryEmbeddingGenerator(
         IEmbeddingGenerator<string, Embedding<float>> innerGenerator,
         ProviderRetryPolicy policy,
         Func<Exception, ProviderFailureVerdict> classify,
         ProviderCallTarget target,
         TimeProvider? timeProvider = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IReadOnlyCollection<string>? credentialValues = null)
         : base(innerGenerator)
     {
         ArgumentNullException.ThrowIfNull(policy);
@@ -55,6 +60,9 @@ public sealed partial class ProviderRetryEmbeddingGenerator : DelegatingEmbeddin
         this._target = target;
         this._timeProvider = timeProvider ?? TimeProvider.System;
         this._logger = logger;
+
+        // Copied, because the caller owns the collection and this stage reports failures for as long as it lives.
+        this._credentialValues = credentialValues is null ? [] : [.. credentialValues];
     }
 
     /// <inheritdoc />
@@ -96,7 +104,7 @@ public sealed partial class ProviderRetryEmbeddingGenerator : DelegatingEmbeddin
         {
             throw new ProviderCallFailedException(
                 this._target,
-                verdict,
+                ProviderRetryMechanics.Reportable(verdict, this._credentialValues),
                 attempt,
                 DriverFailureMapper.ActionHintFor(verdict.HttpStatus),
                 exception);

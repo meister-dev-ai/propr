@@ -202,6 +202,18 @@ A failed probe reports a category and, where one applies, what to change.
 | `capabilityMismatch` | The endpoint does not serve what this family expects |
 | `unknown` | Nothing more specific could be determined |
 
+### Refused calls during a review
+
+When a provider refuses a model call during a review, ProPR records the failure in the `ai_call_failure` event of
+the review's protocol and as the error of the pass. The entry contains the profile, the model, the HTTP status and
+what to change. For connections of the OpenAI, Azure OpenAI, LiteLLM, OpenAI-compatible, Anthropic and Google
+Gemini / Vertex AI families, the entry also contains the message the provider wrote into its error response, with
+the parameter the message refers to. ProPR copies that message field alone and cuts it to 500 characters. In the
+message, ProPR replaces the credential of the connection and the values of its default headers with `[redacted]`.
+For a header value that starts with the scheme `Basic`, `Bearer` or `Token`, ProPR also replaces the part after the
+scheme. For a response without a message field, such as an HTML page from a proxy, the entry contains the status and
+the advice alone.
+
 ### Common messages
 
 | Message | What to do |

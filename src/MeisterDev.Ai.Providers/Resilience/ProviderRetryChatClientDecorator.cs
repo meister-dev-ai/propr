@@ -21,12 +21,16 @@ namespace MeisterDev.Ai.Providers.Resilience;
 /// </param>
 /// <param name="timeProvider">Clock used for backoff; <see langword="null" /> uses the system clock.</param>
 /// <param name="logger">Optional logger for retry attempts.</param>
+/// <param name="credentialValues">
+///     The credential values the connection holds, which are replaced in the failure the retry stage reports.
+/// </param>
 public sealed class ProviderRetryChatClientDecorator(
     IAiProviderDriver driver,
     ProviderRetryPolicy policy,
     string? profileLabel = null,
     TimeProvider? timeProvider = null,
-    ILogger? logger = null) : IProviderChatClientDecorator
+    ILogger? logger = null,
+    IReadOnlyCollection<string>? credentialValues = null) : IProviderChatClientDecorator
 {
     /// <inheritdoc />
     public ProviderRuntimeStage Stage => ProviderRuntimeStage.Retry;
@@ -44,6 +48,7 @@ public sealed class ProviderRetryChatClientDecorator(
             driver.ClassifyRuntimeFailure,
             new ProviderCallTarget(endpoint.ProviderKind, model.RemoteModelId, profileLabel),
             timeProvider,
-            logger);
+            logger,
+            credentialValues);
     }
 }

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Hosting;
 using Microsoft.Extensions.AI;
 
@@ -132,7 +133,10 @@ public sealed class GoogleEmbeddingGenerator : IEmbeddingGenerator<string, Embed
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new HttpRequestException($"Google rejected the embedding request: {body}", null, response.StatusCode);
+            throw new GoogleRequestRefusedException(
+                $"Google rejected the embedding request: {body}",
+                response.StatusCode,
+                DriverFailureMapper.ReadProviderMessage(body));
         }
 
         var values = (JsonNode.Parse(body) as JsonObject)?["embedding"]?["values"] as JsonArray

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.ProPR.Application.DTOs;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;

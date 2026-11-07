@@ -56,6 +56,26 @@ public static class ProviderContractMapping
         };
     }
 
+    /// <summary>
+    ///     The credential values a stored connection holds: the fields of its credential and the values of the
+    ///     secret-marked fields its family declares.
+    /// </summary>
+    /// <remarks>
+    ///     ProPR replaces these values in every text a provider writes about the connection before it stores or shows
+    ///     the text, because several providers quote the presented key back in a refusal.
+    /// </remarks>
+    /// <param name="connection">The stored connection profile.</param>
+    public static IReadOnlyCollection<string> CredentialValues(this AiConnectionDto connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        return
+        [
+            .. ProviderSecretEnvelope.Decode(connection.Secret, connection.AuthMode).Fields.Values,
+            .. connection.DeclaredSecrets.Values,
+        ];
+    }
+
     /// <summary>Projects probe options onto the same endpoint shape used at run time.</summary>
     /// <remarks>
     ///     The probe context carries the transport and nothing else. Discovery and verification are calls the

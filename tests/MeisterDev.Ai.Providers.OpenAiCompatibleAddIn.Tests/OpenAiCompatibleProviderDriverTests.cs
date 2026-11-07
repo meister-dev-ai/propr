@@ -325,6 +325,28 @@ public sealed class OpenAiCompatibleProviderDriverTests
         Assert.Equal("/zen/v1/chat/completions", request.RequestUri!.AbsolutePath);
     }
 
+    // Servers of this protocol write the reason for a refusal into the message field of the error body, some of
+    // them at the top level of the body. The verdict carries that message, so the trace shows it beside the status.
+    [Theory]
+    [InlineData(
+        """{"error":{"message":"Model kimi-k2 does not support tools.","type":"invalid_request_error","param":"tools"}}""",
+        "Model kimi-k2 does not support tools. (parameter: tools)")]
+    [InlineData(
+        """{"object":"error","message":"max_tokens must be at least 1, got 0.","type":"BadRequestError","param":null,"code":400}""",
+        "max_tokens must be at least 1, got 0.")]
+    public async Task ARefusedCallCarriesTheMessageTheServerWrote(string body, string expected)
+    {
+        using var chat = Driver().CreateChatClient(
+            EndpointOn(new FakeCompatibleEndpoint(HttpStatusCode.BadRequest, body)),
+            new ProviderModelDescriptor(Guid.NewGuid(), "kimi-k2", [OpenAiCompatibleProviderDriver.ChatCompletionsProtocol]),
+            OpenAiCompatibleProviderDriver.ChatCompletionsProtocol);
+
+        var failure = await Record.ExceptionAsync(() => chat.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.NotNull(failure);
+        Assert.Equal(expected, Driver().ClassifyRuntimeFailure(failure).ProviderMessage);
+    }
+
     // The transport rides on the endpoint, because the driver is constructed once for the family and every
     // connection of it is reached through the client factory the host attaches to that connection.
     private static ProviderEndpoint EndpointOn(HttpMessageHandler? wire)

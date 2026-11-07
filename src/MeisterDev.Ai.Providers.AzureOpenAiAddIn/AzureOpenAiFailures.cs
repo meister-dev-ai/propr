@@ -51,7 +51,10 @@ internal static class AzureOpenAiFailures
         {
             if (candidate is ClientResultException refused)
             {
-                return DriverFailureMapper.ClassifyStatus(refused.Status, StatedWait(refused));
+                return DriverFailureMapper.ClassifyStatus(refused.Status, StatedWait(refused)) with
+                {
+                    ProviderMessage = ProviderMessage(refused),
+                };
             }
         }
 
@@ -70,6 +73,31 @@ internal static class AzureOpenAiFailures
     {
         var header = RetryAfter(exception);
         return header > TimeSpan.Zero ? header : DriverFailureMapper.ReadStatedDelay(exception.Message) ?? header;
+    }
+
+    /// <summary>
+    ///     What the provider wrote about the refusal, read from the response body that the client library keeps with
+    ///     the failure.
+    /// </summary>
+    /// <remarks>
+    ///     The excerpt is read from the body and not from the exception message, so it holds the message field of
+    ///     the error and nothing the client library wrote around it.
+    /// </remarks>
+    /// <param name="refused">The failure the client library raised.</param>
+    private static string? ProviderMessage(ClientResultException refused)
+    {
+        try
+        {
+            return refused.GetRawResponse() is { } response
+                ? DriverFailureMapper.ReadProviderMessage(response.Content.ToMemory())
+                : null;
+        }
+        catch (InvalidOperationException)
+        {
+            // A body the client library did not keep cannot be read a second time. Classification runs from inside
+            // a catch block, and a throw here would replace the failure being reported.
+            return null;
+        }
     }
 
     // Providers state their own backoff on 429 and sometimes on 503. Honouring it beats guessing, so it is read

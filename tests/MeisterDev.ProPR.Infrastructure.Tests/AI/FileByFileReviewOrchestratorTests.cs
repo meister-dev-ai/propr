@@ -1,6 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -658,6 +661,61 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<CancellationToken>(),
                 Arg.Any<string?>(),
                 Arg.Is<string?>(error => error != null && error.Contains("synthesis service unavailable")));
+    }
+
+    // A refused provider call ends the pass of the file. What the provider wrote about the refusal is what an
+    // operator needs to correct the profile, so it reaches the failure event of the trace and the error of the
+    // pass, beside the status.
+    [Fact]
+    public async Task ReviewAsync_ProviderRefusesTheCall_RecordsWhatTheProviderWroteInTheFailureEventAndThePassError()
+    {
+        const string written =
+            "Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. (parameter: reasoning_effort)";
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(
+                new ProviderCallFailedException(
+                    new ProviderCallTarget("meisterdev/openAi", "gpt-6-luna", "OpenAI"),
+                    DriverFailureMapper.ClassifyStatus(400) with { ProviderMessage = written },
+                    1,
+                    DriverFailureMapper.ActionHintFor(400)));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("a.cs"));
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                storedResults.Add(call.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, repo, Substitute.For<IChatClient>());
+
+        await Record.ExceptionAsync(() => sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None));
+
+        await protocolRecorder.Received()
+            .RecordAiCallAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(),
+                "ai_call_failure",
+                Arg.Is<string?>(error => error != null
+                                         && error.Contains(written, StringComparison.Ordinal)
+                                         && error.Contains("(HTTP 400)", StringComparison.Ordinal)));
+        var failed = Assert.Single(storedResults, result => result.IsFailed);
+        Assert.Contains(written, failed.ErrorMessage, StringComparison.Ordinal);
     }
 
     private static ReviewJob BuildJobWithResults(ReviewJob original, IEnumerable<ReviewFileResult> results)

@@ -4,6 +4,7 @@
 using System.Text;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.ProPR.Application.DTOs;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;

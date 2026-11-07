@@ -39,6 +39,10 @@ public sealed class AiRuntimeFactory(
     IExecutionScopeAccessor? executionScopes = null,
     IExecutionUsageSink? usageSink = null) : IAiRuntimeFactory
 {
+    // The schemes an operator writes in front of a static credential in a default header. They are matched without
+    // regard to case, as HTTP matches an authorization scheme.
+    private static readonly string[] AuthorizationSchemes = ["Basic", "Bearer", "Token"];
+
     public IResolvedAiChatRuntime CreateChatRuntime(
         AiConnectionDto connection,
         AiConfiguredModelDto model,
@@ -168,7 +172,15 @@ public sealed class AiRuntimeFactory(
         var policy = this.RetryPolicy();
         var decorators = new List<IProviderChatClientDecorator>
         {
-            new ProviderRetryChatClientDecorator(driver, policy, connection.DisplayName, timeProvider, logger),
+            // The retry stage reports a refusal with what the provider wrote, and some providers quote the
+            // presented key in it, so the stage is handed the values to replace.
+            new ProviderRetryChatClientDecorator(
+                driver,
+                policy,
+                connection.DisplayName,
+                timeProvider,
+                logger,
+                RedactedFromFailures(connection)),
             new ReasoningModelSamplingDecorator(driver),
             new PromptCacheRoutingDecorator(supportsPromptCacheRouting),
 
@@ -255,12 +267,64 @@ public sealed class AiRuntimeFactory(
             driver.ClassifyRuntimeFailure,
             new ProviderCallTarget(connection.ProviderKind, model.RemoteModelId, connection.DisplayName),
             timeProvider,
-            logger);
+            logger,
+            RedactedFromFailures(connection));
 
         // Outermost, because a width the deployment did not answer with is a configuration fault and no attempt
         // changes it. A caller that states no width has nothing to check against, so the stage is left out.
         return dimensions > 0
             ? new DeclaredWidthEmbeddingGenerator(retrying, model.RemoteModelId, dimensions)
             : retrying;
+    }
+
+    /// <summary>
+    ///     The values the retry stages replace in the failure they report: the credential values of the connection
+    ///     and the values of its default headers.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         An operator can put the provider key in a default header, and a provider that quotes the presented key
+    ///         back quotes it from there as well. The values of the default query parameters stay in the failure.
+    ///         They hold settings such as the Vertex project or the Bedrock region, which provider messages name and
+    ///         which are not credentials.
+    ///     </para>
+    ///     <para>
+    ///         A header value that starts with an authorization scheme, such as <c>Bearer</c> followed by a token, is
+    ///         replaced as the whole value and as the part after the scheme, because a provider quotes the token
+    ///         without the scheme in front of it. The scheme word is not replaced on its own. It is not a credential,
+    ///         and provider messages use it in ordinary text.
+    ///     </para>
+    /// </remarks>
+    /// <param name="connection">The connection the runtime calls.</param>
+    private static IReadOnlyCollection<string> RedactedFromFailures(AiConnectionDto connection)
+    {
+        List<string> values = [.. connection.CredentialValues()];
+        foreach (var value in connection.DefaultHeaders?.Values ?? [])
+        {
+            values.Add(value);
+            if (CredentialAfterScheme(value) is { } credential)
+            {
+                values.Add(credential);
+            }
+        }
+
+        return values;
+    }
+
+    /// <summary>
+    ///     The part after the scheme of a header value that starts with an authorization scheme and white space, or
+    ///     <see langword="null" /> for any other value.
+    /// </summary>
+    /// <param name="value">The value of a default header.</param>
+    private static string? CredentialAfterScheme(string value)
+    {
+        var separator = value.IndexOfAny([' ', '\t']);
+        if (separator <= 0 || !AuthorizationSchemes.Contains(value[..separator], StringComparer.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var credential = value[separator..].Trim();
+        return credential.Length > 0 ? credential : null;
     }
 }

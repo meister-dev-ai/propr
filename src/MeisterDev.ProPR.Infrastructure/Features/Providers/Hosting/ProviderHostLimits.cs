@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Hosting;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;
 
@@ -38,7 +39,7 @@ public static class ProviderHostLimits
     ///     The longest message the host keeps from an add-in, applied to an invocation's terminal message and to
     ///     a credential-health cause. Every string an add-in produces is untrusted output.
     /// </summary>
-    public const int MaximumMessageLength = 1000;
+    public const int MaximumMessageLength = ProviderMessageGuard.MaximumMessageLength;
 
     /// <summary>
     ///     The longest label, hint, placeholder, choice or default value the host renders from an add-in's

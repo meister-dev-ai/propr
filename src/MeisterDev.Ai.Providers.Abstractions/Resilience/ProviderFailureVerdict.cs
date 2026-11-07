@@ -5,7 +5,8 @@ namespace MeisterDev.Ai.Providers.Resilience;
 
 /// <summary>
 ///     What a driver concluded about one failed provider call: whether trying again could plausibly succeed, how
-///     long to wait if the provider said so, and a short reason fit for an operator to read.
+///     long to wait if the provider said so, a short reason fit for an operator to read, and what the provider
+///     wrote about the failure when its response held a message.
 /// </summary>
 /// <remarks>
 ///     This type exists so retry is decided by classification rather than by exception type. A provider SDK's
@@ -48,6 +49,18 @@ public readonly record struct ProviderFailureVerdict(
         get => this._isThrottled;
         init => this._isThrottled = Consistent(this._isTransient, value) && value;
     }
+
+    /// <summary>
+    ///     What the provider wrote about the failure: an excerpt of the error message field of its response, or
+    ///     <see langword="null" /> when the response carried none.
+    /// </summary>
+    /// <remarks>
+    ///     A driver reads it with <see cref="Drivers.DriverFailureMapper.ReadProviderMessage(string)" />, which takes
+    ///     the message field alone and cuts it to <see cref="Drivers.DriverFailureMapper.MaximumProviderMessageLength" />
+    ///     characters. The text comes from the provider and can quote the credential the call presented, so the retry
+    ///     stage of the host replaces the credential of the connection in it before a failure reports it.
+    /// </remarks>
+    public string? ProviderMessage { get; init; }
 
     // Throttling is one of the transient classes, so a verdict cannot be throttled and permanent at once. A
     // stage reading the pair would hold back every other call bound for the connection and never repeat the one

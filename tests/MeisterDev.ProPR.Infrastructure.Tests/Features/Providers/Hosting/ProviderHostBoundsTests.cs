@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Hosting;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
@@ -15,6 +16,12 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.Hosting;
 /// </remarks>
 public sealed class ProviderHostBoundsTests
 {
+    // A key of the length OpenAI issues and a longer secret. The first characters of each occur nowhere else in the
+    // messages the tests build, so finding them in a result means that a part of that value reached it.
+    private const string EchoedKey = "sk-proj-4f9c2a7e1b8d3f6a0c5e9b2d";
+
+    private const string ClientSecret = "cs-live-9d4b7e2a6c1f8e3d5a0b9c7e2f4a6d8b1c3e5f7a9b0d2c4e6f8a1b3c";
+
     // Eliding one value writes the elision text into the message. A second value that occurs inside that text
     // would be replaced within it, which destroys the marker an operator reads as "a credential was here" and
     // leaves the result looking like a value the family produced.
@@ -81,6 +88,54 @@ public sealed class ProviderHostBoundsTests
         Assert.EndsWith("…", capped, StringComparison.Ordinal);
     }
 
+    // A provider can echo the presented key more than once. The second echo here starts two characters past the
+    // cap, and the elision of the first echo makes the text 22 characters shorter, so a part of the second echo
+    // that the scrub did not match whole would move inside the cap.
+    [Fact]
+    public void ARepeatedKeyCrossingTheCapLeavesNoPartOfItInTheCutMessage()
+    {
+        const int cap = ProviderMessageGuard.MaximumMessageLength;
+        var message = EchoedKey + Dots(cap + 2 - EchoedKey.Length) + EchoedKey + Dots(200);
+
+        var sanitized = ProviderMessageGuard.Sanitize(message, [EchoedKey]);
+
+        Assert.DoesNotContain(EchoedKey[..4], sanitized, StringComparison.Ordinal);
+        Assert.Equal(cap, sanitized.Length);
+        Assert.EndsWith("…", sanitized, StringComparison.Ordinal);
+    }
+
+    // The same with two echoes before the third and a short tail. The two elisions make the scrubbed message
+    // shorter than the cap, so it is returned without a cut, and a part of the third echo would be returned with
+    // it.
+    [Fact]
+    public void ARepeatedKeyCrossingTheCapLeavesNoPartOfItInAMessageThatFitsOnceScrubbed()
+    {
+        var filler = Dots(ProviderMessageGuard.MaximumMessageLength + 2 - (2 * EchoedKey.Length));
+        var message = EchoedKey + EchoedKey + filler + EchoedKey + "!";
+
+        var sanitized = ProviderMessageGuard.Sanitize(message, [EchoedKey]);
+
+        Assert.Equal("[redacted][redacted]" + filler + "[redacted]!", sanitized);
+    }
+
+    // A scrub that bounds its input first keeps the cap plus the length of the longest held value. The key here
+    // starts 31 characters before that point, so such a cut keeps every character of the key but the last, and
+    // the elision of the longer secret before it moves that part inside the cap.
+    [Fact]
+    public void AKeyStraddlingTheCapPlusTheLongestHeldValueLeavesNoPartOfIt()
+    {
+        const int cap = ProviderMessageGuard.MaximumMessageLength;
+        var start = cap + ClientSecret.Length + 1 - (EchoedKey.Length - 1);
+        var message = ClientSecret + Dots(start - ClientSecret.Length) + EchoedKey + Dots(200);
+
+        var sanitized = ProviderMessageGuard.Sanitize(message, [EchoedKey, ClientSecret]);
+
+        Assert.DoesNotContain(EchoedKey[..4], sanitized, StringComparison.Ordinal);
+        Assert.DoesNotContain(ClientSecret[..4], sanitized, StringComparison.Ordinal);
+        Assert.Equal(cap, sanitized.Length);
+        Assert.EndsWith("…", sanitized, StringComparison.Ordinal);
+    }
+
     // A window at or below zero is one that has already lapsed. Read as unstated and granted the maximum, an
     // expired invocation gets a fully live signal and a context capable of acting on it for half an hour.
     [Fact]
@@ -139,6 +194,11 @@ public sealed class ProviderHostBoundsTests
     {
         await Assert.ThrowsAsync<OperationCanceledException>(() => ProviderReportedMessage.ScrubbedAsync(
             "anything", _ => throw new OperationCanceledException()));
+    }
+
+    private static string Dots(int count)
+    {
+        return new string('.', count);
     }
 
     private static bool IsPaired(string text, char surrogate)

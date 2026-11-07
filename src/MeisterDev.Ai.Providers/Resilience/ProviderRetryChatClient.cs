@@ -41,6 +41,7 @@ public sealed partial class ProviderRetryChatClient : DelegatingChatClient
     private readonly ProviderCallTarget _target;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger? _logger;
+    private readonly IReadOnlyCollection<string> _credentialValues;
 
     /// <summary>Initializes a new instance of the <see cref="ProviderRetryChatClient" /> class.</summary>
     /// <param name="innerClient">The client whose calls are retried.</param>
@@ -49,13 +50,17 @@ public sealed partial class ProviderRetryChatClient : DelegatingChatClient
     /// <param name="target">The profile, provider and model being called, for logs and failure messages.</param>
     /// <param name="timeProvider">Clock used for backoff; <see langword="null" /> uses the system clock.</param>
     /// <param name="logger">Optional logger for retry attempts.</param>
+    /// <param name="credentialValues">
+    ///     The credential values the connection holds, which are replaced in the failure this stage reports.
+    /// </param>
     public ProviderRetryChatClient(
         IChatClient innerClient,
         ProviderRetryPolicy policy,
         Func<Exception, ProviderFailureVerdict> classify,
         ProviderCallTarget target,
         TimeProvider? timeProvider = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IReadOnlyCollection<string>? credentialValues = null)
         : base(innerClient)
     {
         ArgumentNullException.ThrowIfNull(policy);
@@ -68,6 +73,9 @@ public sealed partial class ProviderRetryChatClient : DelegatingChatClient
         this._target = target;
         this._timeProvider = timeProvider ?? TimeProvider.System;
         this._logger = logger;
+
+        // Copied, because the caller owns the collection and this stage reports failures for as long as it lives.
+        this._credentialValues = credentialValues is null ? [] : [.. credentialValues];
     }
 
     /// <inheritdoc />
@@ -210,7 +218,7 @@ public sealed partial class ProviderRetryChatClient : DelegatingChatClient
     {
         return new ProviderCallFailedException(
             this._target,
-            verdict,
+            ProviderRetryMechanics.Reportable(verdict, this._credentialValues),
             attempts,
             DriverFailureMapper.ActionHintFor(verdict.HttpStatus),
             exception);

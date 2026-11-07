@@ -6,7 +6,9 @@ using System.Text;
 using System.Text.Json;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Resilience;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.Ai.Providers.AnthropicAddIn.Tests;
@@ -240,7 +242,7 @@ public sealed class AnthropicMessagesChatClientTests
             HttpStatusCode.TooManyRequests,
             """{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}""");
 
-        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+        var failure = await Assert.ThrowsAnyAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
 
         Assert.Equal(HttpStatusCode.TooManyRequests, failure.StatusCode);
         Assert.Contains("slow down", failure.Message, StringComparison.Ordinal);
@@ -257,7 +259,7 @@ public sealed class AnthropicMessagesChatClientTests
     {
         var endpoint = new FakeAnthropicEndpoint().Fails(HttpStatusCode.TooManyRequests, body);
 
-        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+        var failure = await Assert.ThrowsAnyAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
 
         Assert.Equal(HttpStatusCode.TooManyRequests, failure.StatusCode);
     }
@@ -269,10 +271,55 @@ public sealed class AnthropicMessagesChatClientTests
             HttpStatusCode.ServiceUnavailable,
             """{"error":"the gateway has no capacity"}""");
 
-        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+        var failure = await Assert.ThrowsAnyAsync<HttpRequestException>(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, failure.StatusCode);
         Assert.Contains("the gateway has no capacity", failure.Message, StringComparison.Ordinal);
+    }
+
+    // The driver puts the message Anthropic wrote on the verdict, so the trace shows it beside the status.
+    [Fact]
+    public async Task AProviderRejectionPutsTheMessageAnthropicWroteOnTheVerdict()
+    {
+        const string written = "max_tokens: 128000 > 64000, which is the maximum allowed number of output tokens for claude-opus-5";
+        var endpoint = new FakeAnthropicEndpoint().Fails(
+            HttpStatusCode.BadRequest,
+            $$$"""{"type":"error","error":{"type":"invalid_request_error","message":"{{{written}}}"}}""");
+
+        var verdict = await VerdictOnRefusal(endpoint);
+
+        Assert.Equal(400, verdict.HttpStatus);
+        Assert.Equal(DriverFailureMapper.ClassifyStatus(400).Reason, verdict.Reason);
+        Assert.Equal(written, verdict.ProviderMessage);
+    }
+
+    // An overloaded answer keeps the verdict of its own, so it is still retried, and carries what Anthropic wrote
+    // like every other refusal.
+    [Fact]
+    public async Task AnOverloadedAnswerStaysWorthRetryingAndCarriesTheMessageAnthropicWrote()
+    {
+        var endpoint = new FakeAnthropicEndpoint().Fails(
+            (HttpStatusCode)529,
+            """{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}""");
+
+        var verdict = await VerdictOnRefusal(endpoint);
+
+        Assert.True(verdict.IsTransient);
+        Assert.Equal(529, verdict.HttpStatus);
+        Assert.Equal("Overloaded", verdict.ProviderMessage);
+    }
+
+    // A page from a proxy in front of Anthropic holds no message field, so the verdict keeps the message the status
+    // alone produces.
+    [Fact]
+    public async Task AnHtmlPageFromAProxyPutsNoMessageOnTheVerdict()
+    {
+        var endpoint = new FakeAnthropicEndpoint().Fails(HttpStatusCode.Forbidden, "<html><body><h1>403 Forbidden</h1></body></html>");
+
+        var verdict = await VerdictOnRefusal(endpoint);
+
+        Assert.Null(verdict.ProviderMessage);
+        Assert.Equal(DriverFailureMapper.ClassifyStatus(403).Reason, verdict.Reason);
     }
 
     // Caching is what makes the native path cheaper than the proxy path, and it only happens where a breakpoint
@@ -500,6 +547,15 @@ public sealed class AnthropicMessagesChatClientTests
             new FakeProviderHostContext(wire).Http,
             connection ?? Endpoint(),
             Model);
+    }
+
+    /// <summary>What the driver makes of the failure the client raises when the endpoint refuses the call.</summary>
+    private static async Task<ProviderFailureVerdict> VerdictOnRefusal(FakeAnthropicEndpoint endpoint)
+    {
+        var failure = await Record.ExceptionAsync(() => Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.NotNull(failure);
+        return new AnthropicProviderDriver().ClassifyRuntimeFailure(failure);
     }
 
     /// <summary>Asks for reasoning the way a caller does: neutrally, through the per-client raw representation.</summary>

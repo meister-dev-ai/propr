@@ -23,6 +23,10 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 public sealed class AiRuntimeFactoryTests
 {
+    private const string SubscriptionKey = "4b9e1c7a2f8d6e3b0a5c9d7e1f2a4b6c";
+
+    private const string ApiVersion = "2024-10-21";
+
     private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-0000-0000-0000-0000000f0117");
 
     [Theory]
@@ -118,6 +122,118 @@ public sealed class AiRuntimeFactoryTests
         // Two retries on top of the first call, and the profile an operator would go and fix is named.
         Assert.Equal(3, failure.Attempts);
         Assert.Contains(connection.DisplayName, failure.Message, StringComparison.Ordinal);
+    }
+
+    // Several providers quote the presented key back in a refusal. The failure becomes the error of the pass and
+    // the failure reason of the job, which the trace shows, so the credential the profile holds is redacted from
+    // the reason and from the provider's message before the failure leaves the runtime.
+    [Fact]
+    public async Task CreateChatRuntime_ProviderRefusalQuotingTheKey_RedactsTheKeyFromTheFailure()
+    {
+        const string key = "sk-proj-a1b2c3d4e5f6a7b8";
+        var (registry, driver, _, _, model, binding) = SetupChat();
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding], secret: key);
+        driver.CreateChatClient(PointedAt(connection), model.ToProviderModel(), binding.ProtocolMode)
+            .Returns(new AlwaysFailingChatClient(new HttpRequestException("refused", null, System.Net.HttpStatusCode.Unauthorized)));
+        driver.ClassifyRuntimeFailure(Arg.Any<Exception>()).Returns(QuotingTheKey(key));
+
+        var runtime = new AiRuntimeFactory(registry).CreateChatRuntime(connection, model, binding);
+        var failure =
+            await Assert.ThrowsAsync<ProviderCallFailedException>(() => runtime.ChatClient.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.DoesNotContain(key, failure.Message, StringComparison.Ordinal);
+        Assert.Contains("Incorrect API key provided: [redacted].", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("The provider rejected the key [redacted].", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateEmbeddingRuntime_ProviderRefusalQuotingTheKey_RedactsTheKeyFromTheFailure()
+    {
+        const string key = "sk-proj-f6e5d4c3b2a1f0e9";
+        var registry = Substitute.For<IAiProviderDriverRegistry>();
+        var driver = Substitute.For<IAiProviderDriver>();
+        var model = AiConnectionTestFactory.CreateEmbeddingModel("embed-model", 1536);
+        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.EmbeddingDefault, model, ProviderDeclaredProtocolModes.Embeddings);
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding], secret: key);
+        registry.IsRegistered(connection.ProviderKind).Returns(true);
+        registry.GetRequired(connection.ProviderKind).Returns(driver);
+        driver.ClassifyRuntimeFailure(Arg.Any<Exception>()).Returns(QuotingTheKey(key));
+        driver.CreateEmbeddingGenerator(PointedAt(connection), model.ToProviderModel(), binding.ProtocolMode, 1536)
+            .Returns(new AlwaysFailingEmbeddingGenerator(new HttpRequestException("refused", null, System.Net.HttpStatusCode.Unauthorized)));
+
+        var runtime = new AiRuntimeFactory(registry).CreateEmbeddingRuntime(connection, model, binding, "cl100k_base", 1536);
+        var failure = await Assert.ThrowsAsync<ProviderCallFailedException>(() => runtime.Generator.GenerateAsync(["hello"]));
+
+        Assert.DoesNotContain(key, failure.Message, StringComparison.Ordinal);
+        Assert.Contains("Incorrect API key provided: [redacted].", failure.Message, StringComparison.Ordinal);
+    }
+
+    // An operator can put the provider key in a default header, such as the subscription key of an API gateway, so
+    // the values of the default headers are redacted from the failure as well. The values of the default query
+    // parameters hold settings such as an API version, a project or a region, which the provider names in its
+    // message, and they stay in it.
+    [Fact]
+    public async Task CreateChatRuntime_ProviderRefusalQuotingADefaultHeader_RedactsTheHeaderValueAndKeepsTheQueryParameter()
+    {
+        var (registry, driver, _, _, model, binding) = SetupChat();
+        var connection = WithGatewayHeaderAndApiVersion(AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding]));
+        driver.CreateChatClient(PointedAt(connection), model.ToProviderModel(), binding.ProtocolMode)
+            .Returns(new AlwaysFailingChatClient(new HttpRequestException("refused", null, System.Net.HttpStatusCode.Unauthorized)));
+        driver.ClassifyRuntimeFailure(Arg.Any<Exception>()).Returns(QuotingTheSubscriptionKey());
+
+        var runtime = new AiRuntimeFactory(registry).CreateChatRuntime(connection, model, binding);
+        var failure =
+            await Assert.ThrowsAsync<ProviderCallFailedException>(() => runtime.ChatClient.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.DoesNotContain(SubscriptionKey, failure.Message, StringComparison.Ordinal);
+        Assert.Contains($"Subscription key [redacted] is not valid for API version {ApiVersion}.", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateEmbeddingRuntime_ProviderRefusalQuotingADefaultHeader_RedactsTheHeaderValueAndKeepsTheQueryParameter()
+    {
+        var registry = Substitute.For<IAiProviderDriverRegistry>();
+        var driver = Substitute.For<IAiProviderDriver>();
+        var model = AiConnectionTestFactory.CreateEmbeddingModel("embed-model", 1536);
+        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.EmbeddingDefault, model, ProviderDeclaredProtocolModes.Embeddings);
+        var connection = WithGatewayHeaderAndApiVersion(AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding]));
+        registry.IsRegistered(connection.ProviderKind).Returns(true);
+        registry.GetRequired(connection.ProviderKind).Returns(driver);
+        driver.ClassifyRuntimeFailure(Arg.Any<Exception>()).Returns(QuotingTheSubscriptionKey());
+        driver.CreateEmbeddingGenerator(PointedAt(connection), model.ToProviderModel(), binding.ProtocolMode, 1536)
+            .Returns(new AlwaysFailingEmbeddingGenerator(new HttpRequestException("refused", null, System.Net.HttpStatusCode.Unauthorized)));
+
+        var runtime = new AiRuntimeFactory(registry).CreateEmbeddingRuntime(connection, model, binding, "cl100k_base", 1536);
+        var failure = await Assert.ThrowsAsync<ProviderCallFailedException>(() => runtime.Generator.GenerateAsync(["hello"]));
+
+        Assert.DoesNotContain(SubscriptionKey, failure.Message, StringComparison.Ordinal);
+        Assert.Contains($"Subscription key [redacted] is not valid for API version {ApiVersion}.", failure.Message, StringComparison.Ordinal);
+    }
+
+    // A provider quotes the token of an authorization header without the scheme in front of it, so the part after
+    // the scheme is redacted on its own as well. The scheme word is not a credential and stays in the message.
+    [Theory]
+    [InlineData("Bearer")]
+    [InlineData("Basic")]
+    [InlineData("token")]
+    public async Task CreateChatRuntime_ProviderRefusalQuotingTheTokenOfAnAuthorizationHeader_RedactsTheTokenAndKeepsTheScheme(string scheme)
+    {
+        const string token = "gw-7d2f9a4c1e8b3f6a";
+
+        var failure = await RefusalWithDefaultHeader("Authorization", $"{scheme} {token}", $"The {scheme} credential {token} is not valid.");
+
+        Assert.DoesNotContain(token, failure.Message, StringComparison.Ordinal);
+        Assert.Contains($"The {scheme} credential [redacted] is not valid.", failure.Message, StringComparison.Ordinal);
+    }
+
+    // A value that does not start with an authorization scheme is redacted as a whole and not split, so a word of
+    // it that a provider message uses on its own stays in the message.
+    [Fact]
+    public async Task CreateChatRuntime_DefaultHeaderWithoutAnAuthorizationScheme_IsRedactedOnlyAsAWhole()
+    {
+        var failure = await RefusalWithDefaultHeader("X-Title", "Review Bot", "The title Review Bot is too long for the Bot field.");
+
+        Assert.Contains("The title [redacted] is too long for the Bot field.", failure.Message, StringComparison.Ordinal);
     }
 
     // Embedding calls face the same provider quotas, so they are retried on the same policy.
@@ -425,6 +541,73 @@ public sealed class AiRuntimeFactoryTests
             {
                 return ValueTask.CompletedTask;
             }
+        }
+    }
+
+    /// <summary>A verdict whose reason and provider message both quote the presented key, as some providers do.</summary>
+    private static ProviderFailureVerdict QuotingTheKey(string key)
+    {
+        return ProviderFailureVerdict.Permanent($"The provider rejected the key {key}.", 401) with
+        {
+            ProviderMessage = $"Incorrect API key provided: {key}. You can find your API key in your account settings.",
+        };
+    }
+
+    /// <summary>The connection with the key of an API gateway in a default header and an API version in a default query parameter.</summary>
+    private static MeisterDev.ProPR.Application.DTOs.AiConnectionDto WithGatewayHeaderAndApiVersion(
+        MeisterDev.ProPR.Application.DTOs.AiConnectionDto connection)
+    {
+        return connection with
+        {
+            DefaultHeaders = new Dictionary<string, string> { ["Ocp-Apim-Subscription-Key"] = SubscriptionKey },
+            DefaultQueryParams = new Dictionary<string, string> { ["api-version"] = ApiVersion },
+        };
+    }
+
+    /// <summary>
+    ///     The failure a chat runtime reports when the connection sends one default header and the provider refuses the
+    ///     call with the given message.
+    /// </summary>
+    private static async Task<ProviderCallFailedException> RefusalWithDefaultHeader(string name, string value, string written)
+    {
+        var (registry, driver, _, _, model, binding) = SetupChat();
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding]) with
+        {
+            DefaultHeaders = new Dictionary<string, string> { [name] = value },
+        };
+        driver.CreateChatClient(PointedAt(connection), model.ToProviderModel(), binding.ProtocolMode)
+            .Returns(new AlwaysFailingChatClient(new HttpRequestException("refused", null, System.Net.HttpStatusCode.Unauthorized)));
+        driver.ClassifyRuntimeFailure(Arg.Any<Exception>())
+            .Returns(ProviderFailureVerdict.Permanent("The provider rejected the credential (HTTP 401).", 401) with { ProviderMessage = written });
+
+        var runtime = new AiRuntimeFactory(registry).CreateChatRuntime(connection, model, binding);
+        return await Assert.ThrowsAsync<ProviderCallFailedException>(() => runtime.ChatClient.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+    }
+
+    /// <summary>A verdict whose provider message quotes the gateway key and the API version the request was sent with.</summary>
+    private static ProviderFailureVerdict QuotingTheSubscriptionKey()
+    {
+        return ProviderFailureVerdict.Permanent("The provider rejected the credential (HTTP 401).", 401) with
+        {
+            ProviderMessage = $"Subscription key {SubscriptionKey} is not valid for API version {ApiVersion}.",
+        };
+    }
+
+    /// <summary>Fails every call with the same exception.</summary>
+    private sealed class AlwaysFailingEmbeddingGenerator(Exception failure) : IEmbeddingGenerator<string, Embedding<float>>
+    {
+        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
+            IEnumerable<string> values,
+            EmbeddingGenerationOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromException<GeneratedEmbeddings<Embedding<float>>>(failure);
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
         }
     }
 

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Declaration;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
 using Microsoft.Extensions.AI;
 using MeisterDev.Ai.Providers.Hosting;
@@ -123,11 +124,12 @@ public sealed class GoogleGenerateContentChatClient : INativeProtocolChatClient
 
         if (!response.IsSuccessStatusCode)
         {
-            // Thrown with the status attached so the shared classifier can decide whether it is worth retrying.
-            throw new HttpRequestException(
+            // Thrown with the status attached so the shared classifier can decide whether it is worth retrying,
+            // and with what Google wrote, which the driver puts on the verdict.
+            throw new GoogleRequestRefusedException(
                 $"Google rejected the request: {DescribeError(body) ?? response.ReasonPhrase}",
-                null,
-                response.StatusCode);
+                response.StatusCode,
+                DriverFailureMapper.ReadProviderMessage(body));
         }
 
         return ParseResponse(body, this._model.RemoteModelId);

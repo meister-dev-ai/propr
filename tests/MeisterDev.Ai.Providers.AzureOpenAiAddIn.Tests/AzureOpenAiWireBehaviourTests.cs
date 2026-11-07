@@ -140,6 +140,28 @@ public sealed class AzureOpenAiWireBehaviourTests
         Assert.Equal(((int)status).ToString(), result.DriverMetadata?["httpStatus"]);
     }
 
+    // A resource states why it refused a call in the error shape the OpenAI surface uses, content filter refusals
+    // included. The verdict carries that message, so the trace shows it beside the status.
+    [Fact]
+    public async Task ARefusedCallCarriesTheMessageTheResourceWrote()
+    {
+        var wire = new FakeCompatibleEndpoint().Responds(
+            HttpStatusCode.BadRequest,
+            """
+            { "error": { "message": "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
+              "type": null, "param": "prompt", "code": "content_filter", "status": 400 } }
+            """);
+
+        var failure = await Record.ExceptionAsync(() => ChatClient(wire, AzureOpenAiProviderDriver.ChatCompletionsProtocol).GetResponseAsync("hello"));
+
+        Assert.NotNull(failure);
+        var verdict = Driver(wire).ClassifyRuntimeFailure(failure);
+        Assert.Equal(400, verdict.HttpStatus);
+        Assert.Equal(
+            "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. (parameter: prompt)",
+            verdict.ProviderMessage);
+    }
+
     [Fact]
     public async Task AResourceThatAnswersItsModelListVerifies()
     {

@@ -4,10 +4,13 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Resilience;
+using MeisterDev.Ai.Providers.Transport;
 
 namespace MeisterDev.Ai.Providers.Drivers;
 
@@ -30,6 +33,19 @@ public static partial class DriverFailureMapper
 {
     /// <summary>How much of a failure message is scanned for a stated wait.</summary>
     private const int MaxScannedMessageLength = 4096;
+
+    /// <summary>The longest excerpt of a provider's error message that a verdict carries.</summary>
+    /// <remarks>
+    ///     A refusal states its reason in a sentence or two. The bound keeps a message that repeats the request from
+    ///     filling the trace.
+    /// </remarks>
+    public const int MaximumProviderMessageLength = 500;
+
+    /// <summary>The longest parameter name an excerpt carries, so a long one still leaves room for the message.</summary>
+    private const int MaximumParameterLength = 100;
+
+    /// <summary>Marks an excerpt that was cut short.</summary>
+    private const string Truncation = "…";
 
     public static ProviderVerificationResult Verified(string summary, IReadOnlyList<string>? warnings = null)
     {
@@ -294,6 +310,158 @@ public static partial class DriverFailureMapper
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
         200)]
     private static partial Regex StatedDelayPattern();
+
+    /// <summary>
+    ///     Reads what a provider wrote about a refused call out of the response body: the message of the error
+    ///     object with the parameter the error refers to, an error given as a string, or a message at the top
+    ///     level of the body.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Only those fields are read. Some gateways repeat the request in their error body, and the request
+    ///         holds the code under review, so nothing else in the body reaches the excerpt. A body that is not a
+    ///         JSON object, such as the page a proxy answers with, yields nothing, and so does a message that is
+    ///         not a string. A body longer than <see cref="ProviderResponseBody.MaximumDocumentBytes" /> is not
+    ///         parsed.
+    ///     </para>
+    ///     <para>
+    ///         Line breaks and control characters become single spaces, because the excerpt is written into one
+    ///         line of the trace and of the log, and the excerpt is cut to
+    ///         <see cref="MaximumProviderMessageLength" /> characters. It still holds whatever the provider quoted,
+    ///         so the host replaces the credential of the connection in it before an operator reads it.
+    ///     </para>
+    /// </remarks>
+    /// <param name="body">The response body as text.</param>
+    /// <returns>The excerpt, or <see langword="null" /> when the body holds no message to read.</returns>
+    public static string? ReadProviderMessage(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body) || body.Length > ProviderResponseBody.MaximumDocumentBytes)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return ProviderMessageIn(document.RootElement);
+        }
+        catch (JsonException)
+        {
+            // Classification runs from inside a catch block. A body that is not JSON yields no excerpt, and the
+            // failure keeps the message built from its status.
+            return null;
+        }
+    }
+
+    /// <summary>Reads what a provider wrote about a refused call out of the UTF-8 bytes of the response body.</summary>
+    /// <remarks>The bytes are read the way <see cref="ReadProviderMessage(string)" /> reads the text of a body.</remarks>
+    /// <param name="body">The response body as UTF-8 bytes.</param>
+    /// <returns>The excerpt, or <see langword="null" /> when the body holds no message to read.</returns>
+    public static string? ReadProviderMessage(ReadOnlyMemory<byte> body)
+    {
+        // A byte order mark is not part of the JSON text, and the parser refuses bytes that start with one.
+        var json = body.Span.StartsWith("\uFEFF"u8) ? body[3..] : body;
+        if (json.IsEmpty || json.Length > ProviderResponseBody.MaximumDocumentBytes)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return ProviderMessageIn(document.RootElement);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    // The message of the error object, or of the body itself where a server puts the message at the top level,
+    // with the parameter named beside it.
+    private static string? ProviderMessageIn(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (root.TryGetProperty("error", out var error))
+        {
+            if (error.ValueKind == JsonValueKind.Object)
+            {
+                return Excerpt(StringIn(error, "message"), StringIn(error, "param"));
+            }
+
+            if (error.ValueKind == JsonValueKind.String)
+            {
+                return Excerpt(error.GetString(), null);
+            }
+        }
+
+        return Excerpt(StringIn(root, "message"), StringIn(root, "param"));
+    }
+
+    private static string? StringIn(JsonElement element, string name)
+    {
+        return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+    }
+
+    // The message with the parameter it refers to, as one line within the bound. The parameter is cut on its own
+    // first, so the message keeps the rest of the bound.
+    private static string? Excerpt(string? message, string? parameter)
+    {
+        var named = parameter is null ? string.Empty : SingleLine(parameter, MaximumParameterLength);
+        var suffix = named.Length == 0 ? string.Empty : $" (parameter: {named})";
+        var text = message is null ? string.Empty : SingleLine(message, MaximumProviderMessageLength - suffix.Length);
+
+        return text.Length == 0 ? null : text + suffix;
+    }
+
+    // Each run of white space and control characters becomes one space, and reading stops past the bound, so a
+    // message of any length costs at most the bound to read.
+    private static string SingleLine(string text, int maximumLength)
+    {
+        var line = new StringBuilder(Math.Min(text.Length, maximumLength + 1));
+        var gap = false;
+        foreach (var character in text)
+        {
+            if (char.IsWhiteSpace(character) || char.IsControl(character))
+            {
+                gap = line.Length > 0;
+                continue;
+            }
+
+            if (gap)
+            {
+                line.Append(' ');
+                gap = false;
+            }
+
+            line.Append(character);
+            if (line.Length > maximumLength)
+            {
+                break;
+            }
+        }
+
+        if (line.Length <= maximumLength)
+        {
+            return line.ToString();
+        }
+
+        // A cut between the halves of a surrogate pair would leave half a character, which a text column refuses,
+        // so the cut keeps one character less there.
+        var kept = maximumLength - Truncation.Length;
+        if (char.IsHighSurrogate(line[kept - 1]))
+        {
+            kept--;
+        }
+
+        return string.Concat(line.ToString(0, kept), Truncation);
+    }
 
     /// <summary>
     ///     Walks a failure and everything nested inside it, flattening an <see cref="AggregateException" /> so a

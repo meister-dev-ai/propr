@@ -12,8 +12,9 @@ namespace MeisterDev.Ai.Providers.Resilience;
 ///     A raw SDK exception says "Service request failed. Status: 401". That is true and useless: it names neither
 ///     the profile to go and fix nor what to do about it, and it is what ends up written on a failed job as its
 ///     cause. This exception carries the profile, the model, how many attempts were spent and what to try next,
-///     so a job's recorded failure reason is actionable. The original exception is kept as the inner one, so no
-///     provider detail is lost.
+///     so a job's recorded failure reason is actionable. Where the provider wrote why it refused the call, the
+///     message carries that text as well. The original exception is kept as the inner one, so no provider detail
+///     is lost.
 /// </remarks>
 public sealed class ProviderCallFailedException : Exception
 {
@@ -64,6 +65,11 @@ public sealed class ProviderCallFailedException : Exception
 
         var attemptClause = attempts <= 1 ? "on the first attempt" : $"after {attempts} attempts";
         var message = $"The AI provider call failed {attemptClause} ({target.Describe()}): {verdict.Reason}";
+        if (verdict.ProviderMessage is { Length: > 0 } written)
+        {
+            message = $"{message} The provider answered: {written}";
+        }
+
         return actionHint is { Length: > 0 } hint ? $"{message} {hint}" : message;
     }
 }

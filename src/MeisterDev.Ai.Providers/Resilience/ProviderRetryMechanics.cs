@@ -1,11 +1,15 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.Ai.Providers.Hosting;
+
 namespace MeisterDev.Ai.Providers.Resilience;
 
 /// <summary>
 ///     The two decisions every retrying wrapper has to make — is this failure ours to judge, and how long to wait
-///     before trying again. They live here so the chat and embedding wrappers cannot drift apart on either one.
+///     before trying again — and the form in which a wrapper reports a failure. They live here so the chat and
+///     embedding wrappers cannot drift apart on any of them.
 /// </summary>
 internal static class ProviderRetryMechanics
 {
@@ -89,5 +93,33 @@ internal static class ProviderRetryMechanics
 
         var jittered = capped + (capped * policy.JitterFactor * Random.Shared.NextDouble());
         return jittered > policy.MaxDelay ? policy.MaxDelay : jittered;
+    }
+
+    /// <summary>
+    ///     The verdict in the form a failure reports it: every credential value of the connection replaced in the
+    ///     reason and in what the provider wrote, and what the provider wrote cut to
+    ///     <see cref="DriverFailureMapper.MaximumProviderMessageLength" /> characters.
+    /// </summary>
+    /// <remarks>
+    ///     A family decides what it puts on a verdict, and several providers quote the presented key back in a
+    ///     refusal. The failure becomes the error of a pass and the reason a job failed, which operators read and
+    ///     share, so the stage that reports it applies the host's scrub to both texts. The bound is applied again
+    ///     here because a family loaded from a directory does not have to read the message the way the shipped
+    ///     families do.
+    /// </remarks>
+    /// <param name="verdict">The driver's classification of the failure.</param>
+    /// <param name="credentialValues">The credential values the connection holds.</param>
+    public static ProviderFailureVerdict Reportable(ProviderFailureVerdict verdict, IReadOnlyCollection<string> credentialValues)
+    {
+        var reason = ProviderMessageGuard.Sanitize(verdict.Reason, credentialValues);
+        var written = verdict.ProviderMessage is null
+            ? string.Empty
+            : ProviderMessageGuard.Sanitize(verdict.ProviderMessage, credentialValues, DriverFailureMapper.MaximumProviderMessageLength);
+
+        return verdict with
+        {
+            Reason = reason.Length > 0 ? reason : verdict.Reason,
+            ProviderMessage = written.Length > 0 ? written : null,
+        };
     }
 }

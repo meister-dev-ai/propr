@@ -12,10 +12,16 @@ namespace MeisterDev.Ai.Providers.GoogleVertexAddIn;
 ///     Classifies what a Vertex call throws, including what Google's token service raises.
 /// </summary>
 /// <remarks>
-///     A Vertex call mints a token before it reaches the model, so a runtime failure can come from the token
-///     service rather than from the provider. Those arrive as <see cref="TokenResponseException" />, which the
-///     shared classifier does not recognise, so it read every one of them as permanent. A token service that is
-///     briefly unavailable then took the call out with it and nothing retried.
+///     <para>
+///         A Vertex call mints a token before it reaches the model, so a runtime failure can come from the token
+///         service rather than from the provider. Those arrive as <see cref="TokenResponseException" />, which the
+///         shared classifier does not recognise, so it read every one of them as permanent. A token service that is
+///         briefly unavailable then took the call out with it and nothing retried.
+///     </para>
+///     <para>
+///         A refusal of the model call itself arrives as <see cref="GoogleRequestRefusedException" />. The shared
+///         classifier reads its status, and what Google wrote about the refusal is put on the verdict.
+///     </para>
 /// </remarks>
 internal static class GoogleFailures
 {
@@ -33,6 +39,14 @@ internal static class GoogleFailures
             if (candidate is TokenResponseException refused)
             {
                 return FromTokenService(refused);
+            }
+        }
+
+        foreach (var candidate in DriverFailureMapper.Unwind(exception))
+        {
+            if (candidate is GoogleRequestRefusedException refused)
+            {
+                return DriverFailureMapper.ClassifyRuntimeFailure(exception) with { ProviderMessage = refused.ProviderMessage };
             }
         }
 

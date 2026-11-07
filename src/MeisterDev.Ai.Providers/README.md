@@ -149,7 +149,7 @@ that case. That client throws on first use.
 | --- | --- |
 | `AddIns` | `ProviderAddInLoader`, `ProviderAddInDirectories`, `ProviderAddInCatalog`, `LoadedProviderAddIn`, `RejectedProviderAddIn`, `ProviderAddInRejectionCategory`, `ProviderAddInOrigin`, `ProviderAddInLoadContext`, `ProviderAddInSharedAssemblies`, `ProviderAddInNames` |
 | `Drivers` | `IAiProviderDriverRegistry`, `AiProviderRegistry`, `AiVocabulary`, `AiVocabularyResolution`, `AiProviderIdentityResolution`, `AiProviderLegacyNames` |
-| `Hosting` | `ProviderHttpClientFactory`, `ProviderHttpPipelines`, `ProviderProbeContext` |
+| `Hosting` | `ProviderHttpClientFactory`, `ProviderHttpPipelines`, `ProviderProbeContext`, `ProviderMessageGuard` |
 | `Egress` | `GuardedEgressHttpHandler`, `EgressUrlPolicy`, `DeclaredUrlFloor`, `ProviderHostPattern`, `ProviderBrowserUrlPolicy` |
 | `Runtime` | `ProviderRuntimePipeline`, `ProviderRuntimeStage`, `IProviderChatClientDecorator`, `NormalizedUsageChatClientDecorator`, `ReasoningModelSamplingDecorator` |
 | `Resilience` | `ProviderRetryPolicy`, `ProviderRetryChatClient(Decorator)`, `ProviderRetryEmbeddingGenerator`, `ProviderPacingChatClient(Decorator)`, `ProviderThrottleGate`, `ProviderCallFailedException` |
@@ -204,6 +204,13 @@ signals *first*. Call `DriverFailureMapper.ClassifyRuntimeFailure` for everythin
 recognise, because a driver that classifies everything itself gets the common cases wrong. Anthropic's
 `529 overloaded` and the AWS SDK's own throttling exception types are the two cases in the shipped add-ins
 today.
+
+A driver that can read the body of a refused call puts what the provider wrote on the verdict as
+`ProviderMessage`. `DriverFailureMapper.ReadProviderMessage` reads the message field of the error with the
+parameter the error refers to, and cuts the text to `DriverFailureMapper.MaximumProviderMessageLength` characters.
+The retry stages take the credential values of the connection from the host. Before they report a failure, they
+replace those values in the reason and in the provider's message with `[redacted]` through `ProviderMessageGuard`,
+cut the message again and add it to the message of `ProviderCallFailedException`.
 
 ### The runtime pipeline has a fixed stage order
 

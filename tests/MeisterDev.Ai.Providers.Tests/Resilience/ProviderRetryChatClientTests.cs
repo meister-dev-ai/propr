@@ -274,6 +274,82 @@ public sealed class ProviderRetryChatClientTests
         Assert.Contains(failure.ActionHint!, failure.Message, StringComparison.Ordinal);
     }
 
+    // What the provider wrote about a refusal is what tells an operator which setting to change. The failure
+    // message becomes the error of the pass and the failure reason of the job, so the provider's words go there
+    // beside the status and the advice.
+    [Fact]
+    public async Task TheFailureCarriesWhatTheProviderWroteBesideTheStatusAndTheAdvice()
+    {
+        const string written =
+            "Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. (parameter: reasoning_effort)";
+        var client = new ProviderRetryChatClient(
+            new ScriptedChatClient([Permanent()]),
+            Immediate,
+            exception => DriverFailureMapper.ClassifyRuntimeFailure(exception) with { ProviderMessage = written },
+            Target);
+
+        var failure = await Assert.ThrowsAsync<ProviderCallFailedException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.Contains("The provider rejected the request (HTTP 400).", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(written, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(DriverFailureMapper.ActionHintFor(400)!, failure.Message, StringComparison.Ordinal);
+        Assert.Equal(written, failure.Verdict.ProviderMessage);
+    }
+
+    // Several providers quote the presented key back in a refusal, and the trace is what an operator shares to
+    // ask for help. The credential the connection holds is taken out of every string the failure carries.
+    [Fact]
+    public async Task TheCredentialOfTheConnectionIsRedactedFromTheFailure()
+    {
+        const string key = "sk-live-0123456789abcdef";
+        var client = new ProviderRetryChatClient(
+            new ScriptedChatClient([Permanent(401)]),
+            Immediate,
+            _ => ProviderFailureVerdict.Permanent($"The provider rejected the key {key}.", 401) with
+            {
+                ProviderMessage = $"Incorrect API key provided: {key}.",
+            },
+            Target,
+            credentialValues: [key]);
+
+        var failure = await Assert.ThrowsAsync<ProviderCallFailedException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.DoesNotContain(key, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(key, failure.Verdict.Reason, StringComparison.Ordinal);
+        Assert.Equal("Incorrect API key provided: [redacted].", failure.Verdict.ProviderMessage);
+        Assert.Contains("Incorrect API key provided: [redacted].", failure.Message, StringComparison.Ordinal);
+    }
+
+    // A family loaded from a directory decides what it puts on its verdict, so the retry stage bounds the message
+    // itself and does not rely on the family having done so.
+    [Fact]
+    public async Task AProviderMessageOverTheBoundIsCutBeforeItReachesTheFailure()
+    {
+        var client = new ProviderRetryChatClient(
+            new ScriptedChatClient([Permanent()]),
+            Immediate,
+            exception => DriverFailureMapper.ClassifyRuntimeFailure(exception) with { ProviderMessage = new string('x', 10_000) },
+            Target);
+
+        var failure = await Assert.ThrowsAsync<ProviderCallFailedException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.Equal(DriverFailureMapper.MaximumProviderMessageLength, failure.Verdict.ProviderMessage!.Length);
+    }
+
+    // A refusal whose body held no message keeps the message the status alone produces.
+    [Fact]
+    public async Task AFailureWithoutAProviderMessageKeepsTheMessageBuiltFromTheStatus()
+    {
+        var failure = await Assert.ThrowsAsync<ProviderCallFailedException>(() =>
+            Client(new ScriptedChatClient([Permanent()])).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.Null(failure.Verdict.ProviderMessage);
+        Assert.Equal(
+            $"The AI provider call failed on the first attempt ({Target.Describe()}): The provider rejected the request (HTTP 400). "
+            + DriverFailureMapper.ActionHintFor(400),
+            failure.Message);
+    }
+
     private static ProviderRetryChatClient Client(
         IChatClient inner,
         ProviderRetryPolicy? policy = null,

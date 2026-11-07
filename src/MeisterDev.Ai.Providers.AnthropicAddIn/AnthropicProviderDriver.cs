@@ -255,20 +255,20 @@ public sealed class AnthropicProviderDriver : IAiProviderDriver
     /// <remarks>
     ///     Adds the one classification the shared default cannot know: Anthropic answers <c>529 overloaded</c>
     ///     when its own capacity is exhausted, which is the most retryable failure it produces and sits outside
-    ///     the range a generic 5xx rule covers.
+    ///     the range a generic 5xx rule covers. What Anthropic wrote about a refused call is put on the verdict,
+    ///     whatever its status, so the failure the retry stage reports carries it beside the status.
     /// </remarks>
     public ProviderFailureVerdict ClassifyRuntimeFailure(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        foreach (var candidate in DriverFailureMapper.Unwind(exception))
-        {
-            if (candidate is HttpRequestException { StatusCode: (System.Net.HttpStatusCode)529 })
-            {
-                return ProviderFailureVerdict.Transient("Anthropic reported that it is overloaded (HTTP 529).", null, 529);
-            }
-        }
+        var chain = DriverFailureMapper.Unwind(exception).ToList();
+        var verdict = chain.Any(candidate => candidate is HttpRequestException { StatusCode: (System.Net.HttpStatusCode)529 })
+            ? ProviderFailureVerdict.Transient("Anthropic reported that it is overloaded (HTTP 529).", null, 529)
+            : DriverFailureMapper.ClassifyRuntimeFailure(exception);
 
-        return DriverFailureMapper.ClassifyRuntimeFailure(exception);
+        return chain.OfType<AnthropicRequestRefusedException>().FirstOrDefault() is { } refused
+            ? verdict with { ProviderMessage = refused.ProviderMessage }
+            : verdict;
     }
 }

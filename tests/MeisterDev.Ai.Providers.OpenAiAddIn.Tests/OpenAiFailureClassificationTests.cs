@@ -3,7 +3,12 @@
 
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Net;
+using System.Text;
+using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.Ai.Providers.Resilience;
+using Microsoft.Extensions.AI;
 
 namespace MeisterDev.Ai.Providers.OpenAiAddIn.Tests;
 
@@ -186,6 +191,97 @@ public sealed class OpenAiFailureClassificationTests
             verdict.Reason);
     }
 
+    // The provider states why it refused a request in the message field of its error body. Without that message
+    // on the verdict, the trace showed the status alone and the reason reached only the server log.
+    [Theory]
+    [InlineData(OpenAiProviderDriver.ChatCompletionsProtocol)]
+    [InlineData(OpenAiProviderDriver.ResponsesProtocol)]
+    public async Task ARefusedCallCarriesTheProvidersMessageAndTheParameterItNames(string protocol)
+    {
+        var verdict = await RefusalOf(
+            new RefusingEndpoint(
+                HttpStatusCode.BadRequest,
+                """
+                {"error":{"message":"Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions.",
+                "type":"invalid_request_error","param":"reasoning_effort","code":"unsupported_parameter"}}
+                """),
+            protocol);
+
+        Assert.Equal(400, verdict.HttpStatus);
+        Assert.Equal(DriverFailureMapper.ClassifyStatus(400).Reason, verdict.Reason);
+        Assert.Equal(
+            "Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. (parameter: reasoning_effort)",
+            verdict.ProviderMessage);
+    }
+
+    // The review loop does not stream, but a refusal of a streamed call arrives through the same client library
+    // and is read the same way.
+    [Fact]
+    public async Task ARefusedStreamingCallCarriesTheProvidersMessage()
+    {
+        using var chat = Driver().CreateChatClient(
+            EndpointOn(new RefusingEndpoint(HttpStatusCode.BadRequest, """{"error":{"message":"Invalid 'messages': empty array."}}""")),
+            new ProviderModelDescriptor(Guid.NewGuid(), "gpt-6-luna", [OpenAiProviderDriver.ChatCompletionsProtocol]),
+            OpenAiProviderDriver.ChatCompletionsProtocol);
+
+        var failure = await Record.ExceptionAsync(async () =>
+        {
+            await foreach (var _ in chat.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "hello")]))
+            {
+            }
+        });
+
+        Assert.NotNull(failure);
+        Assert.Equal("Invalid 'messages': empty array.", Driver().ClassifyRuntimeFailure(failure).ProviderMessage);
+    }
+
+    // A proxy in front of the provider answers with a page of its own. Nothing in it is a message field, so the
+    // verdict keeps the message the status alone produces.
+    [Fact]
+    public async Task AnHtmlPageFromAProxyKeepsTheMessageBuiltFromTheStatus()
+    {
+        var verdict = await RefusalOf(
+            new RefusingEndpoint(
+                HttpStatusCode.Forbidden,
+                "<html><head><title>403 Forbidden</title></head><body><h1>Blocked by the proxy policy</h1></body></html>",
+                "text/html"));
+
+        Assert.Null(verdict.ProviderMessage);
+        Assert.Equal(DriverFailureMapper.ClassifyStatus(403).Reason, verdict.Reason);
+    }
+
+    [Fact]
+    public async Task ARefusalWithoutABodyKeepsTheMessageBuiltFromTheStatus()
+    {
+        var verdict = await RefusalOf(new RefusingEndpoint(HttpStatusCode.BadRequest, string.Empty));
+
+        Assert.Null(verdict.ProviderMessage);
+        Assert.Equal(DriverFailureMapper.ClassifyStatus(400).Reason, verdict.Reason);
+    }
+
+    private static async Task<ProviderFailureVerdict> RefusalOf(
+        RefusingEndpoint wire,
+        string protocol = OpenAiProviderDriver.ChatCompletionsProtocol)
+    {
+        using var chat = Driver().CreateChatClient(
+            EndpointOn(wire),
+            new ProviderModelDescriptor(Guid.NewGuid(), "gpt-6-luna", [protocol]),
+            protocol);
+
+        var failure = await Record.ExceptionAsync(() => chat.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
+
+        Assert.NotNull(failure);
+        return Driver().ClassifyRuntimeFailure(failure);
+    }
+
+    private static ProviderEndpoint EndpointOn(HttpMessageHandler wire)
+    {
+        return new ProviderEndpoint("meisterdev/openAi", "https://api.openai.com/v1", OpenAiProviderDriver.ApiKeyAuth, "sk-test-key")
+        {
+            HostContext = new FakeProviderHostContext(wire),
+        };
+    }
+
     private static OpenAiProviderDriver Driver()
     {
         return new OpenAiProviderDriver();
@@ -202,6 +298,22 @@ public sealed class OpenAiFailureClassificationTests
     {
         return "HTTP 429 (Too Many Requests)\n\n"
                + "{\"error\":{\"message\":\"Rate limit reached for gpt-5. " + detail + "\",\"type\":\"tokens\"}}";
+    }
+
+    /// <summary>Answers every request with one refusal, so the client library raises the failure it raises in production.</summary>
+    private sealed class RefusingEndpoint(HttpStatusCode status, string body, string mediaType = "application/json")
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(
+                new HttpResponseMessage(status)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, mediaType),
+                });
+        }
     }
 
     /// <summary>Minimal transport response so a real <see cref="ClientResultException" /> can be constructed.</summary>
