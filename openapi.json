@@ -6810,7 +6810,7 @@
           }
         ],
         "requestBody": {
-          "description": "All three configured model and connection selections.",
+          "description": "All three configured model and connection selections. The Default and High selections can state the reasoning\nlevel of their purposes on the model.",
           "content": {
             "application/json": {
               "schema": {
@@ -6851,7 +6851,7 @@
             }
           },
           "400": {
-            "description": "A selection is invalid or unverified, or the embedding model is not configured for 1536 dimensions; existing routing is unchanged.",
+            "description": "A selection is invalid or unverified, a reasoning level is one the model does not accept or is stated for the Embedding model, or the embedding model is not configured for 1536 dimensions; existing routing is unchanged.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -35160,6 +35160,11 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "reasoningLevel": {
+            "type": "string",
+            "description": "The reasoning level the purpose runs at on the bound model, or null when the binding sets none. The workspace\nselection sets it; a connection save keeps the stored level while the binding keeps its model and ignores this\nvalue.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -35290,11 +35295,18 @@
         "properties": {
           "connectionId": {
             "type": "string",
+            "description": "The connection that owns the model.",
             "format": "uuid"
           },
           "configuredModelId": {
             "type": "string",
+            "description": "The configured model of the slot.",
             "format": "uuid"
+          },
+          "reasoningLevel": {
+            "type": "string",
+            "description": "The reasoning level of the slot's purposes on the model. A level name sets it, and an empty value removes it, so\nthe default level of the configured model applies. Without a value, the slot keeps its level while it keeps its\nmodel and has no level on a new model. The Embedding slot takes no level.",
+            "nullable": true
           }
         },
         "additionalProperties": false,

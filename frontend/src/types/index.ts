@@ -5190,7 +5190,10 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            /** @description All three configured model and connection selections. */
+            /**
+             * @description All three configured model and connection selections. The Default and High selections can state the reasoning
+             *     level of their purposes on the model.
+             */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["AiWorkspacePurposeSelection"];
@@ -5210,7 +5213,7 @@ export interface paths {
                         "text/json": components["schemas"]["AiConfigurationResult"];
                     };
                 };
-                /** @description A selection is invalid or unverified, or the embedding model is not configured for 1536 dimensions; existing routing is unchanged. */
+                /** @description A selection is invalid or unverified, a reasoning level is one the model does not accept or is stated for the Embedding model, or the embedding model is not configured for 1536 dimensions; existing routing is unchanged. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -24259,6 +24262,12 @@ export interface components {
             createdAt?: string | null;
             /** Format: date-time */
             updatedAt?: string | null;
+            /**
+             * @description The reasoning level the purpose runs at on the bound model, or null when the binding sets none. The workspace
+             *     selection sets it; a connection save keeps the stored level while the binding keeps its model and ignores this
+             *     value.
+             */
+            reasoningLevel?: string | null;
         };
         /** @description Purpose binding payload item for create and update flows. */
         AiPurposeBindingRequest: {
@@ -24307,10 +24316,22 @@ export interface components {
         AiVerificationStatus: "neverVerified" | "verified" | "failed";
         /** @description A configured model and its owning connection selected for a workspace slot. */
         AiWorkspaceModelSelection: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The connection that owns the model.
+             */
             connectionId?: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The configured model of the slot.
+             */
             configuredModelId?: string;
+            /**
+             * @description The reasoning level of the slot's purposes on the model. A level name sets it, and an empty value removes it, so
+             *     the default level of the configured model applies. Without a value, the slot keeps its level while it keeps its
+             *     model and has no level on a new model. The Embedding slot takes no level.
+             */
+            reasoningLevel?: string | null;
         };
         /** @description The complete workspace selection applied in one operation. */
         AiWorkspacePurposeSelection: {

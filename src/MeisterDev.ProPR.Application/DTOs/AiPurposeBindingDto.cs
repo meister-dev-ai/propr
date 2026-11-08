@@ -9,6 +9,11 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <summary>
 ///     One configured AI purpose binding for an AI connection profile.
 /// </summary>
+/// <param name="ReasoningLevel">
+///     The reasoning level the purpose runs at on the bound model, or null when the binding sets none. The workspace
+///     selection sets it; a connection save keeps the stored level while the binding keeps its model and ignores this
+///     value.
+/// </param>
 public sealed record AiPurposeBindingDto(
     Guid Id,
     AiPurpose Purpose,
@@ -17,4 +22,5 @@ public sealed record AiPurposeBindingDto(
     string ProtocolMode = ProviderDeclaredProtocolModes.Auto,
     bool IsEnabled = true,
     DateTimeOffset? CreatedAt = null,
-    DateTimeOffset? UpdatedAt = null);
+    DateTimeOffset? UpdatedAt = null,
+    string? ReasoningLevel = null);

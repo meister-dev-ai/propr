@@ -149,10 +149,13 @@ public sealed partial class ClientAiConnectionsController
 
     /// <summary>Applies the Default, High and Embedding workspace purposes together using verified client-owned models.</summary>
     /// <param name="clientId">The owning client identifier.</param>
-    /// <param name="request">All three configured model and connection selections.</param>
+    /// <param name="request">
+    ///     All three configured model and connection selections. The Default and High selections can state the reasoning
+    ///     level of their purposes on the model.
+    /// </param>
     /// <param name="ct">Request cancellation.</param>
     /// <response code="200">All selected purposes were applied together.</response>
-    /// <response code="400">A selection is invalid or unverified, or the embedding model is not configured for 1536 dimensions; existing routing is unchanged.</response>
+    /// <response code="400">A selection is invalid or unverified, a reasoning level is one the model does not accept or is stated for the Embedding model, or the embedding model is not configured for 1536 dimensions; existing routing is unchanged.</response>
     /// <response code="401">Authentication is required.</response>
     /// <response code="403">Client administrator access is required.</response>
     /// <response code="409">A logical or managed binding conflicts, or configuration changed concurrently.</response>

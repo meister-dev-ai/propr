@@ -236,6 +236,18 @@ public sealed partial class AiConnectionRepository
                     return new(false, "Select chat models that require no reasoning field or support reasoning_content across turns.");
                 }
 
+                var level = ReasoningLevelSelection.Normalize(selected.ReasoningLevel);
+                if (purpose == AiPurpose.EmbeddingDefault && level is not null)
+                {
+                    return new(false, "The Embedding model takes no reasoning level.");
+                }
+
+                if (purpose != AiPurpose.EmbeddingDefault &&
+                    ReasoningLevelSelection.Refusal(level, model.ReasoningLevels, model.RemoteModelId) is { } levelRefusal)
+                {
+                    return new(false, levelRefusal);
+                }
+
                 var protocol = purpose == AiPurpose.EmbeddingDefault ? ProviderDeclaredProtocolModes.Embeddings : ProviderDeclaredProtocolModes.Auto;
                 if (!ProviderVocabulary.Names(model.SupportedProtocolModes, protocol) ||
                     AiProtocolModeSupport.GetRefusalReason(
@@ -300,6 +312,14 @@ public sealed partial class AiConnectionRepository
                 }
             }
 
+            // A slot without a stated level keeps the level of its binding while it keeps its model. On another model it
+            // has no level, because that model may not accept the level.
+            var levels = selections.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value.ReasoningLevel is null
+                    ? profiles.SelectMany(p => p.PurposeBindings).FirstOrDefault(binding =>
+                        binding.Purpose == pair.Key.ToString() && binding.ConfiguredModelId == pair.Value.ConfiguredModelId)?.ReasoningLevel
+                    : ReasoningLevelSelection.Normalize(pair.Value.ReasoningLevel));
             var now = DateTimeOffset.UtcNow;
             var changedProfiles = profiles.Where(this.IsWorkspaceEditable)
                 .Where(p => selections.Values.Any(s => s.ConnectionId == p.Id) ||
@@ -324,7 +344,7 @@ public sealed partial class AiConnectionRepository
                             Purpose = purpose.ToString(),
                             ProtocolMode =
                                 purpose == AiPurpose.EmbeddingDefault ? ProviderDeclaredProtocolModes.Embeddings : ProviderDeclaredProtocolModes.Auto,
-                            IsEnabled = true, CreatedAt = now, UpdatedAt = now,
+                            IsEnabled = true, ReasoningLevel = levels[purpose], CreatedAt = now, UpdatedAt = now,
                         });
                 }
 

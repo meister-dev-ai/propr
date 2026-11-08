@@ -99,19 +99,21 @@ A reasoning level says how hard a model thinks, by the provider's name for it, f
 `xhigh` or `max`. Each chat model on a connection lists the levels it accepts - see
 [reasoning levels of a model](models-and-catalog.md#reasoning-levels-of-a-model).
 
-Five places choose a level:
+Six places choose a level:
 
 | Place | Where | Applies to |
 |---|---|---|
 | Review pass | **AI Providers → Review passes** | The calls of that pass |
 | Purpose assignment | **AI Providers → Purposes** | The calls of that purpose, for example High effort at `high` and Triage at `low` |
 | Logical model | **AI Providers → Logical models** | Every purpose and pass on the logical model that sets no level of its own |
+| Purpose binding | The [client model selection](credentials.md#client-model-selection) of the API | The calls of the bound purposes |
 | Client baseline | **System → Baseline reasoning level** | The baseline review pass of each file |
 | Configured model | **Default Level** of the model on its connection | Every call to the model |
 
 For one call, ProPR takes the first level set in the order of the table: the pass, the purpose assignment, the
-logical model, the client baseline for the baseline review pass, and the configured model. When no place sets a
-level, ProPR sends none, and the provider applies its own default. The baseline pass of a file runs on the purpose
+logical model or the purpose binding, the client baseline for the baseline review pass, and the configured model. A
+purpose resolves through a logical model or through a purpose binding, so the level of a binding takes the place of
+the logical model's level. When no place sets a level, ProPR sends none, and the provider applies its own default. The baseline pass of a file runs on the purpose
 of the file's tier, and a file without a model for its tier runs on Review default. A purpose that borrows the
 logical model of another purpose through its fallback chain takes the level of that logical model, not the level of
 the other purpose's assignment.
@@ -139,8 +141,8 @@ Chat Completions from GPT-5.4 on with any effort other than `none`, and an OpenA
 not know the field can refuse the request.
 
 The evidence judge takes the level of the purpose assignment of Verification, then `AI_VERIFICATION_REASONING_LEVEL`,
-then `low` when the model lists it and the selected transport supports it, then the level of the logical model and
-the default level of the model. The judge keeps `low` above the logical model, because purposes share logical models
+then `low` when the model lists it and the selected transport supports it, then the level of the logical model or the
+purpose binding and the default level of the model. The judge keeps `low` above the logical model, because purposes share logical models
 through their fallback chain, and a logical model set to `high` for the review would otherwise raise the cost of
 every judge call. The judge applies the level also on its bounded output-budget retry and when it runs on the
 reviewer's own model because no model resolves for the Verification purpose. Both contradiction checks run at

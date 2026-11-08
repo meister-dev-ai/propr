@@ -6,10 +6,12 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Infrastructure.Tests.Repositories;
+using Microsoft.Extensions.AI;
 using NSubstitute;
 using MeisterDev.ProPR.TestSupport;
 
@@ -150,6 +152,31 @@ public sealed class AiRuntimeResolverTests
         Assert.Same(expected, runtime);
         await logicalResolver.DidNotReceive().ResolveChatRuntimeAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+    }
+
+    // A purpose that resolves through a binding takes the level of the binding in the place of a logical model's level:
+    // a call that states no level runs at it, and the evidence judge keeps its own level above it.
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_AppliesTheLevelOfThePurposeBinding()
+    {
+        var (connection, model, binding) = Chat("gpt-6.1-terra");
+        var levelled = binding with { ReasoningLevel = "high" };
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewHighEffort, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, levelled));
+        var inner = Substitute.For<IChatClient>();
+        ChatOptions? sent = null;
+        inner.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Do<ChatOptions?>(options => sent = options), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
+        this._runtimeFactory.CreateChatRuntime(connection, model, levelled, Arg.Any<string?>()).Returns(
+            new ResolvedAiChatRuntime(connection, model, levelled, inner, new AgentReviewRuntimeCapabilities(false, false, false, PrefersResponsesApi: true)));
+
+        var runtime = await this.Sut().ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewHighEffort, CancellationToken.None);
+        await runtime.ChatClient.GetResponseAsync([new ChatMessage(ChatRole.User, "review")], new ChatOptions());
+
+        Assert.Equal("high", runtime.LogicalModelReasoningLevel);
+        Assert.Null(runtime.PurposeReasoningLevel);
+        Assert.Equal("high", runtime.Capabilities.ConfiguredReasoningLevel);
+        Assert.Equal("high", sent!.ShapedReasoningLevel());
     }
 
     private static (AiConnectionDto Connection, AiConfiguredModelDto Model, AiPurposeBindingDto Binding) Chat(string remoteModelId)

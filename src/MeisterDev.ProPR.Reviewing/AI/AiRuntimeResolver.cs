@@ -70,12 +70,18 @@ public sealed class AiRuntimeResolver(
 
         await this.RefuseForbiddenProviderAsync(clientId, resolved.Connection, ct);
 
-        return WithPurposeLevel(runtimeFactory.CreateChatRuntime(resolved.Connection, resolved.Model, resolved.Binding), assignmentLevel: null);
+        // The level of the purpose binding takes the place of a logical model's level, so the evidence judge keeps its
+        // own level above it.
+        var runtime = runtimeFactory.CreateChatRuntime(resolved.Connection, resolved.Model, resolved.Binding);
+        return WithPurposeLevel(
+            runtime is ResolvedAiChatRuntime bound ? bound with { LogicalModelReasoningLevel = resolved.Binding.ReasoningLevel } : runtime,
+            assignmentLevel: null);
     }
 
     /// <summary>
     ///     The runtime of a purpose with the purpose's reasoning level applied to every call that states none: the level
-    ///     of the purpose assignment, otherwise of the logical model, otherwise the default level of the configured model.
+    ///     of the purpose assignment, otherwise of the logical model or the purpose binding, otherwise the default level of
+    ///     the configured model.
     /// </summary>
     /// <param name="runtime">The runtime the purpose resolved to.</param>
     /// <param name="assignmentLevel">The level the purpose assignment sets, or null.</param>

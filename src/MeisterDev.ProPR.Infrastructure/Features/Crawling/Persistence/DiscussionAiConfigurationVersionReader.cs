@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
@@ -37,21 +38,20 @@ public sealed class DiscussionAiConfigurationVersionReader(IDbContextFactory<Mei
         var bindings = await db.AiPurposeBindings.AsNoTracking().Where(binding => purposeNames.Contains(binding.Purpose) && binding.ConnectionProfile != null &&
                                                                                   (binding.ConnectionProfile.ClientId == clientId ||
                                                                                    binding.ConnectionProfile.TenantId == tenant))
-            .OrderBy(binding => binding.Id).Select(binding => new
-            {
+            .OrderBy(binding => binding.Id).Select(binding => new BindingFingerprintRow(
                 binding.Id,
                 binding.ConnectionProfileId,
                 binding.ConfiguredModelId,
                 binding.ProtocolMode,
                 binding.IsEnabled,
                 binding.Purpose,
-                ProfileActive = binding.ConnectionProfile!.IsActive,
+                binding.ConnectionProfile!.IsActive,
                 binding.ConnectionProfile.ProviderKind,
                 binding.ConnectionProfile.DisplayName,
                 binding.ConnectionProfile.BaseUrl,
                 binding.ConnectionProfile.ProviderSettings,
-                Model = binding.ConfiguredModel == null ? null : binding.ConfiguredModel.RemoteModelId
-            }).ToListAsync(ct);
+                binding.ConfiguredModel == null ? null : binding.ConfiguredModel.RemoteModelId,
+                binding.ReasoningLevel)).ToListAsync(ct);
         var modelIds = overrides.Select(mapping => mapping.ConfiguredModelId).Concat(logicalModels.Select(mapping => mapping.ConfiguredModelId))
             .Concat(bindings.Select(binding => binding.ConfiguredModelId)).Distinct().ToArray();
         var connectionIds = overrides.Select(mapping => mapping.ConnectionId).Concat(logicalModels.Select(mapping => mapping.ConnectionId))
@@ -117,6 +117,27 @@ public sealed class DiscussionAiConfigurationVersionReader(IDbContextFactory<Mei
             _ => level,
         };
     }
+
+    /// <summary>
+    ///     A purpose binding row of the fingerprint, with the property names the fingerprint has always used. The level
+    ///     appears only when the binding sets one, so a binding without a level keeps the fingerprint it had before
+    ///     bindings carried levels.
+    /// </summary>
+    internal sealed record BindingFingerprintRow(
+        Guid Id,
+        Guid ConnectionProfileId,
+        Guid ConfiguredModelId,
+        string ProtocolMode,
+        bool IsEnabled,
+        string Purpose,
+        bool ProfileActive,
+        string ProviderKind,
+        string DisplayName,
+        string BaseUrl,
+        Dictionary<string, string>? ProviderSettings,
+        string? Model,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? ReasoningLevel);
 
     /// <summary>A logical model row of the fingerprint, with the property names the fingerprint has always used.</summary>
     internal sealed record LogicalModelFingerprintRow(

@@ -20,6 +20,13 @@ public sealed class AiPurposeBindingRecord
 
     public bool IsEnabled { get; set; }
 
+    /// <summary>
+    ///     The reasoning level the purpose runs at on the bound model, or null when the binding leaves it to the default
+    ///     level of the configured model. The workspace selection sets it, and a save of the connection keeps it while the
+    ///     binding keeps its model.
+    /// </summary>
+    public string? ReasoningLevel { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

@@ -324,6 +324,48 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.Equal(second.ConfiguredModels.Single(m => m.SupportsChat).Id, high.Binding.ConfiguredModelId);
     }
 
+    // The Default and High slots carry the reasoning level of their purposes, and the connection list reports it on
+    // each binding, which is where the hosted platform reads the level of a slot.
+    [Fact]
+    public async Task SelectPurposes_StoresTheReasoningLevelOfTheChatSlotsAndRefusesOneForEmbedding()
+    {
+        var clientId = factory.ClientId;
+        using (var ownershipScope = factory.Services.CreateScope())
+        {
+            var registry = ownershipScope.ServiceProvider.GetRequiredService<MeisterDev.ProPR.Application.Interfaces.IClientRegistry>();
+            registry.GetTenantIdAsync(clientId, Arg.Any<CancellationToken>()).Returns((Guid?)factory.TenantId);
+        }
+
+        var connection = await this.SeedConnectionAsync("Levelled selection", verify: true, clientId: clientId);
+        var chat = connection.ConfiguredModels.Single(m => m.SupportsChat).Id;
+        var embedding = connection.ConfiguredModels.Single(m => m.SupportsEmbedding).Id;
+        var client = this.CreateAuthorizedClient();
+
+        var refused = await client.PostAsJsonAsync(
+            $"/clients/{clientId}/ai-connections/select-purposes", new
+            {
+                @default = new { connectionId = connection.Id, configuredModelId = chat },
+                high = new { connectionId = connection.Id, configuredModelId = chat },
+                embedding = new { connectionId = connection.Id, configuredModelId = embedding, reasoningLevel = "low" },
+            });
+        var applied = await client.PostAsJsonAsync(
+            $"/clients/{clientId}/ai-connections/select-purposes", new
+            {
+                @default = new { connectionId = connection.Id, configuredModelId = chat, reasoningLevel = "low" },
+                high = new { connectionId = connection.Id, configuredModelId = chat, reasoningLevel = "high" },
+                embedding = new { connectionId = connection.Id, configuredModelId = embedding },
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("takes no reasoning level", await refused.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.OK, applied.StatusCode);
+        var listed = await client.GetFromJsonAsync<List<AiConnectionDto>>($"/clients/{clientId}/ai-connections", ApiJsonOptions);
+        var bindings = listed!.Single(profile => profile.Id == connection.Id).PurposeBindings;
+        Assert.Equal("low", bindings.Single(binding => binding.Purpose == AiPurpose.ReviewDefault).ReasoningLevel);
+        Assert.Equal("high", bindings.Single(binding => binding.Purpose == AiPurpose.ReviewHighEffort).ReasoningLevel);
+        Assert.Null(bindings.Single(binding => binding.Purpose == AiPurpose.EmbeddingDefault).ReasoningLevel);
+    }
+
     [Fact]
     public async Task PermittedProviders_OffersEveryFamilyThisBuildCanCall()
     {

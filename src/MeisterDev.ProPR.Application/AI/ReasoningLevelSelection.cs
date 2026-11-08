@@ -11,9 +11,10 @@ namespace MeisterDev.ProPR.Application.AI;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The places that choose a level are the review pass, the purpose assignment, the logical model, the client's
-///         baseline level for the baseline review pass, and the configured model's default level. Each caller states them
-///         in its own order; nothing set means that the provider applies its own default.
+///         The places that choose a level are the review pass, the purpose assignment, the logical model or, for a purpose
+///         that resolves through a purpose binding, the binding, the client's baseline level for the baseline review pass,
+///         and the configured model's default level. Each caller states them in its own order; nothing set means that the
+///         provider applies its own default.
 ///     </para>
 ///     <para>
 ///         A model whose levels no source knows receives a level as configured, because no list says otherwise. A model

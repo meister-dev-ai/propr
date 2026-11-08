@@ -1489,7 +1489,8 @@ public sealed partial class AiConnectionRepository(
                 unresolvedValues),
             record.IsEnabled,
             record.CreatedAt,
-            record.UpdatedAt);
+            record.UpdatedAt,
+            record.ReasoningLevel);
     }
 
     private static AiVerificationResultDto ToVerificationDto(
@@ -1636,6 +1637,9 @@ public sealed partial class AiConnectionRepository(
                         request.ProviderKind,
                         binding.ProtocolMode),
                     IsEnabled = binding.IsEnabled,
+                    // The workspace selection sets the level of a binding. A save of the connection keeps it while the
+                    // binding keeps its model and drops it with a new model, which may not accept the level.
+                    ReasoningLevel = existingBinding?.ConfiguredModelId == modelId ? existingBinding.ReasoningLevel : null,
                     CreatedAt = binding.CreatedAt ?? now,
                     UpdatedAt = now,
                 };

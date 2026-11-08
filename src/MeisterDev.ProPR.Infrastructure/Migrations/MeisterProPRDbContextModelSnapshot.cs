@@ -4650,6 +4650,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("purpose");
 
+                    b.Property<string>("ReasoningLevel")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("reasoning_level");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

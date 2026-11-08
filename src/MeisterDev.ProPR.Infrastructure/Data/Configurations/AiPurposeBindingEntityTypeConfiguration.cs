@@ -26,6 +26,7 @@ internal sealed class AiPurposeBindingEntityTypeConfiguration : IEntityTypeConfi
             .HasMaxLength(ProviderVocabulary.MaximumQualifiedValueLength)
             .IsRequired();
         builder.Property(x => x.IsEnabled).HasColumnName("is_enabled").HasDefaultValue(true).IsRequired();
+        builder.Property(x => x.ReasoningLevel).HasColumnName("reasoning_level").HasMaxLength(32);
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
 

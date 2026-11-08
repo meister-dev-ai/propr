@@ -44,7 +44,12 @@ leaves the saved profile and active bindings unchanged. A concurrent credential,
 ### Client model selection
 
 `POST /clients/{clientId}/ai-connections/select-purposes` accepts `default`, `high` and `embedding`, each with
-`connectionId` and `configuredModelId`. All selected connections must belong to the client and be verified.
+`connectionId` and `configuredModelId`. `default` and `high` can also state a `reasoningLevel`, which ProPR stores
+on the bindings of their purposes. A level name sets the level, and an empty value removes it. Without a value, a
+slot keeps its level while it keeps its model, and a slot on another model has no level. ProPR refuses a level that
+the model does not list and a level for `embedding`. A save of the connection keeps the level of a binding while the
+binding keeps its model. See [reasoning level](purposes.md#reasoning-level) for the order in which the levels apply.
+All selected connections must belong to the client and be verified.
 Default and High require chat models. Embedding requires embedding capability, a tokenizer, a positive input
 limit and 1536 dimensions, the width ProPR stores embedding vectors with. Both the configured model and its
 provider driver must support the selected chat or embeddings protocol.

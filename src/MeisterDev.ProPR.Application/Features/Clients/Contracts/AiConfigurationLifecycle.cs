@@ -8,7 +8,14 @@ using MeisterDev.ProPR.Domain.Enums;
 namespace MeisterDev.ProPR.Application.Features.Clients.Contracts;
 
 /// <summary>A configured model and its owning connection selected for a workspace slot.</summary>
-public sealed record AiWorkspaceModelSelection(Guid ConnectionId, Guid ConfiguredModelId);
+/// <param name="ConnectionId">The connection that owns the model.</param>
+/// <param name="ConfiguredModelId">The configured model of the slot.</param>
+/// <param name="ReasoningLevel">
+///     The reasoning level of the slot's purposes on the model. A level name sets it, and an empty value removes it, so
+///     the default level of the configured model applies. Without a value, the slot keeps its level while it keeps its
+///     model and has no level on a new model. The Embedding slot takes no level.
+/// </param>
+public sealed record AiWorkspaceModelSelection(Guid ConnectionId, Guid ConfiguredModelId, string? ReasoningLevel = null);
 
 /// <summary>The complete workspace selection applied in one operation.</summary>
 public sealed record AiWorkspacePurposeSelection(

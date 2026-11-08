@@ -143,9 +143,9 @@ public sealed class LogicalModelMigrationBackfill(
                 continue;
             }
 
-            // Purpose bindings carry no reasoning level, so the faithful translation is no level: the resolver then
-            // applies the configured model's default level, as the legacy binding did.
-            var name = await this.FindOrCreateOverrideAsync(clientId, overrides, takenNames, capability, binding, null, ct);
+            // The level of a binding takes the place of a logical model's level, so the logical model takes the binding's
+            // level. A binding without a level leaves the configured model's default level to apply, as before.
+            var name = await this.FindOrCreateOverrideAsync(clientId, overrides, takenNames, capability, binding, binding.Binding.ReasoningLevel, ct);
             if (name is null)
             {
                 this._logger.LogWarning(

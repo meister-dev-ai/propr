@@ -75,4 +75,29 @@ public sealed class DiscussionAiConfigurationFingerprintTests
         Assert.Equal(before, withoutLevel);
         Assert.NotEqual(before, withLevel);
     }
+
+    // A purpose binding without a level keeps the fingerprint it had before bindings carried levels; a level set on the
+    // binding changes the fingerprint.
+    [Fact]
+    public void APurposeBinding_ChangesTheFingerprintOnlyWithALevel()
+    {
+        var id = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
+        var modelId = Guid.NewGuid();
+        var settings = new Dictionary<string, string> { ["project"] = "review" };
+        var before = DiscussionFingerprints.CanonicalValue(
+            new
+            {
+                Id = id, ConnectionProfileId = connectionId, ConfiguredModelId = modelId, ProtocolMode = "Auto", IsEnabled = true,
+                Purpose = "ReviewDefault", ProfileActive = true, ProviderKind = "meisterdev/openAi", DisplayName = "OpenAI",
+                BaseUrl = "https://api.openai.com/v1", ProviderSettings = settings, Model = "gpt-6.1-terra",
+            });
+
+        DiscussionAiConfigurationVersionReader.BindingFingerprintRow Row(string? level) => new(
+            id, connectionId, modelId, "Auto", true, "ReviewDefault", true, "meisterdev/openAi", "OpenAI",
+            "https://api.openai.com/v1", settings, "gpt-6.1-terra", level);
+
+        Assert.Equal(before, DiscussionFingerprints.CanonicalValue(Row(null)));
+        Assert.NotEqual(before, DiscussionFingerprints.CanonicalValue(Row("high")));
+    }
 }

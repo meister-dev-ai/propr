@@ -39,9 +39,14 @@ public interface IResolvedAiChatRuntime
     string? LogicalModelName { get; }
 
     /// <summary>
-    ///     Gets the reasoning level of the logical model this runtime was resolved from, or <see langword="null" /> when
-    ///     the logical model sets none or the runtime was resolved from a purpose binding or a raw model.
+    ///     Gets the reasoning level of the logical model this runtime was resolved from or, for a runtime resolved from a
+    ///     purpose binding, the level of the binding. <see langword="null" /> when neither sets one or the runtime was
+    ///     resolved from a raw model.
     /// </summary>
+    /// <remarks>
+    ///     A purpose resolves through a logical model or through a purpose binding, never both, so the level of the binding
+    ///     takes the place of the logical model's level in every order of levels.
+    /// </remarks>
     string? LogicalModelReasoningLevel => null;
 
     /// <summary>
