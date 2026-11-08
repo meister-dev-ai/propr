@@ -24,6 +24,10 @@ public sealed class AnthropicMessagesChatClientTests
     private static readonly ProviderModelDescriptor Model =
         new(Guid.NewGuid(), "claude-opus-5", [ProviderDeclaredProtocolModes.Auto, AnthropicProviderDriver.MessagesProtocol]);
 
+    // A model before generation 4.6, which thinks within a token budget and refuses adaptive thinking.
+    private static readonly ProviderModelDescriptor BudgetModel =
+        new(Guid.NewGuid(), "claude-haiku-4-5", [ProviderDeclaredProtocolModes.Auto, AnthropicProviderDriver.MessagesProtocol]);
+
     [Fact]
     public async Task TheAnswerAndItsIdentityComeBack()
     {
@@ -388,14 +392,14 @@ public sealed class AnthropicMessagesChatClientTests
         Assert.False(messages[0].GetProperty("content")[0].TryGetProperty("cache_control", out _));
     }
 
-    // Anthropic expresses reasoning as a token budget rather than a named level, and counts it against the same
-    // cap as the answer — so a budget that was not added to the cap would truncate the visible answer.
+    // A model before generation 4.6 thinks within a token budget, which counts against the same cap as the answer,
+    // so a budget that was not added to the cap would truncate the visible answer.
     [Fact]
     public async Task AskingForReasoningTurnsOnExtendedThinkingAndLeavesRoomForTheAnswer()
     {
         var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
 
-        await Client(endpoint).GetResponseAsync(
+        await Client(endpoint, model: BudgetModel).GetResponseAsync(
             [new ChatMessage(ChatRole.User, "hello")],
             Reasoning(ProviderReasoningEffort.Medium, new ChatOptions { MaxOutputTokens = 4000 }));
 
@@ -410,7 +414,7 @@ public sealed class AnthropicMessagesChatClientTests
     public async Task MoreEffortBuysAStrictlyLargerThinkingBudget()
     {
         var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok")).Responds(TextResponse("ok"));
-        var client = Client(endpoint);
+        var client = Client(endpoint, model: BudgetModel);
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")], Reasoning(ProviderReasoningEffort.Low));
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")], Reasoning(ProviderReasoningEffort.High));
@@ -423,7 +427,7 @@ public sealed class AnthropicMessagesChatClientTests
     public async Task ExtendedThinkingSuppressesTheTemperatureTheProviderWouldRefuse()
     {
         var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok")).Responds(TextResponse("ok"));
-        var client = Client(endpoint);
+        var client = Client(endpoint, model: BudgetModel);
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "hello")],
@@ -436,6 +440,41 @@ public sealed class AnthropicMessagesChatClientTests
         Assert.True(JsonDocument.Parse(endpoint.Bodies[1]).RootElement.TryGetProperty("temperature", out _));
     }
 
+    // Claude models from Opus 4.7 on refuse a sampling temperature in every request with HTTP 400 and sample with
+    // their own default.
+    [Theory]
+    [InlineData("claude-opus-4-7")]
+    [InlineData("claude-opus-5")]
+    [InlineData("claude-sonnet-5-5")]
+    [InlineData("claude-haiku-5-5")]
+    [InlineData("claude-fable-5-1")]
+    public async Task AModelFromOpus47On_ReceivesNoTemperature(string modelId)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint, model: ModelNamed(modelId)).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            new ChatOptions { Temperature = 0.2f });
+
+        Assert.False(JsonDocument.Parse(endpoint.Bodies[0]).RootElement.TryGetProperty("temperature", out _));
+    }
+
+    [Theory]
+    [InlineData("claude-haiku-4-5")]
+    [InlineData("claude-sonnet-4-6")]
+    [InlineData("claude-opus-4-6")]
+    [InlineData("gateway-model")]
+    public async Task AModelBeforeOpus47_KeepsTheTemperature(string modelId)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint, model: ModelNamed(modelId)).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            new ChatOptions { Temperature = 0.2f });
+
+        Assert.Equal(0.2, JsonDocument.Parse(endpoint.Bodies[0]).RootElement.GetProperty("temperature").GetDouble(), 3);
+    }
+
     [Fact]
     public async Task AskingForNoReasoningLeavesThinkingOff()
     {
@@ -446,6 +485,91 @@ public sealed class AnthropicMessagesChatClientTests
             Reasoning(ProviderReasoningEffort.None));
 
         Assert.False(JsonDocument.Parse(endpoint.Bodies[0]).RootElement.TryGetProperty("thinking", out _));
+        Assert.False(JsonDocument.Parse(endpoint.Bodies[0]).RootElement.TryGetProperty("output_config", out _));
+    }
+
+    // A model with adaptive thinking refuses a thinking budget with HTTP 400 and takes the effort in output_config.
+    // The allowance of the effort still keeps room for the answer under the cap.
+    [Theory]
+    [InlineData("claude-opus-5")]
+    [InlineData("claude-opus-5-5")]
+    [InlineData("claude-sonnet-5-5")]
+    [InlineData("claude-haiku-5-5")]
+    [InlineData("claude-sonnet-4-6")]
+    [InlineData("claude-opus-4-7")]
+    [InlineData("claude-fable-5-1")]
+    public async Task AModelWithAdaptiveThinking_ReceivesTheEffortAndNoBudget(string modelId)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint, model: ModelNamed(modelId)).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            Reasoning(ProviderReasoningEffort.Medium, new ChatOptions { MaxOutputTokens = 4000 }));
+
+        var body = JsonDocument.Parse(endpoint.Bodies[0]).RootElement;
+        var thinking = body.GetProperty("thinking");
+        Assert.Equal("adaptive", thinking.GetProperty("type").GetString());
+        Assert.False(thinking.TryGetProperty("budget_tokens", out _));
+        Assert.Equal("medium", body.GetProperty("output_config").GetProperty("effort").GetString());
+        Assert.True(body.GetProperty("max_tokens").GetInt32() > 4000);
+    }
+
+    // A model before generation 4.6 refuses adaptive thinking with HTTP 400 and keeps the thinking budget. A model id
+    // outside the Claude naming keeps it as well.
+    [Theory]
+    [InlineData("claude-haiku-4-5")]
+    [InlineData("claude-haiku-4-5-20251001")]
+    [InlineData("claude-sonnet-4-5-20250929")]
+    [InlineData("claude-opus-4-1-20250805")]
+    [InlineData("claude-sonnet-4-20250514")]
+    [InlineData("claude-3-7-sonnet-20250219")]
+    [InlineData("gateway-model")]
+    public async Task AModelBeforeGeneration46_KeepsTheThinkingBudget(string modelId)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint, model: ModelNamed(modelId)).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            Reasoning(ProviderReasoningEffort.Medium));
+
+        var body = JsonDocument.Parse(endpoint.Bodies[0]).RootElement;
+        Assert.Equal("enabled", body.GetProperty("thinking").GetProperty("type").GetString());
+        Assert.True(Budget(endpoint.Bodies[0]) >= 1024);
+        Assert.False(body.TryGetProperty("output_config", out _));
+    }
+
+    [Theory]
+    [InlineData(ProviderReasoningEffort.Low, "low")]
+    [InlineData(ProviderReasoningEffort.Medium, "medium")]
+    [InlineData(ProviderReasoningEffort.High, "high")]
+    public async Task EachEffortLevel_BecomesTheAdaptiveEffortOfTheSameName(ProviderReasoningEffort effort, string expected)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")], Reasoning(effort));
+
+        Assert.Equal(expected, JsonDocument.Parse(endpoint.Bodies[0]).RootElement.GetProperty("output_config").GetProperty("effort").GetString());
+    }
+
+    // Without a display, a model with adaptive thinking returns its thinking blocks without their text, so a caller that
+    // keeps the reasoning asks for the summarized text.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task KeptReasoning_AsksAModelWithAdaptiveThinkingForTheSummarizedText(bool captureReasoning)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            Reasoning(ProviderReasoningEffort.High, captureReasoning: captureReasoning));
+
+        var thinking = JsonDocument.Parse(endpoint.Bodies[0]).RootElement.GetProperty("thinking");
+        Assert.Equal(captureReasoning, thinking.TryGetProperty("display", out var display));
+        if (captureReasoning)
+        {
+            Assert.Equal("summarized", display.GetString());
+        }
     }
 
     // With thinking on, the provider verifies its own signature over the block and refuses an assistant turn
@@ -541,12 +665,23 @@ public sealed class AnthropicMessagesChatClientTests
 
     // Built over the host's client factory, which is the only way a family loaded from a directory reaches the
     // network at all.
-    private static AnthropicMessagesChatClient Client(FakeAnthropicEndpoint wire, ProviderEndpoint? connection = null)
+    private static AnthropicMessagesChatClient Client(
+        FakeAnthropicEndpoint wire,
+        ProviderEndpoint? connection = null,
+        ProviderModelDescriptor? model = null)
     {
         return new AnthropicMessagesChatClient(
             new FakeProviderHostContext(wire).Http,
             connection ?? Endpoint(),
-            Model);
+            model ?? Model);
+    }
+
+    private static ProviderModelDescriptor ModelNamed(string remoteModelId)
+    {
+        return new ProviderModelDescriptor(
+            Guid.NewGuid(),
+            remoteModelId,
+            [ProviderDeclaredProtocolModes.Auto, AnthropicProviderDriver.MessagesProtocol]);
     }
 
     /// <summary>What the driver makes of the failure the client raises when the endpoint refuses the call.</summary>
@@ -559,10 +694,10 @@ public sealed class AnthropicMessagesChatClientTests
     }
 
     /// <summary>Asks for reasoning the way a caller does: neutrally, through the per-client raw representation.</summary>
-    private static ChatOptions Reasoning(ProviderReasoningEffort effort, ChatOptions? options = null)
+    private static ChatOptions Reasoning(ProviderReasoningEffort effort, ChatOptions? options = null, bool captureReasoning = true)
     {
         options ??= new ChatOptions();
-        options.RawRepresentationFactory = _ => new ProviderReasoningRequest(effort, CaptureReasoning: true);
+        options.RawRepresentationFactory = _ => new ProviderReasoningRequest(effort, captureReasoning);
         return options;
     }
 

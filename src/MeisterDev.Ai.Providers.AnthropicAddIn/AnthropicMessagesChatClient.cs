@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Transport;
 using MeisterDev.Ai.Providers.Declaration;
@@ -31,7 +32,7 @@ namespace MeisterDev.Ai.Providers.AnthropicAddIn;
 ///         <c>tool_result</c> block rather than a role of their own, and <c>max_tokens</c> is required.
 ///     </para>
 /// </remarks>
-public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
+public sealed partial class AnthropicMessagesChatClient : INativeProtocolChatClient
 {
     /// <summary>The API version this client is written against, sent on every request as Anthropic requires.</summary>
     public const string AnthropicVersion = "2023-06-01";
@@ -216,16 +217,18 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
     private JsonObject BuildRequest(IReadOnlyList<ChatMessage> messages, ChatOptions? options)
     {
         var reasoning = options?.RawRepresentationFactory?.Invoke(this) as ProviderReasoningRequest;
-        var thinkingBudget = ThinkingBudget(reasoning?.Effort ?? ProviderReasoningEffort.None);
+        var effort = reasoning?.Effort ?? ProviderReasoningEffort.None;
+        var thinkingAllowance = ThinkingAllowance(effort);
+        var adaptiveThinking = thinkingAllowance is not null && UsesAdaptiveThinking(this._model.RemoteModelId);
 
         var payload = new JsonObject
         {
             ["model"] = this._model.RemoteModelId,
 
-            // The cap covers the thinking budget as well as the answer, so an enabled budget is added to the
-            // caller's cap rather than taken out of it — otherwise a model that thought hard would run out of
-            // room mid-answer and return a truncated one.
-            ["max_tokens"] = (options?.MaxOutputTokens ?? DefaultMaxTokens) + (thinkingBudget ?? 0),
+            // The cap covers the thinking as well as the answer, so the allowance of the effort is added to the
+            // caller's cap, not taken out of it. A model that thought hard would otherwise run out of room
+            // mid-answer and return a truncated one.
+            ["max_tokens"] = (options?.MaxOutputTokens ?? DefaultMaxTokens) + (thinkingAllowance ?? 0),
         };
 
         // The system prompt is a top-level field here, not a message with a role, so system turns are lifted out
@@ -240,13 +243,28 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
             payload["system"] = ToSystemField(system);
         }
 
-        // Extended thinking fixes the sampling temperature, and a request that asks for both is rejected.
-        if (options?.Temperature is { } temperature && thinkingBudget is null)
+        // Thinking fixes the sampling temperature, and a request that asks for both is rejected. Claude models from
+        // Opus 4.7 on refuse a temperature in every request.
+        if (options?.Temperature is { } temperature && thinkingAllowance is null && AcceptsTemperature(this._model.RemoteModelId))
         {
             payload["temperature"] = temperature;
         }
 
-        if (thinkingBudget is { } budget)
+        if (adaptiveThinking)
+        {
+            // Without a display, a model with adaptive thinking returns its thinking blocks without their text. A
+            // caller that keeps the reasoning asks for the summarized text, which a model with a thinking budget
+            // returns on its own.
+            var thinking = new JsonObject { ["type"] = "adaptive" };
+            if (reasoning!.CaptureReasoning)
+            {
+                thinking["display"] = "summarized";
+            }
+
+            payload["thinking"] = thinking;
+            payload["output_config"] = new JsonObject { ["effort"] = AdaptiveEffort(effort) };
+        }
+        else if (thinkingAllowance is { } budget)
         {
             payload["thinking"] = new JsonObject
             {
@@ -389,10 +407,11 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
     }
 
     /// <summary>
-    ///     Turns a neutral effort level into Anthropic's own knob: a token budget the model may spend thinking.
-    ///     Its floor is 1024, so the lowest rung is set clear of it.
+    ///     The tokens a neutral effort level allows for thinking. A model with a thinking budget receives them as its
+    ///     budget, whose floor is 1024, so the lowest rung is set clear of it. A model with adaptive thinking decides
+    ///     itself how much to think, and the allowance keeps room for the answer under the output cap.
     /// </summary>
-    private static int? ThinkingBudget(ProviderReasoningEffort effort)
+    private static int? ThinkingAllowance(ProviderReasoningEffort effort)
     {
         return effort switch
         {
@@ -402,6 +421,75 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
             _ => null,
         };
     }
+
+    /// <summary>The effort of adaptive thinking that matches a neutral effort level.</summary>
+    private static string AdaptiveEffort(ProviderReasoningEffort effort)
+    {
+        return effort switch
+        {
+            ProviderReasoningEffort.Low => "low",
+            ProviderReasoningEffort.Medium => "medium",
+            _ => "high",
+        };
+    }
+
+    /// <summary>
+    ///     Whether the model thinks adaptively, with an effort, or within a thinking budget.
+    /// </summary>
+    /// <remarks>
+    ///     Claude models from generation 4.6 on and the Fable and Mythos lines think adaptively. Anthropic refuses a
+    ///     thinking budget with HTTP 400 on Claude Opus 4.7, Haiku 5.5, Sonnet 5.5, Opus 5.5 and later models, and
+    ///     refuses adaptive thinking with HTTP 400 on models before generation 4.6, such as Claude Haiku 4.5. The
+    ///     Models API states the thinking types of each model; the client reads them from the model id, which needs
+    ///     no further call. A model id outside the Claude naming keeps the thinking budget.
+    /// </remarks>
+    /// <param name="remoteModelId">The model id the request names.</param>
+    private static bool UsesAdaptiveThinking(string remoteModelId)
+    {
+        return ClaudeGeneration(remoteModelId) >= 406;
+    }
+
+    /// <summary>Whether the model takes a sampling temperature.</summary>
+    /// <remarks>
+    ///     Anthropic refuses <c>temperature</c>, <c>top_p</c> and <c>top_k</c> with HTTP 400 on Claude Opus 4.7 and
+    ///     later models, with the message "temperature is deprecated for this model" on Claude Haiku, Sonnet and Opus
+    ///     5.5. Such a model samples with its own default. A model id outside the Claude naming keeps the temperature.
+    /// </remarks>
+    /// <param name="remoteModelId">The model id the request names.</param>
+    private static bool AcceptsTemperature(string remoteModelId)
+    {
+        return ClaudeGeneration(remoteModelId) is not >= 407;
+    }
+
+    // The generation of a Claude model id as the major version times 100 plus the minor version, or null for a model
+    // id outside the Claude naming. The Fable and Mythos lines count as later than every numbered generation.
+    private static int? ClaudeGeneration(string remoteModelId)
+    {
+        var match = ClaudeModelId().Match(remoteModelId);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var line = match.Groups["line"].Value;
+        if (line.Equals("fable", StringComparison.OrdinalIgnoreCase) || line.Equals("mythos", StringComparison.OrdinalIgnoreCase))
+        {
+            return int.MaxValue;
+        }
+
+        var major = int.Parse(match.Groups["major"].Value, System.Globalization.CultureInfo.InvariantCulture);
+        var minor = match.Groups["minor"].Success
+            ? int.Parse(match.Groups["minor"].Value, System.Globalization.CultureInfo.InvariantCulture)
+            : 0;
+        return (major * 100) + minor;
+    }
+
+    // A Claude model id: the line, the generation and an optional minor version of one or two digits. A dated
+    // snapshot such as claude-sonnet-4-20250514 has no minor version, because the date follows the generation.
+    [GeneratedRegex(
+        @"^claude-(?<line>opus|sonnet|haiku|fable|mythos)-(?<major>\d+)(?:-(?<minor>\d{1,2})(?!\d))?",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ClaudeModelId();
 
     private static JsonObject? ToAnthropicMessage(ChatMessage message)
     {

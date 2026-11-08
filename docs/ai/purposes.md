@@ -97,8 +97,9 @@ A Community installation has no tenant-catalog layer at all, so every name is a 
 
 A logical model can carry a reasoning effort of `none`, `low`, `medium` or `high`. Because it is a property of the
 name, you can reason hard on the name mapped to High effort and not at all on the one mapped to Triage. ProPR
-translates it to whatever the provider expresses - an OpenAI reasoning effort, an Anthropic thinking budget, a
-Gemini thinking configuration - so the same setting means the same thing across providers.
+translates it to whatever the provider expresses - an OpenAI reasoning effort, the effort of Anthropic's adaptive
+thinking or, for Claude models before generation 4.6, a thinking budget, a Gemini thinking configuration - so the same
+setting means the same thing across providers.
 
 A review pass uses the effort of the logical model it runs on. The baseline pass of a file runs on the logical model
 that the file's tier purpose resolves to. When that logical model has the effort `none`, the baseline pass uses the
