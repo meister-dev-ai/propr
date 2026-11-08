@@ -76,6 +76,43 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.Equal([new JudgeEffort(null, "low"), new JudgeEffort(ReasoningEffort.None, "none")], efforts);
     }
 
+    // A judge model called through the Responses API also receives its effort in the shared reasoning setting, which
+    // reaches a provider add-in. The independent check on the same model runs with the effort None.
+    [Fact]
+    public async Task AJudgeModelOnTheResponsesApi_AlsoReceivesItsEffortInTheSharedSetting()
+    {
+        var (judge, efforts) = JudgeRecordingEfforts();
+        var resolver = ResolverFor(judge, acceptsReasoningEffortNone: true, supportsLowReasoningEffort: true, usesResponsesApi: true);
+
+        var outcome = Assert.Single(
+            await new EvidenceBackedReviewVerifier().VerifyAsync(
+                [CreateWorkItem(LookupPath, 1, severity: CommentSeverity.Warning)], [],
+                new ReviewVerificationContext(
+                    AllocationTools(LookupSource), "source", Substitute.For<IChatClient>(), "reviewer-model", Guid.NewGuid(), resolver)));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
+        Assert.Equal([new JudgeEffort(ReasoningEffort.Low, "low"), new JudgeEffort(ReasoningEffort.None, "none")], efforts);
+    }
+
+    // A judge that falls back to the reviewer's own model states a configured effort in the shared setting when that
+    // model is called through the Responses API.
+    [Fact]
+    public async Task AJudgeOnTheReviewerModel_OnTheResponsesApi_AlsoReceivesTheEffortInTheSharedSetting()
+    {
+        var (judge, efforts) = JudgeRecordingEfforts();
+        var verifier = new EvidenceBackedReviewVerifier(
+            reviewOptions: Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { VerificationReasoningEffort = ReviewReasoningEffort.Medium }));
+
+        var outcome = Assert.Single(
+            await verifier.VerifyAsync(
+                [CreateWorkItem(LookupPath, 1, severity: CommentSeverity.Warning)], [],
+                new ReviewVerificationContext(AllocationTools(LookupSource), "source", judge, "judge-model", UsesResponsesApi: true)));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
+        var expected = new JudgeEffort(ReasoningEffort.Medium, "medium");
+        Assert.Equal([expected, expected], efforts);
+    }
+
     // A judge with no resolved runtime runs on the reviewer's own model and follows the setting of that model.
     [Theory]
     [InlineData(true)]
@@ -112,12 +149,17 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         return (judge, efforts);
     }
 
-    private static IAiRuntimeResolver ResolverFor(IChatClient judge, bool acceptsReasoningEffortNone, bool supportsLowReasoningEffort)
+    private static IAiRuntimeResolver ResolverFor(
+        IChatClient judge,
+        bool acceptsReasoningEffortNone,
+        bool supportsLowReasoningEffort,
+        bool usesResponsesApi = false)
     {
         var runtime = RuntimeFor(judge, "gpt-6-luna");
         var model = runtime.Model with { SupportsReasoningEffortNone = acceptsReasoningEffortNone };
         runtime.Model.Returns(model);
         runtime.SupportsLowReasoningEffort.Returns(supportsLowReasoningEffort);
+        runtime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, usesResponsesApi));
         var resolver = Substitute.For<IAiRuntimeResolver>();
         resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>()).Returns(runtime);
         return resolver;

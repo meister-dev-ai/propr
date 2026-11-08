@@ -37,9 +37,11 @@ public interface IRunnerRelayModelResolver
 /// </summary>
 /// <param name="Client">The chat client bound to the resolved connection.</param>
 /// <param name="Pricing">The resolved model's rates. Unknown rates price to null, never to zero.</param>
+/// <param name="UsesResponsesApi">Whether the client calls the model through the Responses API.</param>
 public sealed record RunnerRelayModel(
     IChatClient Client,
-    ModelPricing Pricing);
+    ModelPricing Pricing,
+    bool UsesResponsesApi = false);
 
 /// <summary>
 ///     Records what a relayed completion consumed.

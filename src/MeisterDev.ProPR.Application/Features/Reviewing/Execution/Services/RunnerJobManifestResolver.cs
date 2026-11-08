@@ -354,7 +354,7 @@ public sealed partial class RunnerJobManifestResolver(
         var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(clientId, AiPurpose.ReviewDefault, ct);
         return string.IsNullOrWhiteSpace(runtime.LogicalModelName)
             ? null
-            : (Describe(runtime.LogicalModelName!, runtime, ReviewReasoningEffort.None), runtime.Connection.Id);
+            : (Describe(runtime.LogicalModelName!, runtime, runtime.LogicalModelReasoningEffort), runtime.Connection.Id);
     }
 
     /// <summary>

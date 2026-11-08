@@ -291,7 +291,7 @@ public sealed class RelayChatClientReasoningTests
             RunnerRelayRequest request,
             CancellationToken ct = default)
         {
-            this.Relayed = request.OptionsFor(capturesReasoning);
+            this.Relayed = request.OptionsFor(new RunnerRelayResolution(capturesReasoning, false));
 
             return Task.FromResult(
                 RunnerRelayResult.Completed(

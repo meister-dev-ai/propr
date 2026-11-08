@@ -51,6 +51,13 @@ public sealed class LogicalModelResolver(
         var binding = SynthesizeBinding(AiPurpose.ReviewDefault, model, mapping.ProtocolMode);
         var runtime = runtimeFactory.CreateChatRuntime(connection, model, binding, roleName);
 
+        // The runtime carries the logical model's effort, so a caller that resolved a purpose through this logical
+        // model applies the effort the operator set on it, not only a caller that reads the result below.
+        if (runtime is ResolvedAiChatRuntime resolvedRuntime)
+        {
+            runtime = resolvedRuntime with { LogicalModelReasoningEffort = mapping.ReasoningEffort };
+        }
+
         await RecordResolutionAsync(recorder, protocolId, roleName, layer, mapping, ct);
         return new ResolvedLogicalModelChatRuntime(runtime, roleName, layer, mapping.ReasoningEffort);
     }

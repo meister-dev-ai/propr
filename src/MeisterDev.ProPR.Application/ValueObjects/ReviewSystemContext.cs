@@ -247,15 +247,17 @@ public sealed class ReviewSystemContext
 
     /// <summary>
     ///     Reasoning effort configured at the client level for the implicit tier baseline pass. Populated once per job
-    ///     from the client baseline setting and used when building the baseline per-file pass context.
-    ///     Defaults to <see cref="ReviewReasoningEffort.None" /> (no effort sent — current behavior).
+    ///     from the client baseline setting. The baseline per-file pass uses it when the logical model of the file's
+    ///     tier sets the effort None, and when the file falls back to the default client.
+    ///     Defaults to <see cref="ReviewReasoningEffort.None" />.
     /// </summary>
     public ReviewReasoningEffort BaselineReasoningEffort { get; set; } = ReviewReasoningEffort.None;
 
     /// <summary>
     ///     Reasoning effort active for the current pass context, applied to the outbound chat request unconditionally
-    ///     (independent of reasoning-summary capture). Set after the per-pass context is created — the baseline pass
-    ///     from <see cref="BaselineReasoningEffort" />, an additional pass from its <see cref="ReviewPassSpec" />.
+    ///     (independent of reasoning-summary capture). Set after the per-pass context is created: the baseline pass
+    ///     from the logical model of its tier, or from <see cref="BaselineReasoningEffort" /> when that logical model
+    ///     sets the effort None; an additional pass from its logical model or its <see cref="ReviewPassSpec" />.
     ///     Not persisted — a per-pass runtime marker. Defaults to <see cref="ReviewReasoningEffort.None" />.
     /// </summary>
     public ReviewReasoningEffort ActiveReasoningEffort { get; set; } = ReviewReasoningEffort.None;

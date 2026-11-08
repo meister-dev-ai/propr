@@ -100,6 +100,11 @@ name, you can reason hard on the name mapped to High effort and not at all on th
 translates it to whatever the provider expresses - an OpenAI reasoning effort, an Anthropic thinking budget, a
 Gemini thinking configuration - so the same setting means the same thing across providers.
 
+A review pass uses the effort of the logical model it runs on. The baseline pass of a file runs on the logical model
+that the file's tier purpose resolves to. When that logical model has the effort `none`, the baseline pass uses the
+client's baseline reasoning effort. An additional review pass that names a logical model uses the effort of that
+logical model, also when it is `none`.
+
 The Responses API and the Anthropic, Google Vertex and Amazon Bedrock protocols receive `low`, `medium` and `high`.
 On Chat Completions, ProPR sends none of these three efforts, also in runner jobs, and the model uses its own
 default. OpenAI refuses function tools on Chat Completions from GPT-5.4 on with any effort other than

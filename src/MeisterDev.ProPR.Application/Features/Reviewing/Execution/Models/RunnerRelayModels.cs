@@ -17,13 +17,15 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 /// </param>
 /// <param name="Messages">The conversation to complete.</param>
 /// <param name="OptionsFor">
-///     Builds the chat options for this completion once the job's reasoning-capture decision is known,
-///     including any tools the pass offers. Tool calling is not optional here: review passes use it, and a
-///     relay that dropped it would turn a tool-using review into a different review.
+///     Builds the chat options for this completion once the job's reasoning-capture decision and the resolved
+///     model are known, including any tools the pass offers. Tool calling is not optional here: review passes use
+///     it, and a relay that dropped it would turn a tool-using review into a different review.
 ///     <para>
 ///         A function and not a finished value, because the reasoning-capture decision belongs to the tenant
 ///         that owns the job. The relay reads it only after it has validated the lease, so a caller naming a
-///         job it does not hold causes no tenant lookup.
+///         job it does not hold causes no tenant lookup. The relay resolves the logical model before it builds
+///         the options, because the transport of the resolved model decides where a configured reasoning effort
+///         is stated.
 ///     </para>
 /// </param>
 /// <param name="IdempotencyKey">
@@ -33,8 +35,16 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 public sealed record RunnerRelayRequest(
     string LogicalModelName,
     IReadOnlyList<ChatMessage> Messages,
-    Func<bool, ChatOptions?> OptionsFor,
+    Func<RunnerRelayResolution, ChatOptions?> OptionsFor,
     string IdempotencyKey);
+
+/// <summary>What the relay has resolved for one completion when it builds the chat options.</summary>
+/// <param name="CapturesReasoning">Whether the tenant that owns the job permits keeping the model's reasoning.</param>
+/// <param name="UsesResponsesApi">
+///     Whether the resolved model is called through the Responses API. A configured reasoning effort other than none
+///     is then also stated in the shared reasoning setting, which reaches a provider add-in.
+/// </param>
+public sealed record RunnerRelayResolution(bool CapturesReasoning, bool UsesResponsesApi);
 
 /// <summary>Why a relayed completion was not performed.</summary>
 public enum RunnerRelayRefusal

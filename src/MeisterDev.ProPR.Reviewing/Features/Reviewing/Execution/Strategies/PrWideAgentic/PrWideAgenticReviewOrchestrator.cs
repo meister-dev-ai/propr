@@ -469,7 +469,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         baseContext.CapturesReasoning(this._options),
                         baseContext.ActiveReasoningEffort,
-                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone), ct);
+                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                        baseContext.RuntimeCapabilities.PrefersResponsesApi), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_planning", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;
@@ -704,7 +705,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         baseContext.CapturesReasoning(this._options),
                         baseContext.ActiveReasoningEffort,
-                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone), ct);
+                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                        baseContext.RuntimeCapabilities.PrefersResponsesApi), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, $"pr_wide_investigation_{task.Id}", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;
@@ -1068,7 +1070,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         baseContext.CapturesReasoning(this._options),
                         baseContext.ActiveReasoningEffort,
-                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone), ct);
+                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                        baseContext.RuntimeCapabilities.PrefersResponsesApi), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_synthesis", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = usage.InputTokens;

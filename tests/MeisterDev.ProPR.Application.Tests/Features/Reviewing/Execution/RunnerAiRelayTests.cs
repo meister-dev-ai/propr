@@ -360,8 +360,8 @@ public sealed class RunnerAiRelayTests
                 [new ChatMessage(ChatRole.User, "hi")],
                 decision =>
                 {
-                    askedWith = decision;
-                    return new ChatOptions { ModelId = decision ? "captures" : "withholds" };
+                    askedWith = decision.CapturesReasoning;
+                    return new ChatOptions { ModelId = decision.CapturesReasoning ? "captures" : "withholds" };
                 },
                 "k"));
 
@@ -389,8 +389,8 @@ public sealed class RunnerAiRelayTests
                 [new ChatMessage(ChatRole.User, "hi")],
                 decision =>
                 {
-                    askedWith = decision;
-                    return new ChatOptions { ModelId = decision ? "captures" : "withholds" };
+                    askedWith = decision.CapturesReasoning;
+                    return new ChatOptions { ModelId = decision.CapturesReasoning ? "captures" : "withholds" };
                 },
                 "k"));
 
@@ -399,6 +399,34 @@ public sealed class RunnerAiRelayTests
             Arg.Any<IEnumerable<ChatMessage>>(),
             Arg.Is<ChatOptions?>(o => o != null && o.ModelId == "withholds"),
             Arg.Any<CancellationToken>());
+    }
+
+    // Whether the resolved model is called through the Responses API decides where a configured effort is stated,
+    // and the relay is the side that resolves the model, so it hands that answer to the options it builds.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheTransportOfTheResolvedModel_ReachesTheOptionsOfTheCompletion(bool usesResponsesApi)
+    {
+        var relay = this.CreateRelay(budget: Budget(null, 0m));
+        this._reasoningCapture.CapturesReasoningAsync(JobId, Arg.Any<CancellationToken>()).Returns(false);
+        this._models.ResolveAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new RunnerRelayModel(this._client, new ModelPricing(null, 1m), usesResponsesApi));
+
+        RunnerRelayResolution? resolvedWith = null;
+        await relay.CompleteAsync(
+            Call,
+            new RunnerRelayRequest(
+                "reviewer-medium",
+                [new ChatMessage(ChatRole.User, "hi")],
+                resolution =>
+                {
+                    resolvedWith = resolution;
+                    return new ChatOptions();
+                },
+                "k"));
+
+        Assert.Equal(new RunnerRelayResolution(false, usesResponsesApi), resolvedWith);
     }
 
     // The order is the contract: options built from a decision that was not read yet would carry whatever

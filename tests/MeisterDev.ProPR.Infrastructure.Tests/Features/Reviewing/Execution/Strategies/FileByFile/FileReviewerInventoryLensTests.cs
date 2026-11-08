@@ -105,6 +105,7 @@ public sealed class FileReviewerInventoryLensTests
     private static IAiRuntimeResolver ResolverForModel(string remoteModelId)
     {
         var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        runtime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, false));
         runtime.ChatClient.Returns(Substitute.For<IChatClient>());
         runtime.Model.Returns(
             new AiConfiguredModelDto(Guid.NewGuid(), remoteModelId, remoteModelId, [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));
@@ -155,6 +156,7 @@ public sealed class FileReviewerInventoryLensTests
     {
         var resolver = ResolverForModel(passModelId);
         var verificationRuntime = Substitute.For<IResolvedAiChatRuntime>();
+        verificationRuntime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, false));
         verificationRuntime.ChatClient.Returns(judge);
         verificationRuntime.Model.Returns(
             new AiConfiguredModelDto(Guid.NewGuid(), "verification-model", "verification-model", [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));
@@ -290,6 +292,7 @@ public sealed class FileReviewerInventoryLensTests
     private static IAiRuntimeResolver ResolverWithoutVerificationBinding(IChatClient passClient, string passModelId)
     {
         var passRuntime = Substitute.For<IResolvedAiChatRuntime>();
+        passRuntime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, false));
         passRuntime.ChatClient.Returns(passClient);
         passRuntime.Model.Returns(
             new AiConfiguredModelDto(Guid.NewGuid(), passModelId, passModelId, [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));

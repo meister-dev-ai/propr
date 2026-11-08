@@ -184,7 +184,9 @@
                             </option>
                         </select>
                         <p class="muted review-publication-copy">
-                            How much reasoning the model spends on the baseline (tier) review pass.
+                            Reasoning effort of the baseline (tier) review pass when the logical model of the file's
+                            tier has the effort None. A logical model with the effort Low, Medium or High sets the
+                            effort of the baseline pass itself.
                             With <strong>None</strong> (default), ProPR sends the reasoning effort none to a model
                             that has "Accepts Reasoning Effort None" selected on its AI connection. For any other
                             model, ProPR leaves the effort out, and the model uses its own default.

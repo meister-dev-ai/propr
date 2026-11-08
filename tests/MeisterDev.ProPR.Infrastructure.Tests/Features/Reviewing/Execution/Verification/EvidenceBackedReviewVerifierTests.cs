@@ -1567,6 +1567,7 @@ public sealed partial class EvidenceBackedReviewVerifierTests
     private static IResolvedAiChatRuntime RuntimeFor(IChatClient client, string remoteModelId)
     {
         var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        runtime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, false));
         runtime.ChatClient.Returns(client);
         runtime.Model.Returns(
             new AiConfiguredModelDto(Guid.NewGuid(), remoteModelId, remoteModelId, [AiOperationKind.Chat], [ProviderDeclaredProtocolModes.Auto]));

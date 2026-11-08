@@ -50,7 +50,8 @@ public interface IClientAdminService
     ///     Each entry binds one additional multi-pass union pass to a configured model.
     /// </param>
     /// <param name="baselineReasoningEffort">
-    ///     When non-null, sets the client-level reasoning effort for the implicit tier baseline review pass.
+    ///     When non-null, sets the client-level reasoning effort for the implicit tier baseline review pass. The
+    ///     baseline pass uses it when the logical model of the file's tier sets the effort None.
     /// </param>
     /// <param name="budgetConfig">
     ///     When non-null, replaces the client's USD budget caps wholesale; each cap within it may be null to clear

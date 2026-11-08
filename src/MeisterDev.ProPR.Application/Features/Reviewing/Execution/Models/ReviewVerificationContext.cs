@@ -26,7 +26,8 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 ///     that pass read; the judge receives bounded excerpts of those that contain a symbol the claim names.
 ///     <see cref="SupportsReasoningEffortNone" /> states whether the model of <see cref="ChatClient" /> accepts the
 ///     reasoning effort <c>none</c>. A judge that falls back to that model and runs with the effort None sends
-///     <c>none</c> only when it is set.
+///     <c>none</c> only when it is set. <see cref="UsesResponsesApi" /> states whether that model is called through the
+///     Responses API, where a judge effort other than None is also stated in the shared reasoning setting.
 /// </summary>
 public sealed record ReviewVerificationContext(
     IReviewContextTools? Tools,
@@ -39,4 +40,5 @@ public sealed record ReviewVerificationContext(
     Guid? ProtocolId = null,
     bool PassReviewedWithRepositoryTools = false,
     IReadOnlyList<ReviewerFileRead>? ReviewerReads = null,
-    bool SupportsReasoningEffortNone = false);
+    bool SupportsReasoningEffortNone = false,
+    bool UsesResponsesApi = false);

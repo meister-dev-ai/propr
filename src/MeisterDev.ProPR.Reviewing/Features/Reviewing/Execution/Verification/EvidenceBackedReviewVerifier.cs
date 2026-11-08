@@ -194,7 +194,8 @@ public sealed partial class EvidenceBackedReviewVerifier(
                     purpose == AiPurpose.ReviewHighEffort ? AiConnectionModelCategory.HighEffort : resolvedJudgeTokenCategory,
                     runtime.SupportsLowReasoningEffort,
                     new VerificationRuntimeProvenance(runtime.Model.RemoteModelId, runtime.Connection?.Id, purpose.ToString(), runtime.LogicalModelName, false),
-                    runtime.Model.SupportsReasoningEffortNone);
+                    runtime.Model.SupportsReasoningEffortNone,
+                    runtime.Capabilities.PrefersResponsesApi);
             }
             catch (OperationCanceledException)
             {
@@ -209,7 +210,8 @@ public sealed partial class EvidenceBackedReviewVerifier(
         return new JudgeRuntime(
             context?.ChatClient, context?.ModelId, AiConnectionModelCategory.Default,
             Provenance: new VerificationRuntimeProvenance(context?.ModelId, null, purpose.ToString(), null, true),
-            SupportsReasoningEffortNone: context?.SupportsReasoningEffortNone ?? false);
+            SupportsReasoningEffortNone: context?.SupportsReasoningEffortNone ?? false,
+            UsesResponsesApi: context?.UsesResponsesApi ?? false);
     }
 
     // A verification purpose could not be resolved, so the step that asked for it runs on the reviewer's own tier client.
@@ -1186,13 +1188,14 @@ public sealed partial class EvidenceBackedReviewVerifier(
 
     // States the effort of a judge or contradiction-check call. The effort None on a model that does not accept the
     // effort none leaves the options untouched, so the request carries no reasoning options and the model uses its
-    // own default. Any other effort is stated for the Responses API, native protocols and relayed calls; Chat
-    // Completions receives only the effort none, as for a review pass.
+    // own default. Any other effort is stated for the Responses API, also in the standard setting that reaches a
+    // provider add-in, for native protocols and for relayed calls; Chat Completions receives only the effort none, as
+    // for a review pass.
     private static void ApplyJudgeReasoning(ChatOptions options, ReviewReasoningEffort effort, JudgeRuntime judge)
     {
         if (effort != ReviewReasoningEffort.None || judge.SupportsReasoningEffortNone)
         {
-            options.ApplyResolvedReasoning(false, effort, judge.SupportsReasoningEffortNone);
+            options.ApplyResolvedReasoning(false, effort, judge.SupportsReasoningEffortNone, judge.UsesResponsesApi);
         }
     }
 
@@ -1203,13 +1206,15 @@ public sealed partial class EvidenceBackedReviewVerifier(
     /// <param name="SupportsLowReasoningEffort">Whether the model and its transport support low reasoning effort.</param>
     /// <param name="Provenance">The runtime recorded with the outcome.</param>
     /// <param name="SupportsReasoningEffortNone">Whether the judging model accepts the reasoning effort none.</param>
+    /// <param name="UsesResponsesApi">Whether the judging model is called through the Responses API.</param>
     private sealed record JudgeRuntime(
         IChatClient? Client,
         string? ModelId,
         AiConnectionModelCategory Category,
         bool SupportsLowReasoningEffort = false,
         VerificationRuntimeProvenance? Provenance = null,
-        bool SupportsReasoningEffortNone = false);
+        bool SupportsReasoningEffortNone = false,
+        bool UsesResponsesApi = false);
 
     // The serialized protocol recording of one claim: the lock shared by the run, the time after which the claim no
     // longer waits for that lock, and the run token the records themselves use.

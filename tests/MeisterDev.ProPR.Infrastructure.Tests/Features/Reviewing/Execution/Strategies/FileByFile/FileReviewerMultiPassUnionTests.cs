@@ -89,6 +89,9 @@ public sealed class FileReviewerMultiPassUnionTests
 
     // Model id observed on each AI call's context, in call order (baseline pass first, then resample passes).
     private readonly List<string?> _observedModelIds = [];
+
+    // Reasoning effort observed on each AI call's context, in call order (baseline pass first).
+    private readonly List<ReviewReasoningEffort> _observedEfforts = [];
     private readonly IProtocolRecorder _recorder = Substitute.For<IProtocolRecorder>();
     private int _aiCallCount;
     private ReviewFileResult? _persistedResult;
@@ -133,6 +136,7 @@ public sealed class FileReviewerMultiPassUnionTests
                 ctx.LoopMetrics = new ReviewLoopMetrics(0, null, null, 90, 100, 10, 1);
                 this._observedModelIds.Add(ctx.ModelId);
                 this._observedLenses.Add(ctx.ActiveLens);
+                this._observedEfforts.Add(ctx.ActiveReasoningEffort);
                 var template = PassComments[Math.Min(this._aiCallCount, PassComments.Count - 1)];
                 this._aiCallCount++;
                 // Anchor each finding to the file under review so it survives per-file filtering regardless of the
@@ -293,6 +297,76 @@ public sealed class FileReviewerMultiPassUnionTests
         Assert.NotNull(checkpoint.ModelEvidence);
         Assert.Contains(checkpoint.ModelEvidence.Passes, pass => pass.ModelId == "model-a" && pass.IsCertified && pass.Candidates.Count == 0);
         Assert.Contains(checkpoint.ModelEvidence.Passes, pass => pass.ModelId == "gpt-5.4" && pass.Disposition == ModelGenerationDisposition.Failed);
+    }
+
+    // The baseline pass runs at the effort of the logical model its tier purpose resolved to, and at the client's
+    // baseline effort when that logical model sets None.
+    [Theory]
+    [InlineData(ReviewReasoningEffort.High, ReviewReasoningEffort.None, ReviewReasoningEffort.High)]
+    [InlineData(ReviewReasoningEffort.Low, ReviewReasoningEffort.High, ReviewReasoningEffort.Low)]
+    [InlineData(ReviewReasoningEffort.None, ReviewReasoningEffort.Medium, ReviewReasoningEffort.Medium)]
+    public async Task TheBaselinePass_RunsAtTheEffortOfTheLogicalModelOfItsTier(
+        ReviewReasoningEffort logicalModelEffort,
+        ReviewReasoningEffort clientBaseline,
+        ReviewReasoningEffort expected)
+    {
+        var tier = RuntimeForModel("tier-model");
+        tier.LogicalModelReasoningEffort.Returns(logicalModelEffort);
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>()).Returns(tier);
+        var reviewer = this.CreateReviewer(aiRuntimeResolver: resolver);
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+        var context = ProductionContext("tier-model");
+        context.BaselineReasoningEffort = clientBaseline;
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, context, null, tier.ChatClient, CancellationToken.None);
+
+        Assert.Equal(expected, this._observedEfforts[0]);
+    }
+
+    // The baseline pass takes the effort of the logical model of its tier, and a pass that names a logical model keeps
+    // the effort of that logical model. The client's baseline effort applies to neither here.
+    [Fact]
+    public async Task TheBaselineAndANameBasedPass_EachRunAtTheEffortOfTheirOwnLogicalModel()
+    {
+        var tier = RuntimeForModel("tier-model");
+        tier.LogicalModelReasoningEffort.Returns(ReviewReasoningEffort.Low);
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>()).Returns(tier);
+        var passRuntime = RuntimeForModel("logical-deep");
+        var logicalResolver = Substitute.For<ILogicalModelResolver>();
+        logicalResolver
+            .ResolveChatRuntimeAsync(Arg.Any<Guid>(), "deep", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new ResolvedLogicalModelChatRuntime(passRuntime, "deep", LogicalModelLayer.TenantCatalog, ReviewReasoningEffort.High));
+        var reviewer = this.CreateReviewer(aiRuntimeResolver: resolver, logicalModelResolver: logicalResolver);
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+        var context = ProductionContextWithPasses("tier-model", new ReviewPassSpec(Guid.Empty, LogicalModelName: "deep"));
+        context.BaselineReasoningEffort = ReviewReasoningEffort.Medium;
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, context, null, tier.ChatClient, CancellationToken.None);
+
+        Assert.Equal(["tier-model", "logical-deep"], this._observedModelIds);
+        Assert.Equal([ReviewReasoningEffort.Low, ReviewReasoningEffort.High], this._observedEfforts);
+    }
+
+    // A file whose tier resolves to no model is reviewed on the default client, at the client's baseline effort.
+    [Fact]
+    public async Task WithoutAModelForTheTier_TheBaselinePassRunsAtTheClientsBaselineEffort()
+    {
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<IResolvedAiChatRuntime>(new InvalidOperationException("No model for the tier.")));
+        var reviewer = this.CreateReviewer(aiRuntimeResolver: resolver);
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+        var context = ProductionContext("default-model");
+        context.BaselineReasoningEffort = ReviewReasoningEffort.High;
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, context, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Equal(ReviewReasoningEffort.High, this._observedEfforts[0]);
     }
 
     [Fact]

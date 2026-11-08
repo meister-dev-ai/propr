@@ -51,6 +51,22 @@ public sealed class RelayLogicalModelResolverTests
         Assert.Equal(accepted, resolved.Runtime.Model.SupportsReasoningEffortNone);
     }
 
+    // A review pass whose model comes from a logical model with an effort other than None uses that effort, so the
+    // runtime reports the effort the manifest carries for the model. A value this build does not know reads as None.
+    [Theory]
+    [InlineData("High", ReviewReasoningEffort.High)]
+    [InlineData("None", ReviewReasoningEffort.None)]
+    [InlineData("max", ReviewReasoningEffort.None)]
+    public async Task AResolvedModel_ReportsTheEffortOfItsLogicalModel(string manifestEffort, ReviewReasoningEffort expected)
+    {
+        var manifest = RunnerManifests.Sample() with { DefaultModel = RunnerManifests.Model("reviewer-default", manifestEffort) };
+        var resolver = CreateResolver(manifest, _ => Substitute.For<IChatClient>());
+
+        var resolved = await resolver.ResolveChatRuntimeAsync(Guid.NewGuid(), "reviewer-default");
+
+        Assert.Equal(expected, resolved.Runtime.LogicalModelReasoningEffort);
+    }
+
     [Fact]
     public async Task APassModel_ResolvesToItsOwnRelayAndItsOwnEffort()
     {

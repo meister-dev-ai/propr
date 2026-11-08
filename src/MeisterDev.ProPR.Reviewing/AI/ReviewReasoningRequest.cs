@@ -23,7 +23,10 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 ///     That mechanism is per-client by design — the factory is handed the client it is building for — which 
 ///     lets one call site serve providers that express reasoning incompatibly. A client speaking a provider's own
 ///     protocol is given the request in neutral terms and maps it itself; only the OpenAI family is handed the
-///     OpenAI library's options object, because only it understands one.
+///     OpenAI library's options object, because only it understands one. A provider add-in loads its own copy of the
+///     OpenAI library, so for an add-in that object is a foreign type, and the add-in drops it. On the Responses API
+///     the effort is therefore also stated in <see cref="ChatOptions.Reasoning" />, which lives in the abstractions the
+///     host shares with every add-in.
 /// </remarks>
 internal static class ReviewReasoningRequest
 {
@@ -35,7 +38,9 @@ internal static class ReviewReasoningRequest
     ///     <see cref="ReviewReasoningEffort.None" /> effort sends <c>none</c> to a model that accepts it, on the
     ///     Responses API and on Chat Completions. Any other model receives no effort level and uses its own
     ///     default, because some reasoning models refuse a request that names <c>none</c>. A configured Low, Medium or
-    ///     High reaches the Responses API and native protocols. Chat Completions receives no effort for it, because
+    ///     High reaches the Responses API and native protocols; on the Responses API it is also stated in
+    ///     <see cref="ChatOptions.Reasoning" />, so that it reaches a provider add-in. Chat Completions receives no effort
+    ///     for it, because
     ///     OpenAI refuses function tools there with any effort other than <c>none</c> from GPT-5.4 on, and an
     ///     OpenAI-compatible server whose model does not know the field can refuse the request. When neither knob is
     ///     active this is a no-op: byte-identical to sending no reasoning options, and harmless for non-OpenAI clients
@@ -45,13 +50,15 @@ internal static class ReviewReasoningRequest
     /// <param name="captureReasoning">Whether the model is asked to return a summary of its reasoning.</param>
     /// <param name="reasoningEffort">How hard the model is asked to reason.</param>
     /// <param name="supportsReasoningEffortNone">Whether the bound model accepts the effort <c>none</c>.</param>
+    /// <param name="usesResponsesApi">Whether the bound model is called through the Responses API.</param>
     public static ChatOptions ApplyReasoning(
         this ChatOptions chatOptions,
         bool captureReasoning,
         ReviewReasoningEffort reasoningEffort,
-        bool supportsReasoningEffortNone = false)
+        bool supportsReasoningEffortNone = false,
+        bool usesResponsesApi = false)
     {
-        return Apply(chatOptions, captureReasoning, reasoningEffort, supportsReasoningEffortNone, stateWhenNothingIsAsked: false);
+        return Apply(chatOptions, captureReasoning, reasoningEffort, supportsReasoningEffortNone, usesResponsesApi, stateWhenNothingIsAsked: false);
     }
 
     /// <summary>
@@ -70,13 +77,15 @@ internal static class ReviewReasoningRequest
     /// <param name="captureReasoning">Whether this job may keep the model's reasoning.</param>
     /// <param name="reasoningEffort">How hard the model is asked to reason.</param>
     /// <param name="supportsReasoningEffortNone">Whether the bound model accepts the effort <c>none</c>.</param>
+    /// <param name="usesResponsesApi">Whether the bound model is called through the Responses API.</param>
     public static ChatOptions ApplyResolvedReasoning(
         this ChatOptions chatOptions,
         bool captureReasoning,
         ReviewReasoningEffort reasoningEffort,
-        bool supportsReasoningEffortNone = false)
+        bool supportsReasoningEffortNone = false,
+        bool usesResponsesApi = false)
     {
-        return Apply(chatOptions, captureReasoning, reasoningEffort, supportsReasoningEffortNone, stateWhenNothingIsAsked: true);
+        return Apply(chatOptions, captureReasoning, reasoningEffort, supportsReasoningEffortNone, usesResponsesApi, stateWhenNothingIsAsked: true);
     }
 
     /// <summary>Whether these options already carry a reasoning request this shaping produced.</summary>
@@ -97,6 +106,7 @@ internal static class ReviewReasoningRequest
         bool captureReasoning,
         ReviewReasoningEffort reasoningEffort,
         bool supportsReasoningEffortNone,
+        bool usesResponsesApi,
         bool stateWhenNothingIsAsked)
     {
         var effortLevel = MapEffortLevel(reasoningEffort, supportsReasoningEffortNone);
@@ -122,12 +132,20 @@ internal static class ReviewReasoningRequest
         }
 
         // Chat Completions reads the effort from the standard setting, because its adapter accepts no Responses
-        // options. Every request states only the effort none there, for a model that accepts it, and leaves a
-        // configured Low, Medium or High off Chat Completions for the reasons given on ApplyReasoning. A resolved
+        // options. A request states the effort none there for a model that accepts it, and leaves a configured Low,
+        // Medium or High off Chat Completions for the reasons given on ApplyReasoning. A model called through the
+        // Responses API receives a configured Low, Medium or High in the standard setting as well. A resolved
         // decision replaces what the options carried there; an ordinary request leaves it as the caller made it.
         if (reasoningEffort == ReviewReasoningEffort.None && supportsReasoningEffortNone)
         {
             chatOptions.Reasoning = new ReasoningOptions { Effort = ReasoningEffort.None };
+        }
+        else if (usesResponsesApi && reasoningEffort != ReviewReasoningEffort.None)
+        {
+            // The Responses options the factory below builds are a foreign type for a provider add-in, which loads its
+            // own copy of the OpenAI library and drops them. The standard setting crosses that boundary, and the
+            // add-in's Responses adapter writes it into the request.
+            chatOptions.Reasoning = new ReasoningOptions { Effort = MapStandardEffort(reasoningEffort) };
         }
         else if (stateWhenNothingIsAsked)
         {
@@ -138,6 +156,17 @@ internal static class ReviewReasoningRequest
             new ShapedReasoningRequest(captureReasoning, reasoningEffort, effortLevel).Build;
 
         return chatOptions;
+    }
+
+    // Maps a configured Low, Medium or High onto the standard setting that every provider add-in shares with the host.
+    private static ReasoningEffort MapStandardEffort(ReviewReasoningEffort reasoningEffort)
+    {
+        return reasoningEffort switch
+        {
+            ReviewReasoningEffort.Low => ReasoningEffort.Low,
+            ReviewReasoningEffort.Medium => ReasoningEffort.Medium,
+            _ => ReasoningEffort.High,
+        };
     }
 
     // Maps the configured effort onto the shared vocabulary a native-protocol driver reads.

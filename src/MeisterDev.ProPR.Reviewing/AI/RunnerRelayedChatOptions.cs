@@ -38,7 +38,11 @@ public static class RunnerRelayedChatOptions
     ///     opt-in cannot stand through an absent one. Null leaves the runner's request as it stands, for a
     ///     caller that has not resolved the job's policy.
     /// </param>
-    public static ChatOptions? ToChatOptions(RunnerChatOptions? wire, bool? captureReasoning = null)
+    /// <param name="usesResponsesApi">
+    ///     Whether the model the relay resolved is called through the Responses API. A relayed Low, Medium or High is
+    ///     then also stated in the shared reasoning setting, which reaches a provider add-in.
+    /// </param>
+    public static ChatOptions? ToChatOptions(RunnerChatOptions? wire, bool? captureReasoning = null, bool usesResponsesApi = false)
     {
         if (wire is null)
         {
@@ -62,9 +66,9 @@ public static class RunnerRelayedChatOptions
         var statesNone = string.Equals(wire.ReasoningEffort, "none", StringComparison.OrdinalIgnoreCase);
 
         return captureReasoning is { } resolved
-            ? options.ApplyResolvedReasoning(resolved, effort, statesNone)
+            ? options.ApplyResolvedReasoning(resolved, effort, statesNone, usesResponsesApi)
             : effort != ReviewReasoningEffort.None || statesNone
-                ? options.ApplyResolvedReasoning(wire.CaptureReasoning, effort, statesNone)
+                ? options.ApplyResolvedReasoning(wire.CaptureReasoning, effort, statesNone, usesResponsesApi)
                 : options.ApplyReasoning(wire.CaptureReasoning, effort);
     }
 

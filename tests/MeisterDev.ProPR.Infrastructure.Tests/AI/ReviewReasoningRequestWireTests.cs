@@ -99,6 +99,61 @@ public sealed class ReviewReasoningRequestWireTests
         Assert.False(chatCompletions.RootElement.TryGetProperty("reasoning_effort", out _));
     }
 
+    // A provider add-in loads its own copy of the OpenAI library, so the Responses options the host builds are a
+    // foreign type there, and the add-in's adapter ignores them. Here the factory returns an object the adapter
+    // cannot use, as the host's options are for an add-in. For a model called through the Responses API, the
+    // configured effort reaches the request through the shared reasoning setting.
+    [Theory]
+    [InlineData(ReviewReasoningEffort.Low, "low", false)]
+    [InlineData(ReviewReasoningEffort.Medium, "medium", false)]
+    [InlineData(ReviewReasoningEffort.High, "high", false)]
+    [InlineData(ReviewReasoningEffort.High, "high", true)]
+    public async Task AConfiguredEffort_ReachesAResponsesClientThatCannotReadTheHostsOptions(
+        ReviewReasoningEffort effort,
+        string expected,
+        bool resolved)
+    {
+        var options = resolved
+            ? new ChatOptions().ApplyResolvedReasoning(false, effort, usesResponsesApi: true)
+            : new ChatOptions().ApplyReasoning(false, effort, usesResponsesApi: true);
+        options.RawRepresentationFactory = _ => new object();
+
+        using var request = await SendAsync(responsesApi: true, options);
+
+        Assert.Equal(expected, SentEffort(request, responsesApi: true));
+    }
+
+    // A runner job's effort reaches a Responses client that cannot read the host's options in the same way, once the
+    // relay has resolved a model that is called through the Responses API.
+    [Theory]
+    [InlineData("low", null)]
+    [InlineData("high", false)]
+    public async Task ARelayedEffort_ReachesAResponsesClientThatCannotReadTheHostsOptions(string wireEffort, bool? resolvedCapture)
+    {
+        var options = RunnerRelayedChatOptions.ToChatOptions(
+            new RunnerChatOptions(ReasoningEffort: wireEffort),
+            resolvedCapture,
+            usesResponsesApi: true)!;
+        options.RawRepresentationFactory = _ => new object();
+
+        using var request = await SendAsync(responsesApi: true, options);
+
+        Assert.Equal(wireEffort, SentEffort(request, responsesApi: true));
+    }
+
+    // A client that reads the host's Responses options keeps the summary request next to the effort, also when the
+    // effort is stated in the shared reasoning setting as well.
+    [Fact]
+    public async Task AConfiguredEffortWithASummaryRequest_KeepsTheSummaryRequestOnTheResponsesApi()
+    {
+        var options = new ChatOptions().ApplyReasoning(true, ReviewReasoningEffort.High, usesResponsesApi: true);
+
+        using var request = await SendAsync(responsesApi: true, options);
+
+        Assert.Equal("high", SentEffort(request, responsesApi: true));
+        Assert.Equal("auto", request.RootElement.GetProperty("reasoning").GetProperty("summary").GetString());
+    }
+
     // The summary opt-in and the effort are separate settings, so asking for the summary of a model told not to
     // reason still sends none.
     [Theory]

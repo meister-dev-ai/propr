@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.ProPR.Application.Interfaces;
@@ -36,4 +37,12 @@ public interface IResolvedAiChatRuntime
     ///     can be attributed to the logical model that produced it.
     /// </summary>
     string? LogicalModelName { get; }
+
+    /// <summary>
+    ///     Gets the reasoning effort of the logical model this runtime was resolved from, or
+    ///     <see cref="ReviewReasoningEffort.None" /> when it was resolved from a purpose binding or a raw model. A review
+    ///     pass whose model comes from a logical model with an effort other than None uses that effort instead of the
+    ///     client's baseline effort.
+    /// </summary>
+    ReviewReasoningEffort LogicalModelReasoningEffort => ReviewReasoningEffort.None;
 }

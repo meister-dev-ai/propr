@@ -95,7 +95,7 @@ public sealed class RelayLogicalModelResolver : ILogicalModelResolver
         throw new NotSupportedException("A runner relays chat completions; embeddings are computed in the control plane.");
     }
 
-    private static ReviewReasoningEffort ParseEffort(string effort)
+    internal static ReviewReasoningEffort ParseEffort(string effort)
     {
         return Enum.TryParse<ReviewReasoningEffort>(effort, ignoreCase: true, out var parsed)
             ? parsed
@@ -224,4 +224,7 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
             SupportsReasoningEffortNone: this._binding.SupportsReasoningEffortNone);
 
     public string? LogicalModelName => this._binding.LogicalModelName;
+
+    /// <inheritdoc />
+    public ReviewReasoningEffort LogicalModelReasoningEffort => RelayLogicalModelResolver.ParseEffort(this._binding.ReasoningEffort);
 }

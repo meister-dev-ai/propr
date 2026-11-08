@@ -153,15 +153,17 @@ public sealed class RunnerExecutionController(
         // The reasoning-summary opt-in is replaced with what the job's tenant permits, because a runner
         // states its own and an outdated or hostile one would otherwise pull back reasoning the tenant has
         // forbidden. The effort level is a separate setting and is left as the runner sent it. The relay
-        // resolves the decision and hands it back here, after it has validated the lease.
+        // resolves the decision and the transport of the resolved model and hands both back here, after it has
+        // validated the lease.
         var result = await relay.CompleteAsync(
             call,
             new RunnerRelayRequest(
                 request.LogicalModelName,
                 request.Messages,
-                capturesReasoning => Infrastructure.AI.RunnerRelayedChatOptions.ToChatOptions(
+                resolution => Infrastructure.AI.RunnerRelayedChatOptions.ToChatOptions(
                     request.Options,
-                    capturesReasoning),
+                    resolution.CapturesReasoning,
+                    resolution.UsesResponsesApi),
                 request.IdempotencyKey),
             ct);
 

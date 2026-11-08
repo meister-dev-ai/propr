@@ -38,7 +38,8 @@ public sealed partial class RunnerRelayModelResolver(
                     runtime.Model.InputCostPer1MUsd,
                     runtime.Model.OutputCostPer1MUsd,
                     runtime.Model.CachedInputCostPer1MUsd,
-                    runtime.Model.CacheWriteCostPer1MUsd));
+                    runtime.Model.CacheWriteCostPer1MUsd),
+                runtime.Capabilities.PrefersResponsesApi);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

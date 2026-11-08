@@ -68,7 +68,7 @@ public sealed partial class RelayChatClient(
             new RunnerRelayRequest(
                 logicalModelName,
                 [.. messages],
-                capturesReasoning => ApplyReasoningCapture(options, capturesReasoning),
+                resolution => this.ApplyReasoningCapture(options, resolution.CapturesReasoning, resolution.UsesResponsesApi),
                 this._newKey()),
             cancellationToken);
 
@@ -129,12 +129,13 @@ public sealed partial class RelayChatClient(
     // the tenant's answer again for every completion. The reasoning request is therefore discarded and stated
     // again from the current answer: a tenant that has since forbidden reasoning must not have a summary
     // asked for on its behalf. The configured effort is applied either way, because how hard the model
-    // reasons is a separate setting from whether the reasoning text is kept.
+    // reasons is a separate setting from whether the reasoning text is kept. For a model the relay calls through
+    // the Responses API, the effort is also stated in the shared reasoning setting, which reaches a provider add-in.
     //
     // Every shaping here is applied to a copy. The caller owns the instance it passed and may send it again,
     // to this client or to another, and may be sending it concurrently; a factory cleared or a request
     // written on that instance would reach calls this decision does not govern.
-    private ChatOptions? ApplyReasoningCapture(ChatOptions? options, bool capturesReasoning)
+    private ChatOptions? ApplyReasoningCapture(ChatOptions? options, bool capturesReasoning, bool usesResponsesApi)
     {
         var asksForSomething = capturesReasoning || reasoningEffort != ReviewReasoningEffort.None;
 
@@ -165,7 +166,7 @@ public sealed partial class RelayChatClient(
                          && options?.CarriesAReasoningRequest() == true
                          && options.Reasoning?.Effort == ReasoningEffort.None;
 
-        return (options?.Clone() ?? new ChatOptions()).ApplyResolvedReasoning(capturesReasoning, reasoningEffort, statesNone);
+        return (options?.Clone() ?? new ChatOptions()).ApplyResolvedReasoning(capturesReasoning, reasoningEffort, statesNone, usesResponsesApi);
     }
 
     [LoggerMessage(

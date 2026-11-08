@@ -235,7 +235,8 @@ internal sealed partial class ToolAwareAiReviewCore(
         }.ApplyReasoning(
             systemContext.CapturesReasoning(opts),
             systemContext.ActiveReasoningEffort,
-            systemContext.RuntimeCapabilities.SupportsReasoningEffortNone);
+            systemContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+            systemContext.RuntimeCapabilities.PrefersResponsesApi);
 
         // Pre-flight context-window budgeting: estimate the assembled payload against the model's context
         // window and degrade to diff-only, or skip, rather than send the provider a context that is too large.
@@ -739,7 +740,8 @@ internal sealed partial class ToolAwareAiReviewCore(
             .ApplyReasoning(
                 systemContext.CapturesReasoning(opts),
                 systemContext.ActiveReasoningEffort,
-                systemContext.RuntimeCapabilities.SupportsReasoningEffortNone);
+                systemContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                systemContext.RuntimeCapabilities.PrefersResponsesApi);
         ChatResponse finalResponse;
         try
         {
@@ -851,7 +853,8 @@ internal sealed partial class ToolAwareAiReviewCore(
             .ApplyReasoning(
                 systemContext.CapturesReasoning(options.Value),
                 systemContext.ActiveReasoningEffort,
-                systemContext.RuntimeCapabilities.SupportsReasoningEffortNone);
+                systemContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                systemContext.RuntimeCapabilities.PrefersResponsesApi);
 
         // Apply the same context-window budget to the schema-repair call, which sends the accumulated transcript
         // directly rather than through the loop's choke point.

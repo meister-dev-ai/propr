@@ -10,9 +10,9 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 public class ReviewReasoningRequestTests
 {
-    // Chat Completions reads the effort from the standard setting only. An ordinary review pass leaves a configured
-    // Low, Medium or High out of it, because OpenAI refuses function tools there with any effort other than none from
-    // GPT-5.4 on.
+    // Chat Completions reads the effort from the standard setting only. An ordinary review pass on a model called
+    // through Chat Completions leaves a configured Low, Medium or High out of it, because OpenAI refuses function tools
+    // there with any effort other than none from GPT-5.4 on.
     [Theory]
     [InlineData(ReviewReasoningEffort.Low)]
     [InlineData(ReviewReasoningEffort.Medium)]
@@ -22,6 +22,56 @@ public class ReviewReasoningRequestTests
         var options = new ChatOptions().ApplyReasoning(false, effort, supportsReasoningEffortNone: true);
 
         Assert.Null(options.Reasoning);
+    }
+
+    // For a model called through the Responses API, a configured Low, Medium or High is also stated in the standard
+    // setting, which a provider add-in reads, and the Responses options carry the same effort for a client that reads
+    // them. An ordinary pass and a resolved decision behave alike.
+    [Theory]
+    [InlineData(ReviewReasoningEffort.Low, ReasoningEffort.Low, "low", false)]
+    [InlineData(ReviewReasoningEffort.Medium, ReasoningEffort.Medium, "medium", false)]
+    [InlineData(ReviewReasoningEffort.High, ReasoningEffort.High, "high", false)]
+    [InlineData(ReviewReasoningEffort.Low, ReasoningEffort.Low, "low", true)]
+    [InlineData(ReviewReasoningEffort.High, ReasoningEffort.High, "high", true)]
+    public void AConfiguredEffort_IsStatedInTheStandardSettingForTheResponsesApi(
+        ReviewReasoningEffort effort,
+        ReasoningEffort expected,
+        string expectedLevel,
+        bool resolved)
+    {
+        var options = resolved
+            ? new ChatOptions().ApplyResolvedReasoning(false, effort, usesResponsesApi: true)
+            : new ChatOptions().ApplyReasoning(false, effort, usesResponsesApi: true);
+
+        Assert.Equal(expected, options.Reasoning!.Effort);
+#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
+        var raw = Assert.IsType<CreateResponseOptions>(options.RawRepresentationFactory!(null!));
+        Assert.Equal(new ResponseReasoningEffortLevel(expectedLevel), raw.ReasoningOptions!.ReasoningEffortLevel);
+#pragma warning restore OPENAI001
+    }
+
+    // The effort None on a model called through the Responses API follows the rule of every transport: the effort none
+    // for a model that accepts it, and no standard setting for any other model.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NoReasoning_OnTheResponsesApi_StatesTheEffortNoneOnlyForAModelThatAcceptsIt(bool acceptsNone)
+    {
+        var options = new ChatOptions().ApplyResolvedReasoning(false, ReviewReasoningEffort.None, acceptsNone, usesResponsesApi: true);
+
+        ReasoningEffort? expected = acceptsNone ? ReasoningEffort.None : null;
+        Assert.Equal(expected, options.Reasoning?.Effort);
+#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
+        var raw = Assert.IsType<CreateResponseOptions>(options.RawRepresentationFactory!(null!));
+        if (acceptsNone)
+        {
+            Assert.Equal(ResponseReasoningEffortLevel.None, raw.ReasoningOptions!.ReasoningEffortLevel);
+        }
+        else
+        {
+            Assert.Null(raw.ReasoningOptions);
+        }
+#pragma warning restore OPENAI001
     }
 
     [Theory]

@@ -71,6 +71,22 @@ public sealed class RunnerJobManifestResolverTests
         Assert.Equal(accepted, resolution.Manifest!.DefaultModel.SupportsReasoningEffortNone);
     }
 
+    // A runner reviews every file on the default model, and its baseline pass uses the effort of that logical model
+    // as a review in process does, so the binding carries the effort the logical model sets.
+    [Theory]
+    [InlineData(ReviewReasoningEffort.None, "None")]
+    [InlineData(ReviewReasoningEffort.High, "High")]
+    public async Task TheManifest_CarriesTheEffortOfTheDefaultLogicalModel(ReviewReasoningEffort effort, string expected)
+    {
+        var runtime = Runtime("reviewer-default");
+        runtime.LogicalModelReasoningEffort.Returns(effort);
+        this._runtimes.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>()).Returns(runtime);
+
+        var resolution = await this.CreateResolver().ResolveAsync(RequestFor(JobWithRevision()));
+
+        Assert.Equal(expected, resolution.Manifest!.DefaultModel.ReasoningEffort);
+    }
+
     private readonly IClientRegistry _clients = Substitute.For<IClientRegistry>();
     private readonly IRepositoryExclusionFetcher _exclusions = Substitute.For<IRepositoryExclusionFetcher>();
     private readonly IRepositoryInstructionFetcher _instructions = Substitute.For<IRepositoryInstructionFetcher>();

@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.ProPR.Infrastructure.AI;
@@ -23,4 +24,7 @@ public sealed record ResolvedAiChatRuntime(
 
     /// <inheritdoc />
     public string? LogicalModelName { get; init; }
+
+    /// <inheritdoc />
+    public ReviewReasoningEffort LogicalModelReasoningEffort { get; init; }
 }

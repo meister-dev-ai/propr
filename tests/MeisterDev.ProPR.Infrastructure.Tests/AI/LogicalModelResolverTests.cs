@@ -5,9 +5,11 @@ using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
+using Microsoft.Extensions.AI;
 using NSubstitute;
 using MeisterDev.ProPR.TestSupport;
 
@@ -63,6 +65,33 @@ public sealed class LogicalModelResolverTests
         // The synthesized binding must carry the mapping's protocol mode, and the runtime is tagged with the role name.
         this._runtimeFactory.Received(1).CreateChatRuntime(
             connection, model, Arg.Is<AiPurposeBindingDto>(b => b.ProtocolMode == AiConnectionTestFactory.ResponsesProtocol), "deep");
+    }
+
+    // The runtime carries the effort of the logical model, so a caller that resolved a purpose through the logical
+    // model applies the effort set on it. The name the runtime was tagged with stays.
+    [Theory]
+    [InlineData(ReviewReasoningEffort.None)]
+    [InlineData(ReviewReasoningEffort.High)]
+    public async Task ResolveChat_RuntimeCarriesTheEffortOfTheLogicalModel(ReviewReasoningEffort effort)
+    {
+        var modelId = Guid.NewGuid();
+        var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
+        this.SetTenantEntries(ChatMapping("deep", connection.Id, modelId, effort, AiConnectionTestFactory.ResponsesProtocol));
+        this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+        var created = new ResolvedAiChatRuntime(
+            connection,
+            model,
+            new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, RemoteModelId: model.RemoteModelId),
+            Substitute.For<IChatClient>(),
+            new AgentReviewRuntimeCapabilities(false, false, false, PrefersResponsesApi: true)) { LogicalModelName = "deep" };
+        this._runtimeFactory.CreateChatRuntime(connection, model, Arg.Any<AiPurposeBindingDto>(), Arg.Any<string?>()).Returns(created);
+
+        var result = await this.Sut().ResolveChatRuntimeAsync(ClientId, "deep");
+
+        Assert.Equal(effort, result.Runtime.LogicalModelReasoningEffort);
+        Assert.Equal("deep", result.Runtime.LogicalModelName);
+        Assert.Same(created.ChatClient, result.Runtime.ChatClient);
     }
 
     // AC #2: a client override takes precedence over the tenant entry of the same name.
